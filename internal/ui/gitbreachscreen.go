@@ -250,6 +250,12 @@ func (r *Root) newGitBreachScreen() {
 	// activateGitBreachMain).
 	r.gitBreachDiffView.SetMouseCapture(gitBreachBlockFocusSteal)
 
+	// The split view (see gitbreachdiffsplit.go) — built right after
+	// the unified pager it shares a tview.Pages with, since
+	// newGitBreachDiffSplit's own AddPage call needs r.gitBreachDiffView
+	// to already exist.
+	r.newGitBreachDiffSplit()
+
 	r.gitBreachHint = tview.NewTextView()
 	r.gitBreachHint.SetWrap(false)
 	r.gitBreachHint.SetDynamicColors(true)
@@ -265,7 +271,7 @@ func (r *Root) newGitBreachScreen() {
 
 	body := tview.NewFlex().
 		AddItem(leftColumn, 0, 1, true).
-		AddItem(gitBreachBoxFlex(r.gitBreachDiffHeader, r.gitBreachDiffView), 0, 2, false)
+		AddItem(gitBreachBoxFlex(r.gitBreachDiffHeader, r.gitBreachDiffPages), 0, 2, false)
 
 	r.gitBreachLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.gitBreachTitleBar, 1, 0, false).
@@ -350,6 +356,35 @@ type gitBreachBackgroundSetter interface {
 	SetBackgroundColor(tcell.Color) *tview.Box
 }
 
+// gitBreachFocusedBodyLighten is how much brighter the currently
+// focused box's own body reads than PopupBackground alone already
+// gives it — per the user's own explicit follow-up report that the
+// header color change plus PopupBackground's own already-subtle step
+// up from PanelBackground (by design: it's a shared "distinct
+// secondary surface" tone, not specifically a strong focus signal) left
+// which box actually has focus too hard to tell at a glance. Applied on
+// top of whatever PopupBackground the active color scheme happens to
+// define, rather than a fixed replacement color, so this keeps working
+// (and keeps reading as "one step brighter than this scheme's own
+// surface tone") regardless of which scheme is active, light or dark.
+const gitBreachFocusedBodyLighten = 28
+
+// lightenColor returns c with each RGB channel raised by delta (clamped
+// at 255) — a plain, scheme-independent "one shade lighter" step, not
+// tied to any one color scheme's own specific values the way a second,
+// hardcoded replacement color would be.
+func lightenColor(c tcell.Color, delta int32) tcell.Color {
+	r, g, b := c.RGB()
+	lighten := func(ch int32) int32 {
+		ch += delta
+		if ch > 255 {
+			return 255
+		}
+		return ch
+	}
+	return tcell.NewRGBColor(lighten(r), lighten(g), lighten(b))
+}
+
 // styleGitBreachFocus recolors one box's own header/body pair for
 // whether it currently has real keyboard focus — the same two-state
 // header scheme toolWindow's/Details' own title bars already establish
@@ -366,7 +401,7 @@ type gitBreachBackgroundSetter interface {
 func (r *Root) styleGitBreachFocus(header *tview.TextView, body gitBreachBackgroundSetter, focused bool) {
 	if focused {
 		header.SetBackgroundColor(r.theme.InputFocusedBackground)
-		body.SetBackgroundColor(r.theme.PopupBackground)
+		body.SetBackgroundColor(lightenColor(r.theme.PopupBackground, gitBreachFocusedBodyLighten))
 	} else {
 		header.SetBackgroundColor(r.theme.InputBackground)
 		// PanelBackground, not SurfaceBackground: every box's own body
@@ -412,12 +447,17 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 
 	textBodies := []*tview.TextView{
 		r.gitBreachStatusView, r.gitBreachDiffView,
+		r.gitBreachDiffSplitLeft, r.gitBreachDiffSplitRight,
 	}
 	for _, v := range textBodies {
 		// PanelBackground, not SurfaceBackground — see gitBreachLayout's
 		// own comment above for the full reasoning.
 		v.SetBackgroundColor(theme.PanelBackground)
 		v.SetTextColor(theme.Text)
+	}
+	r.gitBreachDiffSplitSeparator.SetBackgroundColor(theme.PanelBackground)
+	if r.gitBreachDiffRawText != "" {
+		r.gitBreachRenderDiffSplit()
 	}
 	// PanelBackground, not SurfaceBackground — see gitBreachLayout's own
 	// comment above for the full reasoning.
@@ -449,8 +489,13 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	// deliberately never one of gitBreachFocusables' own entries, so it
 	// needs its own explicit check here rather than being covered by
 	// the loop below.
-	if r.app.GetFocus() == r.gitBreachDiffView {
-		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffView, true)
+	if r.gitBreachMainHasFocus() {
+		if r.gitBreachDiffSplit {
+			r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitLeft, true)
+			r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitRight, true)
+		} else {
+			r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffView, true)
+		}
 	}
 	for _, f := range r.gitBreachFocusables() {
 		if f.body.HasFocus() {
@@ -501,7 +546,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 			hintKey("d", "drop stash", func(r *Root) { r.openGitBreachStashDrop() }),
 			hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 		)
-	case r.app.GetFocus() == r.gitBreachDiffView:
+	case r.gitBreachMainHasFocus():
 		entries = append(entries,
 			listHintEntry{
 				keys: []listHintKey{
@@ -512,14 +557,31 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 				},
 				label: "scroll diff",
 			},
-			hintKey("←/Enter/Space", "back", func(r *Root) { r.deactivateGitBreachMain() }),
 		)
+		if r.gitBreachDiffSplit {
+			entries = append(entries,
+				listHintEntry{
+					keys: []listHintKey{
+						{"←", simulateKeyOnFocused(tcell.KeyLeft)},
+						{"→", simulateKeyOnFocused(tcell.KeyRight)},
+					},
+					label: "scroll sideways (← at the left edge leaves)",
+				},
+				hintKey("Enter/Space", "back", func(r *Root) { r.deactivateGitBreachMain() }),
+				hintKey("v", "unified view", func(r *Root) { r.toggleGitBreachDiffSplit() }),
+			)
+		} else {
+			entries = append(entries,
+				hintKey("←/Enter/Space", "back", func(r *Root) { r.deactivateGitBreachMain() }),
+				hintKey("v", "side by side", func(r *Root) { r.toggleGitBreachDiffSplit() }),
+			)
+		}
 	}
 	entries = append(entries,
 		hintKey("c", "commit", func(r *Root) { r.openGitBreachCommitPrompt() }),
 		hintKey("r", "reload", func(r *Root) { r.reloadGitBreach() }),
 	)
-	if r.app.GetFocus() == r.gitBreachDiffView {
+	if r.gitBreachMainHasFocus() {
 		entries = append(entries, hintKey("Esc", "back", func(r *Root) { r.deactivateGitBreachMain() }))
 	} else {
 		entries = append(entries, hintKey("Esc", "close", func(r *Root) { r.closeGitBreach() }))
@@ -581,7 +643,7 @@ func (r *Root) toggleGitBreachFocus() {
 	if len(focusables) == 0 {
 		return
 	}
-	if r.app.GetFocus() == r.gitBreachDiffView {
+	if r.gitBreachMainHasFocus() {
 		r.app.SetFocus(focusables[(r.gitBreachMainOwnerIndex()+1)%len(focusables)].body)
 		return
 	}
@@ -602,7 +664,7 @@ func (r *Root) reverseToggleGitBreachFocus() {
 	if len(focusables) == 0 {
 		return
 	}
-	if r.app.GetFocus() == r.gitBreachDiffView {
+	if r.gitBreachMainHasFocus() {
 		i := r.gitBreachMainOwnerIndex()
 		r.app.SetFocus(focusables[(i-1+len(focusables))%len(focusables)].body)
 		return
@@ -649,7 +711,20 @@ func (r *Root) gitBreachMainOwnerIndex() int {
 // the same way lazygit's own diff pane works, with
 // deactivateGitBreachMain as the way back.
 func (r *Root) activateGitBreachMain() {
+	if r.gitBreachDiffSplit {
+		r.app.SetFocus(r.gitBreachDiffSplitLeft)
+		return
+	}
 	r.app.SetFocus(r.gitBreachDiffView)
+}
+
+// gitBreachMainHasFocus reports whether Main currently holds real
+// keyboard focus — either sub-view (see toggleGitBreachDiffSplit):
+// gitBreachDiffSplitRight never counts, since it never actually holds
+// focus itself (see newGitBreachDiffSplit's own doc comment).
+func (r *Root) gitBreachMainHasFocus() bool {
+	focus := r.app.GetFocus()
+	return focus == r.gitBreachDiffView || focus == r.gitBreachDiffSplitLeft
 }
 
 // deactivateGitBreachMain returns focus to whichever box currently
@@ -698,6 +773,9 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case 'r':
 			r.reloadGitBreach()
+			return nil
+		case 'v':
+			r.toggleGitBreachDiffSplit()
 			return nil
 		}
 	}
@@ -1306,12 +1384,28 @@ func (r *Root) renderGitBreachDiffHeader(width, height int) {
 		r.gitBreachDiffHeader.SetText(title)
 		return
 	}
+	view := r.gitBreachDiffView
 	totalLines := r.gitBreachDiffView.GetWrappedLineCount()
+	if r.gitBreachDiffSplit {
+		// The two panes are supposed to always have exactly the same
+		// row count (see gitBreachRenderDiffSplit's own doc comment:
+		// one row per LinePair on both sides, always) — but "Page X/Y"
+		// uses whichever is actually longer regardless, a cheap
+		// safeguard against that invariant ever quietly breaking
+		// (a future rendering change, an edge case missed here) rather
+		// than trusting it blindly.
+		view = r.gitBreachDiffSplitLeft
+		totalLines = view.GetWrappedLineCount()
+		if rightLines := r.gitBreachDiffSplitRight.GetWrappedLineCount(); rightLines > totalLines {
+			view = r.gitBreachDiffSplitRight
+			totalLines = rightLines
+		}
+	}
 	if totalLines == 0 {
 		r.gitBreachDiffHeader.SetText(title)
 		return
 	}
-	row, _ := r.gitBreachDiffView.GetScrollOffset()
+	row, _ := view.GetScrollOffset()
 	currentPage, totalPages := gitBreachDiffPage(row, totalLines, height)
 	hint := fmt.Sprintf("Page %d/%d ", currentPage, totalPages)
 	padding := width - tview.TaggedStringWidth(title) - tview.TaggedStringWidth(hint)

@@ -474,10 +474,39 @@ func (r *Root) gitBreachActivateDiffKey(key string) {
 // this session. key becomes the new gitBreachDiffScrollKey, so the
 // next save (on whatever row comes after this one) attributes to the
 // right entry regardless of how long this fetch took.
-func (r *Root) gitBreachSetDiffText(key, text string) {
+//
+// rawDiff is the real unified-diff text text was colorized from (see
+// gitBreachColorizeDiff) — "" for anything that isn't actually a
+// diff (an untracked file's own raw content, an unresolved conflict's
+// own notice, an error, "no diff to show") — kept so the split view
+// (see comparediffsplit.go's own gitBreachRenderDiffSplit) can be
+// re-rendered from it on toggle without a second git fetch, and so the
+// split view re-renders immediately alongside Main whenever this
+// function runs while split mode is already active, rather than
+// showing stale content from whatever was selected before.
+// gitBreachClearDiff empties Main — both the unified view and the
+// split view, if that's currently showing — and forgets the raw diff
+// text behind it. The shared "nothing selected" reset all three
+// startGitBreach*Diff functions open with, since none of their own
+// gitBreachSetDiffText calls below ever run at all in that case.
+func (r *Root) gitBreachClearDiff() {
+	r.gitBreachDiffView.SetText("")
+	r.gitBreachDiffRawText = ""
+	if r.gitBreachDiffSplit {
+		r.gitBreachRenderDiffSplit()
+	}
+}
+
+func (r *Root) gitBreachSetDiffText(key, text, rawDiff string) {
 	r.gitBreachDiffScrollKey = key
 	r.gitBreachDiffView.SetText(text)
 	r.gitBreachDiffView.ScrollTo(r.gitBreachDiffScroll[key], 0)
+	r.gitBreachDiffRawText = rawDiff
+	if r.gitBreachDiffSplit {
+		r.gitBreachRenderDiffSplit()
+		r.gitBreachDiffSplitLeft.ScrollTo(r.gitBreachDiffScroll[key], 0)
+		r.gitBreachDiffSplitRight.ScrollTo(r.gitBreachDiffScroll[key], 0)
+	}
 }
 
 func (r *Root) startGitBreachDiff(row int) {
@@ -486,14 +515,14 @@ func (r *Root) startGitBreachDiff(row int) {
 	if !ok {
 		r.gitBreachSaveDiffScroll()
 		r.gitBreachDiffScrollKey = ""
-		r.gitBreachDiffView.SetText("")
+		r.gitBreachClearDiff()
 		return
 	}
 	key := gitBreachFileDiffScrollKey(gr)
 	r.gitBreachActivateDiffKey(key)
 
 	if gr.kind == gitBreachRowConflict {
-		r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: unresolved conflict — resolving conflicts is not yet supported here.", gr.path)))
+		r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: unresolved conflict — resolving conflicts is not yet supported here.", gr.path)), "")
 		return
 	}
 
@@ -538,7 +567,7 @@ func (r *Root) startGitBreachDiff(row int) {
 				return // the cursor moved to a different row before this landed
 			}
 			if err != nil {
-				r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: %v", gr.path, err)))
+				r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: %v", gr.path, err)), "")
 				return
 			}
 			if gr.kind == gitBreachRowUntracked {
@@ -557,10 +586,10 @@ func (r *Root) startGitBreachDiff(row int) {
 				// gitBreachColorizeDiff's own doc comment) — this is a
 				// real source file, not a diff, so that rejection
 				// doesn't apply here.
-				r.gitBreachSetDiffText(key, renderSyntax(viewer.Highlight(gr.path, text), paletteFor(r.theme.SurfaceBackground)))
+				r.gitBreachSetDiffText(key, renderSyntax(viewer.Highlight(gr.path, text), paletteFor(r.theme.SurfaceBackground)), "")
 				return
 			}
-			r.gitBreachSetDiffText(key, gitBreachColorizeDiff(text, gr.path, r.theme))
+			r.gitBreachSetDiffText(key, gitBreachColorizeDiff(text, gr.path, r.theme), text)
 		})
 	})
 }
@@ -597,7 +626,7 @@ func (r *Root) startGitBreachCommitDiff(row int) {
 	if !ok {
 		r.gitBreachSaveDiffScroll()
 		r.gitBreachDiffScrollKey = ""
-		r.gitBreachDiffView.SetText("")
+		r.gitBreachClearDiff()
 		return
 	}
 	key := "C:" + c.Hash
@@ -634,10 +663,10 @@ func (r *Root) startGitBreachCommitDiff(row int) {
 				return // the cursor moved to a different row before this landed
 			}
 			if err != nil {
-				r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: %v", c.Short, err)))
+				r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: %v", c.Short, err)), "")
 				return
 			}
-			r.gitBreachSetDiffText(key, gitBreachColorizeDiff(text, "", r.theme))
+			r.gitBreachSetDiffText(key, gitBreachColorizeDiff(text, "", r.theme), text)
 		})
 	})
 }
@@ -660,7 +689,7 @@ func (r *Root) startGitBreachStashDiff(row int) {
 	if !ok {
 		r.gitBreachSaveDiffScroll()
 		r.gitBreachDiffScrollKey = ""
-		r.gitBreachDiffView.SetText("")
+		r.gitBreachClearDiff()
 		return
 	}
 	key := "S:" + s.Ref
@@ -697,10 +726,10 @@ func (r *Root) startGitBreachStashDiff(row int) {
 				return // the cursor moved to a different row before this landed
 			}
 			if err != nil {
-				r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: %v", s.Ref, err)))
+				r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: %v", s.Ref, err)), "")
 				return
 			}
-			r.gitBreachSetDiffText(key, gitBreachColorizeDiff(text, "", r.theme))
+			r.gitBreachSetDiffText(key, gitBreachColorizeDiff(text, "", r.theme), text)
 		})
 	})
 }

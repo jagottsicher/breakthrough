@@ -94,7 +94,8 @@ var helpText = strings.TrimLeft(`
                 (a real interactive remote shell, same connection list
                 as gc) · gm Messages · ge Email (launches neomutt/aerc/
                 himalaya/mail/mailx, whichever is installed —
-                configurable under Options)
+                configurable under Options) ·
+                g: Bash prompt (same as plain ":")
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
                 mw Open with… · mt tail -f · ma Select all · mA Deselect all ·
@@ -106,6 +107,7 @@ var helpText = strings.TrimLeft(`
     j  tools    jc Compress… · je Extract · jE Extract, del org ·
                 jg Git breach dashboard (stage/commit for the repo
                 under the active panel) ·
+                jC Compare (same as plain "C") ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen ·
@@ -635,6 +637,20 @@ var helpText = strings.TrimLeft(`
   or inside an archive view rather than reading the wrong repository on
   this machine under the same-looking path.
 
+  Main's own diff has a second view, toggled by "v" while Main has
+  focus: a side-by-side pane pair (old on the left, new on the right),
+  the same two-pane shape Compare's own diff view (see "C" above) uses.
+  Scrolling is always linked between the two sides here — there's no
+  independent-scrolling mode to opt out of the way Compare's own "="/
+  "≠" toggle offers, since both panes show the same file, not two
+  unrelated things. Left scrolls the pair sideways for a long line,
+  stepping back out to whichever box is still selected underneath (the
+  same action Esc/Enter/Space already reach) once already scrolled all
+  the way back to the left edge. A Commits/Stash row touching several
+  files stacks each file's own pane content under its own path header,
+  one after another; a gap between two hunks of the same file shows as
+  a muted "⋮" row on both sides rather than disappearing silently.
+
     Tab/     Switch keyboard focus forwards/backwards between Files,
     Shift-   Branches, Commits and Stash (or, from inside Main's own
     Tab      diff, continue the same cycle from whichever box is still
@@ -673,7 +689,13 @@ var helpText = strings.TrimLeft(`
              the ordinary way to move through a long list
     Left/    (Main only) Step back out to whichever box is still
     Enter/   selected underneath, returning real keyboard focus there
-    Space    — works no matter which key originally jumped into Main
+    Space    — works no matter which key originally jumped into Main.
+             In the side-by-side view (see "v" below) Left instead
+             scrolls the pair left while there's still room to, only
+             stepping back out once already at the left edge
+    →        (Main, side-by-side view only) Scroll the pair right
+    v        (Main only) Toggle Main's own diff between the unified
+             pager and the side-by-side view
     c        Commit whatever is currently staged, after typing a
              message (does nothing with nothing staged) — works no
              matter which box currently has focus, since committing
@@ -997,6 +1019,9 @@ var helpText = strings.TrimLeft(`
 
 [::b]Compare ("C")[::-]
 
+  Also reachable as "jC" (see the "j" chord family above) — the exact
+  same action under both.
+
   Answers "are these the same, and if not, what's different" — for
   two files, or two whole directory trees. Needs exactly two things to
   compare: mark two entries (in either order — they're compared in
@@ -1011,9 +1036,11 @@ var helpText = strings.TrimLeft(`
   timestamps — this heuristic genuinely can't tell). "Compute hash"
   settles it for certain (SHA-256, cancellable, the same progress
   animation Properties' own hashing shows); "Show diff" opens a real
-  line-by-line comparison through the system's own diff(1) in the
-  Look pager (red/green, the same as any other diff), disabled for a
-  binary pair or when diff(1) isn't installed.
+  line-by-line comparison, two panes side by side (red/green, the same
+  as any other diff), disabled for a binary pair or a directory. Tab
+  switches which pane Up/Down/Page Up/Page Down scrolls; the title
+  bar's own "=" / "≠" button links the two panes to scroll together or
+  lets them scroll independently.
 
   Two directories opens a full screen: every path that differs, plus
   every path that exists on only one side — a directory that's

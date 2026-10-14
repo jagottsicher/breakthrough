@@ -449,10 +449,11 @@ func (r *Root) compareTreeEntryAt(row int) (compare.Entry, bool) {
 }
 
 // activateCompareTreeRow is Enter on a table row: a text pair that
-// actually differs opens the diff pager (see openCompareDiff, reused
-// here against the two real on-disk paths this row names — nothing
-// tree-specific about it); anything else — identical, a directory, a
-// one-sided path, a type mismatch, a binary pair — has no diff to show.
+// actually differs opens the side-by-side diff view (see
+// openCompareDiff, reused here against the two real on-disk paths this
+// row names — nothing tree-specific about it); anything else —
+// identical, a directory, a one-sided path, a type mismatch, a binary
+// pair — has no diff to show.
 func (r *Root) activateCompareTreeRow(row int) {
 	e, ok := r.compareTreeEntryAt(row)
 	if !ok || e.Verdict == compare.OnlyInA || e.Verdict == compare.OnlyInB || e.Verdict == compare.Identical || e.Note != "" {

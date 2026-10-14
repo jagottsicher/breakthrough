@@ -812,11 +812,15 @@ func TestTrashbinShortcutNoOpsWhileAnOverlayIsOpen(t *testing.T) {
 	}
 }
 
-// TestPruneTrashAtStartupRemovesOldItemAndReturnsNotice pins the actual
-// integration, not just fsops.PruneTrash's own already-tested logic: an
-// item older than r.settings.TrashMaxAgeDays is gone from the trash
-// afterward, and the returned notice names how many.
-func TestPruneTrashAtStartupRemovesOldItemAndReturnsNotice(t *testing.T) {
+// TestPruneTrashAtStartupRemovesOldItem pins the actual integration,
+// not just fsops.PruneTrash's own already-tested logic: an item older
+// than r.settings.TrashMaxAgeDays is gone from the trash afterward.
+// (trashPruneMessage's own wording is covered separately — see
+// TestTrashPruneMessageMentionsBothAgeAndQuota — and the notify.Push
+// itself is deferred via QueueUpdateDraw, see pruneTrashAtStartup's own
+// doc comment, which needs a real Application.Run event loop to ever
+// actually execute, not reachable from this kind of test without one.)
+func TestPruneTrashAtStartupRemovesOldItem(t *testing.T) {
 	r, _, file := newTestRootWithFile(t)
 	r.moveSelectionToTrash()
 
@@ -830,11 +834,8 @@ func TestPruneTrashAtStartupRemovesOldItemAndReturnsNotice(t *testing.T) {
 	}
 	backdateTrashItem(t, dir, items[0].ID, time.Duration(r.settings.TrashMaxAgeDays+10)*24*time.Hour)
 
-	notice := r.pruneTrashAtStartup()
+	r.pruneTrashAtStartup()
 
-	if notice == "" {
-		t.Fatal("pruneTrashAtStartup returned no notice despite an item old enough to prune")
-	}
 	remaining, err := fsops.ListTrash(dir)
 	if err != nil || len(remaining) != 0 {
 		t.Fatalf("ListTrash after pruneTrashAtStartup = %+v, %v, want empty", remaining, err)
@@ -845,18 +846,16 @@ func TestPruneTrashAtStartupRemovesOldItemAndReturnsNotice(t *testing.T) {
 }
 
 // TestPruneTrashAtStartupNoOpWithEmptyTrash is a regression guard for
-// NewRoot's own end-of-construction wiring (see its startupNotices):
-// an ordinary fresh start, with nothing ever trashed, must not pop an
-// error overlay of its own accord.
+// NewRoot's own end-of-construction wiring: an ordinary fresh start,
+// with nothing ever trashed, must not pop an error overlay of its own
+// accord.
 func TestPruneTrashAtStartupNoOpWithEmptyTrash(t *testing.T) {
 	r, _, _ := newTestRootWithFile(t)
 
 	if r.activePage == errorPage {
 		t.Fatalf("NewRoot already shows an error overlay with an empty trash: %q", r.errorView.GetText(true))
 	}
-	if notice := r.pruneTrashAtStartup(); notice != "" {
-		t.Errorf("pruneTrashAtStartup() = %q, want \"\" with nothing in the trash", notice)
-	}
+	r.pruneTrashAtStartup()
 }
 
 // TestTrashPruneMessageMentionsBothAgeAndQuota pins trashPruneMessage's
