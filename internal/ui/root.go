@@ -1446,17 +1446,19 @@ type Root struct {
 	// state; compareDiffLeftFocused tracks which of the two panes
 	// currently has focus, read by captureCompareDiffPaneKey to decide
 	// which pane an Up/Down/PgUp/PgDn keypress scrolls when unlinked.
-	compareDiffLayout      *tview.Flex
-	compareDiffTitleBar    *tview.TextView
-	compareDiffBody        *tview.Flex
-	compareDiffLeft        *tview.TextView
-	compareDiffRight       *tview.TextView
-	compareDiffSeparator   *tview.Box
-	compareDiffHint        *tview.TextView
-	compareDiffHintSpans   []listHintSpan
-	compareDiffPairs       []compare.LinePair
-	compareDiffLinked      bool
-	compareDiffLeftFocused bool
+	compareDiffLayout         *tview.Flex
+	compareDiffTitleBar       *tview.TextView
+	compareDiffBody           *tview.Flex
+	compareDiffLeft           *tview.TextView
+	compareDiffLeftScrollbar  *verticalScrollbar
+	compareDiffRight          *tview.TextView
+	compareDiffRightScrollbar *verticalScrollbar
+	compareDiffSeparator      *tview.Box
+	compareDiffHint           *tview.TextView
+	compareDiffHintSpans      []listHintSpan
+	compareDiffPairs          []compare.LinePair
+	compareDiffLinked         bool
+	compareDiffLeftFocused    bool
 
 	helpView      *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	helpScrollbar *verticalScrollbar
