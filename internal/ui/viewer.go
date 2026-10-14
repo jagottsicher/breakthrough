@@ -276,12 +276,13 @@ func (r *Root) showBuiltinLook(path string) bool {
 	}
 
 	// Inner width/height account for newViewerView's own 1-column left/
-	// right border padding (0 top/bottom) — computed once, up front,
-	// since both the image path (ScaleForTerminal) and the unsupported-
-	// image-message path (centeredMessage) need the real drawable area,
-	// not the overlay's own outer rect.
+	// right border padding (0 top/bottom) plus viewerLayout's own
+	// 1-column scrollbar (see root.go/viewerLayout) — computed once, up
+	// front, since both the image path (ScaleForTerminal) and the
+	// unsupported-image-message path (centeredMessage) need the real
+	// drawable area, not the overlay's own outer rect.
 	width, height := r.viewerSize()
-	innerWidth, innerHeight := width-2, height
+	innerWidth, innerHeight := r.viewerInnerWidth(width), height
 
 	switch result.Kind {
 	case viewer.KindPDF:
@@ -342,7 +343,7 @@ func (r *Root) showBuiltinLook(path string) bool {
 
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
-	r.viewerView.SetRect(x, y, width, height)
+	r.viewerLayout.SetRect(x, y, width, height)
 
 	// pushOverlay, not showOverlay: per the user's own explicit request,
 	// "l" now also works while Properties is open (see the "l" key's own
@@ -354,8 +355,18 @@ func (r *Root) showBuiltinLook(path string) bool {
 	// prevent. Stacking on top instead (the same shape openHelp already
 	// uses over anything) leaves Properties intact underneath; Escape
 	// returns to it exactly as it was.
-	r.pushOverlay(viewerPage, r.viewerView, nil)
+	r.pushOverlay(viewerPage, r.viewerLayout, nil)
 	return true
+}
+
+// viewerInnerWidth is the real drawable column count inside the Look
+// overlay for outerWidth — its own 1-column left/right border padding
+// (see newViewerView) plus viewerLayout's own 1-column scrollbar (see
+// root.go/viewerLayout), not outerWidth itself. Shared by
+// showBuiltinLook, turnPDFPage and setPDFViewMode so none of the three
+// drifts from the others.
+func (r *Root) viewerInnerWidth(outerWidth int) int {
+	return outerWidth - 1 - 2
 }
 
 // showUnsupportedLook decides how to report content Load read but
@@ -514,7 +525,7 @@ func (r *Root) turnPDFPage(delta int) {
 	r.viewerPDFPage = next
 
 	width, height := r.viewerSize()
-	r.renderPDFPageContent(width-2, height)
+	r.renderPDFPageContent(r.viewerInnerWidth(width), height)
 }
 
 // setPDFViewMode is 'g'/'t”s own action while viewing a PDF (see
@@ -527,7 +538,7 @@ func (r *Root) setPDFViewMode(mode viewer.PDFViewMode) {
 	r.viewerPDFMode = mode
 
 	width, height := r.viewerSize()
-	r.renderPDFPageContent(width-2, height)
+	r.renderPDFPageContent(r.viewerInnerWidth(width), height)
 }
 
 // LookShortcut used to be Ctrl+L's global action — nothing in

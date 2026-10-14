@@ -1446,6 +1446,16 @@ type Root struct {
 	helpView   *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	viewerView *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
 
+	// viewerScrollbar/viewerLayout are Look's own vertical scrollbar
+	// (see scrollbar.go) and the Flex placing it one column right of
+	// viewerView — viewerLayout, not viewerView directly, is what
+	// showBuiltinLook actually sizes/positions and pushes as the
+	// overlay. Pilot for this app's first custom scrollbar (per the
+	// user's own explicit request) — deliberately not a shared
+	// cross-widget component yet.
+	viewerScrollbar *verticalScrollbar
+	viewerLayout    *tview.Flex
+
 	// helpTitleBar/helpLayout are Help's own one-row title bar (see
 	// newHelpTitleBar) and the Flex stacking it over helpView (the same
 	// shape detailsSidebarLayout has over detailsSidebar — see
@@ -2645,6 +2655,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// single-static-TextView shape as Help, just with its own text set
 	// fresh on every open instead of once here.
 	r.viewerView = r.newViewerView()
+	r.viewerScrollbar = newVerticalScrollbar(r, r.viewerView)
+	r.viewerLayout = tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.viewerView, 0, 1, true).
+		AddItem(r.viewerScrollbar, 1, 0, false)
+	r.viewerLayout.SetMouseCapture(r.captureViewerScrollbarMouse)
 
 	// The tab switcher overlay (see tabswitcher.go) — same
 	// list-plus-title-bar shape as the context menu above, rebuilt on
@@ -2796,7 +2811,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpLayout, false, false)
-	r.AddPage(viewerPage, r.viewerView, false, false)
+	r.AddPage(viewerPage, r.viewerLayout, false, false)
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
@@ -3229,6 +3244,11 @@ func (r *Root) hideOverlay() {
 		// Enter/Tab/Backtab, a click outside, Ctrl+C) funnels through,
 		// so it's also the one point cleanup can't be missed from.
 		r.cleanupViewerLookTempFile()
+		// Same reasoning for the scrollbar's own press-and-hold repeat
+		// goroutine (see scrollbar.go/startRepeat) — closing Look while
+		// an arrow/page-jump is held down must not leave it scrolling a
+		// TextView nothing shows any more.
+		r.viewerScrollbar.stopRepeat()
 	}
 
 	if len(r.overlayStack) == 0 {

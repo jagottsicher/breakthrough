@@ -495,7 +495,11 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	}
 
 	if r.viewerView != nil {
-		r.viewerView.SetBackgroundColor(theme.SurfaceBackground)
+		// PanelBackground, not SurfaceBackground — see mountsLayout's own
+		// comment: every full-bleed catalog/viewer body rests on the same
+		// background as the main panel, not the lighter floating-chrome
+		// surface.
+		r.viewerView.SetBackgroundColor(theme.PanelBackground)
 		r.viewerView.SetTextColor(theme.TextColor)
 	}
 
