@@ -2048,8 +2048,8 @@
     },
     {
       "path": "internal/ui/scrollbar_test.go",
-      "size": 11956,
-      "sha256": "a82a87c25471018f627099c37dd42c1597af5b2d6efbcf3d095798fe117276cd"
+      "size": 12599,
+      "sha256": "3bc088c555171fb796f0218816c1fc56ed396621b1e32cbdb656fc5551015c2b"
     },
     {
       "path": "internal/ui/search.go",
@@ -41628,7 +41628,7 @@
       "file": "internal/ui/scrollbar_test.go",
       "name": "TestVerticalScrollbarHiddenWhenContentFits",
       "kind": "function",
-      "line": 278
+      "line": 288
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49049,5 +49049,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "5f22b453b407be2502b6da77446f44349910aaca2fccdf373b720dd789f1929f"
+  "merkle_root": "8c3e37e20a0f9e2002c9525de1461f075cf1333ad69a76befd84551b6726be93"
 }
