@@ -58,6 +58,20 @@ func (r *Root) newCompareDiffScreen() {
 
 	r.compareDiffSeparator = tview.NewBox()
 	r.compareDiffSeparator.SetDrawFunc(r.drawCompareDiffSeparator)
+	// Box's own default MouseHandler calls setFocus(b) on any
+	// MouseLeftDown within its rect — real behavior, not a
+	// hypothetical: a plain Box with no mouse capture of its own
+	// otherwise silently steals keyboard focus onto itself (a bare Box
+	// with no SetInputCapture at all) the moment a click lands on this
+	// one-column-wide bar, or even just slightly misses one of the two
+	// panes next to it. After that every key does nothing at all,
+	// while the mouse wheel keeps working (it hit-tests by screen
+	// position, not by focus) — exactly the "scrolling only works with
+	// the mouse" the user reported. gitBreachBlockFocusSteal (shared,
+	// not gitbreach-specific despite the name) is this app's own
+	// established fix for the identical problem on every other purely
+	// decorative widget.
+	r.compareDiffSeparator.SetMouseCapture(gitBreachBlockFocusSteal)
 
 	r.compareDiffBody = tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.compareDiffLeft, 0, 1, true).
@@ -67,9 +81,79 @@ func (r *Root) newCompareDiffScreen() {
 	r.compareDiffTitleBar = newPlainTitleBar("Diff")
 	r.compareDiffTitleBar.SetMouseCapture(r.captureCompareDiffTitleBarMouse())
 
+	// The bottom hint bar — per the user's own explicit request after
+	// reporting the link/unlink toggle's own glyph was unclear on its
+	// own: every key this screen answers to, spelled out in words, the
+	// same shared bottom-hint-bar shape every other full-screen list in
+	// this app already uses (see listhint.go's own package doc
+	// comment), not a screen-specific one-off.
+	r.compareDiffHint = tview.NewTextView()
+	r.compareDiffHint.SetWrap(false)
+	r.compareDiffHint.SetDynamicColors(true)
+	r.compareDiffHint.SetMouseCapture(r.captureListHintMouse(r.compareDiffHint, &r.compareDiffHintSpans))
+
 	r.compareDiffLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.compareDiffTitleBar, 1, 0, false).
-		AddItem(r.compareDiffBody, 0, 1, true)
+		AddItem(r.compareDiffBody, 0, 1, true).
+		AddItem(r.compareDiffHint, 1, 0, false)
+}
+
+// compareDiffHintEntries is the bottom hint bar's own content —
+// Up/Down/PgUp/PgDn/Left/Right are dispatched via simulateKeyOnFocused
+// rather than calling scrollCompareDiff directly: a click always lands
+// on whichever pane currently has real keyboard focus, and routing it
+// through the exact same InputHandler a real keypress reaches (see
+// captureCompareDiffPaneKey, which wraps that handler) means a hint-bar
+// click and the matching real key can never drift apart from each
+// other. A method on Root, not a bare function, the same as
+// gitBreachHintEntries — the link/unlink entry below needs to read
+// r.compareDiffLinked to show the glyph that's actually active right
+// now.
+func (r *Root) compareDiffHintEntries() []listHintEntry {
+	return []listHintEntry{
+		{keys: []listHintKey{
+			{"↑", simulateKeyOnFocused(tcell.KeyUp)},
+			{"↓", simulateKeyOnFocused(tcell.KeyDown)},
+		}, label: "scroll"},
+		{keys: []listHintKey{
+			{"PgUp", simulateKeyOnFocused(tcell.KeyPgUp)},
+			{"PgDn", simulateKeyOnFocused(tcell.KeyPgDn)},
+		}, label: "page"},
+		{keys: []listHintKey{
+			{"←", simulateKeyOnFocused(tcell.KeyLeft)},
+			{"→", simulateKeyOnFocused(tcell.KeyRight)},
+		}, label: "scroll sideways (← at the left edge leaves)"},
+		hintKey("Tab", "switch pane", func(r *Root) { r.cycleCompareDiffFocus() }),
+		r.compareDiffLinkHintEntry(),
+		hintKey("Esc", "close", func(r *Root) { r.closeCompareDiff() }),
+	}
+}
+
+// compareDiffLinkHintEntry is the hint bar's own link/unlink toggle
+// entry — its key literally IS the current glyph (see
+// compareDiffLinkedGlyph/compareDiffUnlinkedGlyph), the same state the
+// title bar's own button already shows, so the two never say something
+// different; the label spells out what that glyph means in words
+// instead of leaving it to speak for itself, per the user's own
+// explicit report that the bare glyph alone wasn't clear.
+func (r *Root) compareDiffLinkHintEntry() listHintEntry {
+	glyph := string(compareDiffUnlinkedGlyph)
+	label := "link scroll (currently independent)"
+	if r.compareDiffLinked {
+		glyph = string(compareDiffLinkedGlyph)
+		label = "unlink scroll (currently linked)"
+	}
+	return hintKey(glyph, label, func(r *Root) { r.toggleCompareDiffLinked() })
+}
+
+// renderCompareDiffHint rebuilds the hint bar's own text/spans from
+// compareDiffHintEntries' own current, link-state-dependent list —
+// mirrors refreshGitBreachHint exactly, called on open, on every
+// link/unlink toggle, and on a theme switch.
+func (r *Root) renderCompareDiffHint() {
+	hintText, hintSpans := buildListHint(r.theme, r.compareDiffHintEntries())
+	r.compareDiffHint.SetText(hintText)
+	r.compareDiffHintSpans = hintSpans
 }
 
 // drawCompareDiffSeparator paints a plain vertical rule the full height
@@ -106,10 +190,13 @@ func (r *Root) applyCompareDiffTheme(theme config.ResolvedTheme) {
 	r.compareDiffSeparator.SetBackgroundColor(theme.SurfaceBackground)
 	r.compareDiffTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.compareDiffTitleBar.SetTextColor(theme.TextColor)
+	r.compareDiffHint.SetBackgroundColor(theme.InputBackground)
+	r.compareDiffHint.SetTextColor(theme.MutedTextColor)
 	if r.compareDiffPairs != nil {
 		r.renderCompareDiff()
 	}
 	r.renderCompareDiffTitleBar()
+	r.renderCompareDiffHint()
 }
 
 // openCompareDiff is "Show diff": a real line-by-line answer for the
@@ -142,6 +229,7 @@ func (r *Root) openCompareDiff() {
 	r.compareDiffLeftFocused = true
 	r.renderCompareDiff()
 	r.renderCompareDiffTitleBar()
+	r.renderCompareDiffHint()
 	r.compareDiffLeft.ScrollToBeginning()
 	r.compareDiffRight.ScrollToBeginning()
 	r.showOverlayWithRestore(compareDiffPage, r.compareDiffLayout, func() { r.app.SetFocus(r.compareDiffLeft) })
@@ -282,23 +370,29 @@ func compareDiffLinkButtonCol(width int) int {
 // toggleCompareDiffLinked/closeCompareDiff instead of reload/close.
 func (r *Root) captureCompareDiffTitleBarMouse() func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-		if action != tview.MouseLeftClick {
-			return action, event
+		if action == tview.MouseLeftClick {
+			x, y := event.Position()
+			rectX, rectY, width, _ := r.compareDiffTitleBar.GetRect()
+			if y == rectY {
+				switch x - rectX {
+				case compareDiffCloseButtonCol(width):
+					r.closeCompareDiff()
+					return tview.MouseConsumed, nil
+				case compareDiffLinkButtonCol(width):
+					r.toggleCompareDiffLinked()
+					return tview.MouseConsumed, nil
+				}
+			}
 		}
-		x, y := event.Position()
-		rectX, rectY, width, _ := r.compareDiffTitleBar.GetRect()
-		if y != rectY {
-			return action, event
-		}
-		switch x - rectX {
-		case compareDiffCloseButtonCol(width):
-			r.closeCompareDiff()
-			return tview.MouseConsumed, nil
-		case compareDiffLinkButtonCol(width):
-			r.toggleCompareDiffLinked()
-			return tview.MouseConsumed, nil
-		}
-		return action, event
+		// Any other click on the bar (not one of the two glyphs above)
+		// is blocked here too, same reasoning as
+		// compareDiffSeparator's own mouse capture: a plain TextView's
+		// default MouseHandler also calls setFocus(t) unconditionally
+		// on MouseLeftDown, which would otherwise steal keyboard focus
+		// onto this bar — a TextView with no SetInputCapture of its
+		// own — the instant a click lands anywhere on it but those two
+		// glyphs.
+		return gitBreachBlockFocusSteal(action, event)
 	}
 }
 
@@ -316,6 +410,7 @@ func (r *Root) toggleCompareDiffLinked() {
 		r.inactiveCompareDiffPane().ScrollTo(row, col)
 	}
 	r.renderCompareDiffTitleBar()
+	r.renderCompareDiffHint()
 }
 
 // activeCompareDiffPane/inactiveCompareDiffPane return the focused pane

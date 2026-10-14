@@ -1410,6 +1410,8 @@ type Root struct {
 	compareDiffLeft        *tview.TextView
 	compareDiffRight       *tview.TextView
 	compareDiffSeparator   *tview.Box
+	compareDiffHint        *tview.TextView
+	compareDiffHintSpans   []listHintSpan
 	compareDiffPairs       []compare.LinePair
 	compareDiffLinked      bool
 	compareDiffLeftFocused bool
