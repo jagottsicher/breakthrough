@@ -65,8 +65,14 @@ func (r *Root) newCompareTreeScreen() {
 	r.compareTreeHintSpans = compareTreeHintSpans
 	r.compareTreeHint.SetMouseCapture(r.captureListHintMouse(r.compareTreeHint, &r.compareTreeHintSpans))
 
-	body := tview.NewFlex().SetDirection(tview.FlexRow).
+	r.compareTreeScrollbar = newVerticalScrollbarForTable(r, r.compareTreeTable)
+	tableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.compareTreeTable, 0, 1, true).
+		AddItem(r.compareTreeScrollbar, 1, 0, false)
+	tableRow.SetMouseCapture(r.compareTreeScrollbar.captureMouse)
+
+	body := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(tableRow, 0, 1, true).
 		AddItem(r.compareTreeStatus, 1, 0, false).
 		AddItem(r.compareTreeButtons, 1, 0, false)
 

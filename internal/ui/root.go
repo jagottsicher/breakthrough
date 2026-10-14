@@ -1424,6 +1424,7 @@ type Root struct {
 	compareTreeHint          *tview.TextView
 	compareTreeHintSpans     []listHintSpan
 	compareTreeTable         *tview.Table
+	compareTreeScrollbar     *verticalScrollbar
 	compareTreeStatus        *tview.TextView
 	compareTreeButtons       *tview.Flex
 	compareTreeModeBtn       *tview.Button
