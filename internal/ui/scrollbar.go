@@ -85,6 +85,19 @@ type verticalScrollbar struct {
 	root    *Root
 	content scrollableContent
 
+	// trackColor is normally nil (Draw then falls back to
+	// theme.PanelBackground, the background every plain catalog
+	// screen's own body already rests on — see mountsLayout's own
+	// comment). Git Breach is the one exception so far: its own boxes
+	// brighten when focused (see styleGitBreachFocus), and tview's own
+	// Box exposes no getter for "whatever background color I was last
+	// told to use" — so rather than reading it back, SetTrackColorFunc
+	// lets a screen like that hand the scrollbar the exact same
+	// decision its own content already makes, instead of this column
+	// staying a flat, mismatched tone while the table next to it lights
+	// up.
+	trackColor func() tcell.Color
+
 	dragging        bool
 	dragStartY      int
 	dragStartOffset int
@@ -133,6 +146,15 @@ func newVerticalScrollbarForTextView(root *Root, view *tview.TextView) *vertical
 
 func newVerticalScrollbarForTable(root *Root, table *tview.Table) *verticalScrollbar {
 	return newVerticalScrollbar(root, tableContent{table: table})
+}
+
+// SetTrackColorFunc overrides the track's own background color — see
+// the trackColor field's own doc comment for why a screen would need
+// this at all. f is called fresh on every Draw, so it can reflect
+// live, changing state (e.g. whether the content next to it currently
+// has keyboard focus).
+func (sb *verticalScrollbar) SetTrackColorFunc(f func() tcell.Color) {
+	sb.trackColor = f
 }
 
 // viewportRows is how many rows of content are visible at once —
@@ -277,6 +299,9 @@ func (sb *verticalScrollbar) Draw(screen tcell.Screen) {
 
 	theme := sb.root.theme
 	track := theme.PanelBackground
+	if sb.trackColor != nil {
+		track = sb.trackColor()
+	}
 	thumb := scrollbarThumbColor(track)
 
 	setCell := func(row int, bg tcell.Color, ch rune) {

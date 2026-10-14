@@ -639,20 +639,24 @@ type Root struct {
 	// Each box below is a header/body pair (see newGitBreachBoxHeader/
 	// styleGitBreachFocus) — no border, a colored header line instead,
 	// per the user's own explicit request.
-	gitBreachStatusHeader   *tview.TextView
-	gitBreachStatusView     *tview.TextView
-	gitBreachFilesHeader    *tview.TextView
-	gitBreachFilesTable     *tview.Table
-	gitBreachBranchesHeader *tview.TextView
-	gitBreachBranchesTable  *tview.Table
-	gitBreachCommitsHeader  *tview.TextView
-	gitBreachCommitsTable   *tview.Table
-	gitBreachStashHeader    *tview.TextView
-	gitBreachStashTable     *tview.Table
-	gitBreachDiffHeader     *tview.TextView
-	gitBreachDiffView       *tview.TextView
-	gitBreachHint           *tview.TextView
-	gitBreachHintSpans      []listHintSpan
+	gitBreachStatusHeader      *tview.TextView
+	gitBreachStatusView        *tview.TextView
+	gitBreachFilesHeader       *tview.TextView
+	gitBreachFilesTable        *tview.Table
+	gitBreachFilesScrollbar    *verticalScrollbar
+	gitBreachBranchesHeader    *tview.TextView
+	gitBreachBranchesTable     *tview.Table
+	gitBreachBranchesScrollbar *verticalScrollbar
+	gitBreachCommitsHeader     *tview.TextView
+	gitBreachCommitsTable      *tview.Table
+	gitBreachCommitsScrollbar  *verticalScrollbar
+	gitBreachStashHeader       *tview.TextView
+	gitBreachStashTable        *tview.Table
+	gitBreachStashScrollbar    *verticalScrollbar
+	gitBreachDiffHeader        *tview.TextView
+	gitBreachDiffView          *tview.TextView
+	gitBreachHint              *tview.TextView
+	gitBreachHintSpans         []listHintSpan
 
 	gitBreachDir    string // the directory "jg" was invoked from
 	gitBreachRoot   string // resolved repository root, see git.Root
