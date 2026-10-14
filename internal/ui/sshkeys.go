@@ -108,9 +108,15 @@ func (r *Root) newSSHKeysScreen() {
 	r.sshKeysHintSpans = sshKeysHintSpans
 	r.sshKeysHint.SetMouseCapture(r.captureListHintMouse(r.sshKeysHint, &r.sshKeysHintSpans))
 
+	r.sshKeysScrollbar = newVerticalScrollbarForTable(r, r.sshKeysTable)
+	sshKeysTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.sshKeysTable, 0, 1, true).
+		AddItem(r.sshKeysScrollbar, 1, 0, false)
+	sshKeysTableRow.SetMouseCapture(r.sshKeysScrollbar.captureMouse)
+
 	r.sshKeysLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.sshKeysTitleBar, 1, 0, false).
-		AddItem(r.sshKeysTable, 0, 1, true).
+		AddItem(sshKeysTableRow, 0, 1, true).
 		AddItem(r.sshKeysHint, 1, 0, false)
 }
 
