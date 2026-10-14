@@ -230,3 +230,38 @@ func TestGitBreachDiffSplitRightMouseLeftDownRedirectsFocusToLeft(t *testing.T) 
 		t.Error("a click on the right pane must redirect focus to the left pane, never hold it itself")
 	}
 }
+
+// TestRenderGitBreachDiffHeaderUsesTheLongerSplitPane pins down a
+// defensive guarantee, not a currently-reachable bug: the two panes
+// are supposed to always have exactly the same row count (see
+// gitBreachRenderDiffSplit's own doc comment), but "Page X/Y" picks
+// whichever is actually longer regardless, in case that invariant
+// ever quietly breaks (a future rendering change, an edge case missed
+// there) — simulated directly here by setting mismatched content on
+// the two panes, something gitBreachRenderDiffSplit itself would never
+// actually do.
+func TestRenderGitBreachDiffHeaderUsesTheLongerSplitPane(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("ONE\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := openGitBreachFilesDiff(t, dir, "a.txt")
+	r.app.SetFocus(r.gitBreachDiffView)
+	r.toggleGitBreachDiffSplit()
+
+	r.gitBreachDiffSplitLeft.SetText("one\ntwo")
+	r.gitBreachDiffSplitRight.SetText("one\ntwo\nthree\nfour\nfive\nsix")
+
+	r.renderGitBreachDiffHeader(60, 2)
+	header := r.gitBreachDiffHeader.GetText(true)
+	if !strings.Contains(header, "Page 1/3") {
+		t.Errorf("header = %q, want it to report 3 pages (6 lines / 2 rows), the longer (right) pane's own count, not the shorter left one", header)
+	}
+}

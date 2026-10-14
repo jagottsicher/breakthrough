@@ -1356,10 +1356,22 @@ func (r *Root) renderGitBreachDiffHeader(width, height int) {
 		return
 	}
 	view := r.gitBreachDiffView
+	totalLines := r.gitBreachDiffView.GetWrappedLineCount()
 	if r.gitBreachDiffSplit {
+		// The two panes are supposed to always have exactly the same
+		// row count (see gitBreachRenderDiffSplit's own doc comment:
+		// one row per LinePair on both sides, always) — but "Page X/Y"
+		// uses whichever is actually longer regardless, a cheap
+		// safeguard against that invariant ever quietly breaking
+		// (a future rendering change, an edge case missed here) rather
+		// than trusting it blindly.
 		view = r.gitBreachDiffSplitLeft
+		totalLines = view.GetWrappedLineCount()
+		if rightLines := r.gitBreachDiffSplitRight.GetWrappedLineCount(); rightLines > totalLines {
+			view = r.gitBreachDiffSplitRight
+			totalLines = rightLines
+		}
 	}
-	totalLines := view.GetWrappedLineCount()
 	if totalLines == 0 {
 		r.gitBreachDiffHeader.SetText(title)
 		return
