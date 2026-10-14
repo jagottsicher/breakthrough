@@ -121,9 +121,12 @@ func TestToolWindowGrowsToFitLongLine(t *testing.T) {
 	long := strings.Repeat("x", 80)
 	tw.appendLine(long)
 
-	want := len(long) + 2*toolWindowContentPadding // content's own left/right padding — see newToolWindow's SetBorderPadding
+	// +2*toolWindowContentPadding: content's own left/right padding, see
+	// newToolWindow's SetBorderPadding. +1: the scrollbar's own column,
+	// see Draw/recalculateWidth.
+	want := len(long) + 2*toolWindowContentPadding + 1
 	if _, _, width, _ := tw.GetRect(); width != want {
-		t.Errorf("width = %d, want %d (grown to fit the one line actually on screen, plus its own padding)", width, want)
+		t.Errorf("width = %d, want %d (grown to fit the one line actually on screen, plus its own padding and the scrollbar column)", width, want)
 	}
 }
 
@@ -143,7 +146,10 @@ func TestToolWindowShrinksWhenVisibleLinesShorten(t *testing.T) {
 	tw.SetRect(5, 5, toolWindowMinWidth, 4) // contentHeight = 3
 
 	tw.appendLine(strings.Repeat("x", 80))
-	wantLong := 80 + 2*toolWindowContentPadding // content's own left/right padding — see newToolWindow's SetBorderPadding
+	// +2*toolWindowContentPadding: content's own left/right padding, see
+	// newToolWindow's SetBorderPadding. +1: the scrollbar's own column,
+	// see Draw/recalculateWidth.
+	wantLong := 80 + 2*toolWindowContentPadding + 1
 	if _, _, width, _ := tw.GetRect(); width != wantLong {
 		t.Fatalf("setup: width = %d, want %d right after the long line", width, wantLong)
 	}
@@ -263,6 +269,59 @@ func TestToolWindowContentClickDoesNotStartDrag(t *testing.T) {
 	handler(tview.MouseMove, tcell.NewEventMouse(25, 15, tcell.Button1, 0), func(tview.Primitive) {})
 	if x, y, _, _ := tw.GetRect(); x != 10 || y != 5 {
 		t.Errorf("rect = (%d,%d), want unchanged (10,5) — a content-area press should never move the window", x, y)
+	}
+}
+
+// TestToolWindowScrollbarMouseClickThroughRealDispatch mirrors the
+// same regression test shape used for every other scrollbar in this
+// rollout (Look, Mounts, Git Breach, Help): a click on the scrollbar's
+// own down arrow must actually scroll, driven through the real
+// dispatch chain (tw.MouseHandler()), not tw.scrollbar.captureMouse
+// directly.
+func TestToolWindowScrollbarMouseClickThroughRealDispatch(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	tw := newToolWindow(r, "tw", "test")
+	tw.SetRect(5, 5, 40, 10) // contentHeight = 7
+
+	for i := 0; i < 40; i++ {
+		tw.appendLine(fmt.Sprintf("line %d", i))
+	}
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 40)
+	tw.Draw(screen)
+
+	if tw.scrollbar.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow for 40 lines in a 7-row content area", tw.scrollbar.maxOffset())
+	}
+	// content auto-tracks the end by default (see newToolWindow's own
+	// ScrollToEnd doc comment) — scroll back to a known, non-maximal
+	// position first, or the down-arrow click below would have nowhere
+	// further to go and this test would prove nothing.
+	tw.content.ScrollToBeginning()
+	sbx, sby, _, sbh := tw.scrollbar.GetRect()
+	before, _ := tw.content.GetScrollOffset()
+
+	handler := tw.MouseHandler()
+	setFocus := func(tview.Primitive) {}
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
+	tw.scrollbar.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
+
+	after, _ := tw.content.GetScrollOffset()
+	if after != before+1 {
+		t.Errorf("content offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
+	}
+	if tw.dragging {
+		t.Error("clicking the scrollbar's own arrow must not also start a window-move drag")
 	}
 }
 
