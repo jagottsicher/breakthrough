@@ -762,6 +762,33 @@ type Root struct {
 	// whatever content is genuinely still on screen. Empty whenever
 	// nothing with real content is shown (no selection, cancelled).
 	gitBreachDiffScrollKey string
+	// The Main diff box's own second, side-by-side view (see
+	// gitbreachdiffsplit.go's own gitBreachRenderDiffSplit) — "v" while
+	// Main has focus toggles gitBreachDiffSplit and switches
+	// gitBreachDiffPages between "unified" (r.gitBreachDiffView, the
+	// original pager) and "split" (gitBreachDiffSplitLeft/Right,
+	// separated by gitBreachDiffSplitSeparator — the same two-pane
+	// shape comparediff.go's own Compare diff view already
+	// establishes, reused rather than reinvented). gitBreachDiffRawText
+	// is the real diff text behind whatever gitBreachColorizeDiff
+	// already turned into Main's own colored display — kept so a
+	// toggle re-renders the split view from it directly, with no
+	// second git fetch; gitBreachDiffFiles is compare.ParseUnifiedDiff's
+	// own last result for that same text, cached so a theme switch can
+	// re-render without re-parsing.
+	//
+	// Only gitBreachDiffSplitLeft ever holds real keyboard focus in
+	// split mode — gitBreachDiffSplitRight is a pure mirror (see
+	// gitBreachFocusDiffSplitLeftOnClick), since scrolling here is
+	// always linked, by explicit design choice, unlike Compare's own
+	// optional link/unlink toggle.
+	gitBreachDiffSplit          bool
+	gitBreachDiffPages          *tview.Pages
+	gitBreachDiffSplitLeft      *tview.TextView
+	gitBreachDiffSplitRight     *tview.TextView
+	gitBreachDiffSplitSeparator *tview.Box
+	gitBreachDiffRawText        string
+	gitBreachDiffFiles          []compare.FileDiff
 	// logAuditNewestFirst toggles the viewer table's own sort order —
 	// Up/Down arrow (see captureLogAuditViewerTableKey), per the user's
 	// own explicit request to be able to read either direction without
@@ -1396,6 +1423,25 @@ type Root struct {
 	compareTreeCancel        context.CancelFunc
 	compareTreeRunning       bool
 	compareTreeAnim          int
+
+	// The side-by-side diff view (see comparediff.go) — compareDiffPairs
+	// is compare.SideBySide's own last result, kept so Tab/link-toggle
+	// re-renders (no scroll offset change) never need to recompute the
+	// diff. compareDiffLinked mirrors the title bar's own toggle glyph
+	// state; compareDiffLeftFocused tracks which of the two panes
+	// currently has focus, read by captureCompareDiffPaneKey to decide
+	// which pane an Up/Down/PgUp/PgDn keypress scrolls when unlinked.
+	compareDiffLayout      *tview.Flex
+	compareDiffTitleBar    *tview.TextView
+	compareDiffBody        *tview.Flex
+	compareDiffLeft        *tview.TextView
+	compareDiffRight       *tview.TextView
+	compareDiffSeparator   *tview.Box
+	compareDiffHint        *tview.TextView
+	compareDiffHintSpans   []listHintSpan
+	compareDiffPairs       []compare.LinePair
+	compareDiffLinked      bool
+	compareDiffLeftFocused bool
 
 	helpView   *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	viewerView *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
@@ -2486,11 +2532,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The Compare screens (see compare.go) — file-vs-file overlay and
 	// directory-vs-directory full screen, built once here the same way.
-	// A text diff (see compare.UnifiedDiff) is shown through the
-	// existing Look pager instead of a screen of its own — see
-	// openCompareDiff's own doc comment for why that's not corner-
-	// cutting but the actually simpler, more capable choice.
+	// A text diff (see comparediff.go/compare.SideBySide) gets its own
+	// full-screen, two-pane view rather than the unified-diff-via-Look
+	// pager this used to route through — see openCompareDiff's own doc
+	// comment for why.
 	r.newCompareScreens()
+	r.newCompareDiffScreen()
 
 	// The generic picker (see openOwnerGroupPicker and, unrelated,
 	// openRsyncTabPicker) — one shared List, repopulated and
@@ -2685,6 +2732,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(batchRenamePresetPage, r.batchRenamePresetLayout, false, false)
 	r.AddPage(comparePage, r.compareLayout, false, false)
 	r.AddPage(compareTreePage, r.compareTreeLayout, true, false)
+	// resize=true: the diff view deliberately fills the whole terminal,
+	// the same reasoning compareTreePage's own comment just above gives
+	// — two side-by-side panes want all the width and height they can
+	// get, not a fixed-size overlay.
+	r.AddPage(compareDiffPage, r.compareDiffLayout, true, false)
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.
@@ -2769,18 +2821,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// agreement with it for the mouse_enabled = false case.
 	app.EnableMouse(settings.MouseEnabled)
 
-	// Both of these can have something to say, and both go through the
-	// same showError overlay — collected into one notice rather than
-	// risking the second call silently overwriting the first before
-	// anything's even been drawn (see pruneTrashAtStartup's own doc
-	// comment).
 	var startupNotices []string
 	if len(configWarnings) > 0 {
 		startupNotices = append(startupNotices, fmt.Sprintf("config: %s", strings.Join(configWarnings, "; ")))
 	}
-	if notice := r.pruneTrashAtStartup(); notice != "" {
-		startupNotices = append(startupNotices, notice)
-	}
+	// Pushes its own notify.CategoryTrash toast directly (see its own
+	// doc comment) rather than adding to startupNotices/showError —
+	// routine housekeeping, not something that needs the user's
+	// immediate attention the way a config warning does.
+	r.pruneTrashAtStartup()
 	logger, activityLogNotice, activityLogIsFallback := r.newActivityLogger()
 	r.activityLog = logger
 

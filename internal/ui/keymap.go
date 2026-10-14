@@ -362,6 +362,12 @@ func chordFamilies() []chordFamily {
 			// already uses. See feature_ideas.txt's own "0f.
 			// E-Mail-Client-Integration".
 			{'e', "Email", func(r *Root) { r.openMail() }},
+			// "g:" — a second, mnemonic path to the exact same action
+			// plain ":" already reaches (see plainCommands' own
+			// "Bash command line" entry), per the user's own explicit
+			// request after noticing ":" opens it, right after "ge"
+			// Email.
+			{':', "Bash prompt", func(r *Root) { r.app.SetFocus(r.bashLine) }},
 		}},
 		// "mm" doubles the prefix the same way "gg"/"oo" already do —
 		// opening the context menu, exactly what a bare "m" always did
@@ -518,6 +524,12 @@ func chordFamilies() []chordFamily {
 			{'e', "Extract", func(r *Root) { r.extractCurrentArchive(false) }},
 			{'E', "Extract, del org", func(r *Root) { r.extractCurrentArchive(true) }},
 			{'g', "Git breach", func(r *Root) { r.openGitBreach() }},
+			// "jC" — a second, mnemonic path to the exact same action
+			// plain "C" already reaches (see compare.go's own openCompare
+			// doc comment), per the user's own explicit request to have
+			// it reachable from this family too, right after "jg" and
+			// before "jm".
+			{'C', "Compare", func(r *Root) { r.openCompare() }},
 			{'m', "Mounts", func(r *Root) { r.openMounts() }},
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},

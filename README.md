@@ -502,8 +502,10 @@ terminal.
   directory trees. Two files get size/modified side by side plus an
   immediate verdict from the same size+time heuristic `rsync`'s own
   default sync mode uses, an on-demand SHA-256 hash for a certain
-  answer, and a real line-by-line diff (the system's own `diff(1)`,
-  shown through the existing Look pager) for text. Two directories get
+  answer, and a real line-by-line diff — a side-by-side view, each pane
+  independently scrollable (Up/Down/Page Up/Page Down, Tab to switch
+  panes) or linked to scroll together via the view's own toggle button
+  — for text. Two directories get
   a full screen listing every difference and every one-sided path — a
   one-sided directory is one row, never descended into, so an old
   backup folder doesn't turn into thousands of lines — with a key to
@@ -892,7 +894,8 @@ filtering, a Log Audit screen (`jL`) reading and merging *other* log
 files found in whichever directory the active panel currently shows,
 a Git breach dashboard (`jg`) for staging, committing, and diffing the
 local git repository containing the active panel's own current
-directory, a Sessions screen (`js`) listing local GNU screen, tmux, and
+directory — its own diff pane toggles between a unified pager and a
+side-by-side view (`v`) — a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once

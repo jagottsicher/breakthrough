@@ -11,6 +11,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/session"
 )
@@ -603,11 +604,15 @@ func (r *Root) cancelConfirm() {
 // pruneTrashAtStartup applies the user's own age/quota trash policy
 // (see config.Settings' trash_max_age_days/trash_quota_percent, and
 // fsops.PruneTrash's own doc comment for why once per run rather than
-// on every trash operation) — called once from NewRoot. Returns a
-// one-time notice for NewRoot to combine with its own other startup
-// notices (see its caller — config warnings use the same showError
-// overlay, and calling that twice in a row would just silently
-// overwrite whichever came first) — "" if nothing was removed.
+// on every trash operation) — called once from NewRoot. Pushes a
+// notify.CategoryTrash notice (see trashPruneMessage) when anything was
+// actually removed — per the user's own explicit request after the
+// first version of this greeted a fresh run with an error-style dialog
+// over routine, expected housekeeping: the notify toast/Messages screen
+// is the "something happened while you weren't necessarily looking"
+// channel this app already has for exactly this shape of event (a
+// backgrounded Rsync run finishing, the paste queue completing, ...),
+// not showError's own "something needs your attention right now".
 //
 // Best-effort like the rest of this file's own background bookkeeping
 // (see appendBashHistory): a failure to even resolve or read the trash
@@ -617,10 +622,10 @@ func (r *Root) cancelConfirm() {
 // swallowed the same way — whatever it did manage to remove is still
 // worth reporting, and there's no actionable fix a dialog could offer
 // for e.g. one stuck file at startup anyway.
-func (r *Root) pruneTrashAtStartup() string {
+func (r *Root) pruneTrashAtStartup() {
 	dir, err := r.trashDir()
 	if err != nil {
-		return ""
+		return
 	}
 
 	opts := fsops.PruneTrashOptions{
@@ -629,18 +634,29 @@ func (r *Root) pruneTrashAtStartup() string {
 	}
 	result, _ := fsops.PruneTrash(dir, opts)
 	if result.Removed() == 0 {
-		return ""
+		return
 	}
-	return trashPruneMessage(result)
+	// Deferred via QueueUpdateDraw, not pushed directly: this runs from
+	// NewRoot, entirely before cmd/breakthrough ever calls
+	// Application.Run, so pushNotifyToast's own r.statusBar.GetRect()
+	// call would still read tview.Box's uninitialized zero-width
+	// default here, not the real terminal size — the exact same "a
+	// real, reported bug, not a hypothetical one" timing problem this
+	// function's own caller already works around for showError (see
+	// NewRoot's own startupNotices handling). safeGo, not a bare
+	// goroutine: QueueUpdateDraw's own send blocks until
+	// Application.Run's event loop actually starts servicing it, only
+	// after Run's own first a.draw() call has already resized Root to
+	// the real screen size.
+	msg := trashPruneMessage(result)
+	r.safeGo("trash prune notice", nil, func() {
+		r.app.QueueUpdateDraw(func() { r.notify.Push(notify.LevelInfo, notify.CategoryTrash, msg) })
+	})
 }
 
 // trashPruneMessage words pruneTrashAtStartup's own one-time notice —
 // only ever called once Removed() > 0 has already confirmed there's
-// something to report. Irreversibly removing files, even ones the user
-// already sent to the trash, earns the same attention-grabbing
-// treatment a real error would (see showError, the only "surface a
-// message" channel this app has) — "klar kommuniziert", not just
-// quietly logged.
+// something to report.
 func trashPruneMessage(result fsops.PruneTrashResult) string {
 	var parts []string
 	if result.RemovedByAge > 0 {

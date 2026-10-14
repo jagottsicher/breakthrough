@@ -886,9 +886,14 @@ default sync mode uses —
 **Compute hash** settles it for certain — SHA-256, cancellable, the same
 progress animation Properties' own hashing shows — and always wins over
 the heuristic once it has run. **Show diff** opens a real line-by-line
-comparison through the system's own `diff(1)` in the Look pager (colored
-exactly like any other diff), disabled for a binary pair or when
-`diff(1)` isn't installed.
+comparison, two panes side by side (colored like any other diff),
+disabled for a binary pair or a directory.
+
+The diff view's two panes scroll independently — `Tab` switches which
+one `Up`/`Down`/`Page Up`/`Page Down` scrolls — or together, toggled by
+the `=`/`≠` button in the view's own title bar (`=` means linked,
+scrolling one pane scrolls both; `≠` means independent). `Escape` or the
+title bar's own close button returns to the overlay.
 
 ### Two directories
 

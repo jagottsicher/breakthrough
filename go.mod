@@ -19,6 +19,7 @@ require (
 )
 
 require (
+	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/kr/fs v0.1.0 // indirect
