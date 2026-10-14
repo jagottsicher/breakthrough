@@ -245,7 +245,17 @@ func TestTableContentScrollbarOnMounts(t *testing.T) {
 	}
 	r.mountsEntries = entries
 	r.mountsErr = nil
-	r.openMounts()
+	// Not r.openMounts(): that calls reloadMounts(), which immediately
+	// overwrites mountsEntries above with a real mounts.Read() of
+	// whatever machine runs this test — on a real workstation that's
+	// often still enough rows to accidentally overflow a 10-row screen
+	// anyway, but a CI container can easily have far fewer, making the
+	// test flaky for a reason that has nothing to do with the
+	// scrollbar itself (a real, CI-caught failure). renderMounts +
+	// showOverlay is the same "set state, then just render/show it"
+	// shape TestRenderMountsShowsTheErrorInPlaceOfRows already uses.
+	r.renderMounts()
+	r.showOverlay(mountsPage, r.mountsLayout)
 
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
