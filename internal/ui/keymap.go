@@ -362,6 +362,12 @@ func chordFamilies() []chordFamily {
 			// already uses. See feature_ideas.txt's own "0f.
 			// E-Mail-Client-Integration".
 			{'e', "Email", func(r *Root) { r.openMail() }},
+			// "g:" — a second, mnemonic path to the exact same action
+			// plain ":" already reaches (see plainCommands' own
+			// "Bash command line" entry), per the user's own explicit
+			// request after noticing ":" opens it, right after "ge"
+			// Email.
+			{':', "Bash prompt", func(r *Root) { r.app.SetFocus(r.bashLine) }},
 		}},
 		// "mm" doubles the prefix the same way "gg"/"oo" already do —
 		// opening the context menu, exactly what a bare "m" always did

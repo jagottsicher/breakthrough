@@ -94,7 +94,8 @@ var helpText = strings.TrimLeft(`
                 (a real interactive remote shell, same connection list
                 as gc) · gm Messages · ge Email (launches neomutt/aerc/
                 himalaya/mail/mailx, whichever is installed —
-                configurable under Options)
+                configurable under Options) ·
+                g: Bash prompt (same as plain ":")
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
                 mw Open with… · mt tail -f · ma Select all · mA Deselect all ·
