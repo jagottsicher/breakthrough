@@ -1668,13 +1668,13 @@
     },
     {
       "path": "internal/ui/gitbreachdiffsplit.go",
-      "size": 12360,
-      "sha256": "a7723c9bab9b0d606b2748f0c6ccf20e112c72c47c098df3a3a65efd2f328d10"
+      "size": 13695,
+      "sha256": "1f9a02a1bc9712780351b30ad52c678920edbe2760abb976590418d6a93df9b1"
     },
     {
       "path": "internal/ui/gitbreachdiffsplit_test.go",
-      "size": 10070,
-      "sha256": "0d55e3020f3c1bd31f3c2ee689b85cc6a3d2786f768b850d800991f3d95077f5"
+      "size": 12506,
+      "sha256": "e2f4f1f3b46ed5589864bc6d52a35ac35a8d3231846580378f5330eee5001930"
     },
     {
       "path": "internal/ui/gitbreachscreen.go",
@@ -28206,7 +28206,7 @@
       "name": "drawGitBreachDiffSplitSeparator",
       "kind": "method",
       "receiver": "*Root",
-      "line": 76
+      "line": 98
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28214,7 +28214,7 @@
       "name": "toggleGitBreachDiffSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 93
+      "line": 115
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28222,7 +28222,7 @@
       "name": "gitBreachRenderDiffSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 127
+      "line": 149
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28230,7 +28230,7 @@
       "name": "gitBreachDiffSplitPageStep",
       "kind": "method",
       "receiver": "*Root",
-      "line": 173
+      "line": 195
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28238,7 +28238,7 @@
       "name": "scrollGitBreachDiffSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 187
+      "line": 209
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28246,7 +28246,7 @@
       "name": "captureGitBreachDiffSplitKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 211
+      "line": 233
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28254,7 +28254,7 @@
       "name": "captureGitBreachDiffSplitLeftMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 267
+      "line": 289
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28262,7 +28262,7 @@
       "name": "captureGitBreachDiffSplitRightMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 288
+      "line": 310
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28316,9 +28316,16 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachdiffsplit_test.go",
-      "name": "TestRenderGitBreachDiffHeaderUsesTheLongerSplitPane",
+      "name": "TestGitBreachDiffSplitLeftDrawReRendersTheHeader",
       "kind": "function",
       "line": 243
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachdiffsplit_test.go",
+      "name": "TestRenderGitBreachDiffHeaderUsesTheLongerSplitPane",
+      "kind": "function",
+      "line": 301
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28931,14 +28938,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -47482,14 +47489,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
-      "name": "viewerMinHeight",
+      "name": "viewerMinWidth",
       "kind": "const",
       "line": 24
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
-      "name": "viewerMinWidth",
+      "name": "viewerMinHeight",
       "kind": "const",
       "line": 24
     },
@@ -48695,5 +48702,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "a549788ba4a1ffc7d8ae8901dca11dfaf0b8570bcd5b66b5e0be616169e05e2c"
+  "merkle_root": "fb05e6137233562ea323a2e4f236c3db41bf002345d87b84f50a965e3d253e13"
 }

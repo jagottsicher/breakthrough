@@ -38,6 +38,28 @@ func (r *Root) newGitBreachDiffSplit() {
 	r.gitBreachDiffSplitLeft.SetWrap(false)
 	r.gitBreachDiffSplitLeft.SetInputCapture(r.captureGitBreachDiffSplitKey)
 	r.gitBreachDiffSplitLeft.SetMouseCapture(r.captureGitBreachDiffSplitLeftMouse)
+	// renderGitBreachDiffHeader also needs to re-run while THIS pane is
+	// what's actually being drawn: gitBreachDiffView's own identical
+	// SetDrawFunc (gitbreachscreen.go) only ever fires while the
+	// unified page is the one tview.Pages is actually showing — Draw()
+	// is never called on a page's own content while a sibling page is
+	// the visible one (verified directly against tview's own pages.go,
+	// not guessed). Without this, "Page X/Y" froze at whatever it last
+	// showed before switching into split mode (or before switching to
+	// a shorter/longer file or commit while already in it) and never
+	// updated again — a real, reported bug, not a hypothetical one.
+	//
+	// width passed in here is this one pane's own (half of Main's own
+	// content area, minus the separator) — too narrow for the header's
+	// own right-alignment padding, which has to match the full title
+	// bar it's actually drawn across. gitBreachDiffHeader's own current
+	// rect is read directly instead; height is shared unchanged, since
+	// the panes only split horizontally, never vertically.
+	r.gitBreachDiffSplitLeft.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		_, _, headerWidth, _ := r.gitBreachDiffHeader.GetRect()
+		r.renderGitBreachDiffHeader(headerWidth, height)
+		return x, y, width, height
+	})
 	r.gitBreachDiffSplitLeft.SetFocusFunc(func() {
 		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitLeft, true)
 		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitRight, true)

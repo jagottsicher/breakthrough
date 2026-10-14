@@ -231,6 +231,64 @@ func TestGitBreachDiffSplitRightMouseLeftDownRedirectsFocusToLeft(t *testing.T) 
 	}
 }
 
+// TestGitBreachDiffSplitLeftDrawReRendersTheHeader is the real bug the
+// user reported: "Page 1/20" sticking around regardless of the actual
+// commit's own size, never advancing while scrolling. gitBreachDiffView's
+// own SetDrawFunc (gitbreachscreen.go) only fires while the unified
+// page is the one tview.Pages is actually drawing — never while split
+// mode's own pane is the visible one — so without gitBreachDiffSplitLeft
+// getting the identical SetDrawFunc, the header froze at whatever it
+// last showed before switching into split (here: the short diff's own
+// "Page 1/1") and never updated to the longer one actually on screen.
+func TestGitBreachDiffSplitLeftDrawReRendersTheHeader(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("ONE\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := openGitBreachFilesDiff(t, dir, "a.txt")
+	r.app.SetFocus(r.gitBreachDiffView)
+	r.toggleGitBreachDiffSplit()
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer screen.Fini()
+	screen.SetSize(80, 4)
+	r.gitBreachDiffHeader.SetRect(0, 0, 80, 1)
+	r.gitBreachDiffSplitLeft.SetRect(0, 1, 39, 3)
+
+	// A much longer file than the short "Page 1/1" diff this already
+	// showed before toggling into split — set directly, the same
+	// "bypass the async fetch, set what it would have produced" shape
+	// this suite's own other tests already establish.
+	var long strings.Builder
+	for i := 0; i < 50; i++ {
+		long.WriteString("line\n")
+	}
+	r.gitBreachDiffSplitLeft.SetText(long.String())
+	r.gitBreachDiffSplitRight.SetText(long.String())
+
+	r.gitBreachDiffSplitLeft.Draw(screen)
+
+	// 50 lines over a 2-row body (height 3, minus nothing borrowed here)
+	// is 17 pages — the exact count, not just "not stale", so a
+	// substring check can't be fooled by "Page 1/1" being a prefix of
+	// the correct "Page 1/17" the way an earlier version of this
+	// assertion was.
+	header := r.gitBreachDiffHeader.GetText(true)
+	if !strings.Contains(header, "Page 1/17 ") {
+		t.Errorf("header = %q, want \"Page 1/17\" for 50 lines over a 3-row body — the stale pre-toggle count never updated if this fails", header)
+	}
+}
+
 // TestRenderGitBreachDiffHeaderUsesTheLongerSplitPane pins down a
 // defensive guarantee, not a currently-reachable bug: the two panes
 // are supposed to always have exactly the same row count (see
