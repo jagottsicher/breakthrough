@@ -304,3 +304,52 @@ func TestVerticalScrollbarHiddenWhenContentFits(t *testing.T) {
 		t.Error("clicking a hidden scrollbar's own thumb-sized track must not start a drag — there is no thumb to grab")
 	}
 }
+
+// TestScrollbarThumbColorStaysVisibleOnAVeryDarkTrack is a real,
+// user-reported regression test: Git Breach's own unfocused track
+// (PanelBackground, #1c3232) darkened by a plain percentage factor
+// landed so close to black that the thumb became indistinguishable
+// from the track — "kann man nicht erkennen, wo die Leiste ist". The
+// thumb must differ from the track by at least scrollbarThumbContrastDelta
+// in at least one channel, regardless of how dark the track already is.
+func TestScrollbarThumbColorStaysVisibleOnAVeryDarkTrack(t *testing.T) {
+	track := tcell.NewRGBColor(28, 50, 50) // PanelBackground, #1c3232
+	thumb := scrollbarThumbColor(track)
+
+	tr, tg, tb := track.RGB()
+	hr, hg, hb := thumb.RGB()
+	maxDelta := func(a, b int32) int32 {
+		d := a - b
+		if d < 0 {
+			d = -d
+		}
+		return d
+	}
+	biggest := maxDelta(tr, hr)
+	if d := maxDelta(tg, hg); d > biggest {
+		biggest = d
+	}
+	if d := maxDelta(tb, hb); d > biggest {
+		biggest = d
+	}
+	if biggest < scrollbarThumbContrastDelta {
+		t.Errorf("thumb %v vs track %v differ by only %d in the largest channel, want at least %d", thumb, track, biggest, scrollbarThumbContrastDelta)
+	}
+}
+
+// TestScrollbarThumbColorKeepsDarkeningAMidToneTrack pins the other
+// half of the fix: a track bright enough that darkening it doesn't
+// clip at 0 should still darken (matching the user's own original "one
+// shade darker" request, and Git Breach's own focused track — already
+// confirmed to look right) rather than flip to lightening just because
+// a generic luminance threshold happens to call it "dark".
+func TestScrollbarThumbColorKeepsDarkeningAMidToneTrack(t *testing.T) {
+	track := tcell.NewRGBColor(66, 91, 91) // Git Breach's own focused track (PopupBackground + the focus lighten)
+	thumb := scrollbarThumbColor(track)
+
+	tr, _, _ := track.RGB()
+	hr, _, _ := thumb.RGB()
+	if hr >= tr {
+		t.Errorf("thumb red channel %d is not darker than track's own %d, want darkening (not lightening) for a track this far from clipping at 0", hr, tr)
+	}
+}
