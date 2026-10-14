@@ -518,6 +518,12 @@ func chordFamilies() []chordFamily {
 			{'e', "Extract", func(r *Root) { r.extractCurrentArchive(false) }},
 			{'E', "Extract, del org", func(r *Root) { r.extractCurrentArchive(true) }},
 			{'g', "Git breach", func(r *Root) { r.openGitBreach() }},
+			// "jC" — a second, mnemonic path to the exact same action
+			// plain "C" already reaches (see compare.go's own openCompare
+			// doc comment), per the user's own explicit request to have
+			// it reachable from this family too, right after "jg" and
+			// before "jm".
+			{'C', "Compare", func(r *Root) { r.openCompare() }},
 			{'m', "Mounts", func(r *Root) { r.openMounts() }},
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},

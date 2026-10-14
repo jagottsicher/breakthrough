@@ -106,6 +106,7 @@ var helpText = strings.TrimLeft(`
     j  tools    jc Compress… · je Extract · jE Extract, del org ·
                 jg Git breach dashboard (stage/commit for the repo
                 under the active panel) ·
+                jC Compare (same as plain "C") ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen ·
@@ -996,6 +997,9 @@ var helpText = strings.TrimLeft(`
   to copy to another machine or keep in version control.
 
 [::b]Compare ("C")[::-]
+
+  Also reachable as "jC" (see the "j" chord family above) — the exact
+  same action under both.
 
   Answers "are these the same, and if not, what's different" — for
   two files, or two whole directory trees. Needs exactly two things to
