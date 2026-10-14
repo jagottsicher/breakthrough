@@ -1424,6 +1424,7 @@ type Root struct {
 	compareTreeHint          *tview.TextView
 	compareTreeHintSpans     []listHintSpan
 	compareTreeTable         *tview.Table
+	compareTreeScrollbar     *verticalScrollbar
 	compareTreeStatus        *tview.TextView
 	compareTreeButtons       *tview.Flex
 	compareTreeModeBtn       *tview.Button
@@ -1446,20 +1447,23 @@ type Root struct {
 	// state; compareDiffLeftFocused tracks which of the two panes
 	// currently has focus, read by captureCompareDiffPaneKey to decide
 	// which pane an Up/Down/PgUp/PgDn keypress scrolls when unlinked.
-	compareDiffLayout      *tview.Flex
-	compareDiffTitleBar    *tview.TextView
-	compareDiffBody        *tview.Flex
-	compareDiffLeft        *tview.TextView
-	compareDiffRight       *tview.TextView
-	compareDiffSeparator   *tview.Box
-	compareDiffHint        *tview.TextView
-	compareDiffHintSpans   []listHintSpan
-	compareDiffPairs       []compare.LinePair
-	compareDiffLinked      bool
-	compareDiffLeftFocused bool
+	compareDiffLayout         *tview.Flex
+	compareDiffTitleBar       *tview.TextView
+	compareDiffBody           *tview.Flex
+	compareDiffLeft           *tview.TextView
+	compareDiffLeftScrollbar  *verticalScrollbar
+	compareDiffRight          *tview.TextView
+	compareDiffRightScrollbar *verticalScrollbar
+	compareDiffSeparator      *tview.Box
+	compareDiffHint           *tview.TextView
+	compareDiffHintSpans      []listHintSpan
+	compareDiffPairs          []compare.LinePair
+	compareDiffLinked         bool
+	compareDiffLeftFocused    bool
 
-	helpView   *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
-	viewerView *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
+	helpView      *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
+	helpScrollbar *verticalScrollbar
+	viewerView    *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
 
 	// viewerScrollbar/viewerLayout are Look's own vertical scrollbar
 	// (see scrollbar.go) and the Flex placing it one column right of
@@ -2246,6 +2250,11 @@ type Root struct {
 // NewRoot creates the top-level UI rooted at path. app is passed down to
 // the Panel, which needs it to move keyboard focus into its header's edit
 // field — see Panel.openEdit.
+// Theme/App satisfy scrollbarHost (scrollbar.go) — Root already has
+// both as plain fields.
+func (r *Root) Theme() config.ResolvedTheme { return r.theme }
+func (r *Root) App() *tview.Application     { return r.app }
+
 func NewRoot(app *tview.Application, path string) (*Root, error) {
 	settings, settingOrigins, colorSchemes, configWarnings := loadInitialSettings()
 	theme := config.FindColorScheme(colorSchemes, settings.ColorScheme).Resolve()
@@ -2662,9 +2671,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// other overlay in this app already has.
 	r.helpView = r.newHelpView()
 	r.helpTitleBar = r.newHelpTitleBar()
+	r.helpScrollbar = newVerticalScrollbarForTextView(r, r.helpView)
+	helpRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.helpView, 0, 1, true).
+		AddItem(r.helpScrollbar, 1, 0, false)
+	helpRow.SetMouseCapture(r.helpScrollbar.captureMouse)
 	r.helpLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.helpTitleBar, 1, 0, false).
-		AddItem(r.helpView, 0, 1, true)
+		AddItem(helpRow, 0, 1, true)
 
 	// The Look overlay's built-in pager (see viewer.go/openLook) — same
 	// single-static-TextView shape as Help, just with its own text set

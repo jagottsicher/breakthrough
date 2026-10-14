@@ -73,12 +73,71 @@ func (r *Root) newCompareDiffScreen() {
 	// not gitbreach-specific despite the name) is this app's own
 	// established fix for the identical problem on every other purely
 	// decorative widget.
-	r.compareDiffSeparator.SetMouseCapture(gitBreachBlockFocusSteal)
+	// Not the shared gitBreachBlockFocusSteal directly — same real bug
+	// as gitBreachFocus*OnClick's own fix (gitbreachscreen.go) and
+	// gitBreachDiffHeader's own (gitbreachdiffsplit.go): SetMouseCapture's
+	// callback runs for every event compareDiffBody's own Flex loop
+	// hands to this separator — including ones actually landing on
+	// compareDiffRight, item[2] of the same Flex, reached only after
+	// this separator (item[1]) already decided whether to consume the
+	// event — so without an explicit InRect check here, EVERY click
+	// anywhere in the whole box, including the right pane, got
+	// swallowed here first and never reached it at all. A real,
+	// reproduced bug (not hypothetical like the doc comment above
+	// suggested): clicking the right pane never focused it.
+	r.compareDiffSeparator.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseLeftDown && r.compareDiffSeparator.InRect(event.Position()) {
+			return tview.MouseConsumed, nil
+		}
+		return action, event
+	})
+
+	// Two scrollbars, not one shared one (unlike Git Breach's own diff
+	// split, see gitBreachDiffSplitContent's own doc comment on why):
+	// Compare's two targets are "two unrelated things" (see this
+	// screen's own earlier doc comment), so unlike Git Breach's own
+	// Pair-guaranteed-equal-length panes, these two can have entirely
+	// different line counts — each scrollbar's own geometry has to come
+	// from its own pane alone. compareDiffPaneContent's own scrollTo is
+	// what keeps them in lockstep only while r.compareDiffLinked is
+	// true, checked fresh on every scroll (the title bar's own toggle
+	// can flip it at any moment) — the same shared-vs-independent
+	// choice scrollCompareDiff itself already makes for the keyboard
+	// and mouse wheel.
+	r.compareDiffLeftScrollbar = newVerticalScrollbar(r, &compareDiffPaneContent{
+		textViewContent: &textViewContent{view: r.compareDiffLeft},
+		root:            r,
+		other:           r.compareDiffRight,
+	})
+	r.compareDiffRightScrollbar = newVerticalScrollbar(r, &compareDiffPaneContent{
+		textViewContent: &textViewContent{view: r.compareDiffRight},
+		root:            r,
+		other:           r.compareDiffLeft,
+	})
+	// SurfaceBackground, not the scrollbar's own default
+	// (PanelBackground): both panes always sit on SurfaceBackground
+	// (see applyCompareDiffTheme) and never change with focus —
+	// compareDiffLeftFocused tracks which pane is active for keyboard/
+	// scroll purposes, not a background color (unlike Git Breach's own
+	// focus-tinted boxes).
+	surfaceTrackColor := func() tcell.Color { return r.theme.SurfaceBackground }
+	r.compareDiffLeftScrollbar.SetTrackColorFunc(surfaceTrackColor)
+	r.compareDiffRightScrollbar.SetTrackColorFunc(surfaceTrackColor)
+
+	leftRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.compareDiffLeft, 0, 1, true).
+		AddItem(r.compareDiffLeftScrollbar, 1, 0, false)
+	leftRow.SetMouseCapture(r.compareDiffLeftScrollbar.captureMouse)
+
+	rightRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.compareDiffRight, 0, 1, false).
+		AddItem(r.compareDiffRightScrollbar, 1, 0, false)
+	rightRow.SetMouseCapture(r.compareDiffRightScrollbar.captureMouse)
 
 	r.compareDiffBody = tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.compareDiffLeft, 0, 1, true).
+		AddItem(leftRow, 0, 1, true).
 		AddItem(r.compareDiffSeparator, 1, 0, false).
-		AddItem(r.compareDiffRight, 0, 1, false)
+		AddItem(rightRow, 0, 1, false)
 
 	r.compareDiffTitleBar = newPlainTitleBar("Diff")
 	r.compareDiffTitleBar.SetMouseCapture(r.captureCompareDiffTitleBarMouse())
@@ -199,6 +258,29 @@ func (r *Root) applyCompareDiffTheme(theme config.ResolvedTheme) {
 	}
 	r.renderCompareDiffTitleBar()
 	r.renderCompareDiffHint()
+}
+
+// compareDiffPaneContent adapts one of Compare's own two panes as a
+// scrollableContent (see scrollbar.go) — rect/scrollOffset/totalRows
+// all read from this pane alone, since (unlike Git Breach's own
+// Pair-guaranteed-equal-length diff split, see
+// gitBreachDiffSplitContent's own doc comment) Compare's two targets
+// can have entirely different line counts. scrollTo moves the other
+// pane to the exact same row/column too, but only while
+// root.compareDiffLinked is true — checked fresh on every scroll, the
+// same way scrollCompareDiff itself already decides for the keyboard
+// and mouse wheel.
+type compareDiffPaneContent struct {
+	*textViewContent
+	root  *Root
+	other *tview.TextView
+}
+
+func (c *compareDiffPaneContent) scrollTo(row, col int) {
+	c.textViewContent.scrollTo(row, col)
+	if c.root.compareDiffLinked {
+		c.other.ScrollTo(row, col)
+	}
 }
 
 // openCompareDiff is "Show diff": a real line-by-line answer for the
@@ -386,15 +468,29 @@ func (r *Root) captureCompareDiffTitleBarMouse() func(tview.MouseAction, *tcell.
 				}
 			}
 		}
-		// Any other click on the bar (not one of the two glyphs above)
-		// is blocked here too, same reasoning as
+		// Any other click actually on the bar's own row (not one of the
+		// two glyphs above) is blocked here too, same reasoning as
 		// compareDiffSeparator's own mouse capture: a plain TextView's
 		// default MouseHandler also calls setFocus(t) unconditionally
 		// on MouseLeftDown, which would otherwise steal keyboard focus
 		// onto this bar — a TextView with no SetInputCapture of its
 		// own — the instant a click lands anywhere on it but those two
 		// glyphs.
-		return gitBreachBlockFocusSteal(action, event)
+		//
+		// The y == rectY check matters here for the same reason the
+		// separator's own fix needed one (see its own doc comment): a
+		// bare gitBreachBlockFocusSteal() call with no position check
+		// runs for every mouse event compareDiffLayout's own Flex hands
+		// to this title bar, not just ones on the bar's own row — a
+		// real, reproduced bug: without it, EVERY click anywhere in the
+		// whole screen (including compareDiffRight, two levels further
+		// down the tree) was swallowed here first and never reached it.
+		_, y := event.Position()
+		_, rectY, _, _ := r.compareDiffTitleBar.GetRect()
+		if action == tview.MouseLeftDown && y == rectY {
+			return gitBreachBlockFocusSteal(action, event)
+		}
+		return action, event
 	}
 }
 

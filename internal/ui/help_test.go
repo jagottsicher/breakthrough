@@ -488,3 +488,48 @@ func TestHelpTextPlainKeyTableColumnsStayAligned(t *testing.T) {
 		}
 	}
 }
+
+// TestHelpScrollbarMouseClickThroughRealDispatch is the Help overlay's
+// own counterpart to the earlier Look/Mounts/Git Breach regression
+// tests: a click on the scrollbar's own down arrow must actually
+// scroll, driven through the real dispatch chain (helpLayout's own
+// MouseHandler), not the scrollbar's captureMouse directly — a direct
+// call wouldn't have caught any of the dispatch-ordering bugs found so
+// far in this rollout. Help's own full command reference is long
+// enough to overflow any realistic terminal height on its own, so no
+// synthetic fixture content is needed here.
+func TestHelpScrollbarMouseClickThroughRealDispatch(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 20)
+	r.openHelp()
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 20)
+	r.helpLayout.Draw(screen)
+
+	sb := r.helpScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want Help's own full command reference to overflow a 20-row screen", sb.maxOffset())
+	}
+	sbx, sby, _, sbh := sb.GetRect()
+	before, _ := r.helpView.GetScrollOffset()
+
+	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
+	handler := r.helpLayout.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
+	sb.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
+
+	after, _ := r.helpView.GetScrollOffset()
+	if after != before+1 {
+		t.Errorf("helpView offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
+	}
+}

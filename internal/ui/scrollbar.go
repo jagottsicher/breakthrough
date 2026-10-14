@@ -6,7 +6,23 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
+
+// scrollbarHost is whatever hosts a scrollbar — its own current theme
+// (for Draw's own track/thumb colors) and Application (for
+// startRepeat's own QueueUpdateDraw). Both *Root and *Panel already
+// have exactly these two things as plain fields; implementing this
+// small interface instead of taking a concrete *Root directly is what
+// lets Panel build its own scrollbar fully at construction time (see
+// NewPanel's own doc comment on why — *Root doesn't exist yet the
+// moment the very first Panel is built, and many tests build a bare
+// *Panel with no *Root at all).
+type scrollbarHost interface {
+	Theme() config.ResolvedTheme
+	App() *tview.Application
+}
 
 // scrollableContent is what verticalScrollbar needs from whatever it's
 // attached to: its own current rect, its own current scroll offset, a
@@ -82,7 +98,7 @@ func (c tableContent) totalRows() int             { return c.table.GetRowCount()
 // active.
 type verticalScrollbar struct {
 	*tview.Box
-	root    *Root
+	host    scrollbarHost
 	content scrollableContent
 
 	// trackColor is normally nil (Draw then falls back to
@@ -184,16 +200,16 @@ func scrollbarThumbColor(track tcell.Color) tcell.Color {
 
 // newVerticalScrollbar builds a scrollbar over content — newVerticalScrollbarForTextView/
 // newVerticalScrollbarForTable below are the usual way to get one.
-func newVerticalScrollbar(root *Root, content scrollableContent) *verticalScrollbar {
-	return &verticalScrollbar{Box: tview.NewBox(), root: root, content: content}
+func newVerticalScrollbar(host scrollbarHost, content scrollableContent) *verticalScrollbar {
+	return &verticalScrollbar{Box: tview.NewBox(), host: host, content: content}
 }
 
-func newVerticalScrollbarForTextView(root *Root, view *tview.TextView) *verticalScrollbar {
-	return newVerticalScrollbar(root, &textViewContent{view: view})
+func newVerticalScrollbarForTextView(host scrollbarHost, view *tview.TextView) *verticalScrollbar {
+	return newVerticalScrollbar(host, &textViewContent{view: view})
 }
 
-func newVerticalScrollbarForTable(root *Root, table *tview.Table) *verticalScrollbar {
-	return newVerticalScrollbar(root, tableContent{table: table})
+func newVerticalScrollbarForTable(host scrollbarHost, table *tview.Table) *verticalScrollbar {
+	return newVerticalScrollbar(host, tableContent{table: table})
 }
 
 // SetTrackColorFunc overrides the track's own background color — see
@@ -315,7 +331,7 @@ func (sb *verticalScrollbar) startRepeat(step func()) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				sb.root.app.QueueUpdateDraw(step)
+				sb.host.App().QueueUpdateDraw(step)
 			}
 		}
 	}()
@@ -345,7 +361,7 @@ func (sb *verticalScrollbar) Draw(screen tcell.Screen) {
 		return
 	}
 
-	theme := sb.root.theme
+	theme := sb.host.Theme()
 	track := theme.PanelBackground
 	if sb.trackColor != nil {
 		track = sb.trackColor()
