@@ -356,6 +356,35 @@ type gitBreachBackgroundSetter interface {
 	SetBackgroundColor(tcell.Color) *tview.Box
 }
 
+// gitBreachFocusedBodyLighten is how much brighter the currently
+// focused box's own body reads than PopupBackground alone already
+// gives it — per the user's own explicit follow-up report that the
+// header color change plus PopupBackground's own already-subtle step
+// up from PanelBackground (by design: it's a shared "distinct
+// secondary surface" tone, not specifically a strong focus signal) left
+// which box actually has focus too hard to tell at a glance. Applied on
+// top of whatever PopupBackground the active color scheme happens to
+// define, rather than a fixed replacement color, so this keeps working
+// (and keeps reading as "one step brighter than this scheme's own
+// surface tone") regardless of which scheme is active, light or dark.
+const gitBreachFocusedBodyLighten = 28
+
+// lightenColor returns c with each RGB channel raised by delta (clamped
+// at 255) — a plain, scheme-independent "one shade lighter" step, not
+// tied to any one color scheme's own specific values the way a second,
+// hardcoded replacement color would be.
+func lightenColor(c tcell.Color, delta int32) tcell.Color {
+	r, g, b := c.RGB()
+	lighten := func(ch int32) int32 {
+		ch += delta
+		if ch > 255 {
+			return 255
+		}
+		return ch
+	}
+	return tcell.NewRGBColor(lighten(r), lighten(g), lighten(b))
+}
+
 // styleGitBreachFocus recolors one box's own header/body pair for
 // whether it currently has real keyboard focus — the same two-state
 // header scheme toolWindow's/Details' own title bars already establish
@@ -372,7 +401,7 @@ type gitBreachBackgroundSetter interface {
 func (r *Root) styleGitBreachFocus(header *tview.TextView, body gitBreachBackgroundSetter, focused bool) {
 	if focused {
 		header.SetBackgroundColor(r.theme.InputFocusedBackground)
-		body.SetBackgroundColor(r.theme.PopupBackground)
+		body.SetBackgroundColor(lightenColor(r.theme.PopupBackground, gitBreachFocusedBodyLighten))
 	} else {
 		header.SetBackgroundColor(r.theme.InputBackground)
 		// PanelBackground, not SurfaceBackground: every box's own body
