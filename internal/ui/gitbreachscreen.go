@@ -240,7 +240,21 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachDiffView.SetBlurFunc(func() {
 		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffView, false)
 	})
-	r.gitBreachDiffHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	// Not the shared gitBreachBlockFocusSteal directly — same real bug
+	// as gitBreachFocus{Files,Branches,Commits,Stash}OnClick's own fix
+	// (see that doc comment): SetMouseCapture's callback runs for every
+	// mouse event the box's own Flex loop hands to this header, not
+	// just ones actually on the header's own row, so without an
+	// explicit InRect check here, EVERY click anywhere in the whole
+	// Main box — including the scrollbar column gitBreachDiffPages now
+	// has, in either the unified or split view — got swallowed here
+	// first and never reached it at all.
+	r.gitBreachDiffHeader.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseLeftDown && r.gitBreachDiffHeader.InRect(event.Position()) {
+			return tview.MouseConsumed, nil
+		}
+		return action, event
+	})
 	// The diff view's own MouseLeftDown is blocked the same as every
 	// other passive box's (see gitBreachBlockFocusSteal), but every
 	// other mouse action still passes through unchanged — the wheel
@@ -442,15 +456,18 @@ func lightenColor(c tcell.Color, delta int32) tcell.Color {
 // request that an active box read as visually distinct beyond just its
 // own header line.
 // gitBreachScrollbarTrackColor mirrors styleGitBreachFocus's own
-// focused/blurred background decision for table's own scrollbar — see
-// verticalScrollbar.trackColor's own doc comment for why this has to
-// be handed in rather than read back from the table itself. Checked
-// fresh on every Draw (table.HasFocus()), not cached, so it always
-// agrees with whatever styleGitBreachFocus most recently set, through
-// Tab/Shift-Tab, a mouse click, or a live theme switch alike.
-func (r *Root) gitBreachScrollbarTrackColor(table *tview.Table) func() tcell.Color {
+// focused/blurred background decision for content's own scrollbar —
+// see verticalScrollbar.trackColor's own doc comment for why this has
+// to be handed in rather than read back from content itself. content
+// is whatever box body a scrollbar sits next to — a *tview.Table for
+// the four catalog boxes, a *tview.TextView for Main's own unified/
+// split diff views. Checked fresh on every Draw (content.HasFocus()),
+// not cached, so it always agrees with whatever styleGitBreachFocus
+// most recently set, through Tab/Shift-Tab, a mouse click, or a live
+// theme switch alike.
+func (r *Root) gitBreachScrollbarTrackColor(content tview.Primitive) func() tcell.Color {
 	return func() tcell.Color {
-		if table.HasFocus() {
+		if content.HasFocus() {
 			return lightenColor(r.theme.PopupBackground, gitBreachFocusedBodyLighten)
 		}
 		return r.theme.PanelBackground
