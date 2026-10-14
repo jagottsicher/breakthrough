@@ -17,11 +17,13 @@ import (
 // scrollable widget in this app — deliberately not a shared, reusable
 // component yet.
 //
-// Layout: a top arrow row, a track (with the proportional thumb drawn
-// over part of it), and a bottom arrow row — the same shape as any
-// desktop scrollbar. The thumb is always one shade darker than the
-// track's own background (scrollbarThumbColor), not a fixed palette
-// color, so it still fits whatever color scheme is active.
+// Layout: a track (with the proportional thumb drawn over part of it)
+// filling everything above the bottom two rows, where both arrow
+// buttons sit together — classic Mac OS style, per the user's own
+// explicit request, not one arrow at each end. The thumb is always one
+// shade darker than the track's own background (scrollbarThumbColor),
+// not a fixed palette color, so it still fits whatever color scheme is
+// active.
 type verticalScrollbar struct {
 	*tview.Box
 	root    *Root
@@ -240,19 +242,21 @@ func (sb *verticalScrollbar) Draw(screen tcell.Screen) {
 		screen.SetContent(x, row, ch, nil, tcell.StyleDefault.Background(bg).Foreground(theme.TextColor))
 	}
 
-	setCell(y, thumb, '▲')
-	setCell(y+height-1, thumb, '▼')
-
+	// Both arrows sit together at the track's own bottom end, per the
+	// user's own explicit request (classic Mac OS style) — not one at
+	// each end. The track itself is everything above them.
 	trackRows := height - 2
 	thumbRows, thumbStart := sb.thumbGeometry(trackRows)
 	for i := 0; i < trackRows; i++ {
-		row := y + 1 + i
+		row := y + i
 		if i >= thumbStart && i < thumbStart+thumbRows {
 			setCell(row, thumb, ' ')
 		} else {
 			setCell(row, track, ' ')
 		}
 	}
+	setCell(y+height-2, thumb, '▲')
+	setCell(y+height-1, thumb, '▼')
 }
 
 // captureViewerScrollbarMouse is viewerLayout's own SetMouseCapture
@@ -295,7 +299,7 @@ func (r *Root) captureViewerScrollbarMouse(action tview.MouseAction, event *tcel
 		return tview.MouseConsumed, nil // swallow everything else for the duration of the repeat
 	}
 
-	if action != tview.MouseLeftDown || !sb.InRect(x, y) {
+	if !sb.InRect(x, y) {
 		return action, event
 	}
 
@@ -303,8 +307,32 @@ func (r *Root) captureViewerScrollbarMouse(action tview.MouseAction, event *tcel
 	rel := y - sby
 	trackRows := sbh - 2
 
+	if action == tview.MouseScrollUp {
+		sb.scrollBy(-1)
+		return tview.MouseConsumed, nil
+	}
+	if action == tview.MouseScrollDown {
+		sb.scrollBy(1)
+		return tview.MouseConsumed, nil
+	}
+	if action != tview.MouseLeftDown {
+		// Anything else landing on the scrollbar's own column is still
+		// ours, not whatever happens to be drawn underneath it — in
+		// particular tview derives a trailing MouseLeftClick from the
+		// very same physical click that already fired MouseLeftDown
+		// above (see Application.fireMouseActions), and Look is
+		// maximized to the full screen (see viewerSize's own doc
+		// comment), so without this, that second action falls through
+		// Pages' own dispatch to whatever's drawn at the same screen
+		// cell underneath — a real, user-reported bug: a click on the
+		// scrollbar's own column triggered the main panel's Details
+		// slide-out button (see panel.go/detailsExpandBtn), which sits
+		// at that exact coordinate on the page stacked right behind it.
+		return tview.MouseConsumed, nil
+	}
+
 	switch {
-	case rel == 0: // up arrow
+	case rel == sbh-2: // up arrow — both arrows sit together at the bottom, see Draw
 		sb.scrollBy(-1)
 		sb.startRepeat(func() { sb.scrollBy(-1) })
 	case rel == sbh-1: // down arrow
@@ -312,7 +340,7 @@ func (r *Root) captureViewerScrollbarMouse(action tview.MouseAction, event *tcel
 		sb.startRepeat(func() { sb.scrollBy(1) })
 	default:
 		thumbRows, thumbStart := sb.thumbGeometry(trackRows)
-		trackRel := rel - 1
+		trackRel := rel // the track now starts at the scrollbar's own top row (rel 0), no top arrow to offset past
 		switch {
 		case trackRel < thumbStart:
 			sb.pageJump(-1)

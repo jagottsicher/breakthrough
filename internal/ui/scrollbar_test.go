@@ -138,9 +138,13 @@ func TestCaptureViewerScrollbarMousePageJumpOnTrackClick(t *testing.T) {
 	root := sb.root
 	sbx, sby, _, sbh := sb.GetRect()
 
-	root.captureViewerScrollbarMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-2, tcell.Button1, 0))
+	// The track's own last row, just above both arrow buttons (which
+	// now sit together at the bottom two rows — see Draw) — still part
+	// of the track, below the thumb.
+	trackLastRow := sby + sbh - 3
+	root.captureViewerScrollbarMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, trackLastRow, tcell.Button1, 0))
 	sb.stopRepeat()
-	root.captureViewerScrollbarMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-2, tcell.ButtonNone, 0))
+	root.captureViewerScrollbarMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, trackLastRow, tcell.ButtonNone, 0))
 
 	row, _ := sb.content.GetScrollOffset()
 	if row != viewport {
@@ -157,7 +161,10 @@ func TestVerticalScrollbarDragMovesContentProportionally(t *testing.T) {
 	root := sb.root
 	sbx, sby, _, sbh := sb.GetRect()
 
-	root.captureViewerScrollbarMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+1, tcell.Button1, 0))
+	// The track now starts at the scrollbar's own top row (no arrow
+	// above it — both sit at the bottom, see Draw), so the thumb's own
+	// top row, at rest, is sby itself.
+	root.captureViewerScrollbarMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby, tcell.Button1, 0))
 	if !sb.dragging {
 		t.Fatal("clicking the thumb itself should start a drag")
 	}
@@ -173,7 +180,7 @@ func TestVerticalScrollbarDragMovesContentProportionally(t *testing.T) {
 		t.Error("MouseLeftUp should end the drag")
 	}
 
-	root.captureViewerScrollbarMouse(tview.MouseMove, tcell.NewEventMouse(sbx, sby+1, tcell.ButtonNone, 0))
+	root.captureViewerScrollbarMouse(tview.MouseMove, tcell.NewEventMouse(sbx, sby, tcell.ButtonNone, 0))
 	if afterRow, _ := sb.content.GetScrollOffset(); afterRow != movedRow {
 		t.Errorf("scroll offset moved to %d after the drag already ended, want it to stay at %d", afterRow, movedRow)
 	}
@@ -192,5 +199,30 @@ func TestCaptureViewerScrollbarMousePassesThroughOutsideScrollbar(t *testing.T) 
 
 	if action != tview.MouseLeftDown || gotEvent != event {
 		t.Errorf("captureViewerScrollbarMouse(outside click) = (%v, %v), want the event passed through unchanged", action, gotEvent)
+	}
+}
+
+// TestCaptureViewerScrollbarMouseConsumesTrailingClick is a real,
+// user-reported regression test: tview derives a trailing
+// MouseLeftClick from the very same physical click that already fired
+// MouseLeftDown (see Application.fireMouseActions), and Look is
+// maximized to the full screen (see viewerSize's own doc comment), so
+// that second action landing on the scrollbar's own column must also
+// be consumed here — otherwise it falls through Pages' own dispatch to
+// whatever's drawn at the same screen cell on the page stacked right
+// behind it (here: the main panel's own Details slide-out button, see
+// panel.go/detailsExpandBtn).
+func TestCaptureViewerScrollbarMouseConsumesTrailingClick(t *testing.T) {
+	sb, _ := openLookWithLines(t, 5, 60, 20)
+	root := sb.root
+	sbx, sby, _, _ := sb.GetRect()
+
+	root.captureViewerScrollbarMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby, tcell.Button1, 0))
+	sb.stopRepeat()
+	root.captureViewerScrollbarMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby, tcell.ButtonNone, 0))
+
+	action, event := root.captureViewerScrollbarMouse(tview.MouseLeftClick, tcell.NewEventMouse(sbx, sby, tcell.ButtonNone, 0))
+	if action != tview.MouseConsumed || event != nil {
+		t.Errorf("captureViewerScrollbarMouse(trailing MouseLeftClick on the scrollbar) = (%v, %v), want it consumed (MouseConsumed, nil) rather than passed through to whatever's underneath", action, event)
 	}
 }
