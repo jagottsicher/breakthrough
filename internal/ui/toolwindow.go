@@ -31,10 +31,11 @@ import (
 // (see detailssidebar.go's own doc comment).
 type toolWindow struct {
 	*tview.Box
-	root     *Root
-	id       string // this window's own Pages name (see Root.openToolCommand)
-	titleBar *tview.TextView
-	content  *tview.TextView
+	root      *Root
+	id        string // this window's own Pages name (see Root.openToolCommand)
+	titleBar  *tview.TextView
+	content   *tview.TextView
+	scrollbar *verticalScrollbar
 
 	cancel context.CancelFunc // stops the running process (see Root.openToolCommand) — called by close/reload
 	closed bool               // guards a late QueueUpdateDraw callback against writing into a torn-down window
@@ -161,6 +162,20 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	// (see above).
 	tw.content.SetBackgroundColor(root.theme.SurfaceBackground)
 
+	// toolWindow has no tview.Flex layout of its own to wrap a scrollbar
+	// column into (see Draw/MouseHandler below, both hand-written) —
+	// contentHeight's own rect carves out one column of its own width
+	// for it instead, same as every other scrollbar in this app reserves
+	// one column of its own Flex for, just computed by hand here.
+	tw.scrollbar = newVerticalScrollbarForTextView(root, tw.content)
+	// Not the scrollbar's own default (theme.PanelBackground): tw.content
+	// always sits on SurfaceBackground (see below), never PanelBackground,
+	// and never changes with focus either — a plain closure rather than
+	// verticalScrollbar's own default still re-reads the live theme
+	// fresh on every Draw, so a color-scheme switch is picked up the
+	// same way every other screen's own scrollbar already is.
+	tw.scrollbar.SetTrackColorFunc(func() tcell.Color { return root.theme.SurfaceBackground })
+
 	return tw
 }
 
@@ -233,8 +248,14 @@ func (tw *toolWindow) Draw(screen tcell.Screen) {
 		screen.SetContent(reloadCol, y, toolWindowReloadGlyph, nil, buttonStyle)
 	}
 
-	tw.content.SetRect(x, y+1, width, tw.contentHeight())
+	contentWidth := width - 1 // one column reserved for the scrollbar, see tw.scrollbar below
+	if contentWidth < 0 {
+		contentWidth = 0
+	}
+	tw.content.SetRect(x, y+1, contentWidth, tw.contentHeight())
 	tw.content.Draw(screen)
+	tw.scrollbar.SetRect(x+contentWidth, y+1, 1, tw.contentHeight())
+	tw.scrollbar.Draw(screen)
 
 	// The footer row — see contentHeight's own doc comment on why it's
 	// excluded from content's own rect above — always stays empty
@@ -335,6 +356,18 @@ func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell
 			return true, nil // swallow everything else for the duration of the resize
 		}
 
+		// Scrollbar drag/press-and-hold-repeat in progress — checked
+		// before the InRect gate below for the same reason
+		// tw.dragging/tw.resizing above are: a fast drag can briefly
+		// stray outside this window's own rect, and the rest of that
+		// gesture would otherwise be dropped instead of reaching
+		// tw.scrollbar.captureMouse at all.
+		if tw.scrollbar.dragging || tw.scrollbar.repeatCancel != nil {
+			if _, scrolled := tw.scrollbar.captureMouse(action, event); scrolled == nil {
+				return true, nil
+			}
+		}
+
 		if !tw.InRect(x, y) {
 			return false, nil
 		}
@@ -375,6 +408,17 @@ func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell
 			case y == wy+height-1: // the rest of the footer row — always empty, per the user's own explicit request
 				return true, nil
 			}
+		}
+
+		// tw.scrollbar has no tview.Flex of its own to install
+		// captureMouse on via SetMouseCapture (see newToolWindow's own
+		// doc comment on why) — called directly here instead, the same
+		// (action, event) in/out contract SetMouseCapture's own callback
+		// has. A pass-through (event unchanged, non-nil) means the click
+		// wasn't on the scrollbar's own column, so it falls through to
+		// content exactly as before.
+		if _, scrolled := tw.scrollbar.captureMouse(action, event); scrolled == nil {
+			return true, nil
 		}
 
 		if handler := tw.content.MouseHandler(); handler != nil {
@@ -581,7 +625,12 @@ func (tw *toolWindow) recalculateWidth() {
 
 	width := tview.TaggedStringWidth(tw.titleBar.GetText(false))
 	for _, w := range visible {
-		if padded := w + 2*toolWindowContentPadding; padded > width {
+		// +1: the scrollbar's own column (see Draw) — without it, a
+		// window auto-sized to exactly fit its own longest line would
+		// end up one column too narrow for that same line, now that
+		// one column of its own width goes to the scrollbar instead of
+		// content.
+		if padded := w + 2*toolWindowContentPadding + 1; padded > width {
 			width = padded
 		}
 	}
