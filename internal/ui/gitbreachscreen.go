@@ -262,12 +262,46 @@ func (r *Root) newGitBreachScreen() {
 	r.refreshGitBreachHint()
 	r.gitBreachHint.SetMouseCapture(r.captureListHintMouse(r.gitBreachHint, &r.gitBreachHintSpans))
 
+	// Each table gets its own scrollbar, one column of its own box's own
+	// body rather than the header — wrapping just the table, not the
+	// whole gitBreachBoxFlex(header, ...) result, since the header is a
+	// plain TextView these four boxes already treat specially (see
+	// gitBreachFocusFilesOnClick and friends) and isn't itself
+	// scrollable content.
+	r.gitBreachFilesScrollbar = newVerticalScrollbarForTable(r, r.gitBreachFilesTable)
+	r.gitBreachFilesScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachFilesTable))
+	filesRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.gitBreachFilesTable, 0, 1, true).
+		AddItem(r.gitBreachFilesScrollbar, 1, 0, false)
+	filesRow.SetMouseCapture(r.gitBreachFilesScrollbar.captureMouse)
+
+	r.gitBreachBranchesScrollbar = newVerticalScrollbarForTable(r, r.gitBreachBranchesTable)
+	r.gitBreachBranchesScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachBranchesTable))
+	branchesRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.gitBreachBranchesTable, 0, 1, true).
+		AddItem(r.gitBreachBranchesScrollbar, 1, 0, false)
+	branchesRow.SetMouseCapture(r.gitBreachBranchesScrollbar.captureMouse)
+
+	r.gitBreachCommitsScrollbar = newVerticalScrollbarForTable(r, r.gitBreachCommitsTable)
+	r.gitBreachCommitsScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachCommitsTable))
+	commitsRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.gitBreachCommitsTable, 0, 1, true).
+		AddItem(r.gitBreachCommitsScrollbar, 1, 0, false)
+	commitsRow.SetMouseCapture(r.gitBreachCommitsScrollbar.captureMouse)
+
+	r.gitBreachStashScrollbar = newVerticalScrollbarForTable(r, r.gitBreachStashTable)
+	r.gitBreachStashScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachStashTable))
+	stashRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.gitBreachStashTable, 0, 1, true).
+		AddItem(r.gitBreachStashScrollbar, 1, 0, false)
+	stashRow.SetMouseCapture(r.gitBreachStashScrollbar.captureMouse)
+
 	leftColumn := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(gitBreachBoxFlex(r.gitBreachStatusHeader, r.gitBreachStatusView), gitBreachStatusHeight, 0, false).
-		AddItem(gitBreachBoxFlex(r.gitBreachFilesHeader, r.gitBreachFilesTable), 0, 2, true).
-		AddItem(gitBreachBoxFlex(r.gitBreachBranchesHeader, r.gitBreachBranchesTable), 0, 1, false).
-		AddItem(gitBreachBoxFlex(r.gitBreachCommitsHeader, r.gitBreachCommitsTable), 0, 2, false).
-		AddItem(gitBreachBoxFlex(r.gitBreachStashHeader, r.gitBreachStashTable), 0, 1, false)
+		AddItem(gitBreachBoxFlex(r.gitBreachFilesHeader, filesRow), 0, 2, true).
+		AddItem(gitBreachBoxFlex(r.gitBreachBranchesHeader, branchesRow), 0, 1, false).
+		AddItem(gitBreachBoxFlex(r.gitBreachCommitsHeader, commitsRow), 0, 2, false).
+		AddItem(gitBreachBoxFlex(r.gitBreachStashHeader, stashRow), 0, 1, false)
 
 	body := tview.NewFlex().
 		AddItem(leftColumn, 0, 1, true).
@@ -317,8 +351,17 @@ func gitBreachBlockFocusSteal(action tview.MouseAction, event *tcell.EventMouse)
 // clicking anywhere in the table's own body already does via Table's
 // default MouseHandler, per the user's own explicit request that the
 // header be clickable too, not just the content beneath it.
+//
+// The InRect check matters more than it looks: SetMouseCapture's own
+// callback runs unconditionally for every mouse event this box's own
+// Flex loop ever hands to the header (see WrapMouseHandler), not just
+// ones actually landing on the header's own one-row strip — without
+// this check, any MouseLeftDown anywhere in the whole box (including a
+// click on the table's own rows, or — the real, user-reported bug this
+// fixed — the scrollbar column added alongside the table) got swallowed
+// here first and never reached whatever was actually clicked.
 func (r *Root) gitBreachFocusFilesOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action == tview.MouseLeftDown {
+	if action == tview.MouseLeftDown && r.gitBreachFilesHeader.InRect(event.Position()) {
 		r.app.SetFocus(r.gitBreachFilesTable)
 		return tview.MouseConsumed, nil
 	}
@@ -398,6 +441,22 @@ func lightenColor(c tcell.Color, delta int32) tcell.Color {
 // otherwise sits on) per the user's own further, explicitly optional
 // request that an active box read as visually distinct beyond just its
 // own header line.
+// gitBreachScrollbarTrackColor mirrors styleGitBreachFocus's own
+// focused/blurred background decision for table's own scrollbar — see
+// verticalScrollbar.trackColor's own doc comment for why this has to
+// be handed in rather than read back from the table itself. Checked
+// fresh on every Draw (table.HasFocus()), not cached, so it always
+// agrees with whatever styleGitBreachFocus most recently set, through
+// Tab/Shift-Tab, a mouse click, or a live theme switch alike.
+func (r *Root) gitBreachScrollbarTrackColor(table *tview.Table) func() tcell.Color {
+	return func() tcell.Color {
+		if table.HasFocus() {
+			return lightenColor(r.theme.PopupBackground, gitBreachFocusedBodyLighten)
+		}
+		return r.theme.PanelBackground
+	}
+}
+
 func (r *Root) styleGitBreachFocus(header *tview.TextView, body gitBreachBackgroundSetter, focused bool) {
 	if focused {
 		header.SetBackgroundColor(r.theme.InputFocusedBackground)
@@ -868,7 +927,7 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 // header (see its own doc comment for why a header needs this at all:
 // it's its own separate TextView from the table it labels).
 func (r *Root) gitBreachFocusBranchesOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action == tview.MouseLeftDown {
+	if action == tview.MouseLeftDown && r.gitBreachBranchesHeader.InRect(event.Position()) {
 		r.app.SetFocus(r.gitBreachBranchesTable)
 		return tview.MouseConsumed, nil
 	}
@@ -921,7 +980,7 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 // gitBreachFocusCommitsOnClick mirrors gitBreachFocusBranchesOnClick
 // exactly, for Commits' own header.
 func (r *Root) gitBreachFocusCommitsOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action == tview.MouseLeftDown {
+	if action == tview.MouseLeftDown && r.gitBreachCommitsHeader.InRect(event.Position()) {
 		r.app.SetFocus(r.gitBreachCommitsTable)
 		return tview.MouseConsumed, nil
 	}
@@ -973,7 +1032,7 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 // gitBreachFocusStashOnClick mirrors gitBreachFocusCommitsOnClick
 // exactly, for Stash's own header.
 func (r *Root) gitBreachFocusStashOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action == tview.MouseLeftDown {
+	if action == tview.MouseLeftDown && r.gitBreachStashHeader.InRect(event.Position()) {
 		r.app.SetFocus(r.gitBreachStashTable)
 		return tview.MouseConsumed, nil
 	}
