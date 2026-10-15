@@ -1030,7 +1030,11 @@ func (r *Root) renderDetailsSidebar() {
 		// loadDetailsTarget) — still worth naming the page count, with a
 		// short note on how to get an actual preview, rather than
 		// silently showing nothing at all where the image branch above
-		// would have been.
+		// would have been. The icon box (see renderFileIconBox) fills in
+		// for the preview image this branch doesn't have, same as for
+		// any other no-thumbnail target.
+		_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
+		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.detailsTypeGlyph(), innerWidth))
 		writeSection(strings.Join([]string{
 			infoField("Type", "PDF"),
 			infoField("Pages", strconv.Itoa(r.detailsPDFPageCount)),
@@ -1049,11 +1053,33 @@ func (r *Root) renderDetailsSidebar() {
 		// only place their own metadata section ever shows at all —
 		// gated on the path's extension (see IsDocumentPath's own doc
 		// comment on why that's the right signal here, unlike images).
+		_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
+		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.detailsTypeGlyph(), innerWidth))
 		meta := r.detailsMetadataState
 		if meta == "" {
 			meta = detailsMetadataHint(r.theme)
 		}
 		r.detailsMetaRowStart, r.detailsMetaRowEnd = writeSection(meta)
+
+	case isDirish(r.detailsStat):
+		// A directory gets its own icon box too, per the user's own
+		// explicit request — using theme.DirectoryBackground/Text rather
+		// than the fixed "paper" colors the generic file box below uses,
+		// since a folder's own color already has an existing, theme-aware
+		// meaning elsewhere in this app (the main panel's own directory
+		// rows) worth matching rather than duplicating with a second,
+		// unrelated fixed color.
+		_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
+		writeSection(renderFileIconBox(r.theme.DirectoryBackground, r.theme.Text, r.detailsTypeGlyph(), innerWidth))
+
+	default:
+		// Every other target with no thumbnail of its own (plain text,
+		// audio, binaries, archives, an unrecognized extension, ...)
+		// gets the same generic icon box, just with whatever glyph
+		// internal/fileicons/fallbackTypeText already picks for it — see
+		// detailsTypeGlyph's own doc comment.
+		_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
+		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.detailsTypeGlyph(), innerWidth))
 	}
 
 	writeSection(detailsStatLines(r.detailsStat, r.detailsTarget))
