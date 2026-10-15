@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/filemeta"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
@@ -305,6 +307,7 @@ func (r *Root) preserveFocusAcross(f func()) {
 func (r *Root) hideDetailsSidebar() {
 	r.cancelDetailsHashComputation()
 	r.cancelDetailsDirSizeComputation()
+	r.cancelDetailsMetadataFetch()
 	hadFocus := r.detailsSidebar.HasFocus()
 	r.preserveFocusAcross(func() { r.HidePage(detailsSidebarPage) })
 	if hadFocus {
@@ -518,6 +521,7 @@ func (r *Root) refreshDetailsIfShowing(oldTarget, newTarget string) {
 func (r *Root) loadDetailsTarget(path string) {
 	r.cancelDetailsHashComputation()
 	r.cancelDetailsDirSizeComputation()
+	r.cancelDetailsMetadataFetch()
 	r.cancelDetailsPreview()
 	r.cancelDetailsGitStatus()
 	r.detailsDirSize = nil
@@ -662,27 +666,132 @@ func detailsMetadataHint(theme config.ResolvedTheme) string {
 	return text
 }
 
-// detailsMetadataStubMessage is what fetchDetailsMetadata currently
-// shows once triggered — see its own doc comment on why that's a stub
-// rather than real EXIF/format-specific metadata today. Short for the
-// same reason detailsMetadataHint is: this replaces that hint in the
-// exact same row-tracked position, so it's just as capable of
-// mis-numbering everything after it if it wrapped.
-const detailsMetadataStubMessage = "(not implemented yet)"
+// detailsMetadataErrorMessage turns a filemeta error into the one line
+// shown in place of the result — three distinct cases (not applicable /
+// no data / genuine read failure), since conflating any of them into a
+// single generic "failed" would hide which one it actually was from
+// someone looking at a file they expected EXIF on. Deliberately short,
+// fixed wording for all three (unlike a raw %v of the underlying error,
+// which can be arbitrarily long — a full path in an os.PathError, say):
+// this section's own row-tracked position (see renderDetailsSidebar)
+// makes an unpredictably wide line here just as much of a hazard as an
+// unpredictably tall one — see applyDetailsMetadataResult's own doc
+// comment on where the full error text for the generic case actually
+// goes instead.
+func detailsMetadataErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, filemeta.ErrNotSupported):
+		return "(not supported)"
+	case errors.Is(err, filemeta.ErrNoMetadata):
+		return "(no EXIF found)"
+	default:
+		return "(read error)"
+	}
+}
 
 // fetchDetailsMetadata is "M"/the metadata hint's click zone's own
-// action — currently a stub: real EXIF/format-specific metadata
-// extraction is deliberate follow-up work, once a metadata library has
-// actually been picked, not something this pass builds. What already
-// works end-to-end today is everything around it — the hint text, its
-// click zone, and this keyboard shortcut all visibly do something when
-// triggered, just not the real data yet.
+// action. Images, DOCX/XLSX/PPTX and EPUB today (see filemeta.ForPath's
+// own doc comment on how it picks an extractor, and
+// renderDetailsSidebar's own gate on when this section is shown at
+// all — isPDF/isVideo never reach here); PDF's own metadata is the one
+// remaining piece of feature_ideas.txt #26 not built yet.
+//
+// Mirrors computeDetailsHashes' own async shape (safeGo, a cancellable
+// context, QueueUpdateDraw, re-checking the target hasn't changed before
+// applying the result) but without its progress-animation half: a local
+// read has nothing meaningful to show incremental progress against —
+// it's either already done by the time the first animation frame would
+// fire, or (a corrupt/adversarial file) stuck on a single synchronous
+// read the extractor itself has no way to report partial progress on
+// anyway.
+//
+// Decides eligibility from the path itself (r.detailsStat), not from
+// r.detailsImage: that field is filled asynchronously, debounced, by
+// startDetailsPreview (see its own doc comment) — gating on it would
+// make a deliberate "M" keypress right after moving onto a new row a
+// silent no-op until the debounce happens to catch up, which isn't what
+// "sofort" means for a keypress this explicit.
+// fetchFileMetadata is filemeta.ForPath — a package-level var, not
+// called directly, so a test can substitute a fast, deterministic fake
+// (see isolateImageMetadataFetch) instead of actually decoding a file
+// and racing a real background goroutine, the same override-var pattern
+// hashFile already uses.
+var fetchFileMetadata = filemeta.ForPath
+
 func (r *Root) fetchDetailsMetadata() {
-	if r.detailsImage == nil || r.detailsIsVideo {
+	if r.detailsTarget == "" || isDirish(r.detailsStat) || r.panel.remote != nil || r.detailsMetadataInProgress {
 		return
 	}
-	r.detailsMetadataState = detailsMetadataStubMessage
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r.detailsMetadataCancel = cancel
+	r.detailsMetadataInProgress = true
+	r.detailsMetadataState = "(reading…)"
 	r.renderDetailsSidebar()
+
+	target := r.detailsTarget
+	onPanic := func() {
+		r.cancelDetailsMetadataFetch()
+		r.renderDetailsSidebar()
+	}
+	r.safeGo("Details metadata fetch", onPanic, func() {
+		fields, err := fetchFileMetadata(target)
+		if ctx.Err() != nil {
+			return // superseded before we even got to report anything
+		}
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			r.cancelDetailsMetadataFetch()
+			r.applyDetailsMetadataResult(target, fields, err)
+		})
+	})
+}
+
+// applyDetailsMetadataResult is the sole place fetchDetailsMetadata's
+// own background goroutine hands its finished result to — split out
+// from it, the same reason propagateHashResult is its own function
+// rather than inlined in computeDetailsHashes: a test can call this
+// directly with a canned (fields, err) pair instead of needing the real
+// async plumbing (context, QueueUpdateDraw, a goroutine that may or may
+// not have actually run yet) to just verify the rendering logic for a
+// given result.
+//
+// A genuine, unexpected read error (corrupt file, permission denied,
+// ...) additionally gets a real error modal (see showError) carrying
+// the actual error text — ErrNotSupported/ErrNoMetadata don't, being
+// expected, routine outcomes for an ordinary file, not failures worth
+// interrupting anyone over.
+func (r *Root) applyDetailsMetadataResult(target string, fields []filemeta.Field, err error) {
+	if r.detailsTarget != target {
+		return // the cursor moved on while this was in flight
+	}
+	if err != nil {
+		r.detailsMetadataState = detailsMetadataErrorMessage(err)
+		if !errors.Is(err, filemeta.ErrNotSupported) && !errors.Is(err, filemeta.ErrNoMetadata) {
+			r.showError(fmt.Errorf("reading metadata for %s: %w", target, err))
+		}
+	} else {
+		lines := make([]string, len(fields))
+		for i, field := range fields {
+			lines[i] = infoField(field.Label, field.Value)
+		}
+		r.detailsMetadataState = strings.Join(lines, "\n")
+	}
+	r.renderDetailsSidebar()
+}
+
+// cancelDetailsMetadataFetch mirrors cancelDetailsHashComputation — see
+// its own doc comment. Called once a result arrives, when the target
+// changes (see loadDetailsTarget), and when the sidebar is hidden (see
+// hideDetailsSidebar).
+func (r *Root) cancelDetailsMetadataFetch() {
+	if r.detailsMetadataCancel != nil {
+		r.detailsMetadataCancel()
+		r.detailsMetadataCancel = nil
+	}
+	r.detailsMetadataInProgress = false
 }
 
 // FetchMetadataShortcut is the "M" key's own action. Properties has no
@@ -894,10 +1003,13 @@ func (r *Root) renderDetailsSidebar() {
 		r.detailsPreviewRowStart, r.detailsPreviewRowEnd = previewStart, previewEnd
 
 		if !isPDF && !isVideo {
-			// EXIF-style metadata is an image-specific concept (see
-			// fetchDetailsMetadata's own doc comment) — a PDF has its own,
-			// different kind of metadata (Title/Author/Creator, ...), not
-			// built here yet, so no hint for it is shown on one.
+			// EXIF-style metadata is an image-specific concept — a PDF's
+			// own metadata (Title/Author/Creator, ...) isn't built yet
+			// (see feature_ideas.txt #26), so no hint for it is shown on
+			// one; DOCX/XLSX/PPTX/EPUB get their own metadata section
+			// further down instead (see the "IsDocumentPath" case below),
+			// never reaching here since none of them ever produce a
+			// preview image.
 			meta := r.detailsMetadataState
 			if meta == "" {
 				meta = detailsMetadataHint(r.theme)
@@ -917,6 +1029,18 @@ func (r *Root) renderDetailsSidebar() {
 			infoField("Pages", strconv.Itoa(r.detailsPDFPageCount)),
 			"(install poppler-utils for a page preview)",
 		}, "\n"))
+
+	case !isDirish(r.detailsStat) && filemeta.IsDocumentPath(r.detailsTarget):
+		// DOCX/XLSX/PPTX/EPUB never get a preview image of their own (see
+		// detailsPreviewFor), so unlike the image case above, this is the
+		// only place their own metadata section ever shows at all —
+		// gated on the path's extension (see IsDocumentPath's own doc
+		// comment on why that's the right signal here, unlike images).
+		meta := r.detailsMetadataState
+		if meta == "" {
+			meta = detailsMetadataHint(r.theme)
+		}
+		r.detailsMetaRowStart, r.detailsMetaRowEnd = writeSection(meta)
 	}
 
 	writeSection(detailsStatLines(r.detailsStat, r.detailsTarget))

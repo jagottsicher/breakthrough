@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"archive/zip"
 	"context"
 	"image"
 	"image/color"
@@ -16,6 +17,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/filemeta"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -401,15 +403,28 @@ func TestDetailsFullscreenHintNeverWrapsAtMinWidth(t *testing.T) {
 	}
 }
 
-// TestDetailsMetadataHintAndStubNeverWrapAtMinWidth is a regression
-// guard for a real, observed bug: the original, longer wording of both
-// of these strings wrapped at the sidebar's own minimum width — unlike
+// TestDetailsMetadataHintAndStatesNeverWrapAtMinWidth is a regression
+// guard for a real, observed bug: the original, longer wording of the
+// hint wrapped at the sidebar's own minimum width — unlike
 // detailsFullscreenHint (which sits with nothing after it to
-// mis-number), both of these are always followed by the stat block,
-// so wrapping here silently threw off every click zone below it.
-func TestDetailsMetadataHintAndStubNeverWrapAtMinWidth(t *testing.T) {
+// mis-number), this section is always followed by the stat block, so
+// wrapping here silently threw off every click zone below it. Covers
+// every fixed-wording state fetchDetailsMetadata/
+// detailsMetadataErrorMessage can produce — real field VALUES (Camera,
+// dimensions, ...) are deliberately not covered here, the same
+// trade-off hashLines' own wrapInfoField already documents for a hash
+// digest: short by construction for the field set this package picks
+// (see filemeta.ForImage's own doc comment), not pinned by a fixed-
+// width test the way a literal string can be.
+func TestDetailsMetadataHintAndStatesNeverWrapAtMinWidth(t *testing.T) {
 	usableWidth := detailsSidebarMinWidth - 2
-	for _, s := range []string{detailsMetadataHint(config.DefaultTheme().Resolve()), detailsMetadataStubMessage} {
+	states := []string{
+		detailsMetadataHint(config.DefaultTheme().Resolve()),
+		"(reading…)",
+		detailsMetadataErrorMessage(filemeta.ErrNotSupported),
+		detailsMetadataErrorMessage(filemeta.ErrNoMetadata),
+	}
+	for _, s := range states {
 		if w := tview.TaggedStringWidth(s); w > usableWidth {
 			t.Errorf("%q is %d columns wide, want at most %d (the sidebar's own minimum usable width)", s, w, usableWidth)
 		}
@@ -764,11 +779,37 @@ func TestDetailsSidebarShowsImagePreviewAndDimensionsForImageFile(t *testing.T) 
 	}
 }
 
-// TestFetchDetailsMetadataShowsStubMessage pins that the metadata hint's
-// click zone/keyboard shortcut already does something real end to end —
-// see fetchDetailsMetadata's own doc comment on why what it shows is
-// still a stub rather than actual EXIF data.
-func TestFetchDetailsMetadataShowsStubMessage(t *testing.T) {
+// isolateImageMetadataFetch mirrors isolateHashFile (properties_test.go)
+// exactly — see its own doc comment for the full reasoning, including
+// why a caller must register isolateImageMetadataFetch(t) *before*
+// t.Cleanup(r.cancelDetailsMetadataFetch): cleanups run in LIFO order,
+// so cancelDetailsMetadataFetch runs first, and by the time the fake
+// actually unblocks, fetchDetailsMetadata's own ctx.Err() check already
+// sees it as cancelled and returns without touching fetchFileMetadata
+// or the UI again.
+func isolateImageMetadataFetch(t *testing.T) <-chan struct{} {
+	t.Helper()
+	original := fetchFileMetadata
+	started := make(chan struct{})
+	unblock := make(chan struct{})
+	fetchFileMetadata = func(string) ([]filemeta.Field, error) {
+		close(started)
+		<-unblock
+		return nil, context.Canceled
+	}
+	t.Cleanup(func() {
+		close(unblock)
+		fetchFileMetadata = original
+	})
+	return started
+}
+
+// TestFetchDetailsMetadataShowsReadingPlaceholderImmediately pins the
+// same "feedback right away" shape TestComputeHashesShowsAnimationImmediately
+// already pins for hashes: pressing "M" shows something other than the
+// idle hint before the real result can possibly have landed, rather
+// than the metadata section just sitting frozen on the hint.
+func TestFetchDetailsMetadataShowsReadingPlaceholderImmediately(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "photo.png")
 	f, err := os.Create(path)
@@ -787,6 +828,8 @@ func TestFetchDetailsMetadataShowsStubMessage(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.SetRect(0, 0, 100, 40)
+	started := isolateImageMetadataFetch(t)
+	t.Cleanup(r.cancelDetailsMetadataFetch)
 	// Cursor on photo.png too, not just detailsTarget — FetchMetadataShortcut
 	// now calls ensureDetailsSidebarShowing first (see its own doc
 	// comment), which re-syncs Details to the panel's own live cursor if
@@ -803,10 +846,206 @@ func TestFetchDetailsMetadataShowsStubMessage(t *testing.T) {
 	}
 
 	r.FetchMetadataShortcut()
+	<-started // wait for fetchImageMetadata's one-time call (see isolateImageMetadataFetch) before this test can safely end
 
+	if !r.detailsMetadataInProgress {
+		t.Error("detailsMetadataInProgress should be true right after FetchMetadataShortcut")
+	}
 	after := r.detailsSidebar.GetText(true)
-	if !strings.Contains(after, detailsMetadataStubMessage) {
-		t.Errorf("after FetchMetadataShortcut, the sidebar should show the stub message, got:\n%s", after)
+	if !strings.Contains(after, "reading") {
+		t.Errorf("after FetchMetadataShortcut, the sidebar should show the reading placeholder, got:\n%s", after)
+	}
+}
+
+// TestApplyDetailsMetadataResultShowsFields pins the success path:
+// fields the extractor found render as one "Label: value" line each, in
+// the order they were returned.
+func TestApplyDetailsMetadataResultShowsFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "photo.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewNRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.detailsSidebarVisible = true
+	loadDetailsWithPreview(t, r, path)
+
+	fields := []filemeta.Field{
+		{Label: "Camera", Value: "ACME X100"},
+		{Label: "ISO", Value: "400"},
+	}
+	r.applyDetailsMetadataResult(path, fields, nil)
+
+	text := r.detailsSidebar.GetText(true)
+	if !strings.Contains(text, "Camera") || !strings.Contains(text, "ACME X100") {
+		t.Errorf("details sidebar text should show the Camera field, got:\n%s", text)
+	}
+	if !strings.Contains(text, "ISO") || !strings.Contains(text, "400") {
+		t.Errorf("details sidebar text should show the ISO field, got:\n%s", text)
+	}
+}
+
+// TestApplyDetailsMetadataResultShowsErrorMessage pins the three
+// distinct error states detailsMetadataErrorMessage produces (see its
+// own doc comment) actually reach the rendered text.
+func TestApplyDetailsMetadataResultShowsErrorMessage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "photo.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewNRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.detailsSidebarVisible = true
+	loadDetailsWithPreview(t, r, path)
+
+	r.applyDetailsMetadataResult(path, nil, filemeta.ErrNoMetadata)
+
+	text := r.detailsSidebar.GetText(true)
+	if !strings.Contains(text, "no EXIF found") {
+		t.Errorf("details sidebar text should show the ErrNoMetadata message, got:\n%s", text)
+	}
+}
+
+// buildTestZip writes a minimal zip archive to path — just enough for
+// IsDocumentPath/the render path's own extension check to treat it as a
+// real DOCX/EPUB target; the filemeta package's own tests (not this
+// one) cover actually parsing its contents.
+func buildTestZip(t *testing.T, path string, entries map[string]string) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	for name, content := range entries {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFetchMetadataShortcutShowsHintForDocumentTarget pins that a DOCX
+// target — one with no preview image of its own (see
+// renderDetailsSidebar's own "IsDocumentPath" case) — still gets a
+// metadata section at all, the gap this case closes.
+func TestFetchMetadataShortcutShowsHintForDocumentTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.docx")
+	buildTestZip(t, path, map[string]string{"word/document.xml": "<document/>"})
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.detailsSidebarVisible = true
+	r.loadDetailsTarget(path)
+
+	text := r.detailsSidebar.GetText(true)
+	if !strings.Contains(text, "load metadata") {
+		t.Errorf("details sidebar text should show the metadata hint for a DOCX target with no preview, got:\n%s", text)
+	}
+	if r.detailsMetaRowStart < 0 || r.detailsMetaRowEnd < r.detailsMetaRowStart {
+		t.Errorf("detailsMetaRowStart/End = %d/%d, want a valid non-negative range for a DOCX target", r.detailsMetaRowStart, r.detailsMetaRowEnd)
+	}
+}
+
+// TestApplyDetailsMetadataResultShowsFieldsForDocumentTarget pins the
+// same success-path rendering TestApplyDetailsMetadataResultShowsFields
+// already pins for images, this time for a target that never gets a
+// preview image at all.
+func TestApplyDetailsMetadataResultShowsFieldsForDocumentTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.docx")
+	buildTestZip(t, path, map[string]string{"word/document.xml": "<document/>"})
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.detailsSidebarVisible = true
+	r.loadDetailsTarget(path)
+
+	fields := []filemeta.Field{{Label: "Title", Value: "Quarterly Report"}}
+	r.applyDetailsMetadataResult(path, fields, nil)
+
+	text := r.detailsSidebar.GetText(true)
+	if !strings.Contains(text, "Title") || !strings.Contains(text, "Quarterly Report") {
+		t.Errorf("details sidebar text should show the Title field, got:\n%s", text)
+	}
+}
+
+// TestApplyDetailsMetadataResultIgnoresStaleTarget pins that a result
+// for a target the cursor has since moved off is silently discarded —
+// mirrors propagateHashResult's own "r.detailsTarget != target" guard.
+func TestApplyDetailsMetadataResultIgnoresStaleTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "photo.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewNRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.detailsSidebarVisible = true
+	loadDetailsWithPreview(t, r, path)
+
+	before := r.detailsSidebar.GetText(true)
+	r.applyDetailsMetadataResult(path+".stale", []filemeta.Field{{Label: "Camera", Value: "ACME"}}, nil)
+	after := r.detailsSidebar.GetText(true)
+
+	if before != after {
+		t.Errorf("a result for a stale target should be a no-op, text changed:\nbefore:\n%s\nafter:\n%s", before, after)
 	}
 }
 
