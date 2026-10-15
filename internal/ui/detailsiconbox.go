@@ -97,28 +97,34 @@ const (
 	fileIconBoxRows = 9
 )
 
-// fileIconFoldRow is one row of the top-right fold's own shape (see
-// fileIconFoldStaircase) — fullCols is how many columns from the right
-// edge are entirely fold-colored that row, transition says whether the
-// one column immediately left of that block gets a softening "▐"
-// instead of a hard edge straight into the box's own background.
-type fileIconFoldRow struct {
-	fullCols   int
-	transition bool
-}
+// fileIconFoldRows is how many of the box's own top rows the folded
+// corner spans — 3, per the user's own follow-up request confining the
+// fold to "die oberen drei Zeilen" (the top three rows), down from an
+// earlier, taller attempt.
+//
+// fileIconFoldHStart is the column (relative to lastCol) where the
+// fold's own solid "H" (light gray, fileIconBoxFoldBackground) band
+// starts in every one of those rows — fixed across rows, unlike the
+// band's own length (fileIconFoldHLen), which widens going down: row 0
+// has a 1-column H band, rows 1 and 2 both have 3 (not a strict +1 per
+// row — row 1's band was widened to match row 2's per direct follow-up
+// correction), each followed by whatever's left (a transition cell
+// plus background, or background alone) out to the box's own right
+// edge — the "H" region widening as the "fully removed" background
+// region shrinks is what reads as the fold narrowing toward the box's
+// interior going down, the same "nach innen
+// zeigen" shape the folder box's own taper already uses, just with an
+// extra visible gray band here instead of a flat jump straight to
+// background.
+const (
+	fileIconFoldRows   = 3
+	fileIconFoldHStart = 4 // columns before lastCol, i.e. col = lastCol-4
+)
 
-// fileIconFoldStaircase is the top-right fold's own shape, one entry
-// per row starting at row 0 — each row one column narrower than the
-// last, so the shape tapers down and to the left, toward the box's
-// interior, the same direction the user's own "nach innen zeigen"
-// (point inward) describes.
-var fileIconFoldStaircase = []fileIconFoldRow{
-	{4, false},
-	{3, true},
-	{2, true},
-	{1, true},
-	{0, true},
-}
+// fileIconFoldHLen is each fold row's own H-band length — see
+// fileIconFoldHStart's own doc comment for why row 1 and row 2 match
+// rather than following the same +1 progression row 0→1 does.
+var fileIconFoldHLen = [fileIconFoldRows]int{1, 3, 3}
 
 // folderTopRightTaperCols is how many columns, immediately left of the
 // folder box's own top-right corner, taper into it via the same
@@ -181,21 +187,42 @@ func renderFileIconBox(bg, fg tcell.Color, glyph string, availableWidth int, rou
 	lastRow := fileIconBoxRows - 1
 	lastCol := fileIconBoxCols - 1
 
-	foldStaircase := fileIconFoldStaircase
-
 	var b strings.Builder
 	for row := 0; row < fileIconBoxRows; row++ {
 		b.WriteString(margin)
 		for col := 0; col < fileIconBoxCols; col++ {
-			var fold *fileIconFoldRow
-			if foldTopRight && row < len(foldStaircase) {
-				fold = &foldStaircase[row]
+			// Fold cell classification for this row (only rows 0-2, only
+			// when foldTopRight) — see fileIconFoldRows/fileIconFoldHStart's
+			// own doc comment for the shape. hLen is this row's own H
+			// band length; hasTransition is true only for row 0 and row 2
+			// (row 1 jumps straight from H to background, per the user's
+			// own explicit "Zeile 1 und 3" — 1-indexed — spec).
+			inFold := foldTopRight && row < fileIconFoldRows
+			hStart := lastCol - fileIconFoldHStart
+			hLen := 0
+			if inFold {
+				hLen = fileIconFoldHLen[row]
 			}
+			hasTransition := row == 0 || row == 2
+			transitionCol := hStart + hLen
+			bStart := hStart + hLen
+			if hasTransition {
+				bStart++
+			}
+
 			switch {
-			case fold != nil && col > lastCol-fold.fullCols:
+			case inFold && col >= hStart && col < hStart+hLen:
+				// Solid light-gray fold band.
 				fmt.Fprintf(&b, "[-:%s:] ", foldTag)
-			case fold != nil && fold.transition && col == lastCol-fold.fullCols:
-				fmt.Fprintf(&b, "[%s:%s:]▐", foldTag, bgTag)
+			case inFold && hasTransition && col == transitionCol:
+				// The one "right half-block" cell the user's own spec
+				// calls out explicitly: bottom half light gray (the fold
+				// band bleeding into this cell), top half background.
+				fmt.Fprintf(&b, "[%s:-:]▄", foldTag)
+			case inFold && col >= bStart:
+				// Past the H band (and its transition cell, if any):
+				// fully background, the corner "practically removed".
+				fmt.Fprintf(&b, "[-:-:] ")
 			case roundCorners && row == 0 && col == 0:
 				// Top-left: rounded.
 				fmt.Fprintf(&b, "[%s:-:]▄", bgTag)

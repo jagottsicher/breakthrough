@@ -55,29 +55,32 @@ func TestRenderFileIconBoxDecoratesCornersWhenRequested(t *testing.T) {
 		t.Fatalf("renderFileIconBox produced %d lines, want %d", len(lines), fileIconBoxRows)
 	}
 
-	// Top-right: the staircase fold, several rows deep, drawn against
-	// its own distinct shade (fileIconBoxFoldBackground) — row 0's own
-	// top-right corner is fully fold-colored (no glyph needed, just a
-	// space on that background); the softening "▐" transition cells
-	// appear on rows 1-4 (see fileIconFoldStaircase).
+	// Top-right: the fold, confined to the top fileIconFoldRows rows
+	// (3) — each has a solid light-gray band (fileIconBoxFoldBackground)
+	// that grows by one column per row, rows 0 and 2 (not 1) also get
+	// one "▄" transition cell (bottom light gray, top background) right
+	// after that band, per the user's own explicit "Zeile 1 und 3"
+	// (1-indexed) spec.
 	foldTag := colorTag(fileIconBoxFoldBackground)
-	if !strings.Contains(lines[0], foldTag) {
-		t.Errorf("top row should reference the fold shade %s, got %q", foldTag, lines[0])
-	}
-	foundTransition := false
-	for _, row := range []int{1, 2, 3, 4} {
-		if strings.Contains(lines[row], "▐") && strings.Contains(lines[row], foldTag) {
-			foundTransition = true
+	for row := 0; row < fileIconFoldRows; row++ {
+		if !strings.Contains(lines[row], foldTag) {
+			t.Errorf("row %d should reference the fold shade %s, got %q", row, foldTag, lines[row])
 		}
 	}
-	if !foundTransition {
-		t.Errorf("rows 1-4 should contain at least one ▐ fold transition cell referencing %s, got:\n%s", foldTag, got)
+	// Row 0 has two ▄ glyphs: the top-left rounded corner and the
+	// fold's own transition cell.
+	if got := strings.Count(lines[0], "▄"); got != 2 {
+		t.Errorf("row 0 should contain 2 ▄ glyphs (top-left corner + fold transition), got %d in %q", got, lines[0])
 	}
-	// The fold shouldn't reach all the way down to the bottom rows —
-	// it's meant to taper off, not fill the whole right edge.
+	if strings.Contains(lines[1], "▄") {
+		t.Errorf("row 1 should have a hard edge (no ▄ transition), got %q", lines[1])
+	}
 	last := lines[len(lines)-1]
 	if strings.Contains(last, foldTag) {
-		t.Errorf("bottom row should not reference the fold shade %s, the fold should have tapered off by then, got %q", foldTag, last)
+		t.Errorf("bottom row should not reference the fold shade %s, the fold should be confined to the top %d rows, got %q", foldTag, fileIconFoldRows, last)
+	}
+	if strings.Contains(lines[fileIconFoldRows], foldTag) {
+		t.Errorf("row %d (just past the fold) should not reference the fold shade %s, got %q", fileIconFoldRows, foldTag, lines[fileIconFoldRows])
 	}
 
 	// The other three corners: rounded, via a half-block glyph each —

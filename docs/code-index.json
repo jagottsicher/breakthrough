@@ -1608,13 +1608,13 @@
     },
     {
       "path": "internal/ui/detailsiconbox.go",
-      "size": 9927,
-      "sha256": "b95c03e7d59ceb0d1ec3aaba2e03bc09829c6762c6866f54b62f28686ac4f691"
+      "size": 11516,
+      "sha256": "1860800cc180abfe55fb040d585864473b2906f930a19c0ca5f785d4abd5ff82"
     },
     {
       "path": "internal/ui/detailsiconbox_test.go",
-      "size": 8623,
-      "sha256": "2620cca691173fdd5c26290be4dd109e3f22f3fe9d1f6ad324ca1cb5fb2d80aa"
+      "size": 8888,
+      "sha256": "18f44aa2712470fb302567cc49f0fbfc2bf72428ac10cae018f697a8d0556001"
     },
     {
       "path": "internal/ui/detailssidebar.go",
@@ -25087,30 +25087,37 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox.go",
-      "name": "fileIconFoldRow",
-      "kind": "type",
-      "line": 105
+      "name": "fileIconFoldRows",
+      "kind": "const",
+      "line": 120
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox.go",
-      "name": "fileIconFoldStaircase",
+      "name": "fileIconFoldHStart",
+      "kind": "const",
+      "line": 121
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/detailsiconbox.go",
+      "name": "fileIconFoldHLen",
       "kind": "var",
-      "line": 115
+      "line": 127
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox.go",
       "name": "folderTopRightTaperCols",
       "kind": "const",
-      "line": 132
+      "line": 138
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox.go",
       "name": "renderFileIconBox",
       "kind": "function",
-      "line": 169
+      "line": 175
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25138,42 +25145,42 @@
       "file": "internal/ui/detailsiconbox_test.go",
       "name": "TestRenderFileIconBoxSkipsCornerDecorationWhenNotRequested",
       "kind": "function",
-      "line": 94
+      "line": 97
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox_test.go",
       "name": "TestRenderFileIconBoxRoundsAllFourCornersWithoutFold",
       "kind": "function",
-      "line": 115
+      "line": 118
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox_test.go",
       "name": "TestDetailsEntryTypeMirrorsClassifyKindPrecedence",
       "kind": "function",
-      "line": 143
+      "line": 146
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox_test.go",
       "name": "TestDetailsSidebarShowsFileIconBoxForPlainFile",
       "kind": "function",
-      "line": 168
+      "line": 171
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox_test.go",
       "name": "TestDetailsSidebarShowsFolderIconBoxForDirectory",
       "kind": "function",
-      "line": 190
+      "line": 193
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox_test.go",
       "name": "TestDetailsTypeGlyphUsesNerdFontIconWhenEnabled",
       "kind": "function",
-      "line": 211
+      "line": 214
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29843,14 +29850,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -50355,5 +50362,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "61c1da18151d1091877baa1cb20e404c80c93d094ba5b3cca64a1ac6989aa6ce"
+  "merkle_root": "9cb01c5194ee99c4b55ca11208086f27ce2fb5d3ad5c586bfd9eb1bfeff0bade"
 }
