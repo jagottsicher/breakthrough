@@ -211,6 +211,13 @@ func plainCommands() []plainCommand {
 		{key: 'S', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
 		{key: 'B', label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
 		{key: 'C', label: "Compare (two marked items, or split view)", action: func(r *Root) { r.openCompare() }},
+		// Plain "L" — a second, direct path to the exact same action
+		// "jL" already reaches (see logaudit.go's own doc comment on
+		// openLogAudit), per the user's own explicit request, mirroring
+		// plain "C"'s own relationship to "jC" right above. Not quick
+		// (no button-bar slot) — it doesn't need to appear in the
+		// primary navigation either, same as "C".
+		{key: 'L', label: "Log Audit", action: func(r *Root) { r.openLogAudit() }},
 		{key: 'R', label: "Rsync", action: func(r *Root) { r.openRsync() }},
 		{key: 'G', label: "Go to the last row", action: func(r *Root) { r.panel.focusRow(r.panel.table.GetRowCount() - 1) }},
 		{key: '+', label: "Select by pattern", action: func(r *Root) { r.openSelectPlus() }},

@@ -1708,8 +1708,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 95819,
-      "sha256": "b9bd033a1f32ffa4cf35094e45e9d418a4344abde7320f43ef69e72d2ae1f14c"
+      "size": 95948,
+      "sha256": "e5faa64a0c11c271f51cb5f8a8c49ffa8745a4953e7eef3d352544ab4ee32df0"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -1743,8 +1743,8 @@
     },
     {
       "path": "internal/ui/keymap.go",
-      "size": 50955,
-      "sha256": "55c43171eced0e5360682c534593f37f1c3498bb9ea0e00cc4292e386da3e8fb"
+      "size": 51403,
+      "sha256": "29558da834737d49e052b158a55da627b36f6b1c0d49dc035b9f0066faacd7eb"
     },
     {
       "path": "internal/ui/keymap_test.go",
@@ -29219,7 +29219,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1547
+      "line": 1550
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29227,7 +29227,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1572
+      "line": 1575
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29235,7 +29235,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1589
+      "line": 1592
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29243,7 +29243,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1605
+      "line": 1608
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29251,7 +29251,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1625
+      "line": 1628
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29259,7 +29259,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1641
+      "line": 1644
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29267,7 +29267,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1667
+      "line": 1670
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29275,7 +29275,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1697
+      "line": 1700
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29283,7 +29283,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1715
+      "line": 1718
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29720,7 +29720,7 @@
       "file": "internal/ui/keymap.go",
       "name": "plainCommandFor",
       "kind": "function",
-      "line": 223
+      "line": 230
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29728,7 +29728,7 @@
       "name": "copyCurrentSelection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 245
+      "line": 252
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29736,49 +29736,49 @@
       "name": "cutCurrentSelection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 252
+      "line": 259
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/keymap.go",
       "name": "chordMember",
       "kind": "type",
-      "line": 271
+      "line": 278
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/keymap.go",
       "name": "chordFamily",
       "kind": "type",
-      "line": 278
+      "line": 285
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/keymap.go",
       "name": "chordFamilies",
       "kind": "function",
-      "line": 302
+      "line": 309
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/keymap.go",
       "name": "reservedYankMember",
       "kind": "function",
-      "line": 626
+      "line": 633
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/keymap.go",
       "name": "chordFamilyFor",
       "kind": "function",
-      "line": 633
+      "line": 640
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/keymap.go",
       "name": "userHomeDir",
       "kind": "function",
-      "line": 648
+      "line": 655
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29786,21 +29786,21 @@
       "name": "chordTimeout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 669
+      "line": 676
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/keymap.go",
       "name": "chordTimeoutMaxMS",
       "kind": "const",
-      "line": 677
+      "line": 684
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/keymap.go",
       "name": "chordTickInterval",
       "kind": "const",
-      "line": 685
+      "line": 692
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29808,7 +29808,7 @@
       "name": "HandlePlainKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 701
+      "line": 708
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29816,7 +29816,7 @@
       "name": "acceptsPropertiesAwareKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 747
+      "line": 754
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29824,7 +29824,7 @@
       "name": "refreshChordHintBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 760
+      "line": 767
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29832,7 +29832,7 @@
       "name": "startChord",
       "kind": "method",
       "receiver": "*Root",
-      "line": 774
+      "line": 781
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29840,7 +29840,7 @@
       "name": "resolveChord",
       "kind": "method",
       "receiver": "*Root",
-      "line": 807
+      "line": 814
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29848,7 +29848,7 @@
       "name": "cancelChord",
       "kind": "method",
       "receiver": "*Root",
-      "line": 833
+      "line": 840
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29856,14 +29856,14 @@
       "name": "animateChordCountdown",
       "kind": "method",
       "receiver": "*Root",
-      "line": 855
+      "line": 862
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/keymap.go",
       "name": "chordCountdownBlocks",
       "kind": "var",
-      "line": 885
+      "line": 892
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29871,7 +29871,7 @@
       "name": "chordCountdownGlyph",
       "kind": "method",
       "receiver": "*Root",
-      "line": 894
+      "line": 901
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29879,7 +29879,7 @@
       "name": "chordIndicatorText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 924
+      "line": 931
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29887,7 +29887,7 @@
       "name": "chordHintBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 972
+      "line": 979
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49707,5 +49707,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "228f4adda5ce77e59c26aa9e4d410e1c95f40986289e9da004c08d7ccb0e1e4d"
+  "merkle_root": "c9e584bdac1267baedca46ee3b600f796d78eb8612b0aedd147e156e01db3061"
 }
