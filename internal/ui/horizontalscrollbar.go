@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -62,11 +61,7 @@ type horizontalScrollbar struct {
 	// doc comment there for why a screen needs this at all.
 	trackColor func() tcell.Color
 
-	dragging        bool
-	dragStartX      int
-	dragStartOffset int
-	dragSpan        int
-	dragMaxOffset   int
+	scrollbarDrag
 
 	repeatCancel context.CancelFunc
 }
@@ -106,40 +101,14 @@ func (sb *horizontalScrollbar) maxOffset() int {
 }
 
 func (sb *horizontalScrollbar) clampOffset(v int) int {
-	if v < 0 {
-		return 0
-	}
-	if m := sb.maxOffset(); v > m {
-		return m
-	}
-	return v
+	return clampScrollOffset(v, sb.maxOffset())
 }
 
 // thumbGeometry mirrors verticalScrollbar's own method exactly, swapped
 // onto columns — see its doc comment there.
 func (sb *horizontalScrollbar) thumbGeometry(trackCols int) (thumbCols, thumbStart int) {
-	if trackCols <= 0 {
-		return 0, 0
-	}
-	total := sb.content.totalCols()
-	viewport := sb.viewportCols()
-	if total <= viewport || total <= 0 {
-		return trackCols, 0
-	}
-	thumbCols = trackCols * viewport / total
-	if thumbCols < 1 {
-		thumbCols = 1
-	}
-	if thumbCols > trackCols {
-		thumbCols = trackCols
-	}
-	span := trackCols - thumbCols
-	maxOffset := total - viewport
-	if span > 0 && maxOffset > 0 {
-		_, offsetCol := sb.content.scrollOffset()
-		thumbStart = offsetCol * span / maxOffset
-	}
-	return thumbCols, thumbStart
+	_, col := sb.content.scrollOffset()
+	return scrollbarThumbGeometry(trackCols, sb.content.totalCols(), sb.viewportCols(), col)
 }
 
 func (sb *horizontalScrollbar) scrollBy(delta int) {
@@ -157,46 +126,22 @@ func (sb *horizontalScrollbar) dragTo(mouseX int) {
 	if sb.dragSpan <= 0 {
 		return
 	}
-	deltaCols := (mouseX - sb.dragStartX) * sb.dragMaxOffset / sb.dragSpan
 	row, _ := sb.content.scrollOffset()
-	sb.content.scrollTo(row, sb.clampOffset(sb.dragStartOffset+deltaCols))
+	sb.content.scrollTo(row, sb.clampOffset(sb.delta(mouseX)))
 }
 
-// startRepeat/stopRepeat mirror verticalScrollbar's own methods of the
-// same name exactly (see their doc comments there) — duplicated rather
-// than shared because they're tied to this type's own repeatCancel
-// field, not because the behavior differs in any way.
+// startRepeat/stopRepeat both delegate to the shared
+// startScrollbarRepeat/stopScrollbarRepeat functions (scrollbar.go) —
+// see their own doc comments.
 func (sb *horizontalScrollbar) startRepeat(step func()) {
-	sb.stopRepeat()
-	ctx, cancel := context.WithCancel(context.Background())
-	sb.repeatCancel = cancel
-	go func() {
-		timer := time.NewTimer(scrollbarRepeatDelay)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-		}
-		ticker := time.NewTicker(scrollbarRepeatInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				sb.host.App().QueueUpdateDraw(step)
-			}
-		}
-	}()
+	startScrollbarRepeat(sb.host.App(), &sb.repeatCancel, step)
 }
 
 func (sb *horizontalScrollbar) stopRepeat() {
-	if sb == nil || sb.repeatCancel == nil {
+	if sb == nil {
 		return
 	}
-	sb.repeatCancel()
-	sb.repeatCancel = nil
+	stopScrollbarRepeat(&sb.repeatCancel)
 }
 
 // Draw paints the arrow columns, the track, and the thumb directly onto
@@ -329,7 +274,7 @@ func (sb *horizontalScrollbar) captureMouse(action tview.MouseAction, event *tce
 			sb.startRepeat(func() { sb.pageJump(1) })
 		default:
 			sb.dragging = true
-			sb.dragStartX = x
+			sb.dragStartPos = x
 			_, sb.dragStartOffset = sb.content.scrollOffset()
 			sb.dragSpan = trackCols - thumbCols
 			sb.dragMaxOffset = sb.maxOffset()
