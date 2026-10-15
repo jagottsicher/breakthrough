@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 )
@@ -165,5 +168,107 @@ func TestLogAuditStatsTextReportsTotalsAndNoSourceFallback(t *testing.T) {
 	}
 	if !strings.Contains(got, "no Source recognized") {
 		t.Errorf("logAuditStatsText = %q, want the no-Source fallback line", got)
+	}
+}
+
+// openLogAuditStatsOverflowing opens the Statistics modal on a small
+// screen with entries engineered to overflow both axes: every Level (7
+// rows) plus one very long Source name, on a screen too small to show
+// either without scrolling.
+func openLogAuditStatsOverflowing(t *testing.T, width, height int) *Root {
+	t.Helper()
+	r, err := NewRoot(tview.NewApplication(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, width, height)
+
+	entries := make([]logview.Entry, 0, len(logAuditLevelOrder))
+	for _, lvl := range logAuditLevelOrder {
+		entries = append(entries, logview.Entry{Level: lvl, Source: strings.Repeat("x", 100)})
+	}
+	r.logAuditAllEntries = entries
+	r.openLogAuditStats()
+	return r
+}
+
+func drawLogAuditStats(t *testing.T, r *Root, width, height int) {
+	t.Helper()
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	t.Cleanup(screen.Fini)
+	screen.SetSize(width, height)
+	r.logAuditStatsLayout.Draw(screen)
+}
+
+// TestLogAuditStatsScrollbarMouseClickThroughRealDispatch mirrors the
+// same regression test shape used for every other scrollbar in this
+// rollout: a click on the scrollbar's own down arrow must actually
+// scroll the Statistics modal's own content, driven through the real
+// dispatch chain (logAuditStatsLayout's own MouseHandler), not
+// captureMouse directly.
+func TestLogAuditStatsScrollbarMouseClickThroughRealDispatch(t *testing.T) {
+	r := openLogAuditStatsOverflowing(t, 100, 10)
+	drawLogAuditStats(t, r, 100, 10)
+
+	sb := r.logAuditStatsScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow on a 10-row screen", sb.maxOffset())
+	}
+	sbx, sby, _, sbh := sb.GetRect()
+	before, _ := r.logAuditStatsView.GetScrollOffset()
+
+	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
+	handler := r.logAuditStatsLayout.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
+	sb.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
+
+	after, _ := r.logAuditStatsView.GetScrollOffset()
+	if after != before+1 {
+		t.Errorf("logAuditStatsView offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
+	}
+}
+
+// TestLogAuditStatsHScrollbarMouseClickThroughRealDispatch is the
+// horizontal counterpart, using the long Source name to force overflow
+// on a screen wide enough to show every Level row but not the long
+// line.
+func TestLogAuditStatsHScrollbarMouseClickThroughRealDispatch(t *testing.T) {
+	r := openLogAuditStatsOverflowing(t, 40, 30)
+	drawLogAuditStats(t, r, 40, 30)
+
+	sb := r.logAuditStatsHScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow for a 100-character source name on a 40-column screen", sb.maxOffset())
+	}
+	sbx, sby, _, _ := sb.GetRect()
+	_, before := r.logAuditStatsView.GetScrollOffset()
+
+	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
+	handler := r.logAuditStatsLayout.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
+	sb.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
+
+	_, after := r.logAuditStatsView.GetScrollOffset()
+	if after != before+1 {
+		t.Errorf("logAuditStatsView column offset after clicking the right arrow = %d, want %d (before=%d)", after, before+1, before)
+	}
+}
+
+// TestLogAuditStatsScrollbarsDoNotShareTheCornerCell pins the user's
+// own explicit requirement that the vertical and horizontal bars never
+// overlap.
+func TestLogAuditStatsScrollbarsDoNotShareTheCornerCell(t *testing.T) {
+	r := openLogAuditStatsOverflowing(t, 100, 10)
+	drawLogAuditStats(t, r, 100, 10)
+
+	vx, _, _, _ := r.logAuditStatsScrollbar.GetRect()
+	hx, _, hw, _ := r.logAuditStatsHScrollbar.GetRect()
+	if hx+hw > vx {
+		t.Errorf("horizontal bar (x=%d width=%d) reaches into the vertical bar's own column (x=%d)", hx, hw, vx)
 	}
 }
