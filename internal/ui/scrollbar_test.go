@@ -391,11 +391,12 @@ func TestTextViewContentRecomputesAfterSameLengthTextChanges(t *testing.T) {
 
 // TestScrollbarMinimapGlyphsOneRowPerTrackRow pins the simplest case:
 // as many track rows as content lines, so each glyph reflects exactly
-// one line's own width against globalMax, with no averaging involved.
+// one line's own width against the busiest row found (the widest line
+// here, 8, is also the only line in its own bucket, so it's trivially
+// its own busiest bucket too).
 func TestScrollbarMinimapGlyphsOneRowPerTrackRow(t *testing.T) {
-	// 0, 2, 4, 8 against globalMax=8 -> 0/8, 2/8, 4/8, 8/8.
 	widths := []int{0, 2, 4, 8}
-	got := scrollbarMinimapGlyphs(widths, 4, 8)
+	got := scrollbarMinimapGlyphs(widths, 4)
 	want := []rune{' ', '▎', '▌', '█'}
 	for i := range want {
 		if got[i] != want[i] {
@@ -404,36 +405,35 @@ func TestScrollbarMinimapGlyphsOneRowPerTrackRow(t *testing.T) {
 	}
 }
 
-// TestScrollbarMinimapGlyphsAveragesMultipleLinesPerRow pins the
-// averaging case: more content lines than track rows, so each glyph
-// reflects the AVERAGE width of several lines, not just the first or
-// the longest one of the range.
-func TestScrollbarMinimapGlyphsAveragesMultipleLinesPerRow(t *testing.T) {
-	// 4 lines into 2 track rows: row 0 averages lines [0,2) = (0+8)/2=4,
-	// row 1 averages lines [2,4) = (4+4)/2=4 — both average out to
-	// globalMax/2 despite very different individual line widths.
-	widths := []int{0, 8, 4, 4}
-	got := scrollbarMinimapGlyphs(widths, 2, 8)
-	want := []rune{'▌', '▌'}
-	if got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("glyphs = %v, want %v (both rows average to half of globalMax)", got, want)
+// TestScrollbarMinimapGlyphsSumsMultipleLinesPerRow pins the "text
+// amount", not "line width", semantics the user asked for: more
+// content lines in a row's own bucket, or longer ones, add up to a
+// bigger total — not an average — regardless of whether any single
+// line is particularly long.
+func TestScrollbarMinimapGlyphsSumsMultipleLinesPerRow(t *testing.T) {
+	// 6 lines into 3 track rows: bucket sums 2, 4, 20 — a strictly
+	// increasing sequence from a mix of many-short-lines and few-long-
+	// lines buckets, normalized against the busiest one (20).
+	widths := []int{1, 1, 2, 2, 10, 10}
+	got := scrollbarMinimapGlyphs(widths, 3)
+	want := []rune{'▏', '▎', '█'}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("glyph[%d] = %q, want %q (got %v, want %v)", i, got[i], want[i], got, want)
+		}
 	}
 }
 
-// TestScrollbarMinimapGlyphsUsesGlobalMaxNotLocalMax pins the user's
-// own explicit correction mid-spec: the 100% reference is the longest
-// line in the ENTIRE document, not just the lines one track row
-// represents — a local-max reference was explicitly rejected because
-// it would make every row look equally "full" regardless of its real
-// relative length.
-func TestScrollbarMinimapGlyphsUsesGlobalMaxNotLocalMax(t *testing.T) {
-	// This row's own lines only ever reach 10, but globalMax (from
-	// elsewhere in the document) is 100 — the glyph must reflect
-	// 10/100 (a low fill level), not 10/10 (which would read as full).
-	widths := []int{10, 10}
-	got := scrollbarMinimapGlyphs(widths, 1, 100)
-	if got[0] == '█' {
-		t.Errorf("glyph = %q (full), want a low fill level: 10/100 against the document's real global max, not 10/10 against this row's own local one", got[0])
+// TestScrollbarMinimapGlyphsNormalizesAgainstTheBusiestBucketInThisTrack
+// pins the reference point itself: 100% is whichever bucket has the
+// most text IN THIS TRACK RIGHT NOW, not some fixed absolute scale —
+// the same reasoning Log Audit's own timeline bar already uses for
+// event density. A tiny two-line document's own busiest bucket still
+// reads as full, exactly like a much larger document's would.
+func TestScrollbarMinimapGlyphsNormalizesAgainstTheBusiestBucketInThisTrack(t *testing.T) {
+	got := scrollbarMinimapGlyphs([]int{1, 1}, 1)
+	if got[0] != '█' {
+		t.Errorf("glyph = %q, want full — this bucket is the only one, so it's trivially the busiest regardless of its small absolute size", got[0])
 	}
 }
 
@@ -443,24 +443,25 @@ func TestScrollbarMinimapGlyphsUsesGlobalMaxNotLocalMax(t *testing.T) {
 // not a panic — the tail rows repeat the last line's own width rather
 // than reading an empty range.
 func TestScrollbarMinimapGlyphsHandlesMoreTrackRowsThanLines(t *testing.T) {
-	got := scrollbarMinimapGlyphs([]int{8}, 5, 8)
+	got := scrollbarMinimapGlyphs([]int{8}, 5)
 	if len(got) != 5 {
 		t.Fatalf("len(got) = %d, want 5 (one glyph per track row, regardless of how few lines exist)", len(got))
 	}
 	for i, g := range got {
 		if g != '█' {
-			t.Errorf("glyph[%d] = %q, want full (the document's one and only line equals globalMax)", i, g)
+			t.Errorf("glyph[%d] = %q, want full (the document's one and only line is its own busiest bucket)", i, g)
 		}
 	}
 }
 
 // TestScrollbarMinimapGlyphsBlankWhenNothingToShow pins the degenerate
-// inputs (no lines, or a globalMax of 0 — an all-empty document):
-// every glyph must come back blank, never a divide-by-zero panic.
+// inputs (no lines at all, or every line empty — an all-blank
+// document): every glyph must come back blank, never a divide-by-zero
+// panic.
 func TestScrollbarMinimapGlyphsBlankWhenNothingToShow(t *testing.T) {
 	for _, got := range [][]rune{
-		scrollbarMinimapGlyphs(nil, 5, 8),
-		scrollbarMinimapGlyphs([]int{0, 0}, 5, 0),
+		scrollbarMinimapGlyphs(nil, 5),
+		scrollbarMinimapGlyphs([]int{0, 0}, 5),
 	} {
 		if len(got) != 5 {
 			t.Fatalf("len(got) = %d, want 5", len(got))
@@ -477,7 +478,7 @@ func TestScrollbarMinimapGlyphsBlankWhenNothingToShow(t *testing.T) {
 // Draw/MouseHandler widget, not a Flex-based one) with content lines of
 // known, deliberately varied widths, sized small enough to force real
 // vertical overflow — the draw-level minimap test below needs a widget
-// that actually called EnableLineWidthMinimap, not a bare
+// that actually called EnableTextDensityMinimap, not a bare
 // textViewContent in isolation the way the pure-function tests above
 // use.
 func openToolWindowWithWideLines(t *testing.T) *toolWindow {
@@ -490,10 +491,11 @@ func openToolWindowWithWideLines(t *testing.T) *toolWindow {
 	tw := newToolWindow(r, "tw", "test")
 	tw.resizeTo(40, 8) // manuallyResized, so recalculateWidth never fights the fixed width below
 
-	// 10 lines, widths 10,20,...,100 — globalMax is exactly the last
-	// one (100), and a 5-row track (contentHeight = 8-3 = 5) averages
-	// two lines per row, giving a predictable, strictly increasing
-	// glyph sequence to assert against.
+	// 10 strictly-increasing-width lines, bucketed into a track a good
+	// deal shorter than 10 rows — each bucket's own total only ever
+	// grows as the lines feeding it get wider, so the busiest bucket
+	// (the one normalizing every glyph) is always the last one, giving
+	// a predictable, non-decreasing glyph sequence to assert against.
 	for i := 1; i <= 10; i++ {
 		tw.appendLine(strings.Repeat("x", i*10))
 	}
@@ -503,7 +505,7 @@ func openToolWindowWithWideLines(t *testing.T) *toolWindow {
 // TestToolWindowScrollbarMinimapReflectsLineWidths is the one
 // draw-level test per the advisor's own recommendation: the pure
 // function above is where a row-range off-by-one would hide, but this
-// pins that EnableLineWidthMinimap/Draw actually wires it up and that
+// pins that EnableTextDensityMinimap/Draw actually wires it up and that
 // the track genuinely reads as increasing left-to-right, matching ten
 // strictly-increasing line widths.
 func TestToolWindowScrollbarMinimapReflectsLineWidths(t *testing.T) {
@@ -562,7 +564,7 @@ func TestToolWindowScrollbarMinimapReflectsLineWidths(t *testing.T) {
 // TestLookScrollbarHasNoMinimap pins the scope decision: a SetWrap(true)
 // view (Look) must never show the minimap, even though its own
 // textViewContent technically satisfies lineWidthMeasurer — Look never
-// calls EnableLineWidthMinimap (see its own doc comment on why wrapped
+// calls EnableTextDensityMinimap (see its own doc comment on why wrapped
 // views are excluded), so its track must render exactly as it did
 // before this feature existed: plain thumb/track cells, not glyphs.
 func TestLookScrollbarHasNoMinimap(t *testing.T) {

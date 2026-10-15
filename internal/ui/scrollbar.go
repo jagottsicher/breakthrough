@@ -113,23 +113,21 @@ func (c *textViewContent) totalCols() int {
 
 // lineWidths is each logical ("\n"-delimited) line's own on-screen
 // width, in document order — the per-row data verticalScrollbar's own
-// line-width minimap (see lineWidthMeasurer) needs to show each track
-// row's own average relative to totalCols' own global maximum.
+// text-density minimap (see lineWidthMeasurer) sums per track row to
+// show how much text sits there.
 //
 // Only ever meaningful for a SetWrap(false) view, the same restriction
 // totalCols already documents: a logical line here is also exactly one
 // displayed row (what scrollOffset's own row component addresses), so
 // index i here lines up with content row i. For a SetWrap(true) view
-// (Look, Help, Details — see verticalScrollbar.EnableLineWidthMinimap's
+// (Look, Help, Details — see verticalScrollbar.EnableTextDensityMinimap's
 // own doc comment on why those are excluded rather than approximated),
-// a single logical line can span several displayed rows of very
-// different widths, tview exposes no public API to recover the real
-// per-displayed-row text to measure instead, and a displayed row can
-// never exceed the box width in the first place — every glyph would
-// read as "nearly full" regardless of the line's own real length, which
-// is informative exactly nowhere. Called only by widgets that already
-// know they're SetWrap(false) (see each one's own
-// EnableLineWidthMinimap call site), never unconditionally.
+// a single logical line can span several displayed rows, and tview
+// exposes no public API to recover the real per-displayed-row text to
+// measure instead — the two indices would silently drift apart, with
+// no way to tell from here. Called only by widgets that already know
+// they're SetWrap(false) (see each one's own EnableTextDensityMinimap
+// call site), never unconditionally.
 func (c *textViewContent) lineWidths() []int {
 	text := c.view.GetText(false)
 	if text == c.cachedColsText {
@@ -195,10 +193,10 @@ type verticalScrollbar struct {
 	// up.
 	trackColor func() tcell.Color
 
-	// lineWidthMinimap is set via EnableLineWidthMinimap — see its own
-	// doc comment for which widgets actually call it and why most
+	// textDensityMinimap is set via EnableTextDensityMinimap — see its
+	// own doc comment for which widgets actually call it and why most
 	// don't.
-	lineWidthMinimap bool
+	textDensityMinimap bool
 
 	dragging        bool
 	dragStartY      int
@@ -308,48 +306,58 @@ func (sb *verticalScrollbar) SetTrackColorFunc(f func() tcell.Color) {
 }
 
 // lineWidthMeasurer is the extra capability a scrollbar's own content
-// needs to draw the line-width minimap (see EnableLineWidthMinimap) —
-// bundled into one interface (rather than a loose type-assertion on
-// totalCols alone) since both numbers have to come from the same
-// content to mean anything together. *textViewContent implements this
-// directly; tableContent deliberately does not (a per-cell concept
-// doesn't carry over cleanly to a table's many columns — explicitly
-// out of scope for now, not forgotten).
+// needs to draw the text-density minimap (see EnableTextDensityMinimap)
+// — a per-line width, not a per-line character count, since these views
+// all use SetDynamicColors(true) (see textViewContent.lineWidths' own
+// doc comment on why a plain byte/rune count would overcount style
+// tags). *textViewContent implements this directly; tableContent
+// deliberately does not (a per-cell concept doesn't carry over cleanly
+// to a table's many columns — explicitly out of scope for now, not
+// forgotten).
 type lineWidthMeasurer interface {
 	lineWidths() []int
-	totalCols() int
 }
 
-// EnableLineWidthMinimap turns on the track's own line-width minimap —
-// Phase 2 of the user's original scrollbar request, built once Phase 1
-// (the plain thumb/arrows/drag scrollbar, already rolled out everywhere)
-// was confirmed working. Each track row fills with one of
-// scrollbarMinimapBlocks' own horizontal eighth-block glyphs,
-// representing the average on-screen width of the content rows that
-// track row represents, relative to the single widest line in the
-// WHOLE document (content.totalCols(), not just this row's own local
-// share — an explicit correction from the user mid-spec, rejecting an
-// earlier local-max design that would have made every section look
-// equally "full" regardless of its real relative length).
+// EnableTextDensityMinimap turns on the track's own text-density
+// minimap — Phase 2 of the user's original scrollbar request, built
+// once Phase 1 (the plain thumb/arrows/drag scrollbar, already rolled
+// out everywhere) was confirmed working. Each track row fills with one
+// of scrollbarMinimapBlocks' own horizontal eighth-block glyphs,
+// representing the total on-screen width of the content rows that
+// track row represents (not their average — a region with many lines,
+// or long ones, reads as having more text than a sparse or short-lined
+// one), relative to the single busiest track row found in THIS track
+// right now — the same bucket-normalized-against-the-busiest-bucket
+// idea Log Audit's own timeline bar already uses for event density
+// (see logAuditTimelineText), just measuring text amount instead of
+// event count. Replaced an earlier "average width relative to the
+// document's single longest line" design the user tried live and asked
+// to redo: that answered "how wide are the lines here", not "how much
+// text is here" — a very sparse region of a few very long lines read
+// as more significant than a dense region of many merely-long-enough
+// ones, the opposite of what Jens actually wanted to see at a glance.
 //
 // Deliberately opt-in per widget, not automatic for every
 // scrollableContent that happens to implement lineWidthMeasurer:
 // SetWrap(true) views (Look, Help, Details) also build on
-// textViewContent and so also satisfy the interface, but a displayed
-// row there can never exceed the box's own width in the first place —
-// the minimap would read every line as "nearly full" regardless of its
-// real length, informative nowhere. Call this only from a widget whose
-// own TextView is SetWrap(false) (checked by the author at each call
-// site, not detectable here — tview exposes no public getter for its
-// own unexported wrap field). Currently called by toolWindow's command
-// output, Git Breach's Main diff (unified and split), Compare's
-// side-by-side diff view, and Log Audit's Statistics modal — see each
-// one's own construction site.
-func (sb *verticalScrollbar) EnableLineWidthMinimap() {
-	sb.lineWidthMinimap = true
+// textViewContent and so also satisfy the interface, but their own
+// scrollOffset's row component addresses a DISPLAYED (wrapped) row,
+// while lineWidths() only ever has one entry per LOGICAL ("\n"-
+// delimited) line — the two indices line up only for a SetWrap(false)
+// view, where a logical line and a displayed row are the same thing.
+// tview exposes no public API to recover the real per-displayed-row
+// text for a wrapped view to measure instead. Call this only from a
+// widget whose own TextView is SetWrap(false) (checked by the author
+// at each call site, not detectable here — tview exposes no public
+// getter for its own unexported wrap field either). Currently called
+// by toolWindow's command output, Git Breach's Main diff (unified and
+// split), Compare's side-by-side diff view, and Log Audit's Statistics
+// modal — see each one's own construction site.
+func (sb *verticalScrollbar) EnableTextDensityMinimap() {
+	sb.textDensityMinimap = true
 }
 
-// scrollbarMinimapBlocks are the line-width minimap's own glyphs, one
+// scrollbarMinimapBlocks are the text-density minimap's own glyphs, one
 // per 1/8th of fill, horizontal and left-aligned (unlike the vertical,
 // bottom-up blocks Log Audit's own timeline bar uses elsewhere in this
 // app) — chosen so the fill direction visually matches the direction
@@ -364,19 +372,24 @@ var scrollbarMinimapBlocks = []rune{' ', '▏', '▎', '▍', '▌', '▋', '▊
 // [i*total/trackRows, (i+1)*total/trackRows) (at least one row, even
 // where trackRows exceeds total — the tail end of a short document
 // then has a few track rows repeating its own last row's width, rather
-// than an empty range with nothing to average); its own glyph is that
-// range's average width as a fraction of globalMax, rounded to the
-// nearest eighth.
-func scrollbarMinimapGlyphs(lineWidths []int, trackRows, globalMax int) []rune {
+// than an empty range with nothing to sum); its own glyph is that
+// range's total width as a fraction of the busiest range found among
+// all trackRows buckets, rounded to the nearest eighth — so at least
+// one row always reads as full, the same "relative to what's actually
+// on screen right now" reference logAuditTimelineText's own maxCount
+// already establishes for an analogous density bar.
+func scrollbarMinimapGlyphs(lineWidths []int, trackRows int) []rune {
 	glyphs := make([]rune, trackRows)
 	for i := range glyphs {
 		glyphs[i] = scrollbarMinimapBlocks[0]
 	}
 	total := len(lineWidths)
-	if trackRows <= 0 || total <= 0 || globalMax <= 0 {
+	if trackRows <= 0 || total <= 0 {
 		return glyphs
 	}
 
+	sums := make([]int, trackRows)
+	maxSum := 0
 	for i := 0; i < trackRows; i++ {
 		start := i * total / trackRows
 		end := (i + 1) * total / trackRows
@@ -394,9 +407,17 @@ func scrollbarMinimapGlyphs(lineWidths []int, trackRows, globalMax int) []rune {
 		for _, w := range lineWidths[start:end] {
 			sum += w
 		}
-		avg := float64(sum) / float64(end-start)
+		sums[i] = sum
+		if sum > maxSum {
+			maxSum = sum
+		}
+	}
+	if maxSum == 0 {
+		return glyphs
+	}
 
-		level := int(avg/float64(globalMax)*8 + 0.5)
+	for i, sum := range sums {
+		level := int(float64(sum)/float64(maxSum)*8 + 0.5)
 		if level < 0 {
 			level = 0
 		}
@@ -577,18 +598,18 @@ func (sb *verticalScrollbar) Draw(screen tcell.Screen) {
 	trackRows := height - 2
 	thumbRows, thumbStart := sb.thumbGeometry(trackRows)
 
-	// The line-width minimap (see EnableLineWidthMinimap) — nil unless
-	// both this scrollbar opted in AND its own content actually supports
-	// it (a SetWrap(true) textViewContent would technically satisfy
-	// lineWidthMeasurer too, but EnableLineWidthMinimap is never called
-	// for one — see its own doc comment). Drawn under the thumb too, not
-	// just the plain track: the minimap's whole point is to show the
-	// document's shape at a glance, which a blank gap where the thumb
-	// currently sits would undercut.
+	// The text-density minimap (see EnableTextDensityMinimap) — nil
+	// unless both this scrollbar opted in AND its own content actually
+	// supports it (a SetWrap(true) textViewContent would technically
+	// satisfy lineWidthMeasurer too, but EnableTextDensityMinimap is
+	// never called for one — see its own doc comment). Drawn under the
+	// thumb too, not just the plain track: the minimap's whole point is
+	// to show the document's shape at a glance, which a blank gap where
+	// the thumb currently sits would undercut.
 	var minimap []rune
-	if sb.lineWidthMinimap {
+	if sb.textDensityMinimap {
 		if lw, ok := sb.content.(lineWidthMeasurer); ok {
-			minimap = scrollbarMinimapGlyphs(lw.lineWidths(), trackRows, lw.totalCols())
+			minimap = scrollbarMinimapGlyphs(lw.lineWidths(), trackRows)
 		}
 	}
 
