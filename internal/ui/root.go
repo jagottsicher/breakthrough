@@ -1506,6 +1506,7 @@ type Root struct {
 	// CycleFocusShortcut, ...), unaffected by wrapping it in a layout
 	// purely for drawing purposes.
 	detailsSidebar        *tview.TextView
+	detailsScrollbar      *verticalScrollbar
 	detailsTitleBar       *tview.TextView
 	detailsSidebarLayout  *tview.Flex
 	detailsSidebarVisible bool
@@ -2723,9 +2724,20 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// positioned and shown/hidden its own way (see showDetailsSidebar).
 	r.detailsSidebar = r.newDetailsSidebarView()
 	r.detailsTitleBar = r.newDetailsTitleBar()
+	// AccentBackground, matching detailsSidebar's own constant content
+	// background (see newDetailsSidebarView's own doc comment on why
+	// that never changes with focus) — not the scrollbar's own default
+	// (PanelBackground), which would otherwise leave this one column a
+	// visibly different, mismatched tone next to the content it scrolls.
+	r.detailsScrollbar = newVerticalScrollbarForTextView(r, r.detailsSidebar)
+	r.detailsScrollbar.SetTrackColorFunc(func() tcell.Color { return r.theme.AccentBackground })
+	detailsContentRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.detailsSidebar, 0, 1, true).
+		AddItem(r.detailsScrollbar, 1, 0, false)
+	detailsContentRow.SetMouseCapture(r.detailsScrollbar.captureMouse)
 	r.detailsSidebarLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.detailsTitleBar, 1, 0, false).
-		AddItem(r.detailsSidebar, 0, 1, true)
+		AddItem(detailsContentRow, 0, 1, true)
 
 	r.wirePanel(panel)
 

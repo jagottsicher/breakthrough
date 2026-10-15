@@ -1675,3 +1675,108 @@ func TestDetailsImagePreviewHasNoExtraVerticalGap(t *testing.T) {
 		t.Errorf("the line two before Format: should already be real preview content (no second, extra blank line) — full text:\n%s", text)
 	}
 }
+
+// TestDetailsScrollbarMouseClickThroughRealDispatch mirrors the same
+// regression test shape used for every other scrollbar in this rollout:
+// a click on the scrollbar's own down arrow must actually scroll Details'
+// own content, driven through the real dispatch chain
+// (detailsSidebarLayout's own MouseHandler), not captureMouse directly.
+// A small rect forces real overflow without needing to fabricate extra
+// content — the sidebar's own ordinary stat block already has more lines
+// than a sidebar this short can show at once.
+func TestDetailsScrollbarMouseClickThroughRealDispatch(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 10) // short screen -> short sidebar (height-3, see detailsSidebarSize), forces overflow
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 10)
+	r.detailsSidebarLayout.Draw(screen)
+
+	sb := r.detailsScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow on a short sidebar", sb.maxOffset())
+	}
+	sbx, sby, _, sbh := sb.GetRect()
+	before, _ := r.detailsSidebar.GetScrollOffset()
+
+	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
+	handler := r.detailsSidebarLayout.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
+	sb.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
+
+	after, _ := r.detailsSidebar.GetScrollOffset()
+	if after != before+1 {
+		t.Errorf("detailsSidebar offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
+	}
+}
+
+// TestDetailsHashClickZoneAccountsForScrollOffset is a real, found
+// regression: captureDetailsSidebarMouse computed a click's row as
+// y-rectY alone — the clicked row's position within the visible
+// viewport, always 0 at the very top regardless of how far the sidebar
+// has scrolled — and compared that directly against
+// detailsHashRowStart, an absolute row number within the full text (see
+// renderDetailsSidebar's own writeSection). The two only ever agreed by
+// coincidence, whenever the sidebar happened to still be scrolled to
+// the very top — exactly the case every click-zone test here already
+// covered, and the only one nothing had scrolled past before. Once
+// scrolled down past the hash row, the button's own click zone silently
+// stopped responding anywhere at all.
+func TestDetailsHashClickZoneAccountsForScrollOffset(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	r.target = path
+	r.loadDetailsTarget(path)
+
+	if r.detailsHashRowStart <= 0 {
+		t.Fatal("setup: detailsHashRowStart should be a positive row (not the very first line) for this test to mean anything")
+	}
+
+	// Scroll partway toward the hash row — not all the way to it, so the
+	// hash row is still visible but no longer at viewport row 0.
+	scrollTo := r.detailsHashRowStart - 1
+	r.detailsSidebar.ScrollTo(scrollTo, 0)
+	gotOffset, _ := r.detailsSidebar.GetScrollOffset()
+	if gotOffset != scrollTo {
+		t.Fatalf("setup: scroll offset = %d, want %d", gotOffset, scrollTo)
+	}
+
+	_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
+	x, _, _, _ := r.detailsSidebar.GetRect()
+	// The hash row now sits at viewport row (detailsHashRowStart - scrollTo) == 1, not detailsHashRowStart itself.
+	viewportRow := r.detailsHashRowStart - scrollTo
+	action, _ := r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, rectY+viewportRow, tcell.Button1, 0))
+	if action != tview.MouseConsumed {
+		t.Fatalf("action = %v, want MouseConsumed", action)
+	}
+	if !r.detailsHashInProgress {
+		t.Error("clicking the hash button's own on-screen row after scrolling should still trigger it")
+	}
+}
