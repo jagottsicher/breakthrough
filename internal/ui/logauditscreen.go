@@ -99,7 +99,7 @@ func (r *Root) newLogAuditScreen() {
 }
 
 func (r *Root) newLogAuditSelectionScreen() {
-	r.logAuditTitleBar = newPlainTitleBar("Log Audit — select files")
+	r.logAuditTitleBar = newPlainTitleBar("Log Holepunch — select files")
 	// A clickable "✕" in the title bar's own top-right corner, per the
 	// user's own explicit request — see closeTitleBarButtonCol/
 	// renderCloseTitleBar/captureCloseTitleBarMouse (root.go). The
@@ -137,7 +137,7 @@ func (r *Root) newLogAuditSelectionScreen() {
 }
 
 func (r *Root) newLogAuditViewerScreen() {
-	r.logAuditViewerTitle = newPlainTitleBar("Log Audit")
+	r.logAuditViewerTitle = newPlainTitleBar("Log Holepunch")
 	// Same clickable "✕" as the selection screen's own title bar (see
 	// its own comment on this, just above in
 	// newLogAuditSelectionScreen) — drawn by renderLogAuditViewer
@@ -298,7 +298,7 @@ func logAuditGroupInfo(g logview.FileGroup) string {
 // Enter simply opens whichever row the cursor is already on (see
 // openLogAuditViewer's own doc comment for why).
 func (r *Root) renderLogAuditSelection() {
-	title := " Log Audit — select files"
+	title := " Log Holepunch — select files"
 	if r.panel.isRemote() {
 		// Named explicitly, not just "(remote)" — per this project's own
 		// "a remote view must never describe local paths or metadata"
@@ -616,7 +616,7 @@ func (r *Root) renderLogAuditViewer() {
 		}
 	}
 
-	title := fmt.Sprintf(" Log Audit — %d events │ %d files │ %d skipped │ %d errors │ %d warnings",
+	title := fmt.Sprintf(" Log Holepunch — %d events │ %d files │ %d skipped │ %d errors │ %d warnings",
 		len(r.logAuditAllEntries), r.logAuditFiles, r.logAuditSkipped, errCount, warnCount)
 	if len(shown) != len(r.logAuditAllEntries) {
 		title += fmt.Sprintf(" │ %d matching", len(shown))

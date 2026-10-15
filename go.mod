@@ -21,8 +21,12 @@ require (
 require (
 	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
+	github.com/evanoberholster/imagemeta v1.1.0 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
+	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+	github.com/tinylib/msgp v1.6.3 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )

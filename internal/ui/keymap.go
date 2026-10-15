@@ -210,7 +210,14 @@ func plainCommands() []plainCommand {
 		// own explicit request) — 'S' was free and still reads as "Sed".
 		{key: 'S', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
 		{key: 'B', label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
-		{key: 'C', label: "Compare (two marked items, or split view)", action: func(r *Root) { r.openCompare() }},
+		{key: 'C', label: "Compare Faultline (two marked items, or split view)", action: func(r *Root) { r.openCompare() }},
+		// Plain "L" — a second, direct path to the exact same action
+		// "jL" already reaches (see logaudit.go's own doc comment on
+		// openLogAudit), per the user's own explicit request, mirroring
+		// plain "C"'s own relationship to "jC" right above. Not quick
+		// (no button-bar slot) — it doesn't need to appear in the
+		// primary navigation either, same as "C".
+		{key: 'L', label: "Log Holepunch", action: func(r *Root) { r.openLogAudit() }},
 		{key: 'R', label: "Rsync", action: func(r *Root) { r.openRsync() }},
 		{key: 'G', label: "Go to the last row", action: func(r *Root) { r.panel.focusRow(r.panel.table.GetRowCount() - 1) }},
 		{key: '+', label: "Select by pattern", action: func(r *Root) { r.openSelectPlus() }},
@@ -351,11 +358,12 @@ func chordFamilies() []chordFamily {
 			// read and write — per the user's own explicit request —
 			// so a host saved from either one shows up in both.
 			{'s', "SSH shell…", func(r *Root) { r.openSSHShellMenu() }},
-			// "Messages", after gr/gb/gc/gs: the status bar's own badge
-			// (bottombar.go) is this same action's mouse equivalent, the
-			// same "gehe zu einem ganzen weiteren Ort" role gb/gc already
-			// have — see feature_ideas.txt's own "3a. Benachrichtigungen".
-			{'m', "Messages", func(r *Root) { r.openMessages() }},
+			// "Flareup" (Messages), after gr/gb/gc/gs: the status bar's
+			// own badge (bottombar.go) is this same action's mouse
+			// equivalent, the same "gehe zu einem ganzen weiteren Ort"
+			// role gb/gc already have — see feature_ideas.txt's own "3a.
+			// Benachrichtigungen".
+			{'m', "Flareup", func(r *Root) { r.openMessages() }},
 			// "Email" ("go email") — launches whichever terminal mail
 			// client is configured/detected (internal/mail), Suspend +
 			// direct exec, the exact same mechanism Sessions' own Attach
@@ -470,8 +478,8 @@ func chordFamilies() []chordFamily {
 		// and Extract are tools too, not a fourth full-screen catalog)
 		// lead, ahead of the four full-screen catalogs that follow.
 		//
-		// "jg" opens the Git breach dashboard (gitbreach.go/
-		// gitbreachscreen.go) — named "Git breach" per the user's own
+		// "jg" opens the Git Breach dashboard (gitbreach.go/
+		// gitbreachscreen.go) — named "Git Breach" per the user's own
 		// explicit request, not a pun on "git branch" — a multi-pane
 		// screen (Status/Files/Branches/Commits/Stash at once, the
 		// first screen in this app shaped that way instead of a
@@ -523,34 +531,34 @@ func chordFamilies() []chordFamily {
 			{'c', "Compress…", func(r *Root) { r.openCompress() }},
 			{'e', "Extract", func(r *Root) { r.extractCurrentArchive(false) }},
 			{'E', "Extract, del org", func(r *Root) { r.extractCurrentArchive(true) }},
-			{'g', "Git breach", func(r *Root) { r.openGitBreach() }},
+			{'g', "Git Breach", func(r *Root) { r.openGitBreach() }},
 			// "jC" — a second, mnemonic path to the exact same action
 			// plain "C" already reaches (see compare.go's own openCompare
 			// doc comment), per the user's own explicit request to have
 			// it reachable from this family too, right after "jg" and
 			// before "jm".
-			{'C', "Compare", func(r *Root) { r.openCompare() }},
+			{'C', "Compare Faultline", func(r *Root) { r.openCompare() }},
 			{'m', "Mounts", func(r *Root) { r.openMounts() }},
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
 			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
 			// "Action Log" — renamed from "Activity Log" per the user's
 			// own explicit request, to avoid reading as a sibling of the
-			// new "jL" (Log Audit, capital L) right next to it: this one
-			// is still exactly the same screen (activitylogscreen.go),
+			// new "jL" (Log Holepunch, capital L) right next to it: this
+			// one is still exactly the same screen (activitylogscreen.go),
 			// browsing breakthrough's own recorded actions, nothing about
 			// it changed but the label.
 			{'l', "Action Log", func(r *Root) { r.openActivityLog() }},
 			{'s', "Sessions", func(r *Root) { r.openSessions() }},
 			{'k', "SSH Keys", func(r *Root) { r.openSSHKeys() }},
-			// "Log Audit" — capital L, this family's own second
+			// "Log Holepunch" — capital L, this family's own second
 			// capitalized member alongside "jE" (see its own doc comment
 			// above for that convention): reads *other* log files on
 			// disk (internal/logview), scoped to wherever the active
 			// panel currently is rather than a fixed destination — see
 			// logaudit.go's own doc comment on openLogAudit for why that
 			// makes it unlike every other member of this family.
-			{'L', "Log Audit", func(r *Root) { r.openLogAudit() }},
+			{'L', "Log Holepunch", func(r *Root) { r.openLogAudit() }},
 		}},
 		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
 			{'m', "chmod", func(r *Root) { r.openChmod() }},

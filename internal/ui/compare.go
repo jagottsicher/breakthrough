@@ -78,7 +78,7 @@ func (r *Root) newCompareFileScreen() {
 
 	r.compareButtons = r.newCompareButtons()
 
-	r.compareTitleBar = newPlainTitleBar("Compare")
+	r.compareTitleBar = newPlainTitleBar("Compare Faultline")
 
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.compareHeader, compareHeaderHeight, 0, false).

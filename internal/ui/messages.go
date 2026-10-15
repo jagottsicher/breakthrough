@@ -172,7 +172,7 @@ func (r *Root) newMessagesScreen() {
 		r.armMessagesDwell(row)
 	})
 
-	r.messagesTitleBar = newPlainTitleBar("Messages")
+	r.messagesTitleBar = newPlainTitleBar("Flareup")
 	r.messagesTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.messagesTitleBar, r.reloadMessages, r.closeMessages))
 
 	r.messagesHint = tview.NewTextView()
@@ -268,7 +268,7 @@ func (r *Root) renderMessages() {
 	header(messagesColMessage, "Message")
 	header(messagesColClose, padRight("", messagesColCloseWidth))
 
-	renderReloadCloseTitleBar(r.messagesTitleBar, fmt.Sprintf(" Messages — %d, %d unread ", len(r.messagesList), r.notify.UnreadCount()), r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.messagesTitleBar, fmt.Sprintf(" Flareup — %d, %d unread ", len(r.messagesList), r.notify.UnreadCount()), r.lastScreenWidth)
 
 	if len(r.messagesList) == 0 {
 		showTablePlaceholder(r.messagesTable, "No messages yet.", r.theme.PlaceholderText)

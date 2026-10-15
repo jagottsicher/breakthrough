@@ -111,7 +111,7 @@ var (
 // styleGitBreachFocus's own PopupBackground/SurfaceBackground pair
 // adds on top of that established scheme.
 func (r *Root) newGitBreachScreen() {
-	r.gitBreachTitleBar = newPlainTitleBar("Git breach")
+	r.gitBreachTitleBar = newPlainTitleBar("Git Breach")
 	r.gitBreachTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.gitBreachTitleBar, r.reloadGitBreach, r.closeGitBreach))
 
 	r.gitBreachStatusHeader, r.gitBreachStatusView = newGitBreachBox("Status")
@@ -1067,7 +1067,7 @@ func (r *Root) gitBreachFocusStashOnClick(action tview.MouseAction, event *tcell
 // commit, the same "re-render from the current state, never patch it
 // in place" convention every other screen in this package follows.
 func (r *Root) renderGitBreach() {
-	title := " Git breach"
+	title := " Git Breach"
 	if r.gitBreachRoot != "" {
 		title += " — " + r.gitBreachRoot
 	}

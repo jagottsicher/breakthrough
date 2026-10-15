@@ -183,7 +183,7 @@ func contextMenuTree() []menuEntry {
 			{label: "sed", mnemonic: 'S', action: func(r *Root) { r.openSedReplace() }},
 			{label: "Batch rename", mnemonic: 'B', action: func(r *Root) { r.openBatchRename() }},
 			{label: "Undo last rename", mnemonic: 'u', action: func(r *Root) { r.undoLastBatchRename() }},
-			{label: "Compare", mnemonic: 'C', action: func(r *Root) { r.openCompare() }},
+			{label: "Compare Faultline", mnemonic: 'C', action: func(r *Root) { r.openCompare() }},
 			{label: "Rsync", mnemonic: 'R', action: func(r *Root) { r.openRsync() }},
 			// Compress works on any selection (a file, several files, or a
 			// whole directory tree) — no visibility gate of its own, the

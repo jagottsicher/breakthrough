@@ -47,6 +47,7 @@ var helpText = strings.TrimLeft(`
   B   Batch rename   S     Sed Replace          G   Go to last row
   C   Compare        R     Rsync                W   Open with…
   q   Quit           ?     This help            :   Bash command line
+  L   Log Holepunch (same as "jL")
 
   h/k/M target whichever of Properties/Details is relevant (Properties
   first if both are open on the same file), opening the Details sidebar
@@ -92,7 +93,7 @@ var helpText = strings.TrimLeft(`
     g  goto     gg top · gh home · gu up · gp back · gn forward ·
                 gr / (root) · gb Trashbin · gc Connect… · gs SSH shell…
                 (a real interactive remote shell, same connection list
-                as gc) · gm Messages · ge Email (launches neomutt/aerc/
+                as gc) · gm Flareup · ge Email (launches neomutt/aerc/
                 himalaya/mail/mailx, whichever is installed —
                 configurable under Options) ·
                 g: Bash prompt (same as plain ":")
@@ -105,14 +106,16 @@ var helpText = strings.TrimLeft(`
                 its own queue) · mC Cancel Compress/Extract (same
                 question) — mR/mC never touch each other or Paste
     j  tools    jc Compress… · je Extract · jE Extract, del org ·
-                jg Git breach dashboard (stage/commit for the repo
+                jg Git Breach dashboard (stage/commit for the repo
                 under the active panel) ·
-                jC Compare (same as plain "C") ·
+                jC Compare Faultline (same as plain "C") ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen ·
                 js Sessions screen (local screen/tmux/zellij sessions) ·
-                jk SSH Keys screen (local key pairs under ~/.ssh)
+                jk SSH Keys screen (local key pairs under ~/.ssh) ·
+                jL Log Holepunch (same as plain "L" — see its own
+                section below)
     p  perms    pm chmod · po chown
     z  disp     zN sort by name · zS sort by size · zT sort by time ·
                 zs size format · zt time format · zi Nerd Font icons
@@ -309,7 +312,7 @@ var helpText = strings.TrimLeft(`
   archive member. Details, status-bar Disk/Inodes, and System Info at
   "/" all
   describe the remote machine, not this one, once connected. chown,
-  Compare, Batch rename, Sed Replace, and Properties as a whole still
+  Compare Faultline, Batch rename, Sed Replace, and Properties as a whole still
   refuse outright for now.
 
   "gs" opens a second dropdown ("Open shell to"), shaped like the one
@@ -580,9 +583,9 @@ var helpText = strings.TrimLeft(`
   here, the same "tail, not head" reasoning a live log is usually
   browsed with.
 
-[::b]Git breach dashboard ("jg")[::-]
+[::b]Git Breach dashboard ("jg")[::-]
 
-  Like "jL" (Log Audit) below, not a fixed destination: "jg" resolves
+  Like "jL" (Log Holepunch) below, not a fixed destination: "jg" resolves
   the git repository containing the active panel's own current
   directory — its own parent directories included, exactly the way a
   real "git status" typed there would find it — and opens a dashboard
@@ -619,7 +622,7 @@ var helpText = strings.TrimLeft(`
   second meaning there). Once inside, Up/Down/PgUp/PgDn page the diff
   itself instead of the side box's own list, and Left, Enter, Space or
   Esc all step back out to whichever box is still selected underneath
-  — Esc here is the one exception to "Esc closes Git breach": it only
+  — Esc here is the one exception to "Esc closes Git Breach": it only
   backs out of the diff, closing the dashboard everywhere else. Tab/
   Shift-Tab from inside the diff continue the same cycle from that
   box's own position, exactly as if pressed from there directly.
@@ -639,9 +642,9 @@ var helpText = strings.TrimLeft(`
 
   Main's own diff has a second view, toggled by "v" while Main has
   focus: a side-by-side pane pair (old on the left, new on the right),
-  the same two-pane shape Compare's own diff view (see "C" above) uses.
+  the same two-pane shape Compare Faultline's own diff view (see "C" above) uses.
   Scrolling is always linked between the two sides here — there's no
-  independent-scrolling mode to opt out of the way Compare's own "="/
+  independent-scrolling mode to opt out of the way Compare Faultline's own "="/
   "≠" toggle offers, since both panes show the same file, not two
   unrelated things. Left scrolls the pair sideways for a long line,
   stepping back out to whichever box is still selected underneath (the
@@ -707,7 +710,7 @@ var helpText = strings.TrimLeft(`
              underneath (the same as Left/Enter/Space above) instead of
              closing the dashboard
 
-[::b]Log Audit screen ("jL")[::-]
+[::b]Log Holepunch screen ("jL")[::-]
 
   Not a fixed destination like every other member of the "j" family —
   "jL" reads whichever log files are in the active panel's own current
@@ -726,11 +729,11 @@ var helpText = strings.TrimLeft(`
   time. The "✕" glyph in the title bar's own top-right corner is
   a mouse-clickable equivalent to Escape — both screens below have one.
 
-    Enter    Open the Log Audit view for the family under the cursor
+    Enter    Open the Log Holepunch view for the family under the cursor
     r        Re-scan the directory
     Esc      Close
 
-  Step 2 — Log Audit view: every selected file's own lines, merged into
+  Step 2 — Log Holepunch view: every selected file's own lines, merged into
   one chronological stream, opening with the list itself already
   focused (the row just above its header turns the same color as a
   focused input field while it is — Tab/Shift+Tab move focus to
@@ -1017,7 +1020,7 @@ var helpText = strings.TrimLeft(`
   ~/.config/breakthrough/rename-presets/ (or $XDG_CONFIG_HOME) — easy
   to copy to another machine or keep in version control.
 
-[::b]Compare ("C")[::-]
+[::b]Compare Faultline ("C")[::-]
 
   Also reachable as "jC" (see the "j" chord family above) — the exact
   same action under both.
@@ -1321,7 +1324,7 @@ var helpText = strings.TrimLeft(`
   Archives the current selection — one file, several files, or a whole
   directory — into a new file right beside it, or, once a split is
   active, straight into the other pane's own directory instead (the
-  same default Rsync/Compare already use), via a real external tool
+  same default Rsync/Compare Faultline already use), via a real external tool
   (zip, tar, gzip, bzip2, xz, or zstd — never a reimplementation). Pick
   a Format, type an Output name (the extension is added automatically);
   the live Preview line shows exactly what will be created. Refuses a
@@ -1355,8 +1358,8 @@ var helpText = strings.TrimLeft(`
   Unpacks the archive currently under the cursor in one step, without
   first entering it — into the archive's own directory, or, if a split
   is currently active, straight into the other pane's own current
-  directory instead (the same default Rsync/Compare already use once a
-  split exists) — local or, extracting locally into a throwaway temp
+  directory instead (the same default Rsync/Compare Faultline already use
+  once a split exists) — local or, extracting locally into a throwaway temp
   directory first and uploading it, a remote SFTP connection. "jE"
   additionally moves the original archive to the Trash once extraction
   has actually succeeded (landed on the real destination, upload
