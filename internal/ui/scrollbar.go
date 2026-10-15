@@ -69,13 +69,19 @@ type textViewContent struct {
 	cachedText  string
 	cachedTotal int
 
-	// cachedColsText/cachedTotalCols are totalCols' own cache — unlike
-	// cachedTotal above, the longest line's width never depends on the
-	// view's own rect (wrapping is irrelevant: this is only ever asked of
-	// a SetWrap(false) view, see horizontallyScrollableContent's own doc
-	// comment), so the cache key here is just the text itself.
-	cachedColsText  string
-	cachedTotalCols int
+	// cachedColsText/cachedLineWidths/cachedTotalCols are totalCols' and
+	// lineWidths' own shared cache — unlike cachedTotal above, neither
+	// depends on the view's own rect (wrapping is irrelevant: both are
+	// only ever asked of a SetWrap(false) view, see
+	// horizontallyScrollableContent's/lineWidthMeasurer's own doc
+	// comments), so the cache key here is just the text itself. One
+	// cache, not two, deliberately — computing cachedTotalCols as a
+	// byproduct of cachedLineWidths (see lineWidths) is what keeps the
+	// two from ever disagreeing with each other the way two separate
+	// caches over the same text could.
+	cachedColsText   string
+	cachedLineWidths []int
+	cachedTotalCols  int
 }
 
 func (c *textViewContent) rect() (int, int, int, int) { return c.view.GetRect() }
@@ -101,19 +107,48 @@ func (c *textViewContent) totalRows() int {
 // screen columns; counting them would make the thumb spuriously tiny
 // and maxOffset scroll out past where any real content ends.
 func (c *textViewContent) totalCols() int {
+	c.lineWidths() // populates/refreshes cachedTotalCols as a byproduct
+	return c.cachedTotalCols
+}
+
+// lineWidths is each logical ("\n"-delimited) line's own on-screen
+// width, in document order — the per-row data verticalScrollbar's own
+// line-width minimap (see lineWidthMeasurer) needs to show each track
+// row's own average relative to totalCols' own global maximum.
+//
+// Only ever meaningful for a SetWrap(false) view, the same restriction
+// totalCols already documents: a logical line here is also exactly one
+// displayed row (what scrollOffset's own row component addresses), so
+// index i here lines up with content row i. For a SetWrap(true) view
+// (Look, Help, Details — see verticalScrollbar.EnableLineWidthMinimap's
+// own doc comment on why those are excluded rather than approximated),
+// a single logical line can span several displayed rows of very
+// different widths, tview exposes no public API to recover the real
+// per-displayed-row text to measure instead, and a displayed row can
+// never exceed the box width in the first place — every glyph would
+// read as "nearly full" regardless of the line's own real length, which
+// is informative exactly nowhere. Called only by widgets that already
+// know they're SetWrap(false) (see each one's own
+// EnableLineWidthMinimap call site), never unconditionally.
+func (c *textViewContent) lineWidths() []int {
 	text := c.view.GetText(false)
 	if text == c.cachedColsText {
-		return c.cachedTotalCols
+		return c.cachedLineWidths
 	}
 	c.cachedColsText = text
+	lines := strings.Split(text, "\n")
+	widths := make([]int, len(lines))
 	max := 0
-	for _, line := range strings.Split(text, "\n") {
-		if w := tview.TaggedStringWidth(line); w > max {
+	for i, line := range lines {
+		w := tview.TaggedStringWidth(line)
+		widths[i] = w
+		if w > max {
 			max = w
 		}
 	}
+	c.cachedLineWidths = widths
 	c.cachedTotalCols = max
-	return c.cachedTotalCols
+	return c.cachedLineWidths
 }
 
 // tableContent adapts a *tview.Table — row-based, no wrapping and
@@ -159,6 +194,11 @@ type verticalScrollbar struct {
 	// staying a flat, mismatched tone while the table next to it lights
 	// up.
 	trackColor func() tcell.Color
+
+	// lineWidthMinimap is set via EnableLineWidthMinimap — see its own
+	// doc comment for which widgets actually call it and why most
+	// don't.
+	lineWidthMinimap bool
 
 	dragging        bool
 	dragStartY      int
@@ -265,6 +305,107 @@ func newVerticalScrollbarForTable(host scrollbarHost, table *tview.Table) *verti
 // has keyboard focus).
 func (sb *verticalScrollbar) SetTrackColorFunc(f func() tcell.Color) {
 	sb.trackColor = f
+}
+
+// lineWidthMeasurer is the extra capability a scrollbar's own content
+// needs to draw the line-width minimap (see EnableLineWidthMinimap) —
+// bundled into one interface (rather than a loose type-assertion on
+// totalCols alone) since both numbers have to come from the same
+// content to mean anything together. *textViewContent implements this
+// directly; tableContent deliberately does not (a per-cell concept
+// doesn't carry over cleanly to a table's many columns — explicitly
+// out of scope for now, not forgotten).
+type lineWidthMeasurer interface {
+	lineWidths() []int
+	totalCols() int
+}
+
+// EnableLineWidthMinimap turns on the track's own line-width minimap —
+// Phase 2 of the user's original scrollbar request, built once Phase 1
+// (the plain thumb/arrows/drag scrollbar, already rolled out everywhere)
+// was confirmed working. Each track row fills with one of
+// scrollbarMinimapBlocks' own horizontal eighth-block glyphs,
+// representing the average on-screen width of the content rows that
+// track row represents, relative to the single widest line in the
+// WHOLE document (content.totalCols(), not just this row's own local
+// share — an explicit correction from the user mid-spec, rejecting an
+// earlier local-max design that would have made every section look
+// equally "full" regardless of its real relative length).
+//
+// Deliberately opt-in per widget, not automatic for every
+// scrollableContent that happens to implement lineWidthMeasurer:
+// SetWrap(true) views (Look, Help, Details) also build on
+// textViewContent and so also satisfy the interface, but a displayed
+// row there can never exceed the box's own width in the first place —
+// the minimap would read every line as "nearly full" regardless of its
+// real length, informative nowhere. Call this only from a widget whose
+// own TextView is SetWrap(false) (checked by the author at each call
+// site, not detectable here — tview exposes no public getter for its
+// own unexported wrap field). Currently called by toolWindow's command
+// output, Git Breach's Main diff (unified and split), Compare's
+// side-by-side diff view, and Log Audit's Statistics modal — see each
+// one's own construction site.
+func (sb *verticalScrollbar) EnableLineWidthMinimap() {
+	sb.lineWidthMinimap = true
+}
+
+// scrollbarMinimapBlocks are the line-width minimap's own glyphs, one
+// per 1/8th of fill, horizontal and left-aligned (unlike the vertical,
+// bottom-up blocks Log Audit's own timeline bar uses elsewhere in this
+// app) — chosen so the fill direction visually matches the direction
+// text itself flows, per the user's own explicit request.
+var scrollbarMinimapBlocks = []rune{' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'}
+
+// scrollbarMinimapGlyphs maps lineWidths (one entry per content row, in
+// document order) onto exactly trackRows glyphs — a pure function,
+// deliberately split out of Draw and unit-tested on its own, since a
+// row-range off-by-one is exactly the kind of bug that hides inside a
+// larger rendering function. Each track row i represents content rows
+// [i*total/trackRows, (i+1)*total/trackRows) (at least one row, even
+// where trackRows exceeds total — the tail end of a short document
+// then has a few track rows repeating its own last row's width, rather
+// than an empty range with nothing to average); its own glyph is that
+// range's average width as a fraction of globalMax, rounded to the
+// nearest eighth.
+func scrollbarMinimapGlyphs(lineWidths []int, trackRows, globalMax int) []rune {
+	glyphs := make([]rune, trackRows)
+	for i := range glyphs {
+		glyphs[i] = scrollbarMinimapBlocks[0]
+	}
+	total := len(lineWidths)
+	if trackRows <= 0 || total <= 0 || globalMax <= 0 {
+		return glyphs
+	}
+
+	for i := 0; i < trackRows; i++ {
+		start := i * total / trackRows
+		end := (i + 1) * total / trackRows
+		if end <= start {
+			end = start + 1
+		}
+		if end > total {
+			end = total
+		}
+		if start >= end {
+			start = end - 1
+		}
+
+		sum := 0
+		for _, w := range lineWidths[start:end] {
+			sum += w
+		}
+		avg := float64(sum) / float64(end-start)
+
+		level := int(avg/float64(globalMax)*8 + 0.5)
+		if level < 0 {
+			level = 0
+		}
+		if level > 8 {
+			level = 8
+		}
+		glyphs[i] = scrollbarMinimapBlocks[level]
+	}
+	return glyphs
 }
 
 // viewportRows is how many rows of content are visible at once —
@@ -435,13 +576,41 @@ func (sb *verticalScrollbar) Draw(screen tcell.Screen) {
 	// each end. The track itself is everything above them.
 	trackRows := height - 2
 	thumbRows, thumbStart := sb.thumbGeometry(trackRows)
+
+	// The line-width minimap (see EnableLineWidthMinimap) — nil unless
+	// both this scrollbar opted in AND its own content actually supports
+	// it (a SetWrap(true) textViewContent would technically satisfy
+	// lineWidthMeasurer too, but EnableLineWidthMinimap is never called
+	// for one — see its own doc comment). Drawn under the thumb too, not
+	// just the plain track: the minimap's whole point is to show the
+	// document's shape at a glance, which a blank gap where the thumb
+	// currently sits would undercut.
+	var minimap []rune
+	if sb.lineWidthMinimap {
+		if lw, ok := sb.content.(lineWidthMeasurer); ok {
+			minimap = scrollbarMinimapGlyphs(lw.lineWidths(), trackRows, lw.totalCols())
+		}
+	}
+
 	for i := 0; i < trackRows; i++ {
 		row := y + i
+		bg := track
 		if i >= thumbStart && i < thumbStart+thumbRows {
-			setCell(row, thumb, ' ')
-		} else {
-			setCell(row, track, ' ')
+			bg = thumb
 		}
+		ch := ' '
+		fg := theme.TextColor
+		if minimap != nil {
+			ch = minimap[i]
+			// The same fixed-delta contrast scrollbarThumbColor already
+			// uses for the thumb's own background against the track —
+			// reused here, not a second color algorithm, since it's
+			// already proven safe against every background this app's
+			// scrollbars sit on (Git Breach's own dark unfocused track
+			// included — see scrollbarThumbColor's own doc comment).
+			fg = scrollbarThumbColor(bg)
+		}
+		screen.SetContent(x, row, ch, nil, tcell.StyleDefault.Background(bg).Foreground(fg))
 	}
 	setCell(y+height-2, thumb, '▲')
 	setCell(y+height-1, thumb, '▼')

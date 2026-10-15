@@ -116,6 +116,9 @@ func (r *Root) newCompareDiffScreen() {
 	}
 	r.compareDiffLeftScrollbar = newVerticalScrollbar(r, leftContent)
 	r.compareDiffRightScrollbar = newVerticalScrollbar(r, rightContent)
+	// Both panes are SetWrap(false).
+	r.compareDiffLeftScrollbar.EnableLineWidthMinimap()
+	r.compareDiffRightScrollbar.EnableLineWidthMinimap()
 	// Same adapter instance as the vertical bar just above, not a fresh
 	// one — compareDiffPaneContent's own scrollTo override (linking the
 	// other pane while r.compareDiffLinked is true) must apply to a

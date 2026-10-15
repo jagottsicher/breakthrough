@@ -348,6 +348,7 @@ func (r *Root) newLogAuditStatsScreen() {
 	popupTrackColor := func() tcell.Color { return r.theme.PopupBackground }
 
 	r.logAuditStatsScrollbar = newVerticalScrollbarForTextView(r, r.logAuditStatsView)
+	r.logAuditStatsScrollbar.EnableLineWidthMinimap() // logAuditStatsView is SetWrap(false)
 	r.logAuditStatsScrollbar.SetTrackColorFunc(popupTrackColor)
 	topRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.logAuditStatsView, 0, 1, true).

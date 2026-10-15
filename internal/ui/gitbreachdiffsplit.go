@@ -100,6 +100,7 @@ func (r *Root) newGitBreachDiffSplit() {
 	// unlinked mode" invariant scrollGitBreachDiffSplit already
 	// enforces for keyboard/wheel scrolling.
 	r.gitBreachDiffScrollbar = newVerticalScrollbarForTextView(r, r.gitBreachDiffView)
+	r.gitBreachDiffScrollbar.EnableLineWidthMinimap() // gitBreachDiffView is SetWrap(false)
 	r.gitBreachDiffScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachDiffView))
 	unifiedTopRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.gitBreachDiffView, 0, 1, true).
@@ -126,6 +127,7 @@ func (r *Root) newGitBreachDiffSplit() {
 		right:           r.gitBreachDiffSplitRight,
 	}
 	r.gitBreachDiffSplitScrollbar = newVerticalScrollbar(r, splitContent)
+	r.gitBreachDiffSplitScrollbar.EnableLineWidthMinimap() // both panes are SetWrap(false)
 	r.gitBreachDiffSplitScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachDiffSplitLeft))
 	splitTopRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(splitBody, 0, 1, true).
@@ -195,6 +197,29 @@ func (c *gitBreachDiffSplitContent) totalCols() int {
 		return right
 	}
 	return left
+}
+
+// lineWidths overrides the embedded textViewContent's own method for
+// the same reason totalCols does: the minimap's own per-row glyph
+// (see verticalScrollbar.EnableLineWidthMinimap) should show whichever
+// pane is actually wider on that row, not always the left one. The
+// Pair invariant that guarantees equal line counts is what makes
+// pairing by index safe here.
+func (c *gitBreachDiffSplitContent) lineWidths() []int {
+	left := c.textViewContent.lineWidths()
+	if c.rightCols == nil {
+		c.rightCols = &textViewContent{view: c.right}
+	}
+	right := c.rightCols.lineWidths()
+
+	widths := make([]int, len(left))
+	for i, w := range left {
+		widths[i] = w
+		if i < len(right) && right[i] > w {
+			widths[i] = right[i]
+		}
+	}
+	return widths
 }
 
 // drawGitBreachDiffSplitSeparator mirrors
