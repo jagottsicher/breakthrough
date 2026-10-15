@@ -388,3 +388,202 @@ func TestTextViewContentRecomputesAfterSameLengthTextChanges(t *testing.T) {
 		t.Errorf("totalCols after switching to same-length but much narrower text = %d, want %d (stale cache not invalidated)", got, want)
 	}
 }
+
+// TestScrollbarMinimapGlyphsOneRowPerTrackRow pins the simplest case:
+// as many track rows as content lines, so each glyph reflects exactly
+// one line's own width against the busiest row found (the widest line
+// here, 8, is also the only line in its own bucket, so it's trivially
+// its own busiest bucket too).
+func TestScrollbarMinimapGlyphsOneRowPerTrackRow(t *testing.T) {
+	widths := []int{0, 2, 4, 8}
+	got := scrollbarMinimapGlyphs(widths, 4)
+	want := []rune{' ', '▎', '▌', '█'}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("glyph[%d] = %q, want %q (got %v, want %v)", i, got[i], want[i], got, want)
+		}
+	}
+}
+
+// TestScrollbarMinimapGlyphsSumsMultipleLinesPerRow pins the "text
+// amount", not "line width", semantics the user asked for: more
+// content lines in a row's own bucket, or longer ones, add up to a
+// bigger total — not an average — regardless of whether any single
+// line is particularly long.
+func TestScrollbarMinimapGlyphsSumsMultipleLinesPerRow(t *testing.T) {
+	// 6 lines into 3 track rows: bucket sums 2, 4, 20 — a strictly
+	// increasing sequence from a mix of many-short-lines and few-long-
+	// lines buckets, normalized against the busiest one (20).
+	widths := []int{1, 1, 2, 2, 10, 10}
+	got := scrollbarMinimapGlyphs(widths, 3)
+	want := []rune{'▏', '▎', '█'}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("glyph[%d] = %q, want %q (got %v, want %v)", i, got[i], want[i], got, want)
+		}
+	}
+}
+
+// TestScrollbarMinimapGlyphsNormalizesAgainstTheBusiestBucketInThisTrack
+// pins the reference point itself: 100% is whichever bucket has the
+// most text IN THIS TRACK RIGHT NOW, not some fixed absolute scale —
+// the same reasoning Log Audit's own timeline bar already uses for
+// event density. A tiny two-line document's own busiest bucket still
+// reads as full, exactly like a much larger document's would.
+func TestScrollbarMinimapGlyphsNormalizesAgainstTheBusiestBucketInThisTrack(t *testing.T) {
+	got := scrollbarMinimapGlyphs([]int{1, 1}, 1)
+	if got[0] != '█' {
+		t.Errorf("glyph = %q, want full — this bucket is the only one, so it's trivially the busiest regardless of its small absolute size", got[0])
+	}
+}
+
+// TestScrollbarMinimapGlyphsHandlesMoreTrackRowsThanLines pins the
+// short-document edge case: a document with fewer lines than the track
+// has rows must still produce exactly trackRows glyphs, not fewer and
+// not a panic — the tail rows repeat the last line's own width rather
+// than reading an empty range.
+func TestScrollbarMinimapGlyphsHandlesMoreTrackRowsThanLines(t *testing.T) {
+	got := scrollbarMinimapGlyphs([]int{8}, 5)
+	if len(got) != 5 {
+		t.Fatalf("len(got) = %d, want 5 (one glyph per track row, regardless of how few lines exist)", len(got))
+	}
+	for i, g := range got {
+		if g != '█' {
+			t.Errorf("glyph[%d] = %q, want full (the document's one and only line is its own busiest bucket)", i, g)
+		}
+	}
+}
+
+// TestScrollbarMinimapGlyphsBlankWhenNothingToShow pins the degenerate
+// inputs (no lines at all, or every line empty — an all-blank
+// document): every glyph must come back blank, never a divide-by-zero
+// panic.
+func TestScrollbarMinimapGlyphsBlankWhenNothingToShow(t *testing.T) {
+	for _, got := range [][]rune{
+		scrollbarMinimapGlyphs(nil, 5),
+		scrollbarMinimapGlyphs([]int{0, 0}, 5),
+	} {
+		if len(got) != 5 {
+			t.Fatalf("len(got) = %d, want 5", len(got))
+		}
+		for i, g := range got {
+			if g != ' ' {
+				t.Errorf("glyph[%d] = %q, want blank", i, g)
+			}
+		}
+	}
+}
+
+// openToolWindowWithWideLines builds a real toolWindow (the hand-rolled
+// Draw/MouseHandler widget, not a Flex-based one) with content lines of
+// known, deliberately varied widths, sized small enough to force real
+// vertical overflow — the draw-level minimap test below needs a widget
+// that actually called EnableTextDensityMinimap, not a bare
+// textViewContent in isolation the way the pure-function tests above
+// use.
+func openToolWindowWithWideLines(t *testing.T) *toolWindow {
+	t.Helper()
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	tw := newToolWindow(r, "tw", "test")
+	tw.resizeTo(40, 8) // manuallyResized, so recalculateWidth never fights the fixed width below
+
+	// 10 strictly-increasing-width lines, bucketed into a track a good
+	// deal shorter than 10 rows — each bucket's own total only ever
+	// grows as the lines feeding it get wider, so the busiest bucket
+	// (the one normalizing every glyph) is always the last one, giving
+	// a predictable, non-decreasing glyph sequence to assert against.
+	for i := 1; i <= 10; i++ {
+		tw.appendLine(strings.Repeat("x", i*10))
+	}
+	return tw
+}
+
+// TestToolWindowScrollbarMinimapReflectsLineWidths is the one
+// draw-level test per the advisor's own recommendation: the pure
+// function above is where a row-range off-by-one would hide, but this
+// pins that EnableTextDensityMinimap/Draw actually wires it up and that
+// the track genuinely reads as increasing left-to-right, matching ten
+// strictly-increasing line widths.
+func TestToolWindowScrollbarMinimapReflectsLineWidths(t *testing.T) {
+	tw := openToolWindowWithWideLines(t)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 40)
+	tw.Draw(screen)
+
+	if tw.scrollbar.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow for 10 lines in a 5-row content area", tw.scrollbar.maxOffset())
+	}
+	sbx, sby, _, sbh := tw.scrollbar.GetRect()
+	trackRows := sbh - 2
+
+	glyphLevel := func(ch string) int {
+		for i, g := range scrollbarMinimapBlocks {
+			if string(g) == ch {
+				return i
+			}
+		}
+		return -1
+	}
+
+	var firstLevel, prevLevel int
+	prevLevel = -1
+	for i := 0; i < trackRows; i++ {
+		ch, _, _ := screen.Get(sbx, sby+i)
+		level := glyphLevel(ch)
+		if level < 0 {
+			t.Fatalf("row %d: screen content %q is not one of scrollbarMinimapBlocks", i, ch)
+		}
+		if i == 0 {
+			firstLevel = level
+		}
+		if level < prevLevel {
+			t.Errorf("row %d: minimap fill level %d is lower than the previous row's %d, want non-decreasing for strictly increasing line widths", i, level, prevLevel)
+		}
+		prevLevel = level
+	}
+	// Exact levels depend on how many content lines each track row
+	// averages (itself a function of the widget's own reserved rows —
+	// not something this test should have to reproduce by hand), so
+	// this only asserts the trend the ten strictly-increasing line
+	// widths must produce: a clearly higher level at the end than at
+	// the start, already pinned non-decreasing in between above.
+	if prevLevel <= firstLevel {
+		t.Errorf("last track row's fill level (%d) should be clearly higher than the first row's (%d) for ten strictly-increasing line widths", prevLevel, firstLevel)
+	}
+}
+
+// TestLookScrollbarHasNoMinimap pins the scope decision: a SetWrap(true)
+// view (Look) must never show the minimap, even though its own
+// textViewContent technically satisfies lineWidthMeasurer — Look never
+// calls EnableTextDensityMinimap (see its own doc comment on why wrapped
+// views are excluded), so its track must render exactly as it did
+// before this feature existed: plain thumb/track cells, not glyphs.
+func TestLookScrollbarHasNoMinimap(t *testing.T) {
+	sb, _ := openLookWithLines(t, 200, 60, 20)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(60, 20)
+	sb.Draw(screen)
+
+	sbx, sby, _, sbh := sb.GetRect()
+	trackRows := sbh - 2
+	for i := 0; i < trackRows; i++ {
+		ch, _, _ := screen.Get(sbx, sby+i)
+		if ch != " " {
+			t.Errorf("row %d: track content = %q, want plain blank (Look never enables the minimap)", i, ch)
+		}
+	}
+}
