@@ -235,10 +235,12 @@ func (r *Root) newGitBreachScreen() {
 	// work correctly).
 	r.gitBreachDiffView.SetFocusFunc(func() {
 		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffView, true)
+		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSpacer, true)
 		r.refreshGitBreachHint()
 	})
 	r.gitBreachDiffView.SetBlurFunc(func() {
 		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffView, false)
+		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSpacer, false)
 	})
 	// Not the shared gitBreachBlockFocusSteal directly — same real bug
 	// as gitBreachFocus{Files,Branches,Commits,Stash}OnClick's own fix
@@ -532,6 +534,8 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 		v.SetTextColor(theme.Text)
 	}
 	r.gitBreachDiffSplitSeparator.SetBackgroundColor(theme.PanelBackground)
+	r.gitBreachDiffSpacer.SetBackgroundColor(theme.PanelBackground)
+	r.gitBreachDiffSplitSpacer.SetBackgroundColor(theme.PanelBackground)
 	if r.gitBreachDiffRawText != "" {
 		r.gitBreachRenderDiffSplit()
 	}
@@ -569,8 +573,10 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 		if r.gitBreachDiffSplit {
 			r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitLeft, true)
 			r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitRight, true)
+			r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitSpacer, true)
 		} else {
 			r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffView, true)
+			r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSpacer, true)
 		}
 	}
 	for _, f := range r.gitBreachFocusables() {

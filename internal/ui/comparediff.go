@@ -104,16 +104,26 @@ func (r *Root) newCompareDiffScreen() {
 	// can flip it at any moment) — the same shared-vs-independent
 	// choice scrollCompareDiff itself already makes for the keyboard
 	// and mouse wheel.
-	r.compareDiffLeftScrollbar = newVerticalScrollbar(r, &compareDiffPaneContent{
+	leftContent := &compareDiffPaneContent{
 		textViewContent: &textViewContent{view: r.compareDiffLeft},
 		root:            r,
 		other:           r.compareDiffRight,
-	})
-	r.compareDiffRightScrollbar = newVerticalScrollbar(r, &compareDiffPaneContent{
+	}
+	rightContent := &compareDiffPaneContent{
 		textViewContent: &textViewContent{view: r.compareDiffRight},
 		root:            r,
 		other:           r.compareDiffLeft,
-	})
+	}
+	r.compareDiffLeftScrollbar = newVerticalScrollbar(r, leftContent)
+	r.compareDiffRightScrollbar = newVerticalScrollbar(r, rightContent)
+	// Same adapter instance as the vertical bar just above, not a fresh
+	// one — compareDiffPaneContent's own scrollTo override (linking the
+	// other pane while r.compareDiffLinked is true) must apply to a
+	// horizontal scroll exactly the same way it already does to a
+	// vertical one, and sharing the instance is what guarantees the two
+	// bars always agree on this pane's own current column too.
+	r.compareDiffLeftHScrollbar = newHorizontalScrollbar(r, leftContent)
+	r.compareDiffRightHScrollbar = newHorizontalScrollbar(r, rightContent)
 	// SurfaceBackground, not the scrollbar's own default
 	// (PanelBackground): both panes always sit on SurfaceBackground
 	// (see applyCompareDiffTheme) and never change with focus —
@@ -123,16 +133,44 @@ func (r *Root) newCompareDiffScreen() {
 	surfaceTrackColor := func() tcell.Color { return r.theme.SurfaceBackground }
 	r.compareDiffLeftScrollbar.SetTrackColorFunc(surfaceTrackColor)
 	r.compareDiffRightScrollbar.SetTrackColorFunc(surfaceTrackColor)
+	r.compareDiffLeftHScrollbar.SetTrackColorFunc(surfaceTrackColor)
+	r.compareDiffRightHScrollbar.SetTrackColorFunc(surfaceTrackColor)
 
-	leftRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+	// The corner where each pane's own two bars would otherwise meet:
+	// the vertical bar keeps its own normal content-only height, and the
+	// horizontal bar's own row is itself a FlexColumn of [the bar,
+	// 1-column spacer] — the spacer sits directly under the vertical
+	// bar's own column and is always reserved there (painted
+	// SurfaceBackground, the vertical bar's own track color on this
+	// screen — see r.compareDiffLeftSpacer/RightSpacer in
+	// applyCompareDiffTheme), so the two bars' rects never share a
+	// cell.
+	r.compareDiffLeftSpacer = tview.NewBox().SetBackgroundColor(r.theme.SurfaceBackground)
+	r.compareDiffRightSpacer = tview.NewBox().SetBackgroundColor(r.theme.SurfaceBackground)
+
+	leftTopRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.compareDiffLeft, 0, 1, true).
 		AddItem(r.compareDiffLeftScrollbar, 1, 0, false)
-	leftRow.SetMouseCapture(r.compareDiffLeftScrollbar.captureMouse)
+	leftTopRow.SetMouseCapture(r.compareDiffLeftScrollbar.captureMouse)
+	leftHBarRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.compareDiffLeftHScrollbar, 0, 1, false).
+		AddItem(r.compareDiffLeftSpacer, 1, 0, false)
+	leftHBarRow.SetMouseCapture(r.compareDiffLeftHScrollbar.captureMouse)
+	leftRow := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(leftTopRow, 0, 1, true).
+		AddItem(leftHBarRow, 1, 0, false)
 
-	rightRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+	rightTopRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.compareDiffRight, 0, 1, false).
 		AddItem(r.compareDiffRightScrollbar, 1, 0, false)
-	rightRow.SetMouseCapture(r.compareDiffRightScrollbar.captureMouse)
+	rightTopRow.SetMouseCapture(r.compareDiffRightScrollbar.captureMouse)
+	rightHBarRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.compareDiffRightHScrollbar, 0, 1, false).
+		AddItem(r.compareDiffRightSpacer, 1, 0, false)
+	rightHBarRow.SetMouseCapture(r.compareDiffRightHScrollbar.captureMouse)
+	rightRow := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(rightTopRow, 0, 1, true).
+		AddItem(rightHBarRow, 1, 0, false)
 
 	r.compareDiffBody = tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(leftRow, 0, 1, true).
@@ -253,6 +291,8 @@ func (r *Root) applyCompareDiffTheme(theme config.ResolvedTheme) {
 	r.compareDiffTitleBar.SetTextColor(theme.TextColor)
 	r.compareDiffHint.SetBackgroundColor(theme.InputBackground)
 	r.compareDiffHint.SetTextColor(theme.MutedTextColor)
+	r.compareDiffLeftSpacer.SetBackgroundColor(theme.SurfaceBackground)
+	r.compareDiffRightSpacer.SetBackgroundColor(theme.SurfaceBackground)
 	if r.compareDiffPairs != nil {
 		r.renderCompareDiff()
 	}

@@ -63,11 +63,13 @@ func (r *Root) newGitBreachDiffSplit() {
 	r.gitBreachDiffSplitLeft.SetFocusFunc(func() {
 		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitLeft, true)
 		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitRight, true)
+		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitSpacer, true)
 		r.refreshGitBreachHint()
 	})
 	r.gitBreachDiffSplitLeft.SetBlurFunc(func() {
 		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitLeft, false)
 		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitRight, false)
+		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffSplitSpacer, false)
 	})
 
 	r.gitBreachDiffSplitRight = tview.NewTextView()
@@ -99,20 +101,52 @@ func (r *Root) newGitBreachDiffSplit() {
 	// enforces for keyboard/wheel scrolling.
 	r.gitBreachDiffScrollbar = newVerticalScrollbarForTextView(r, r.gitBreachDiffView)
 	r.gitBreachDiffScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachDiffView))
-	unifiedRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+	unifiedTopRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.gitBreachDiffView, 0, 1, true).
 		AddItem(r.gitBreachDiffScrollbar, 1, 0, false)
-	unifiedRow.SetMouseCapture(r.gitBreachDiffScrollbar.captureMouse)
+	unifiedTopRow.SetMouseCapture(r.gitBreachDiffScrollbar.captureMouse)
 
-	r.gitBreachDiffSplitScrollbar = newVerticalScrollbar(r, &gitBreachDiffSplitContent{
+	// The horizontal counterpart, same shape as Compare's own corner
+	// handling (comparediff.go): a reserved spacer column under the
+	// vertical bar, painted its own track color, so the two bars' rects
+	// never share a cell.
+	r.gitBreachDiffHScrollbar = newHorizontalScrollbarForTextView(r, r.gitBreachDiffView)
+	r.gitBreachDiffHScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachDiffView))
+	r.gitBreachDiffSpacer = tview.NewBox().SetBackgroundColor(r.theme.PanelBackground)
+	unifiedHBarRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.gitBreachDiffHScrollbar, 0, 1, false).
+		AddItem(r.gitBreachDiffSpacer, 1, 0, false)
+	unifiedHBarRow.SetMouseCapture(r.gitBreachDiffHScrollbar.captureMouse)
+	unifiedRow := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(unifiedTopRow, 0, 1, true).
+		AddItem(unifiedHBarRow, 1, 0, false)
+
+	splitContent := &gitBreachDiffSplitContent{
 		textViewContent: &textViewContent{view: r.gitBreachDiffSplitLeft},
 		right:           r.gitBreachDiffSplitRight,
-	})
+	}
+	r.gitBreachDiffSplitScrollbar = newVerticalScrollbar(r, splitContent)
 	r.gitBreachDiffSplitScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachDiffSplitLeft))
-	splitRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+	splitTopRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(splitBody, 0, 1, true).
 		AddItem(r.gitBreachDiffSplitScrollbar, 1, 0, false)
-	splitRow.SetMouseCapture(r.gitBreachDiffSplitScrollbar.captureMouse)
+	splitTopRow.SetMouseCapture(r.gitBreachDiffSplitScrollbar.captureMouse)
+
+	// One shared horizontal bar for the whole splitBody, the same
+	// instance of gitBreachDiffSplitContent as the vertical bar above —
+	// its own scrollTo override already moves both panes together (see
+	// its doc comment), so sharing it here is what keeps a horizontal
+	// scroll linked too, with no further adapter needed.
+	r.gitBreachDiffSplitHScrollbar = newHorizontalScrollbar(r, splitContent)
+	r.gitBreachDiffSplitHScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachDiffSplitLeft))
+	r.gitBreachDiffSplitSpacer = tview.NewBox().SetBackgroundColor(r.theme.PanelBackground)
+	splitHBarRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.gitBreachDiffSplitHScrollbar, 0, 1, false).
+		AddItem(r.gitBreachDiffSplitSpacer, 1, 0, false)
+	splitHBarRow.SetMouseCapture(r.gitBreachDiffSplitHScrollbar.captureMouse)
+	splitRow := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(splitTopRow, 0, 1, true).
+		AddItem(splitHBarRow, 1, 0, false)
 
 	r.gitBreachDiffPages = tview.NewPages().
 		AddPage(gitBreachDiffUnifiedPage, unifiedRow, true, true).
@@ -132,11 +166,35 @@ func (r *Root) newGitBreachDiffSplit() {
 type gitBreachDiffSplitContent struct {
 	*textViewContent
 	right *tview.TextView
+
+	// rightCols caches the right pane's own totalCols the same way
+	// textViewContent itself caches the left pane's — see totalCols
+	// below for why this adapter needs both at all.
+	rightCols *textViewContent
 }
 
 func (c *gitBreachDiffSplitContent) scrollTo(row, col int) {
 	c.textViewContent.scrollTo(row, col)
 	c.right.ScrollTo(row, col)
+}
+
+// totalCols overrides the embedded textViewContent's own method: the
+// Pair invariant gitBreachRenderDiffSplit enforces only guarantees both
+// panes have the same number of lines, never that corresponding lines
+// are the same WIDTH (an edit can turn a short line into a much longer
+// one, or vice versa) — reading the left pane alone here would under-
+// report maxOffset whenever the right pane's own longest line is
+// actually the wider of the two, leaving the shared horizontal bar
+// unable to scroll far enough to ever reveal the rest of it.
+func (c *gitBreachDiffSplitContent) totalCols() int {
+	left := c.textViewContent.totalCols()
+	if c.rightCols == nil {
+		c.rightCols = &textViewContent{view: c.right}
+	}
+	if right := c.rightCols.totalCols(); right > left {
+		return right
+	}
+	return left
 }
 
 // drawGitBreachDiffSplitSeparator mirrors

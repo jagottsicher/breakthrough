@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -52,6 +53,14 @@ type textViewContent struct {
 	cachedWidth   int
 	cachedTextLen int
 	cachedTotal   int
+
+	// cachedColsTextLen/cachedTotalCols are totalCols' own cache — unlike
+	// cachedTotal above, the longest line's width never depends on the
+	// view's own rect (wrapping is irrelevant: this is only ever asked of
+	// a SetWrap(false) view, see horizontallyScrollableContent's own doc
+	// comment), so the cache key here is just the text itself.
+	cachedColsTextLen int
+	cachedTotalCols   int
 }
 
 func (c *textViewContent) rect() (int, int, int, int) { return c.view.GetRect() }
@@ -68,6 +77,28 @@ func (c *textViewContent) totalRows() int {
 	c.cachedTextLen = len(text)
 	c.cachedTotal = c.view.GetWrappedLineCount()
 	return c.cachedTotal
+}
+
+// totalCols is the widest line's own on-screen width across the whole
+// text, for horizontalScrollbar — tview.TaggedStringWidth, not a plain
+// rune/byte count: these views all use SetDynamicColors(true), so a
+// line like "[red]foo[-]" is full of style tags that take up zero
+// screen columns; counting them would make the thumb spuriously tiny
+// and maxOffset scroll out past where any real content ends.
+func (c *textViewContent) totalCols() int {
+	text := c.view.GetText(false)
+	if len(text) == c.cachedColsTextLen {
+		return c.cachedTotalCols
+	}
+	c.cachedColsTextLen = len(text)
+	max := 0
+	for _, line := range strings.Split(text, "\n") {
+		if w := tview.TaggedStringWidth(line); w > max {
+			max = w
+		}
+	}
+	c.cachedTotalCols = max
+	return c.cachedTotalCols
 }
 
 // tableContent adapts a *tview.Table — row-based, no wrapping and
