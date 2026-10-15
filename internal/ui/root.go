@@ -1542,15 +1542,22 @@ type Root struct {
 	detailsPreviewRowEnd   int
 
 	// detailsMetadataState is "" until fetchDetailsMetadata has run for
-	// the current detailsTarget (see its own doc comment on why that's
-	// still a stub) — reset back to "" by loadDetailsTarget every time
-	// the target changes, the same way detailsHashes is.
+	// the current detailsTarget — reset back to "" by loadDetailsTarget
+	// every time the target changes, the same way detailsHashes is.
+	// detailsMetadataInProgress/Cancel mirror detailsHashInProgress/
+	// Cancel (no AnimFrame equivalent: a local EXIF read is fast enough
+	// that an animated "still working" frame would never actually be
+	// seen — see fetchDetailsMetadata's own doc comment), still
+	// cancelable so switching targets mid-read doesn't leave a stale
+	// result racing to land after the cursor has moved on.
 	// detailsMetaRowStart/End are the metadata section's own click-zone
 	// bounds within the rendered text (-1 when there's no image, so
 	// nothing to show it for — see renderDetailsSidebar).
-	detailsMetadataState string
-	detailsMetaRowStart  int
-	detailsMetaRowEnd    int
+	detailsMetadataState      string
+	detailsMetadataInProgress bool
+	detailsMetadataCancel     context.CancelFunc
+	detailsMetaRowStart       int
+	detailsMetaRowEnd         int
 
 	// detailsHashes/InProgress/AnimFrame/Cancel/BytesRead/RowStart mirror
 	// propertiesHashes/hashInProgress/hashAnimFrame/hashCancel/
