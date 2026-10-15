@@ -169,6 +169,7 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	// for it instead, same as every other scrollbar in this app reserves
 	// one column of its own Flex for, just computed by hand here.
 	tw.scrollbar = newVerticalScrollbarForTextView(root, tw.content)
+	tw.scrollbar.EnableLineWidthMinimap() // tw.content is SetWrap(false) — see EnableLineWidthMinimap's own doc comment
 	// Not the scrollbar's own default (theme.PanelBackground): tw.content
 	// always sits on SurfaceBackground (see below), never PanelBackground,
 	// and never changes with focus either — a plain closure rather than
