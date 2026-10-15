@@ -220,6 +220,141 @@ func TestGitBreachDiffUnifiedScrollbarMouseClickThroughRealDispatch(t *testing.T
 	}
 }
 
+// gitBreachDiffWithWideLine sets up a one-line diff whose changed line
+// is wide enough to overflow any reasonable test screen horizontally —
+// the setup every horizontal-scrollbar test below needs, mirroring the
+// many-short-lines setup the vertical tests above use for overflow on
+// the other axis.
+func gitBreachDiffWithWideLine(t *testing.T) *Root {
+	t.Helper()
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("line\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	wide := strings.Repeat("x", 200) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(wide), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := openGitBreachFilesDiff(t, dir, "a.txt")
+	r.app.SetFocus(r.gitBreachDiffView)
+	rawDiff, err := git.Diff(context.Background(), dir, "a.txt", false)
+	if err != nil {
+		t.Fatalf("git.Diff: %v", err)
+	}
+	r.gitBreachSetDiffText("test", gitBreachColorizeDiff(rawDiff, "a.txt", r.theme), rawDiff)
+	return r
+}
+
+// TestGitBreachDiffUnifiedHScrollbarMouseClickThroughRealDispatch is the
+// horizontal counterpart to
+// TestGitBreachDiffUnifiedScrollbarMouseClickThroughRealDispatch.
+func TestGitBreachDiffUnifiedHScrollbarMouseClickThroughRealDispatch(t *testing.T) {
+	r := gitBreachDiffWithWideLine(t)
+	r.SetRect(0, 0, 60, 20)
+	r.gitBreachLayout.SetRect(0, 0, 60, 20)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(60, 20)
+	r.gitBreachLayout.Draw(screen)
+
+	sb := r.gitBreachDiffHScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow for a 200-column line on a 60-column screen", sb.maxOffset())
+	}
+	sbx, sby, _, _ := sb.GetRect()
+	_, before := r.gitBreachDiffView.GetScrollOffset()
+
+	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
+	handler := r.gitBreachLayout.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
+	sb.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
+
+	_, after := r.gitBreachDiffView.GetScrollOffset()
+	if after != before+1 {
+		t.Errorf("gitBreachDiffView column offset after clicking the right arrow = %d, want %d (before=%d)", after, before+1, before)
+	}
+}
+
+// TestGitBreachDiffSplitHScrollbarMovesBothPanes is the horizontal
+// counterpart to TestGitBreachDiffSplitScrollbarMovesBothPanes.
+func TestGitBreachDiffSplitHScrollbarMovesBothPanes(t *testing.T) {
+	r := gitBreachDiffWithWideLine(t)
+	r.toggleGitBreachDiffSplit()
+	r.SetRect(0, 0, 60, 20)
+	r.gitBreachLayout.SetRect(0, 0, 60, 20)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(60, 20)
+	r.gitBreachLayout.Draw(screen)
+
+	sb := r.gitBreachDiffSplitHScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow for a 200-column line on a 60-column screen", sb.maxOffset())
+	}
+	sbx, sby, _, _ := sb.GetRect()
+	_, leftBefore := r.gitBreachDiffSplitLeft.GetScrollOffset()
+	_, rightBefore := r.gitBreachDiffSplitRight.GetScrollOffset()
+
+	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
+	handler := r.gitBreachLayout.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
+	sb.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
+
+	_, leftAfter := r.gitBreachDiffSplitLeft.GetScrollOffset()
+	_, rightAfter := r.gitBreachDiffSplitRight.GetScrollOffset()
+	if leftAfter != leftBefore+1 {
+		t.Errorf("left pane column offset = %d, want %d (before=%d)", leftAfter, leftBefore+1, leftBefore)
+	}
+	if rightAfter != rightBefore+1 {
+		t.Errorf("right pane column offset = %d, want %d (before=%d)", rightAfter, rightBefore+1, rightBefore)
+	}
+	if leftAfter != rightAfter {
+		t.Errorf("panes drifted apart: left=%d right=%d, want them to always match", leftAfter, rightAfter)
+	}
+}
+
+// TestGitBreachDiffScrollbarsDoNotShareTheCornerCell pins the user's own
+// explicit requirement that the vertical and horizontal bars never
+// overlap, for both the unified and split views.
+func TestGitBreachDiffScrollbarsDoNotShareTheCornerCell(t *testing.T) {
+	r := gitBreachDiffWithWideLine(t)
+	r.SetRect(0, 0, 100, 20)
+	r.gitBreachLayout.SetRect(0, 0, 100, 20)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 20)
+	r.gitBreachLayout.Draw(screen)
+
+	vx, _, _, _ := r.gitBreachDiffScrollbar.GetRect()
+	hx, _, hw, _ := r.gitBreachDiffHScrollbar.GetRect()
+	if hx+hw > vx {
+		t.Errorf("unified horizontal bar (x=%d width=%d) reaches into the vertical bar's own column (x=%d)", hx, hw, vx)
+	}
+
+	r.toggleGitBreachDiffSplit()
+	r.gitBreachLayout.Draw(screen)
+	vx, _, _, _ = r.gitBreachDiffSplitScrollbar.GetRect()
+	hx, _, hw, _ = r.gitBreachDiffSplitHScrollbar.GetRect()
+	if hx+hw > vx {
+		t.Errorf("split horizontal bar (x=%d width=%d) reaches into the vertical bar's own column (x=%d)", hx, hw, vx)
+	}
+}
+
 func TestCaptureGitBreachMainKeyVEntersSplitMode(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)

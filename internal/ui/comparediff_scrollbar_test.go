@@ -146,3 +146,111 @@ func TestCompareDiffScrollbarsMoveOnlyOwnPaneWhenUnlinked(t *testing.T) {
 		t.Errorf("right pane offset changed from %d to %d while unlinked, want it untouched", rightBefore, rightAfter)
 	}
 }
+
+// openCompareDiffWithWideLines mirrors openCompareDiffWithManyLines but
+// for horizontal overflow: one long line per side, wider than any
+// reasonable test screen, rather than many short ones.
+func openCompareDiffWithWideLines(t *testing.T, width, height int) *Root {
+	t.Helper()
+	r, dir := newCompareRoot(t)
+	left := "left " + strings.Repeat("x", 200) + "\n"
+	right := "right " + strings.Repeat("y", 200) + "\n"
+	a, b := filepath.Join(dir, "a.txt"), filepath.Join(dir, "b.txt")
+	if err := os.WriteFile(a, []byte(left), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b, []byte(right), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.openCompareFile(a, b)
+	r.openCompareDiff()
+	if r.activePage != compareDiffPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, compareDiffPage)
+	}
+
+	r.SetRect(0, 0, width, height)
+	r.compareDiffLayout.SetRect(0, 0, width, height)
+	return r
+}
+
+// TestCompareDiffHScrollbarsMoveBothPanesWhenLinked mirrors
+// TestCompareDiffScrollbarsMoveBothPanesWhenLinked for the horizontal
+// bar: a click on either pane's own right arrow must scroll both panes
+// sideways together while linked.
+func TestCompareDiffHScrollbarsMoveBothPanesWhenLinked(t *testing.T) {
+	r := openCompareDiffWithWideLines(t, 60, 20)
+	drawCompareDiff(t, r, 60, 20)
+
+	if !r.compareDiffLinked {
+		t.Fatal("setup: compareDiffLinked = false, want true (openCompareDiff's own default)")
+	}
+	sb := r.compareDiffLeftHScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow for a 200-column line on a 60-column screen", sb.maxOffset())
+	}
+	sbx, sby, _, _ := sb.GetRect()
+
+	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
+	handler := r.compareDiffLayout.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
+	sb.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
+
+	_, leftCol := r.compareDiffLeft.GetScrollOffset()
+	_, rightCol := r.compareDiffRight.GetScrollOffset()
+	if leftCol != 1 {
+		t.Errorf("left pane column offset = %d, want 1", leftCol)
+	}
+	if rightCol != leftCol {
+		t.Errorf("right pane column offset = %d, want it to match the left pane (%d) while linked", rightCol, leftCol)
+	}
+}
+
+// TestCompareDiffHScrollbarsMoveOnlyOwnPaneWhenUnlinked mirrors
+// TestCompareDiffScrollbarsMoveOnlyOwnPaneWhenUnlinked for the
+// horizontal bar.
+func TestCompareDiffHScrollbarsMoveOnlyOwnPaneWhenUnlinked(t *testing.T) {
+	r := openCompareDiffWithWideLines(t, 60, 20)
+	r.toggleCompareDiffLinked()
+	if r.compareDiffLinked {
+		t.Fatal("setup: toggleCompareDiffLinked should have turned linking off")
+	}
+	drawCompareDiff(t, r, 60, 20)
+
+	sb := r.compareDiffLeftHScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow for a 200-column line on a 60-column screen", sb.maxOffset())
+	}
+	sbx, sby, _, _ := sb.GetRect()
+	_, rightBefore := r.compareDiffRight.GetScrollOffset()
+
+	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
+	handler := r.compareDiffLayout.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
+	sb.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
+
+	_, leftCol := r.compareDiffLeft.GetScrollOffset()
+	_, rightAfter := r.compareDiffRight.GetScrollOffset()
+	if leftCol != 1 {
+		t.Errorf("left pane column offset = %d, want 1", leftCol)
+	}
+	if rightAfter != rightBefore {
+		t.Errorf("right pane column offset changed from %d to %d while unlinked, want it untouched", rightBefore, rightAfter)
+	}
+}
+
+// TestCompareDiffScrollbarsDoNotShareTheCornerCell pins the user's own
+// explicit requirement that the vertical and horizontal bars never
+// overlap — the vertical bar's own column must stay entirely to the
+// right of the horizontal bar's own width.
+func TestCompareDiffScrollbarsDoNotShareTheCornerCell(t *testing.T) {
+	r := openCompareDiffWithManyLines(t, 100, 20)
+	drawCompareDiff(t, r, 100, 20)
+
+	vx, _, _, _ := r.compareDiffLeftScrollbar.GetRect()
+	hx, _, hw, _ := r.compareDiffLeftHScrollbar.GetRect()
+	if hx+hw > vx {
+		t.Errorf("left pane's horizontal bar (x=%d width=%d) reaches into the vertical bar's own column (x=%d)", hx, hw, vx)
+	}
+}

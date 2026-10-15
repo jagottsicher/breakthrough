@@ -656,6 +656,8 @@ type Root struct {
 	gitBreachDiffHeader        *tview.TextView
 	gitBreachDiffView          *tview.TextView
 	gitBreachDiffScrollbar     *verticalScrollbar
+	gitBreachDiffHScrollbar    *horizontalScrollbar
+	gitBreachDiffSpacer        *tview.Box
 	gitBreachHint              *tview.TextView
 	gitBreachHintSpans         []listHintSpan
 
@@ -796,14 +798,16 @@ type Root struct {
 	// gitBreachFocusDiffSplitLeftOnClick), since scrolling here is
 	// always linked, by explicit design choice, unlike Compare's own
 	// optional link/unlink toggle.
-	gitBreachDiffSplit          bool
-	gitBreachDiffPages          *tview.Pages
-	gitBreachDiffSplitLeft      *tview.TextView
-	gitBreachDiffSplitRight     *tview.TextView
-	gitBreachDiffSplitSeparator *tview.Box
-	gitBreachDiffSplitScrollbar *verticalScrollbar
-	gitBreachDiffRawText        string
-	gitBreachDiffFiles          []compare.FileDiff
+	gitBreachDiffSplit           bool
+	gitBreachDiffPages           *tview.Pages
+	gitBreachDiffSplitLeft       *tview.TextView
+	gitBreachDiffSplitRight      *tview.TextView
+	gitBreachDiffSplitSeparator  *tview.Box
+	gitBreachDiffSplitScrollbar  *verticalScrollbar
+	gitBreachDiffSplitHScrollbar *horizontalScrollbar
+	gitBreachDiffSplitSpacer     *tview.Box
+	gitBreachDiffRawText         string
+	gitBreachDiffFiles           []compare.FileDiff
 	// logAuditNewestFirst toggles the viewer table's own sort order —
 	// Up/Down arrow (see captureLogAuditViewerTableKey), per the user's
 	// own explicit request to be able to read either direction without
@@ -1447,19 +1451,23 @@ type Root struct {
 	// state; compareDiffLeftFocused tracks which of the two panes
 	// currently has focus, read by captureCompareDiffPaneKey to decide
 	// which pane an Up/Down/PgUp/PgDn keypress scrolls when unlinked.
-	compareDiffLayout         *tview.Flex
-	compareDiffTitleBar       *tview.TextView
-	compareDiffBody           *tview.Flex
-	compareDiffLeft           *tview.TextView
-	compareDiffLeftScrollbar  *verticalScrollbar
-	compareDiffRight          *tview.TextView
-	compareDiffRightScrollbar *verticalScrollbar
-	compareDiffSeparator      *tview.Box
-	compareDiffHint           *tview.TextView
-	compareDiffHintSpans      []listHintSpan
-	compareDiffPairs          []compare.LinePair
-	compareDiffLinked         bool
-	compareDiffLeftFocused    bool
+	compareDiffLayout          *tview.Flex
+	compareDiffTitleBar        *tview.TextView
+	compareDiffBody            *tview.Flex
+	compareDiffLeft            *tview.TextView
+	compareDiffLeftScrollbar   *verticalScrollbar
+	compareDiffLeftHScrollbar  *horizontalScrollbar
+	compareDiffLeftSpacer      *tview.Box
+	compareDiffRight           *tview.TextView
+	compareDiffRightScrollbar  *verticalScrollbar
+	compareDiffRightHScrollbar *horizontalScrollbar
+	compareDiffRightSpacer     *tview.Box
+	compareDiffSeparator       *tview.Box
+	compareDiffHint            *tview.TextView
+	compareDiffHintSpans       []listHintSpan
+	compareDiffPairs           []compare.LinePair
+	compareDiffLinked          bool
+	compareDiffLeftFocused     bool
 
 	helpView      *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	helpScrollbar *verticalScrollbar
