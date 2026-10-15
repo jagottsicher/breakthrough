@@ -323,19 +323,22 @@ type lineWidthMeasurer interface {
 // once Phase 1 (the plain thumb/arrows/drag scrollbar, already rolled
 // out everywhere) was confirmed working. Each track row fills with one
 // of scrollbarMinimapBlocks' own horizontal eighth-block glyphs,
-// representing the total on-screen width of the content rows that
-// track row represents (not their average — a region with many lines,
-// or long ones, reads as having more text than a sparse or short-lined
-// one), relative to the single busiest track row found in THIS track
-// right now — the same bucket-normalized-against-the-busiest-bucket
-// idea Log Audit's own timeline bar already uses for event density
-// (see logAuditTimelineText), just measuring text amount instead of
-// event count. Replaced an earlier "average width relative to the
-// document's single longest line" design the user tried live and asked
-// to redo: that answered "how wide are the lines here", not "how much
-// text is here" — a very sparse region of a few very long lines read
-// as more significant than a dense region of many merely-long-enough
-// ones, the opposite of what Jens actually wanted to see at a glance.
+// representing the average on-screen width of the content rows that
+// track row represents, relative to the box's own current width —
+// per the user's own explicit request that the minimap "reflect what
+// the user actually sees": the box's own width is what's visible right
+// now, not an abstract reference a reader has no way to judge a glyph
+// against. A line wider than the box (scrolled horizontally to read in
+// full) is counted as exactly box-width wide in this average, not its
+// real, possibly far longer, width — the user's own explicit "avoid
+// outliers" request: without this cap, a single very long line sharing
+// a bucket with several short ones could drag that whole bucket's own
+// average up near the top regardless of how little text the rest of
+// the bucket actually has, exactly the kind of outlier-dominated
+// reading the earlier two designs both independently ran into (a
+// single document-wide longest line first, then a single busiest
+// bucket) before landing on an absolute, content-independent reference
+// instead.
 //
 // Deliberately opt-in per widget, not automatic for every
 // scrollableContent that happens to implement lineWidthMeasurer:
@@ -372,24 +375,23 @@ var scrollbarMinimapBlocks = []rune{' ', '▏', '▎', '▍', '▌', '▋', '▊
 // [i*total/trackRows, (i+1)*total/trackRows) (at least one row, even
 // where trackRows exceeds total — the tail end of a short document
 // then has a few track rows repeating its own last row's width, rather
-// than an empty range with nothing to sum); its own glyph is that
-// range's total width as a fraction of the busiest range found among
-// all trackRows buckets, rounded to the nearest eighth — so at least
-// one row always reads as full, the same "relative to what's actually
-// on screen right now" reference logAuditTimelineText's own maxCount
-// already establishes for an analogous density bar.
-func scrollbarMinimapGlyphs(lineWidths []int, trackRows int) []rune {
+// than an empty range with nothing to average); its own glyph is that
+// range's average width — each line capped at boxWidth first, so one
+// overlong line can't drag the whole bucket's own average up past what
+// the box could ever actually show at once — as a fraction of boxWidth
+// itself, rounded to the nearest eighth. boxWidth <= 0 (nothing to
+// measure against) blanks the whole minimap rather than dividing by
+// zero.
+func scrollbarMinimapGlyphs(lineWidths []int, trackRows, boxWidth int) []rune {
 	glyphs := make([]rune, trackRows)
 	for i := range glyphs {
 		glyphs[i] = scrollbarMinimapBlocks[0]
 	}
 	total := len(lineWidths)
-	if trackRows <= 0 || total <= 0 {
+	if trackRows <= 0 || total <= 0 || boxWidth <= 0 {
 		return glyphs
 	}
 
-	sums := make([]int, trackRows)
-	maxSum := 0
 	for i := 0; i < trackRows; i++ {
 		start := i * total / trackRows
 		end := (i + 1) * total / trackRows
@@ -405,19 +407,14 @@ func scrollbarMinimapGlyphs(lineWidths []int, trackRows int) []rune {
 
 		sum := 0
 		for _, w := range lineWidths[start:end] {
+			if w > boxWidth {
+				w = boxWidth
+			}
 			sum += w
 		}
-		sums[i] = sum
-		if sum > maxSum {
-			maxSum = sum
-		}
-	}
-	if maxSum == 0 {
-		return glyphs
-	}
+		avg := float64(sum) / float64(end-start)
 
-	for i, sum := range sums {
-		level := int(float64(sum)/float64(maxSum)*8 + 0.5)
+		level := int(avg/float64(boxWidth)*8 + 0.5)
 		if level < 0 {
 			level = 0
 		}
@@ -609,7 +606,8 @@ func (sb *verticalScrollbar) Draw(screen tcell.Screen) {
 	var minimap []rune
 	if sb.textDensityMinimap {
 		if lw, ok := sb.content.(lineWidthMeasurer); ok {
-			minimap = scrollbarMinimapGlyphs(lw.lineWidths(), trackRows)
+			_, _, boxWidth, _ := sb.content.rect()
+			minimap = scrollbarMinimapGlyphs(lw.lineWidths(), trackRows, boxWidth)
 		}
 	}
 
