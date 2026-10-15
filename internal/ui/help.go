@@ -115,7 +115,8 @@ var helpText = strings.TrimLeft(`
                 js Sessions screen (local screen/tmux/zellij sessions) ·
                 jk SSH Keys screen (local key pairs under ~/.ssh) ·
                 jL Log Holepunch (same as plain "L" — see its own
-                section below)
+                section below) · jt Transfers (what's running or
+                recently finished — Paste/backgrounded Rsync)
     p  perms    pm chmod · po chown
     z  disp     zN sort by name · zS sort by size · zT sort by time ·
                 zs size format · zt time format · zi Nerd Font icons
@@ -489,6 +490,27 @@ var helpText = strings.TrimLeft(`
   below), floating on top of this screen rather than replacing it — pick
   another tool, or press Escape to get back to browsing, without losing
   anything already running.
+
+[::b]Transfers screen ("jt")[::-]
+
+  A live view of every Paste (Copy/Cut) and backgrounded Rsync
+  currently running or recently finished — the Status column shows
+  "running"/"paused" for a still-live one, or how it ended ("succeeded"/
+  "partial"/"failed"/"cancelled") once done, with a short result summary
+  (counts, and the first error for a failed one) in its own column.
+
+  Up / Down         Move between entries
+  c                 Cancel the selected entry, if it's still running
+  p                 Pause/resume the selected entry (Paste only — Rsync
+                    has nothing to pause mid-run)
+  r                 Re-read the live operation list (also updates live
+                    on its own as jobs start/finish)
+  Escape            Close the Transfers screen
+
+  Retrying a finished job, and remembering completed summaries across a
+  restart, aren't built yet — this first pass is read-only-plus-cancel/
+  pause, reflecting what's running right now rather than a durable
+  history.
 
 [::b]Mounts screen ("jm")[::-]
 

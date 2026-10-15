@@ -38,8 +38,16 @@ func NewTracker() *Tracker {
 
 // Subscribe registers fn as the callback Start/SetState/Finish each
 // call, synchronously, whenever they change an Operation — replacing
-// whatever was registered before. A nil fn turns the callback back off
-// without discarding anything already recorded.
+// whatever was registered before, the same single-callback shape
+// notify.Store.Subscribe already has. A nil fn turns the callback back
+// off without discarding anything already recorded.
+//
+// internal/ui's only caller today is newTransferCenterScreen
+// (transfercenter.go), once, at startup — a second subscriber would
+// silently replace it rather than failing to compile, so a future
+// caller needing to react to Operation changes too (not just the
+// Transfer-Zentrale screen) has to fan this single callback out itself,
+// not add a second Subscribe call expecting both to fire.
 func (t *Tracker) Subscribe(fn func(Operation)) {
 	t.mu.Lock()
 	t.onChange = fn

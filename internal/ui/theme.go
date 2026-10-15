@@ -379,6 +379,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// firewall.go/applyFirewallTheme).
 	r.applyFirewallTheme(theme)
 
+	// The Transfer-Zentrale screen (see transfercenter.go/
+	// applyTransferCenterTheme).
+	r.applyTransferCenterTheme(theme)
+
 	// The Sessions screen (see sessions.go/applySessionsTheme).
 	r.applySessionsTheme(theme)
 
