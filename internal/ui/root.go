@@ -26,6 +26,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/mounts"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
+	"github.com/jagottsicher/breakthrough/internal/operations"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/sshkeys"
@@ -236,6 +237,20 @@ type Root struct {
 	// past this process exiting, restored the next time breakthrough
 	// starts, up to its own 999-entry cap.
 	notify *notify.Store
+
+	// operations is the shared, UI-independent record of what's
+	// currently running and what recently finished (see internal/
+	// operations' own doc comment for the full "2. Operationen als
+	// einheitliche Grundlage erfassen" rationale) — lifecycle only
+	// (Start/SetState/Finish), not live progress: each job type still
+	// owns its own progress state exactly as it already did, this just
+	// additionally reports its own start/pause-resume/end alongside the
+	// activityLog/notify calls already sitting at the same call sites.
+	// Never nil (see NewRoot), the same "no off switch to honor, always
+	// call it" shape notify itself already has — unlike notify, not
+	// persisted across restarts (see internal/operations' own doc
+	// comment on why not).
+	operations *operations.Tracker
 
 	// labels is the shared, app-wide color-label store (see
 	// internal/filelabels) behind the "zl" chord — pushed down into
@@ -2301,6 +2316,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		settingOrigins: settingOrigins,
 		theme:          theme,
 		notify:         notify.NewWithPersistence(notifyPersistPath()),
+		operations:     operations.NewTracker(),
 		labels:         filelabels.NewWithPersistence(labelsPersistPath()),
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
