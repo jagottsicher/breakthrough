@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/operations"
 )
 
 // Ctrl+C's own answer while a Paste (Copy or Cut) is running: rather
@@ -74,6 +76,7 @@ func (r *Root) requestPastePause() {
 		return
 	}
 	job.pause()
+	r.operations.SetState(job.opID, operations.StatePaused)
 	r.renderPastePauseDialog(job)
 	r.resizePastePauseDialog()
 	r.pastePauseDialog.SetCurrentItem(pastePauseContinueItem)
@@ -147,6 +150,7 @@ func (r *Root) resumePastePause() {
 		return
 	}
 	job.resume()
+	r.operations.SetState(job.opID, operations.StateRunning)
 	if job.current != nil {
 		r.renderPasteConflictDialog(job)
 		r.resizePasteConflictDialog()
@@ -174,6 +178,7 @@ func (r *Root) cancelPastePauseKeepQueue() {
 	if job == nil {
 		return
 	}
+	r.finishPasteOperation(job, operations.OutcomeCancelled)
 	job.cancel()
 	r.pasteJob = nil
 	r.advancePasteQueue()
