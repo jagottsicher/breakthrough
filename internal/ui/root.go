@@ -656,6 +656,8 @@ type Root struct {
 	gitBreachDiffHeader        *tview.TextView
 	gitBreachDiffView          *tview.TextView
 	gitBreachDiffScrollbar     *verticalScrollbar
+	gitBreachDiffHScrollbar    *horizontalScrollbar
+	gitBreachDiffSpacer        *tview.Box
 	gitBreachHint              *tview.TextView
 	gitBreachHintSpans         []listHintSpan
 
@@ -796,14 +798,16 @@ type Root struct {
 	// gitBreachFocusDiffSplitLeftOnClick), since scrolling here is
 	// always linked, by explicit design choice, unlike Compare's own
 	// optional link/unlink toggle.
-	gitBreachDiffSplit          bool
-	gitBreachDiffPages          *tview.Pages
-	gitBreachDiffSplitLeft      *tview.TextView
-	gitBreachDiffSplitRight     *tview.TextView
-	gitBreachDiffSplitSeparator *tview.Box
-	gitBreachDiffSplitScrollbar *verticalScrollbar
-	gitBreachDiffRawText        string
-	gitBreachDiffFiles          []compare.FileDiff
+	gitBreachDiffSplit           bool
+	gitBreachDiffPages           *tview.Pages
+	gitBreachDiffSplitLeft       *tview.TextView
+	gitBreachDiffSplitRight      *tview.TextView
+	gitBreachDiffSplitSeparator  *tview.Box
+	gitBreachDiffSplitScrollbar  *verticalScrollbar
+	gitBreachDiffSplitHScrollbar *horizontalScrollbar
+	gitBreachDiffSplitSpacer     *tview.Box
+	gitBreachDiffRawText         string
+	gitBreachDiffFiles           []compare.FileDiff
 	// logAuditNewestFirst toggles the viewer table's own sort order —
 	// Up/Down arrow (see captureLogAuditViewerTableKey), per the user's
 	// own explicit request to be able to read either direction without
@@ -827,9 +831,12 @@ type Root struct {
 	// The Statistics modal ("s" on a viewer row) — counts by level and
 	// by source over whatever the viewer currently shows (see
 	// logAuditStats in logauditstats.go).
-	logAuditStatsTitleBar *tview.TextView
-	logAuditStatsView     *tview.TextView
-	logAuditStatsLayout   *tview.Flex
+	logAuditStatsTitleBar   *tview.TextView
+	logAuditStatsView       *tview.TextView
+	logAuditStatsScrollbar  *verticalScrollbar
+	logAuditStatsHScrollbar *horizontalScrollbar
+	logAuditStatsSpacer     *tview.Box
+	logAuditStatsLayout     *tview.Flex
 
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
@@ -1447,19 +1454,23 @@ type Root struct {
 	// state; compareDiffLeftFocused tracks which of the two panes
 	// currently has focus, read by captureCompareDiffPaneKey to decide
 	// which pane an Up/Down/PgUp/PgDn keypress scrolls when unlinked.
-	compareDiffLayout         *tview.Flex
-	compareDiffTitleBar       *tview.TextView
-	compareDiffBody           *tview.Flex
-	compareDiffLeft           *tview.TextView
-	compareDiffLeftScrollbar  *verticalScrollbar
-	compareDiffRight          *tview.TextView
-	compareDiffRightScrollbar *verticalScrollbar
-	compareDiffSeparator      *tview.Box
-	compareDiffHint           *tview.TextView
-	compareDiffHintSpans      []listHintSpan
-	compareDiffPairs          []compare.LinePair
-	compareDiffLinked         bool
-	compareDiffLeftFocused    bool
+	compareDiffLayout          *tview.Flex
+	compareDiffTitleBar        *tview.TextView
+	compareDiffBody            *tview.Flex
+	compareDiffLeft            *tview.TextView
+	compareDiffLeftScrollbar   *verticalScrollbar
+	compareDiffLeftHScrollbar  *horizontalScrollbar
+	compareDiffLeftSpacer      *tview.Box
+	compareDiffRight           *tview.TextView
+	compareDiffRightScrollbar  *verticalScrollbar
+	compareDiffRightHScrollbar *horizontalScrollbar
+	compareDiffRightSpacer     *tview.Box
+	compareDiffSeparator       *tview.Box
+	compareDiffHint            *tview.TextView
+	compareDiffHintSpans       []listHintSpan
+	compareDiffPairs           []compare.LinePair
+	compareDiffLinked          bool
+	compareDiffLeftFocused     bool
 
 	helpView      *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	helpScrollbar *verticalScrollbar
@@ -1498,6 +1509,7 @@ type Root struct {
 	// CycleFocusShortcut, ...), unaffected by wrapping it in a layout
 	// purely for drawing purposes.
 	detailsSidebar        *tview.TextView
+	detailsScrollbar      *verticalScrollbar
 	detailsTitleBar       *tview.TextView
 	detailsSidebarLayout  *tview.Flex
 	detailsSidebarVisible bool
@@ -2715,9 +2727,20 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// positioned and shown/hidden its own way (see showDetailsSidebar).
 	r.detailsSidebar = r.newDetailsSidebarView()
 	r.detailsTitleBar = r.newDetailsTitleBar()
+	// AccentBackground, matching detailsSidebar's own constant content
+	// background (see newDetailsSidebarView's own doc comment on why
+	// that never changes with focus) — not the scrollbar's own default
+	// (PanelBackground), which would otherwise leave this one column a
+	// visibly different, mismatched tone next to the content it scrolls.
+	r.detailsScrollbar = newVerticalScrollbarForTextView(r, r.detailsSidebar)
+	r.detailsScrollbar.SetTrackColorFunc(func() tcell.Color { return r.theme.AccentBackground })
+	detailsContentRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.detailsSidebar, 0, 1, true).
+		AddItem(r.detailsScrollbar, 1, 0, false)
+	detailsContentRow.SetMouseCapture(r.detailsScrollbar.captureMouse)
 	r.detailsSidebarLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.detailsTitleBar, 1, 0, false).
-		AddItem(r.detailsSidebar, 0, 1, true)
+		AddItem(detailsContentRow, 0, 1, true)
 
 	r.wirePanel(panel)
 

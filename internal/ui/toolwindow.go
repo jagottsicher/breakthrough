@@ -31,11 +31,12 @@ import (
 // (see detailssidebar.go's own doc comment).
 type toolWindow struct {
 	*tview.Box
-	root      *Root
-	id        string // this window's own Pages name (see Root.openToolCommand)
-	titleBar  *tview.TextView
-	content   *tview.TextView
-	scrollbar *verticalScrollbar
+	root       *Root
+	id         string // this window's own Pages name (see Root.openToolCommand)
+	titleBar   *tview.TextView
+	content    *tview.TextView
+	scrollbar  *verticalScrollbar
+	hScrollbar *horizontalScrollbar
 
 	cancel context.CancelFunc // stops the running process (see Root.openToolCommand) — called by close/reload
 	closed bool               // guards a late QueueUpdateDraw callback against writing into a torn-down window
@@ -176,6 +177,15 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	// same way every other screen's own scrollbar already is.
 	tw.scrollbar.SetTrackColorFunc(func() tcell.Color { return root.theme.SurfaceBackground })
 
+	// The horizontal counterpart — content's own longest line can exceed
+	// its width once recalculateWidth's own auto-fit is overridden by a
+	// manual resize (see manuallyResized's own doc comment), the one
+	// real case this window can have horizontal overflow at all. Same
+	// reserved-row approach as the vertical scrollbar's reserved column
+	// (see Draw below): contentHeight shrinks by one more row for it.
+	tw.hScrollbar = newHorizontalScrollbarForTextView(root, tw.content)
+	tw.hScrollbar.SetTrackColorFunc(func() tcell.Color { return root.theme.SurfaceBackground })
+
 	return tw
 }
 
@@ -248,13 +258,27 @@ func (tw *toolWindow) Draw(screen tcell.Screen) {
 		screen.SetContent(reloadCol, y, toolWindowReloadGlyph, nil, buttonStyle)
 	}
 
-	contentWidth := width - 1 // one column reserved for the scrollbar, see tw.scrollbar below
+	contentWidth := width - 1 // one column reserved for the vertical scrollbar, see tw.scrollbar below
 	if contentWidth < 0 {
 		contentWidth = 0
 	}
-	tw.content.SetRect(x, y+1, contentWidth, tw.contentHeight())
+	contentHeight := tw.contentHeight()
+	tw.content.SetRect(x, y+1, contentWidth, contentHeight)
 	tw.content.Draw(screen)
-	tw.scrollbar.SetRect(x+contentWidth, y+1, 1, tw.contentHeight())
+
+	// The horizontal scrollbar's own reserved row, directly below
+	// content — see tw.hScrollbar's own doc comment on why this window
+	// can have horizontal overflow at all. Deliberately contentWidth
+	// wide, not width: the vertical scrollbar's own column (right below)
+	// is the corner cell the two bars would otherwise collide in, and it
+	// stays owned by tw.scrollbar alone (see its own SetRect just below,
+	// spanning one row further than content's own height to cover
+	// exactly that cell) rather than this row trying to paint a
+	// matching blank spacer there itself.
+	tw.hScrollbar.SetRect(x, y+1+contentHeight, contentWidth, 1)
+	tw.hScrollbar.Draw(screen)
+
+	tw.scrollbar.SetRect(x+contentWidth, y+1, 1, contentHeight+1)
 	tw.scrollbar.Draw(screen)
 
 	// The footer row — see contentHeight's own doc comment on why it's
@@ -279,13 +303,14 @@ func (tw *toolWindow) Draw(screen tcell.Screen) {
 
 // contentHeight returns how many rows are actually available for
 // content: this window's own current height, minus the title bar (row
-// 0) and the resize-handle footer row (always the very last row) —
-// Draw's own layout above and recalculateWidth both need exactly this
-// same number and must always agree, since recalculateWidth's whole
-// point is to react to what's actually visible on screen.
+// 0), the horizontal scrollbar's own reserved row, and the
+// resize-handle footer row (always the very last row) — Draw's own
+// layout above and recalculateWidth both need exactly this same number
+// and must always agree, since recalculateWidth's whole point is to
+// react to what's actually visible on screen.
 func (tw *toolWindow) contentHeight() int {
 	_, _, _, height := tw.GetRect()
-	h := height - 2
+	h := height - 3
 	if h < 0 {
 		h = 0
 	}
@@ -361,9 +386,17 @@ func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell
 		// tw.dragging/tw.resizing above are: a fast drag can briefly
 		// stray outside this window's own rect, and the rest of that
 		// gesture would otherwise be dropped instead of reaching
-		// tw.scrollbar.captureMouse at all.
+		// tw.scrollbar.captureMouse at all. Both bars checked the same
+		// way, independently — either can be mid-gesture at once? No,
+		// only one mouse button exists, but each bar tracks its own
+		// gesture state regardless of which one actually started it.
 		if tw.scrollbar.dragging || tw.scrollbar.repeatCancel != nil {
 			if _, scrolled := tw.scrollbar.captureMouse(action, event); scrolled == nil {
+				return true, nil
+			}
+		}
+		if tw.hScrollbar.dragging || tw.hScrollbar.repeatCancel != nil {
+			if _, scrolled := tw.hScrollbar.captureMouse(action, event); scrolled == nil {
 				return true, nil
 			}
 		}
@@ -410,14 +443,18 @@ func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell
 			}
 		}
 
-		// tw.scrollbar has no tview.Flex of its own to install
-		// captureMouse on via SetMouseCapture (see newToolWindow's own
-		// doc comment on why) — called directly here instead, the same
-		// (action, event) in/out contract SetMouseCapture's own callback
-		// has. A pass-through (event unchanged, non-nil) means the click
-		// wasn't on the scrollbar's own column, so it falls through to
-		// content exactly as before.
+		// tw.scrollbar/tw.hScrollbar have no tview.Flex of their own to
+		// install captureMouse on via SetMouseCapture (see
+		// newToolWindow's own doc comment on why) — called directly here
+		// instead, the same (action, event) in/out contract
+		// SetMouseCapture's own callback has. A pass-through (event
+		// unchanged, non-nil) means the click wasn't on that bar's own
+		// row/column, so it falls through — to the other bar, then to
+		// content — exactly as before.
 		if _, scrolled := tw.scrollbar.captureMouse(action, event); scrolled == nil {
+			return true, nil
+		}
+		if _, scrolled := tw.hScrollbar.captureMouse(action, event); scrolled == nil {
 			return true, nil
 		}
 
@@ -438,9 +475,10 @@ func (tw *toolWindow) moveTo(x, y, width, height int) {
 }
 
 // toolWindowMinHeight is the shortest this window can ever be resized
-// to (see resizeTo) — the title bar, one row of actual content, and the
-// resize-handle footer row itself, per the user's own explicit request.
-const toolWindowMinHeight = 3
+// to (see resizeTo) — the title bar, one row of actual content, the
+// horizontal scrollbar's own reserved row, and the resize-handle footer
+// row itself, per the user's own explicit request.
+const toolWindowMinHeight = 4
 
 // minWidth is the narrowest this window can ever be resized to (see
 // resizeTo) — its own title, one space, the reload button, one blank

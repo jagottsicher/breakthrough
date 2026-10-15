@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -44,14 +45,37 @@ type scrollableContent interface {
 // calls it "an even more expensive call" than counting unwrapped lines,
 // since it has to parse the whole text and allocate a line index.
 // Recomputing it on every Draw (called on every redraw, i.e. on every
-// keypress or mouse move) would be wasteful; cachedWidth/cachedTextLen
-// pin it to the last actual change in whatever it depends on.
+// keypress or mouse move) would be wasteful; cachedWidth/cachedText pin
+// it to the last actual change in whatever it depends on.
+//
+// The cache key is the full text, not len(text) — a real, found bug in
+// an earlier version: two different diffs (or any two different texts)
+// landing at the exact same byte length, which real-world content does
+// hit by coincidence, collided on a len()-only key and silently kept
+// serving the previous text's own stale totalRows/totalCols. Reported
+// live as "the horizontal scrollbar doesn't show up" while clicking
+// through several commits in Git Breach's own Commits table — some
+// commit's diff happened to be exactly as many bytes as the previous
+// one, so its real overflow was masked by whatever totalCols the
+// previous, shorter-lined diff had already cached. Comparing the whole
+// string costs one more memcmp per Draw than comparing its length
+// already did — negligible next to GetWrappedLineCount's own cost,
+// which is the expensive call this cache exists to avoid in the first
+// place.
 type textViewContent struct {
 	view *tview.TextView
 
-	cachedWidth   int
-	cachedTextLen int
-	cachedTotal   int
+	cachedWidth int
+	cachedText  string
+	cachedTotal int
+
+	// cachedColsText/cachedTotalCols are totalCols' own cache — unlike
+	// cachedTotal above, the longest line's width never depends on the
+	// view's own rect (wrapping is irrelevant: this is only ever asked of
+	// a SetWrap(false) view, see horizontallyScrollableContent's own doc
+	// comment), so the cache key here is just the text itself.
+	cachedColsText  string
+	cachedTotalCols int
 }
 
 func (c *textViewContent) rect() (int, int, int, int) { return c.view.GetRect() }
@@ -61,13 +85,35 @@ func (c *textViewContent) scrollTo(row, col int)      { c.view.ScrollTo(row, col
 func (c *textViewContent) totalRows() int {
 	_, _, width, _ := c.view.GetRect()
 	text := c.view.GetText(false)
-	if width == c.cachedWidth && len(text) == c.cachedTextLen {
+	if width == c.cachedWidth && text == c.cachedText {
 		return c.cachedTotal
 	}
 	c.cachedWidth = width
-	c.cachedTextLen = len(text)
+	c.cachedText = text
 	c.cachedTotal = c.view.GetWrappedLineCount()
 	return c.cachedTotal
+}
+
+// totalCols is the widest line's own on-screen width across the whole
+// text, for horizontalScrollbar — tview.TaggedStringWidth, not a plain
+// rune/byte count: these views all use SetDynamicColors(true), so a
+// line like "[red]foo[-]" is full of style tags that take up zero
+// screen columns; counting them would make the thumb spuriously tiny
+// and maxOffset scroll out past where any real content ends.
+func (c *textViewContent) totalCols() int {
+	text := c.view.GetText(false)
+	if text == c.cachedColsText {
+		return c.cachedTotalCols
+	}
+	c.cachedColsText = text
+	max := 0
+	for _, line := range strings.Split(text, "\n") {
+		if w := tview.TaggedStringWidth(line); w > max {
+			max = w
+		}
+	}
+	c.cachedTotalCols = max
+	return c.cachedTotalCols
 }
 
 // tableContent adapts a *tview.Table — row-based, no wrapping and

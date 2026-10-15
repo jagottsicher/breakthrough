@@ -76,7 +76,7 @@ func TestToolWindowContentShowsAllLinesThatFit(t *testing.T) {
 	r.SetRect(0, 0, 100, 40)
 	tw := newToolWindow(r, "tw", "t")
 	const n = 5
-	tw.SetRect(5, 5, toolWindowMinWidth, n+2) // contentHeight == n exactly
+	tw.SetRect(5, 5, toolWindowMinWidth, n+3) // contentHeight == n exactly (title + n content + hbar row + footer)
 
 	for i := 1; i <= n; i++ {
 		tw.appendLine(fmt.Sprintf("LINE%d", i))
@@ -932,5 +932,85 @@ func TestToolWindowBackgroundMatchesDetailsSidebar(t *testing.T) {
 	tw.Blur()
 	if got, want := tw.titleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
 		t.Errorf("title bar background after losing focus again = %v, want EditableBackground %v", got, want)
+	}
+}
+
+// TestToolWindowHScrollbarMouseClickThroughRealDispatch mirrors
+// TestToolWindowScrollbarMouseClickThroughRealDispatch but for the
+// horizontal bar: a click on its own right arrow must actually scroll
+// content sideways, driven through the real dispatch chain
+// (tw.MouseHandler), not captureMouse directly. Needs a manually
+// resized window (see manuallyResized's own doc comment) — otherwise
+// recalculateWidth's own auto-fit would just widen the window to fit
+// the long line instead of ever needing to scroll past it.
+func TestToolWindowHScrollbarMouseClickThroughRealDispatch(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 200, 40)
+	tw := newToolWindow(r, "tw", "test")
+	tw.SetRect(5, 5, 60, 10)
+	tw.resizeTo(30, 10) // pins manuallyResized so the long line below can't just widen the window
+
+	tw.appendLine(strings.Repeat("x", 100))
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(200, 40)
+	tw.Draw(screen)
+
+	if tw.hScrollbar.maxOffset() <= 0 {
+		t.Fatalf("hScrollbar maxOffset = %d, want real overflow for a 100-column line in a narrow window", tw.hScrollbar.maxOffset())
+	}
+	sbx, sby, _, _ := tw.hScrollbar.GetRect()
+	_, before := tw.content.GetScrollOffset()
+
+	handler := tw.MouseHandler()
+	setFocus := func(tview.Primitive) {}
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
+	tw.hScrollbar.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
+
+	_, after := tw.content.GetScrollOffset()
+	if after != before+1 {
+		t.Errorf("content column offset after clicking the right arrow = %d, want %d (before=%d)", after, before+1, before)
+	}
+}
+
+// TestToolWindowScrollbarsDoNotShareTheCornerCell pins the user's own
+// explicit requirement that the vertical and horizontal bars never
+// overlap where they meet ("das sollen wir nicht") — the vertical bar
+// owns that corner cell and spans one row further than content's own
+// height to cover it (see Draw's own doc comment), so the horizontal
+// bar's own rect must stay entirely to its left.
+func TestToolWindowScrollbarsDoNotShareTheCornerCell(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	tw := newToolWindow(r, "tw", "test")
+	tw.SetRect(5, 5, 40, 10)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 40)
+	tw.Draw(screen)
+
+	vx, vy, _, vh := tw.scrollbar.GetRect()
+	hx, hy, hw, _ := tw.hScrollbar.GetRect()
+
+	if hx+hw > vx {
+		t.Errorf("horizontal bar (x=%d width=%d) reaches into the vertical bar's own column (x=%d)", hx, hw, vx)
+	}
+	if hy < vy || hy >= vy+vh {
+		t.Errorf("horizontal bar's own row (y=%d) is not covered by the vertical bar's span (y=%d..%d)", hy, vy, vy+vh)
 	}
 }

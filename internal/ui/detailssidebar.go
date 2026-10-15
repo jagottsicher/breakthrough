@@ -1484,7 +1484,19 @@ func (r *Root) captureDetailsSidebarMouse(action tview.MouseAction, event *tcell
 
 	case tview.MouseLeftClick:
 		rectX, rectY, _, _ := r.detailsSidebar.GetInnerRect()
-		row, col := y-rectY, x-rectX
+		// detailsPreviewRowStart/End etc. are absolute row numbers within
+		// the full text (see renderDetailsSidebar's own writeSection), but
+		// y-rectY alone is only ever the clicked row's position within
+		// the currently visible viewport — the same row 0 regardless of
+		// how far the sidebar has scrolled. Adding back the TextView's
+		// own current scroll offset is what makes row comparable to
+		// those absolute numbers again; without it, every click zone
+		// below silently computed the right answer only by coincidence,
+		// whenever the sidebar happened to still be scrolled to the very
+		// top — exactly the case every test here used to check, and the
+		// only one nothing until now had scrolled past.
+		scrollRow, _ := r.detailsSidebar.GetScrollOffset()
+		row, col := y-rectY+scrollRow, x-rectX
 		switch {
 		case r.detailsPreviewRowStart >= 0 && row >= r.detailsPreviewRowStart && row <= r.detailsPreviewRowEnd:
 			r.lookCurrentEntry()
