@@ -423,6 +423,7 @@ func TestDetailsMetadataHintAndStatesNeverWrapAtMinWidth(t *testing.T) {
 		"(reading…)",
 		detailsMetadataErrorMessage(filemeta.ErrNotSupported),
 		detailsMetadataErrorMessage(filemeta.ErrNoMetadata),
+		detailsMetadataErrorMessage(filemeta.ErrPopplerUtilsMissing),
 	}
 	for _, s := range states {
 		if w := tview.TaggedStringWidth(s); w > usableWidth {
@@ -927,7 +928,7 @@ func TestApplyDetailsMetadataResultShowsErrorMessage(t *testing.T) {
 	r.applyDetailsMetadataResult(path, nil, filemeta.ErrNoMetadata)
 
 	text := r.detailsSidebar.GetText(true)
-	if !strings.Contains(text, "no EXIF found") {
+	if !strings.Contains(text, "no metadata found") {
 		t.Errorf("details sidebar text should show the ErrNoMetadata message, got:\n%s", text)
 	}
 }
@@ -1783,6 +1784,9 @@ func TestDetailsSidebarShowsPDFPageCount(t *testing.T) {
 			t.Errorf("details sidebar text should contain %q, got:\n%s", want, text)
 		}
 	}
+	if r.detailsMetaRowStart < 0 || r.detailsMetaRowEnd < r.detailsMetaRowStart {
+		t.Errorf("detailsMetaRowStart/End = %d/%d, want a valid non-negative range — the rasterization-failed fallback gets a metadata section too", r.detailsMetaRowStart, r.detailsMetaRowEnd)
+	}
 }
 
 // TestDetailsSidebarShowsPDFPreviewWhenPdftoppmAvailable pins the actual
@@ -1816,8 +1820,8 @@ func TestDetailsSidebarShowsPDFPreviewWhenPdftoppmAvailable(t *testing.T) {
 	if r.detailsPreviewRowStart < 0 || r.detailsPreviewRowEnd < r.detailsPreviewRowStart {
 		t.Errorf("detailsPreviewRowStart/End = %d/%d, want a valid non-negative range", r.detailsPreviewRowStart, r.detailsPreviewRowEnd)
 	}
-	if r.detailsMetaRowStart >= 0 {
-		t.Error("a PDF should not get the image-only EXIF-style metadata hint")
+	if r.detailsMetaRowStart < 0 || r.detailsMetaRowEnd < r.detailsMetaRowStart {
+		t.Errorf("detailsMetaRowStart/End = %d/%d, want a valid non-negative range — PDFs get a real metadata section now (filemeta.ForPDF), not just images", r.detailsMetaRowStart, r.detailsMetaRowEnd)
 	}
 }
 

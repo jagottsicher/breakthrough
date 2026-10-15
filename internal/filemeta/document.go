@@ -31,15 +31,20 @@ func IsDocumentPath(path string) bool {
 // Open XML (DOCX/XLSX/PPTX) and EPUB are both ZIP containers with no
 // reliable way to tell them apart from an image by content alone (every
 // one of them starts with the same "PK\x03\x04" ZIP signature), so
-// these two go by extension; everything else falls through to
-// ForImage's own content-sniffed decode, which already returns
-// ErrNotSupported for anything imagemeta doesn't recognize.
+// these two go by extension; PDF goes by extension too, for a
+// different reason — pdfinfo needs a real file path, not sniffed
+// content, since it shells out rather than parsing anything itself.
+// Everything else falls through to ForImage's own content-sniffed
+// decode, which already returns ErrNotSupported for anything imagemeta
+// doesn't recognize.
 func ForPath(path string) ([]Field, error) {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".docx", ".xlsx", ".pptx":
 		return ForOfficeOpenXML(path)
 	case ".epub":
 		return ForEPUB(path)
+	case ".pdf":
+		return ForPDF(path)
 	default:
 		return ForImage(path)
 	}

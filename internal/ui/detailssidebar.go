@@ -667,14 +667,15 @@ func detailsMetadataHint(theme config.ResolvedTheme) string {
 }
 
 // detailsMetadataErrorMessage turns a filemeta error into the one line
-// shown in place of the result — three distinct cases (not applicable /
-// no data / genuine read failure), since conflating any of them into a
-// single generic "failed" would hide which one it actually was from
-// someone looking at a file they expected EXIF on. Deliberately short,
-// fixed wording for all three (unlike a raw %v of the underlying error,
-// which can be arbitrarily long — a full path in an os.PathError, say):
-// this section's own row-tracked position (see renderDetailsSidebar)
-// makes an unpredictably wide line here just as much of a hazard as an
+// shown in place of the result — four distinct cases (not applicable /
+// no data / a missing external tool / genuine read failure), since
+// conflating any of them into a single generic "failed" would hide
+// which one it actually was from someone looking at a file they
+// expected metadata on. Deliberately short, fixed wording for all four
+// (unlike a raw %v of the underlying error, which can be arbitrarily
+// long — a full path in an os.PathError, say): this section's own
+// row-tracked position (see renderDetailsSidebar) makes an
+// unpredictably wide line here just as much of a hazard as an
 // unpredictably tall one — see applyDetailsMetadataResult's own doc
 // comment on where the full error text for the generic case actually
 // goes instead.
@@ -683,7 +684,9 @@ func detailsMetadataErrorMessage(err error) string {
 	case errors.Is(err, filemeta.ErrNotSupported):
 		return "(not supported)"
 	case errors.Is(err, filemeta.ErrNoMetadata):
-		return "(no EXIF found)"
+		return "(no metadata found)"
+	case errors.Is(err, filemeta.ErrPopplerUtilsMissing):
+		return "(install poppler-utils)"
 	default:
 		return "(read error)"
 	}
@@ -760,16 +763,19 @@ func (r *Root) fetchDetailsMetadata() {
 //
 // A genuine, unexpected read error (corrupt file, permission denied,
 // ...) additionally gets a real error modal (see showError) carrying
-// the actual error text — ErrNotSupported/ErrNoMetadata don't, being
-// expected, routine outcomes for an ordinary file, not failures worth
-// interrupting anyone over.
+// the actual error text — ErrNotSupported/ErrNoMetadata/
+// ErrPopplerUtilsMissing don't, being expected, routine outcomes for an
+// ordinary file (the last of those three is "install a thing", not a
+// failure — the inline "(install poppler-utils)" message already says
+// so without needing a modal on top).
 func (r *Root) applyDetailsMetadataResult(target string, fields []filemeta.Field, err error) {
 	if r.detailsTarget != target {
 		return // the cursor moved on while this was in flight
 	}
 	if err != nil {
 		r.detailsMetadataState = detailsMetadataErrorMessage(err)
-		if !errors.Is(err, filemeta.ErrNotSupported) && !errors.Is(err, filemeta.ErrNoMetadata) {
+		routine := errors.Is(err, filemeta.ErrNotSupported) || errors.Is(err, filemeta.ErrNoMetadata) || errors.Is(err, filemeta.ErrPopplerUtilsMissing)
+		if !routine {
 			r.showError(fmt.Errorf("reading metadata for %s: %w", target, err))
 		}
 	} else {
@@ -1002,14 +1008,15 @@ func (r *Root) renderDetailsSidebar() {
 		_, previewEnd := writeSection(strings.Join(infoLines, "\n"))
 		r.detailsPreviewRowStart, r.detailsPreviewRowEnd = previewStart, previewEnd
 
-		if !isPDF && !isVideo {
-			// EXIF-style metadata is an image-specific concept — a PDF's
-			// own metadata (Title/Author/Creator, ...) isn't built yet
-			// (see feature_ideas.txt #26), so no hint for it is shown on
-			// one; DOCX/XLSX/PPTX/EPUB get their own metadata section
-			// further down instead (see the "IsDocumentPath" case below),
-			// never reaching here since none of them ever produce a
-			// preview image.
+		if !isVideo {
+			// A video's preview frame has no metadata concept of its own
+			// worth showing here; images and a successfully-rasterized
+			// PDF (filemeta.ForPath dispatches by extension, so this
+			// works the same regardless of which one it is) both do.
+			// DOCX/XLSX/PPTX/EPUB get their own metadata section further
+			// down instead (see the "IsDocumentPath" case below), never
+			// reaching here since none of them ever produce a preview
+			// image.
 			meta := r.detailsMetadataState
 			if meta == "" {
 				meta = detailsMetadataHint(r.theme)
@@ -1029,6 +1036,12 @@ func (r *Root) renderDetailsSidebar() {
 			infoField("Pages", strconv.Itoa(r.detailsPDFPageCount)),
 			"(install poppler-utils for a page preview)",
 		}, "\n"))
+
+		meta := r.detailsMetadataState
+		if meta == "" {
+			meta = detailsMetadataHint(r.theme)
+		}
+		r.detailsMetaRowStart, r.detailsMetaRowEnd = writeSection(meta)
 
 	case !isDirish(r.detailsStat) && filemeta.IsDocumentPath(r.detailsTarget):
 		// DOCX/XLSX/PPTX/EPUB never get a preview image of their own (see
