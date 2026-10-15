@@ -113,8 +113,9 @@ func (c *textViewContent) totalCols() int {
 
 // lineWidths is each logical ("\n"-delimited) line's own on-screen
 // width, in document order — the per-row data verticalScrollbar's own
-// text-density minimap (see lineWidthMeasurer) sums per track row to
-// show how much text sits there.
+// text-density minimap (see lineWidthMeasurer) averages per track row,
+// against the box's own width, to show how much text sits there (see
+// scrollbarMinimapGlyphs' own doc comment for the full calculation).
 //
 // Only ever meaningful for a SetWrap(false) view, the same restriction
 // totalCols already documents: a logical line here is also exactly one
@@ -159,6 +160,33 @@ func (c tableContent) scrollOffset() (int, int)   { return c.table.GetOffset() }
 func (c tableContent) scrollTo(row, col int)      { c.table.SetOffset(row, col) }
 func (c tableContent) totalRows() int             { return c.table.GetRowCount() }
 
+// scrollbarDrag is the hold-and-drag state both verticalScrollbar and
+// horizontalScrollbar track identically — embedded by value in each
+// (see their own struct definitions), so dragging/dragSpan/etc. are
+// still plain promoted fields at every existing call site, just
+// declared once instead of twice. dragStartPos is a screen Y for the
+// vertical bar, a screen X for the horizontal one; delta's own
+// arithmetic doesn't care which — only each type's own dragTo (which
+// still differs: a vertical drag moves the row half of scrollOffset,
+// a horizontal one the column half) needs to know that.
+type scrollbarDrag struct {
+	dragging        bool
+	dragStartPos    int
+	dragStartOffset int
+	dragSpan        int
+	dragMaxOffset   int
+}
+
+// delta is the new scroll offset while a drag is in progress, given the
+// mouse's current position along the scrollbar's own axis — shared
+// arithmetic between both axes; the caller clamps it and applies it to
+// whichever half of scrollOffset its own content actually scrolls.
+// Guarded by dragTo's own "dragSpan <= 0" early return in both callers,
+// same as before this was split out — never called with a zero span.
+func (d *scrollbarDrag) delta(pos int) int {
+	return d.dragStartOffset + (pos-d.dragStartPos)*d.dragMaxOffset/d.dragSpan
+}
+
 // verticalScrollbar is a custom, 1-column-wide vertical scrollbar —
 // tview itself has no scrollbar support at all (checked directly
 // against its own textview.go/table.go, not guessed), so this is fully
@@ -198,11 +226,7 @@ type verticalScrollbar struct {
 	// don't.
 	textDensityMinimap bool
 
-	dragging        bool
-	dragStartY      int
-	dragStartOffset int
-	dragSpan        int
-	dragMaxOffset   int
+	scrollbarDrag
 
 	repeatCancel context.CancelFunc
 }
@@ -238,6 +262,104 @@ const (
 	scrollbarRepeatDelay    = 400 * time.Millisecond
 	scrollbarRepeatInterval = 80 * time.Millisecond
 )
+
+// clampScrollOffset is both scrollbar axes' own clampOffset, pulled out
+// as a free function over a plain already-computed max: the two types'
+// own maxOffset() read from entirely different content methods
+// (totalRows vs totalCols), but the comparison itself was always
+// identical.
+func clampScrollOffset(v, max int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
+// scrollbarThumbGeometry is both scrollbar axes' own thumbGeometry,
+// pulled out as a free function over plain ints — trackSize/total/
+// viewport/offset are rows for the vertical bar, columns for the
+// horizontal one, but the arithmetic placing a proportional thumb
+// within a track never cared which. thumbSize floors at 1 (per the
+// user's own explicit request: below that, the same single row/column
+// simply represents a varying share of the total, rather than
+// vanishing) — shared by both callers' own thumbGeometry, which only
+// differ in which of totalRows/totalCols and viewportRows/viewportCols
+// they read.
+func scrollbarThumbGeometry(trackSize, total, viewport, offset int) (thumbSize, thumbStart int) {
+	if trackSize <= 0 {
+		return 0, 0
+	}
+	if total <= viewport || total <= 0 {
+		return trackSize, 0
+	}
+	thumbSize = trackSize * viewport / total
+	if thumbSize < 1 {
+		thumbSize = 1
+	}
+	if thumbSize > trackSize {
+		thumbSize = trackSize
+	}
+	span := trackSize - thumbSize
+	maxOffset := total - viewport
+	if span > 0 && maxOffset > 0 {
+		thumbStart = offset * span / maxOffset
+	}
+	return thumbSize, thumbStart
+}
+
+// startScrollbarRepeat begins step's own press-and-hold auto-repeat,
+// shared by both verticalScrollbar.startRepeat and
+// horizontalScrollbar.startRepeat via cancel (each type's own
+// repeatCancel field address) — an initial scrollbarRepeatDelay pause,
+// then a step every scrollbarRepeatInterval, until stopScrollbarRepeat
+// cancels it. tcell delivers a mouse-down event but no further events
+// while the button stays held down, so "repeat while held" has to come
+// from a timer, not from more mouse events — each step is marshalled
+// back onto the UI goroutine via QueueUpdateDraw, never called
+// directly from this goroutine, per this app's own async/UI-update
+// rules.
+func startScrollbarRepeat(app *tview.Application, cancel *context.CancelFunc, step func()) {
+	stopScrollbarRepeat(cancel)
+	ctx, c := context.WithCancel(context.Background())
+	*cancel = c
+	go func() {
+		timer := time.NewTimer(scrollbarRepeatDelay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		ticker := time.NewTicker(scrollbarRepeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				app.QueueUpdateDraw(step)
+			}
+		}
+	}()
+}
+
+// stopScrollbarRepeat cancels any in-flight startScrollbarRepeat
+// goroutine addressed by cancel — a nil cancel, or one that was never
+// started, is already a no-op. Both scrollbar axes' own stopRepeat
+// still guard against a nil *verticalScrollbar/*horizontalScrollbar
+// receiver themselves, one level up, before ever reaching here — see
+// their own doc comments for why that guard can't move down into this
+// shared function.
+func stopScrollbarRepeat(cancel *context.CancelFunc) {
+	if cancel == nil || *cancel == nil {
+		return
+	}
+	(*cancel)()
+	*cancel = nil
+}
 
 func scrollbarThumbColor(track tcell.Color) tcell.Color {
 	r, g, b := track.RGB()
@@ -446,13 +568,7 @@ func (sb *verticalScrollbar) maxOffset() int {
 }
 
 func (sb *verticalScrollbar) clampOffset(v int) int {
-	if v < 0 {
-		return 0
-	}
-	if m := sb.maxOffset(); v > m {
-		return m
-	}
-	return v
+	return clampScrollOffset(v, sb.maxOffset())
 }
 
 // thumbGeometry returns the thumb's own height and its row offset
@@ -462,28 +578,8 @@ func (sb *verticalScrollbar) clampOffset(v int) int {
 // own explicit request: below that, the same single row simply
 // represents a varying share of the total, rather than vanishing).
 func (sb *verticalScrollbar) thumbGeometry(trackRows int) (thumbRows, thumbStart int) {
-	if trackRows <= 0 {
-		return 0, 0
-	}
-	total := sb.content.totalRows()
-	viewport := sb.viewportRows()
-	if total <= viewport || total <= 0 {
-		return trackRows, 0
-	}
-	thumbRows = trackRows * viewport / total
-	if thumbRows < 1 {
-		thumbRows = 1
-	}
-	if thumbRows > trackRows {
-		thumbRows = trackRows
-	}
-	span := trackRows - thumbRows
-	maxOffset := total - viewport
-	if span > 0 && maxOffset > 0 {
-		offsetRow, _ := sb.content.scrollOffset()
-		thumbStart = offsetRow * span / maxOffset
-	}
-	return thumbRows, thumbStart
+	row, _ := sb.content.scrollOffset()
+	return scrollbarThumbGeometry(trackRows, sb.content.totalRows(), sb.viewportRows(), row)
 }
 
 func (sb *verticalScrollbar) scrollBy(delta int) {
@@ -497,62 +593,38 @@ func (sb *verticalScrollbar) pageJump(dir int) {
 
 // dragTo moves the thumb so the point originally grabbed stays under
 // the cursor, matching mouseY's own movement since the drag started
-// (dragStartY/dragStartOffset/dragSpan/dragMaxOffset are all snapshot
+// (dragStartPos/dragStartOffset/dragSpan/dragMaxOffset are all snapshot
 // once, in captureMouse, at MouseLeftDown) rather than snapping the
 // thumb's top edge to the cursor on every move.
 func (sb *verticalScrollbar) dragTo(mouseY int) {
 	if sb.dragSpan <= 0 {
 		return
 	}
-	deltaRows := (mouseY - sb.dragStartY) * sb.dragMaxOffset / sb.dragSpan
 	_, col := sb.content.scrollOffset()
-	sb.content.scrollTo(sb.clampOffset(sb.dragStartOffset+deltaRows), col)
+	sb.content.scrollTo(sb.clampOffset(sb.delta(mouseY)), col)
 }
 
-// startRepeat begins step's own press-and-hold auto-repeat — an
-// initial scrollbarRepeatDelay pause, then a step every
-// scrollbarRepeatInterval, until stopRepeat cancels it. tcell delivers
-// a mouse-down event but no further events while the button stays
-// still held down, so "repeat while held" has to come from a timer, not
-// from more mouse events — each step is marshalled back onto the UI
-// goroutine via QueueUpdateDraw, never called directly from this
-// goroutine, per this app's own async/UI-update rules.
+// startRepeat begins step's own press-and-hold auto-repeat — see
+// startScrollbarRepeat's own doc comment (shared with
+// horizontalScrollbar) for the full behavior.
 func (sb *verticalScrollbar) startRepeat(step func()) {
-	sb.stopRepeat()
-	ctx, cancel := context.WithCancel(context.Background())
-	sb.repeatCancel = cancel
-	go func() {
-		timer := time.NewTimer(scrollbarRepeatDelay)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-		}
-		ticker := time.NewTicker(scrollbarRepeatInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				sb.host.App().QueueUpdateDraw(step)
-			}
-		}
-	}()
+	startScrollbarRepeat(sb.host.App(), &sb.repeatCancel, step)
 }
 
 // stopRepeat cancels any in-flight startRepeat goroutine — called on
 // MouseLeftUp/a stray button release, and from hideOverlay when an
 // overlay closes outright (see root.go) so a held-down arrow/page-jump
 // never keeps scrolling content nothing shows any more. A nil receiver
-// or a repeat that was never started are both already a no-op.
+// or a repeat that was never started are both already a no-op — the
+// nil check has to stay here, on the outer method, rather than moving
+// into stopScrollbarRepeat: a nil *verticalScrollbar can't have its
+// repeatCancel field addressed at all, the same reason this couldn't
+// just become a promoted method on an embedded repeat-state struct.
 func (sb *verticalScrollbar) stopRepeat() {
-	if sb == nil || sb.repeatCancel == nil {
+	if sb == nil {
 		return
 	}
-	sb.repeatCancel()
-	sb.repeatCancel = nil
+	stopScrollbarRepeat(&sb.repeatCancel)
 }
 
 // Draw paints the arrow rows, the track, and the thumb directly onto
@@ -737,7 +809,7 @@ func (sb *verticalScrollbar) captureMouse(action tview.MouseAction, event *tcell
 			sb.startRepeat(func() { sb.pageJump(1) })
 		default:
 			sb.dragging = true
-			sb.dragStartY = y
+			sb.dragStartPos = y
 			sb.dragStartOffset, _ = sb.content.scrollOffset()
 			sb.dragSpan = trackRows - thumbRows
 			sb.dragMaxOffset = sb.maxOffset()

@@ -354,6 +354,47 @@ func TestScrollbarThumbColorKeepsDarkeningAMidToneTrack(t *testing.T) {
 	}
 }
 
+// TestScrollbarMinimapGlyphColorStaysDistinctFromItsOwnBackground pins
+// a case the minimap's own glyph color introduced that the plain
+// thumb/track pair never had to worry about: scrollbarThumbColor
+// applied a SECOND time (the minimap draws its glyph as
+// scrollbarThumbColor(cellBackground), reusing the same function — see
+// Draw's own doc comment on why). A clip-at-0-or-255 flip on the first
+// application could in principle land close enough to its own
+// background again on the second that the glyph became unreadable
+// exactly where a user looks most (under the thumb) — checked here
+// exhaustively across the one axis that actually matters (the track's
+// own darkest channel, 0..255), not just spot-checked against today's
+// handful of real theme colors, so a future theme's own background
+// can't quietly reintroduce this.
+func TestScrollbarMinimapGlyphColorStaysDistinctFromItsOwnBackground(t *testing.T) {
+	for v := int32(0); v <= 255; v++ {
+		bg := tcell.NewRGBColor(v, v, v)
+		glyphBg := scrollbarThumbColor(bg)      // the cell's own background (track or thumb)
+		glyphFg := scrollbarThumbColor(glyphBg) // the minimap's own glyph color for that cell
+
+		br, bgc, bb := glyphBg.RGB()
+		fr, fg, fb := glyphFg.RGB()
+		maxDelta := func(a, b int32) int32 {
+			d := a - b
+			if d < 0 {
+				d = -d
+			}
+			return d
+		}
+		biggest := maxDelta(br, fr)
+		if d := maxDelta(bgc, fg); d > biggest {
+			biggest = d
+		}
+		if d := maxDelta(bb, fb); d > biggest {
+			biggest = d
+		}
+		if biggest < scrollbarThumbContrastDelta {
+			t.Fatalf("background gray level %d: glyph color %v differs from its own cell background %v by only %d in the largest channel, want at least %d", v, glyphFg, glyphBg, biggest, scrollbarThumbContrastDelta)
+		}
+	}
+}
+
 // TestTextViewContentRecomputesAfterSameLengthTextChanges is a real,
 // user-reported regression: clicking through Git Breach's own Commits
 // table, the new horizontal scrollbar sometimes "doesn't show up" even
