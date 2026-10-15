@@ -831,9 +831,12 @@ type Root struct {
 	// The Statistics modal ("s" on a viewer row) — counts by level and
 	// by source over whatever the viewer currently shows (see
 	// logAuditStats in logauditstats.go).
-	logAuditStatsTitleBar *tview.TextView
-	logAuditStatsView     *tview.TextView
-	logAuditStatsLayout   *tview.Flex
+	logAuditStatsTitleBar   *tview.TextView
+	logAuditStatsView       *tview.TextView
+	logAuditStatsScrollbar  *verticalScrollbar
+	logAuditStatsHScrollbar *horizontalScrollbar
+	logAuditStatsSpacer     *tview.Box
+	logAuditStatsLayout     *tview.Flex
 
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this

@@ -341,9 +341,37 @@ func (r *Root) newLogAuditStatsScreen() {
 	r.logAuditStatsView.SetBorderPadding(0, 0, 1, 1)
 	r.logAuditStatsView.SetInputCapture(r.captureLogAuditStatsKey)
 
+	// PopupBackground, matching logAuditStatsView's own static background
+	// (see applyLogAuditStatsTheme) — never focus-dependent the way Git
+	// Breach's own boxes are, so a plain closure rather than the
+	// scrollbar's own PanelBackground default is all this needs.
+	popupTrackColor := func() tcell.Color { return r.theme.PopupBackground }
+
+	r.logAuditStatsScrollbar = newVerticalScrollbarForTextView(r, r.logAuditStatsView)
+	r.logAuditStatsScrollbar.SetTrackColorFunc(popupTrackColor)
+	topRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.logAuditStatsView, 0, 1, true).
+		AddItem(r.logAuditStatsScrollbar, 1, 0, false)
+	topRow.SetMouseCapture(r.logAuditStatsScrollbar.captureMouse)
+
+	// The horizontal counterpart, same corner handling as Compare's own
+	// diff view (comparediff.go): a reserved spacer column under the
+	// vertical bar, so the two bars' rects never share a cell.
+	r.logAuditStatsHScrollbar = newHorizontalScrollbarForTextView(r, r.logAuditStatsView)
+	r.logAuditStatsHScrollbar.SetTrackColorFunc(popupTrackColor)
+	r.logAuditStatsSpacer = tview.NewBox().SetBackgroundColor(r.theme.PopupBackground)
+	hBarRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.logAuditStatsHScrollbar, 0, 1, false).
+		AddItem(r.logAuditStatsSpacer, 1, 0, false)
+	hBarRow.SetMouseCapture(r.logAuditStatsHScrollbar.captureMouse)
+
+	contentRow := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(topRow, 0, 1, true).
+		AddItem(hBarRow, 1, 0, false)
+
 	r.logAuditStatsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.logAuditStatsTitleBar, 1, 0, false).
-		AddItem(r.logAuditStatsView, 0, 1, true)
+		AddItem(contentRow, 0, 1, true)
 }
 
 // logAuditViewerVisibleEntries recomputes the viewer's own current
