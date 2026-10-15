@@ -47,6 +47,7 @@ var helpText = strings.TrimLeft(`
   B   Batch rename   S     Sed Replace          G   Go to last row
   C   Compare        R     Rsync                W   Open with…
   q   Quit           ?     This help            :   Bash command line
+  L   Log Audit (same as "jL")
 
   h/k/M target whichever of Properties/Details is relevant (Properties
   first if both are open on the same file), opening the Details sidebar
@@ -112,7 +113,9 @@ var helpText = strings.TrimLeft(`
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen ·
                 js Sessions screen (local screen/tmux/zellij sessions) ·
-                jk SSH Keys screen (local key pairs under ~/.ssh)
+                jk SSH Keys screen (local key pairs under ~/.ssh) ·
+                jL Log Audit (same as plain "L" — see its own section
+                below)
     p  perms    pm chmod · po chown
     z  disp     zN sort by name · zS sort by size · zT sort by time ·
                 zs size format · zt time format · zi Nerd Font icons
