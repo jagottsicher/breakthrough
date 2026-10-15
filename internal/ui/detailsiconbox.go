@@ -74,30 +74,27 @@ func (r *Root) detailsTypeGlyph() string {
 }
 
 // fileIconBoxCols/fileIconBoxRows are the generic icon box's own fixed
-// size: exactly one cell of margin around the glyph in every direction
-// — "jeweils 1 Zeichen Margin", per the user's own explicit spec — and
-// nothing more. Deliberately NOT detailsImageBoxSize's own much larger
-// real-preview footprint (innerHeight/3): that budget exists for an
-// actual thumbnail worth that much space, and reusing it here for a
-// single decorative character pushed the stat/hash section far enough
-// down to fall outside the sidebar's own visible viewport in a real,
-// observed regression (two existing click-zone tests started failing
-// against a real terminal height, not just a stale assumption) — an
-// icon is small by nature, so this box stays small by construction
-// regardless of how tall the sidebar itself is.
+// size — 12×9, per the user's own explicit, corrected spec (an earlier
+// 3×3 pass read as "much too small"). Still deliberately NOT
+// detailsImageBoxSize's own real-preview footprint (innerHeight/3,
+// which scales with the sidebar's own height): a fixed size keeps this
+// decorative box's own footprint predictable and independent of
+// terminal height, the same reasoning that mattered even more at 3×3
+// (see the click-zone scroll-offset fix in detailsiconbox_test.go's own
+// sibling, detailssidebar_test.go, for the regression a too-generous
+// size caused once already).
 const (
-	fileIconBoxCols = 3
-	fileIconBoxRows = 3
+	fileIconBoxCols = 13
+	fileIconBoxRows = 9
 )
 
 // renderFileIconBox draws a flat-colored, fileIconBoxCols×fileIconBoxRows
-// placeholder — glyph centered, with the one-cell margin
-// fileIconBoxCols/fileIconBoxRows's own doc comment describes — centered
-// horizontally within availableWidth (the sidebar's own inner width),
-// for every target that has no real thumbnail of its own (anything
-// that isn't a successfully-decoded image or rasterized PDF page), per
-// the user's own explicit request for "two half-block fake images, one
-// for files, one for folders".
+// placeholder — glyph centered in it, box itself centered horizontally
+// within availableWidth (the sidebar's own inner width) — for every
+// target that has no real thumbnail of its own (anything that isn't a
+// successfully-decoded image or rasterized PDF page), per the user's
+// own explicit request for "two half-block fake images, one for files,
+// one for folders".
 //
 // A flat color needs none of renderImageHalfBlocks' own per-pixel
 // half-block trick (top and bottom halves would always be identical
@@ -113,7 +110,18 @@ func renderFileIconBox(bg, fg tcell.Color, glyph string, availableWidth int) str
 	margin := strings.Repeat(" ", leftPad)
 	bgTag := colorTag(bg)
 	blankRow := margin + fmt.Sprintf("[-:%s:]%s[-:-]", bgTag, strings.Repeat(" ", fileIconBoxCols))
-	glyphRow := margin + fmt.Sprintf("[-:%s:] [%s:%s:]%s[-:%s:] [-:-]", bgTag, colorTag(fg), bgTag, glyph, bgTag)
+
+	// glyphRow fills the FULL fileIconBoxCols width with bg, same as
+	// blankRow — not just a fixed cluster around the glyph: a real,
+	// observed bug here once left every column after that cluster
+	// uncolored, and the cluster itself landed near the box's own left
+	// edge rather than centered in it, for any width wider than the
+	// minimum this was first written for.
+	centerCol := (fileIconBoxCols - 1) / 2
+	glyphRow := margin +
+		fmt.Sprintf("[-:%s:]", bgTag) + strings.Repeat(" ", centerCol) +
+		fmt.Sprintf("[%s:%s:]%s[-:%s:]", colorTag(fg), bgTag, glyph, bgTag) + strings.Repeat(" ", fileIconBoxCols-centerCol-1) +
+		"[-:-]"
 
 	centerRow := fileIconBoxRows / 2
 	var b strings.Builder
