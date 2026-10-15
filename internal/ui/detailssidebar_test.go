@@ -1371,9 +1371,16 @@ func TestClickingDetailsHashZoneDefersToOpenProperties(t *testing.T) {
 	if r.detailsHashRowStart < 0 {
 		t.Fatal("setup: detailsHashRowStart should be set for a non-directory target")
 	}
+	// Scroll the hash row to the very top of the viewport first — with
+	// the icon box (see detailsiconbox.go) now sitting above the stat
+	// block for a plain file, the hash row can sit below a small
+	// sidebar's own visible height, the same reason
+	// TestDetailsHashClickZoneAccountsForScrollOffset already scrolls
+	// rather than assuming offset 0.
+	r.detailsSidebar.ScrollTo(r.detailsHashRowStart, 0)
 	_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
 	x, _, _, _ := r.detailsSidebar.GetRect()
-	action, _ := r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, rectY+r.detailsHashRowStart, tcell.Button1, 0))
+	action, _ := r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, rectY, tcell.Button1, 0))
 	if action != tview.MouseConsumed {
 		t.Fatalf("action = %v, want MouseConsumed", action)
 	}
@@ -1621,9 +1628,15 @@ func TestDetailsDirSizeClickZoneTriggersComputation(t *testing.T) {
 		t.Fatal("setup: expected a directory-size row")
 	}
 
+	// Scroll the dir-size row to the very top of the viewport first —
+	// with the folder icon box (see detailsiconbox.go) now sitting above
+	// it, the row can sit below a small sidebar's own visible height, the
+	// same reason TestDetailsHashClickZoneAccountsForScrollOffset already
+	// scrolls rather than assuming offset 0.
+	r.detailsSidebar.ScrollTo(r.detailsDirSizeRowStart, 0)
 	_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
 	x, _, _, _ := r.detailsSidebar.GetRect()
-	action, _ := r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, rectY+r.detailsDirSizeRowStart, tcell.Button1, 0))
+	action, _ := r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, rectY, tcell.Button1, 0))
 	if action != tview.MouseConsumed {
 		t.Fatalf("action = %v, want MouseConsumed", action)
 	}
