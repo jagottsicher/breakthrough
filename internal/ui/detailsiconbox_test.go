@@ -123,8 +123,14 @@ func TestRenderFileIconBoxRoundsAllFourCornersWithoutFold(t *testing.T) {
 
 	top := lines[0]
 	bottom := lines[len(lines)-1]
-	if strings.Count(top, "▄") != 2 {
-		t.Errorf("top row should contain exactly 2 rounded-corner glyphs ▄ (top-left and top-right), got %q", top)
+	// Top-left corner (1) plus the top-right taper (folderTopRightTaperCols)
+	// leading up to the fully-removed top-right corner cell itself.
+	wantTopGlyphs := 1 + folderTopRightTaperCols
+	if got := strings.Count(top, "▄"); got != wantTopGlyphs {
+		t.Errorf("top row should contain %d ▄ glyphs (top-left + the top-right taper), got %d in %q", wantTopGlyphs, got, top)
+	}
+	if !strings.Contains(top, "[-:-:] ") {
+		t.Errorf("top row's own rightmost cell should be fully background (\"[-:-:] \"), got %q", top)
 	}
 	if strings.Count(bottom, "▀") != 2 {
 		t.Errorf("bottom row should contain exactly 2 rounded-corner glyphs ▀ (bottom-left and bottom-right), got %q", bottom)

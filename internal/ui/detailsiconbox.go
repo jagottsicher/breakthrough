@@ -120,6 +120,17 @@ var fileIconFoldStaircase = []fileIconFoldRow{
 	{0, true},
 }
 
+// folderTopRightTaperCols is how many columns, immediately left of the
+// folder box's own top-right corner, taper into it via the same
+// half-block glyph the other corners already use — per the user's own
+// follow-up request specifically for the folder box (no fold, see
+// renderFileIconBox's own doc comment): the corner cell itself goes
+// fully to the surrounding background (no box color left in it at all,
+// "komplett Hintergrundfarbe"), with this many cells immediately before
+// it softening the change gradually rather than jumping straight from
+// full box color to none in a single cell.
+const folderTopRightTaperCols = 8
+
 // renderFileIconBox draws a flat-colored, fileIconBoxCols×fileIconBoxRows
 // placeholder — glyph centered in it, box itself centered horizontally
 // within availableWidth (the sidebar's own inner width) — for every
@@ -189,11 +200,18 @@ func renderFileIconBox(bg, fg tcell.Color, glyph string, availableWidth int, rou
 				// Top-left: rounded.
 				fmt.Fprintf(&b, "[%s:-:]▄", bgTag)
 			case roundCorners && !foldTopRight && row == 0 && col == lastCol:
-				// Top-right: rounded too, same as top-left — only when
-				// it isn't already the folded corner instead (the file
-				// box's own look). The folder box has no fold, so all
-				// four of its corners round the same way, per the
-				// user's own explicit follow-up request.
+				// The corner cell itself: fully background, no box
+				// color at all — "practically removed", not just
+				// softened (see folderTopRightTaperCols's own doc
+				// comment) — only for the folder box's own look (no
+				// fold); the file box's folded corner is handled by the
+				// staircase case above instead.
+				fmt.Fprintf(&b, "[-:-:] ")
+			case roundCorners && !foldTopRight && row == 0 && col >= lastCol-folderTopRightTaperCols && col < lastCol:
+				// Several columns leading up to that corner, same
+				// half-block rounding the other corners already use,
+				// widening the cut gradually instead of jumping
+				// straight from full box color to none in one cell.
 				fmt.Fprintf(&b, "[%s:-:]▄", bgTag)
 			case roundCorners && row == lastRow && col == 0:
 				// Bottom-left: rounded.

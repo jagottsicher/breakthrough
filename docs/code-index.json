@@ -1608,13 +1608,13 @@
     },
     {
       "path": "internal/ui/detailsiconbox.go",
-      "size": 8880,
-      "sha256": "ba3bd3f9de407f1d10f4384e420388d8cee385e0344269eafb70bad0a2befbab"
+      "size": 9927,
+      "sha256": "b95c03e7d59ceb0d1ec3aaba2e03bc09829c6762c6866f54b62f28686ac4f691"
     },
     {
       "path": "internal/ui/detailsiconbox_test.go",
-      "size": 8260,
-      "sha256": "17543d1ed022e1adb54b5fbb7aae79cb3a0141acd2abfa2d6dadf45866aa425c"
+      "size": 8623,
+      "sha256": "2620cca691173fdd5c26290be4dd109e3f22f3fe9d1f6ad324ca1cb5fb2d80aa"
     },
     {
       "path": "internal/ui/detailssidebar.go",
@@ -25101,9 +25101,16 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox.go",
+      "name": "folderTopRightTaperCols",
+      "kind": "const",
+      "line": 132
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/detailsiconbox.go",
       "name": "renderFileIconBox",
       "kind": "function",
-      "line": 158
+      "line": 169
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25145,28 +25152,28 @@
       "file": "internal/ui/detailsiconbox_test.go",
       "name": "TestDetailsEntryTypeMirrorsClassifyKindPrecedence",
       "kind": "function",
-      "line": 137
+      "line": 143
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox_test.go",
       "name": "TestDetailsSidebarShowsFileIconBoxForPlainFile",
       "kind": "function",
-      "line": 162
+      "line": 168
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox_test.go",
       "name": "TestDetailsSidebarShowsFolderIconBoxForDirectory",
       "kind": "function",
-      "line": 184
+      "line": 190
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox_test.go",
       "name": "TestDetailsTypeGlyphUsesNerdFontIconWhenEnabled",
       "kind": "function",
-      "line": 205
+      "line": 211
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26013,14 +26020,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
@@ -42918,14 +42925,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 26
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 26
     },
@@ -50348,5 +50355,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "09d4593e4aa2f24f6322a477c328204614cb51694487170dec9e9199ecc5857d"
+  "merkle_root": "61c1da18151d1091877baa1cb20e404c80c93d094ba5b3cca64a1ac6989aa6ce"
 }
