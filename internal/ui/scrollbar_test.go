@@ -391,12 +391,12 @@ func TestTextViewContentRecomputesAfterSameLengthTextChanges(t *testing.T) {
 
 // TestScrollbarMinimapGlyphsOneRowPerTrackRow pins the simplest case:
 // as many track rows as content lines, so each glyph reflects exactly
-// one line's own width against the busiest row found (the widest line
-// here, 8, is also the only line in its own bucket, so it's trivially
-// its own busiest bucket too).
+// one line's own width against the box's own width, with no capping or
+// averaging involved (none of these lines exceed boxWidth).
 func TestScrollbarMinimapGlyphsOneRowPerTrackRow(t *testing.T) {
+	// 0, 2, 4, 8 against boxWidth=8 -> 0/8, 2/8, 4/8, 8/8.
 	widths := []int{0, 2, 4, 8}
-	got := scrollbarMinimapGlyphs(widths, 4)
+	got := scrollbarMinimapGlyphs(widths, 4, 8)
 	want := []rune{' ', '▎', '▌', '█'}
 	for i := range want {
 		if got[i] != want[i] {
@@ -405,35 +405,55 @@ func TestScrollbarMinimapGlyphsOneRowPerTrackRow(t *testing.T) {
 	}
 }
 
-// TestScrollbarMinimapGlyphsSumsMultipleLinesPerRow pins the "text
-// amount", not "line width", semantics the user asked for: more
-// content lines in a row's own bucket, or longer ones, add up to a
-// bigger total — not an average — regardless of whether any single
-// line is particularly long.
-func TestScrollbarMinimapGlyphsSumsMultipleLinesPerRow(t *testing.T) {
-	// 6 lines into 3 track rows: bucket sums 2, 4, 20 — a strictly
-	// increasing sequence from a mix of many-short-lines and few-long-
-	// lines buckets, normalized against the busiest one (20).
-	widths := []int{1, 1, 2, 2, 10, 10}
-	got := scrollbarMinimapGlyphs(widths, 3)
-	want := []rune{'▏', '▎', '█'}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("glyph[%d] = %q, want %q (got %v, want %v)", i, got[i], want[i], got, want)
-		}
+// TestScrollbarMinimapGlyphsAveragesMultipleLinesPerRow pins the
+// averaging case: more content lines than track rows, so each glyph
+// reflects the AVERAGE width of several lines, not just the first or
+// the longest one of the range.
+func TestScrollbarMinimapGlyphsAveragesMultipleLinesPerRow(t *testing.T) {
+	// 4 lines into 2 track rows: row 0 averages lines [0,2) = (0+8)/2=4,
+	// row 1 averages lines [2,4) = (4+4)/2=4 — both average out to
+	// boxWidth/2 despite very different individual line widths.
+	widths := []int{0, 8, 4, 4}
+	got := scrollbarMinimapGlyphs(widths, 2, 8)
+	want := []rune{'▌', '▌'}
+	if got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("glyphs = %v, want %v (both rows average to half of boxWidth)", got, want)
 	}
 }
 
-// TestScrollbarMinimapGlyphsNormalizesAgainstTheBusiestBucketInThisTrack
-// pins the reference point itself: 100% is whichever bucket has the
-// most text IN THIS TRACK RIGHT NOW, not some fixed absolute scale —
-// the same reasoning Log Audit's own timeline bar already uses for
-// event density. A tiny two-line document's own busiest bucket still
-// reads as full, exactly like a much larger document's would.
-func TestScrollbarMinimapGlyphsNormalizesAgainstTheBusiestBucketInThisTrack(t *testing.T) {
-	got := scrollbarMinimapGlyphs([]int{1, 1}, 1)
-	if got[0] != '█' {
-		t.Errorf("glyph = %q, want full — this bucket is the only one, so it's trivially the busiest regardless of its small absolute size", got[0])
+// TestScrollbarMinimapGlyphsCapsOverlongLinesAtBoxWidth pins the
+// user's own explicit "avoid outliers" request: a single line far
+// wider than the box (scrolled horizontally to read in full) must be
+// counted as exactly boxWidth wide in the average, not its real,
+// far-longer width — otherwise one such line sharing a bucket with
+// several short ones would drag that bucket's own average up near the
+// top regardless of how little text the rest of the bucket actually
+// has.
+func TestScrollbarMinimapGlyphsCapsOverlongLinesAtBoxWidth(t *testing.T) {
+	// Uncapped, (2+100)/2=51, read against boxWidth=10 would clip
+	// straight to full. Capped at boxWidth first, (2+10)/2=6, a
+	// moderate, non-full level — proving the cap actually changed the
+	// result, not just a reformulation that happens to agree.
+	got := scrollbarMinimapGlyphs([]int{2, 100}, 1, 10)
+	if got[0] == '█' {
+		t.Errorf("glyph = %q (full), want a moderate level reflecting the capped average (2+10)/2=6 against boxWidth=10, not the uncapped (2+100)/2=51", got[0])
+	}
+	want := scrollbarMinimapBlocks[5] // 6/10*8+0.5 = 5.3 -> level 5
+	if got[0] != want {
+		t.Errorf("glyph = %q, want %q (capped average 6 against boxWidth 10)", got[0], want)
+	}
+}
+
+// TestScrollbarMinimapGlyphsReferencesBoxWidthIndependentOfOtherBuckets
+// pins the reference point itself: 100% is the box's own fixed width,
+// not whichever bucket happens to have the most text — unlike an
+// earlier busiest-bucket-relative design, one bucket's own glyph must
+// never change just because a DIFFERENT bucket's content changed.
+func TestScrollbarMinimapGlyphsReferencesBoxWidthIndependentOfOtherBuckets(t *testing.T) {
+	first := scrollbarMinimapGlyphs([]int{4, 4, 4, 4}, 2, 8)
+	second := scrollbarMinimapGlyphs([]int{4, 4, 100, 100}, 2, 8)
+	if first[0] != second[0] {
+		t.Errorf("first bucket's glyph changed from %q to %q just because the second bucket's content changed — want it unaffected, since the reference is the fixed box width, not the busiest bucket", first[0], second[0])
 	}
 }
 
@@ -443,25 +463,25 @@ func TestScrollbarMinimapGlyphsNormalizesAgainstTheBusiestBucketInThisTrack(t *t
 // not a panic — the tail rows repeat the last line's own width rather
 // than reading an empty range.
 func TestScrollbarMinimapGlyphsHandlesMoreTrackRowsThanLines(t *testing.T) {
-	got := scrollbarMinimapGlyphs([]int{8}, 5)
+	got := scrollbarMinimapGlyphs([]int{8}, 5, 8)
 	if len(got) != 5 {
 		t.Fatalf("len(got) = %d, want 5 (one glyph per track row, regardless of how few lines exist)", len(got))
 	}
 	for i, g := range got {
 		if g != '█' {
-			t.Errorf("glyph[%d] = %q, want full (the document's one and only line is its own busiest bucket)", i, g)
+			t.Errorf("glyph[%d] = %q, want full (the document's one and only line equals boxWidth)", i, g)
 		}
 	}
 }
 
 // TestScrollbarMinimapGlyphsBlankWhenNothingToShow pins the degenerate
-// inputs (no lines at all, or every line empty — an all-blank
-// document): every glyph must come back blank, never a divide-by-zero
+// inputs (no lines, or a boxWidth of 0 — nothing real to measure
+// against): every glyph must come back blank, never a divide-by-zero
 // panic.
 func TestScrollbarMinimapGlyphsBlankWhenNothingToShow(t *testing.T) {
 	for _, got := range [][]rune{
-		scrollbarMinimapGlyphs(nil, 5),
-		scrollbarMinimapGlyphs([]int{0, 0}, 5),
+		scrollbarMinimapGlyphs(nil, 5, 8),
+		scrollbarMinimapGlyphs([]int{0, 0}, 5, 0),
 	} {
 		if len(got) != 5 {
 			t.Fatalf("len(got) = %d, want 5", len(got))
@@ -492,10 +512,12 @@ func openToolWindowWithWideLines(t *testing.T) *toolWindow {
 	tw.resizeTo(40, 8) // manuallyResized, so recalculateWidth never fights the fixed width below
 
 	// 10 strictly-increasing-width lines, bucketed into a track a good
-	// deal shorter than 10 rows — each bucket's own total only ever
-	// grows as the lines feeding it get wider, so the busiest bucket
-	// (the one normalizing every glyph) is always the last one, giving
-	// a predictable, non-decreasing glyph sequence to assert against.
+	// deal shorter than 10 rows — each bucket's own average only ever
+	// grows as the lines feeding it get wider (some later ones exceed
+	// the box's own width and get capped there, which only ever pulls
+	// an average down, never up — see scrollbarMinimapGlyphs' own doc
+	// comment), giving a predictable, non-decreasing glyph sequence to
+	// assert against.
 	for i := 1; i <= 10; i++ {
 		tw.appendLine(strings.Repeat("x", i*10))
 	}
