@@ -2279,6 +2279,22 @@ type Root struct {
 	dragCurrentRow int
 	dragMoved      bool
 	dragging       bool
+
+	// The Transfer-Zentrale screen (see transfercenter.go/
+	// openTransferCenter) — a read-only-plus-cancel/pause view of
+	// r.operations (internal/operations), the Aufgaben-/Transferzentrale
+	// feature_ideas.txt's own "3." describes, same build-once/
+	// repopulate-on-open shape every other full-screen catalog here
+	// already uses. transferCenterOps holds the last rendered snapshot
+	// (newest first), refreshed by reloadTransferCenter on open, on "r",
+	// and live via r.operations.Subscribe while the screen is open.
+	transferCenterLayout    *tview.Flex
+	transferCenterTitleBar  *tview.TextView
+	transferCenterHint      *tview.TextView
+	transferCenterHintSpans []listHintSpan
+	transferCenterTable     *tview.Table
+	transferCenterScrollbar *verticalScrollbar
+	transferCenterOps       []operations.Operation
 }
 
 // NewRoot creates the top-level UI rooted at path. app is passed down to
@@ -2635,6 +2651,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// full-screen catalog, same build-once/repopulate-on-open shape.
 	r.newFirewallScreen()
 
+	// The Transfer-Zentrale screen (see transfercenter.go/
+	// openTransferCenter) — same build-once/repopulate-on-open shape,
+	// reading r.operations instead of a system command's own output.
+	r.newTransferCenterScreen()
+
 	// The Firewall screen's own "Add rule" form and self-lockout
 	// rollback prompt (see firewalladdrule.go).
 	r.firewallAddRuleForm = r.newFirewallAddRuleForm()
@@ -2849,6 +2870,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(firewallAddRulePage, r.firewallAddRuleLayout, false, false)
 	r.AddPage(firewallRollbackPage, r.firewallRollbackLayout, false, false)
 	r.AddPage(firewallSimulatePage, r.firewallSimulateLayout, false, false)
+	// resize=true: the Transfer-Zentrale screen deliberately fills the
+	// whole terminal too, the same reasoning every other full-screen
+	// catalog above gives.
+	r.AddPage(transferCenterPage, r.transferCenterLayout, true, false)
 	// resize=true: the Sessions screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
