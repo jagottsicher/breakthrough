@@ -1034,7 +1034,7 @@ func (r *Root) renderDetailsSidebar() {
 		// for the preview image this branch doesn't have, same as for
 		// any other no-thumbnail target.
 		_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
-		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.detailsTypeGlyph(), innerWidth, true, true))
+		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.theme.SurfaceBackground, r.detailsTypeGlyph(), innerWidth, true, true))
 		writeSection(strings.Join([]string{
 			infoField("Type", "PDF"),
 			infoField("Pages", strconv.Itoa(r.detailsPDFPageCount)),
@@ -1054,7 +1054,7 @@ func (r *Root) renderDetailsSidebar() {
 		// gated on the path's extension (see IsDocumentPath's own doc
 		// comment on why that's the right signal here, unlike images).
 		_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
-		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.detailsTypeGlyph(), innerWidth, true, true))
+		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.theme.SurfaceBackground, r.detailsTypeGlyph(), innerWidth, true, true))
 		meta := r.detailsMetadataState
 		if meta == "" {
 			meta = detailsMetadataHint(r.theme)
@@ -1070,7 +1070,7 @@ func (r *Root) renderDetailsSidebar() {
 		// rows) worth matching rather than duplicating with a second,
 		// unrelated fixed color.
 		_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
-		writeSection(renderFileIconBox(r.theme.DirectoryBackground, r.theme.Text, r.detailsTypeGlyph(), innerWidth, true, false))
+		writeSection(renderFileIconBox(r.theme.DirectoryBackground, r.theme.Text, r.theme.SurfaceBackground, r.detailsTypeGlyph(), innerWidth, true, false))
 
 	default:
 		// Every other target with no thumbnail of its own (plain text,
@@ -1079,7 +1079,7 @@ func (r *Root) renderDetailsSidebar() {
 		// internal/fileicons/fallbackTypeText already picks for it — see
 		// detailsTypeGlyph's own doc comment.
 		_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
-		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.detailsTypeGlyph(), innerWidth, true, true))
+		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.theme.SurfaceBackground, r.detailsTypeGlyph(), innerWidth, true, true))
 	}
 
 	writeSection(detailsStatLines(r.detailsStat, r.detailsTarget))

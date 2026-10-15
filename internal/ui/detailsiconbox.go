@@ -116,15 +116,27 @@ const (
 // zeigen" shape the folder box's own taper already uses, just with an
 // extra visible gray band here instead of a flat jump straight to
 // background.
-const (
-	fileIconFoldRows   = 3
-	fileIconFoldHStart = 4 // columns before lastCol, i.e. col = lastCol-4
-)
+// fileIconFoldTaperCols is how many of the box's own rightmost columns
+// the fold's own H/B boundary staircases across — a real diagonal, one
+// half-row step per column (fileIconFoldHalfRowDepth below), replacing
+// an earlier per-row "solid band plus one transition cell" version the
+// user reported as uneven: "die Kante rechts... in der Treppe sollten
+// alles Halbstufen sein" (every step should be a half-step).
+//
+// fileIconFoldRows — how many rows deep the staircase's own deepest
+// column reaches — falls out of the same slope rather than being tuned
+// separately.
+const fileIconFoldTaperCols = 6
 
-// fileIconFoldHLen is each fold row's own H-band length — see
-// fileIconFoldHStart's own doc comment for why row 1 and row 2 match
-// rather than following the same +1 progression row 0→1 does.
-var fileIconFoldHLen = [fileIconFoldRows]int{1, 3, 3}
+var fileIconFoldRows = (fileIconFoldTaperCols-1)/2 + 1
+
+// fileIconFoldHalfRowDepth returns column col's own boundary depth, in
+// half-rows counted down from the top of row 0 — 0 at the taper's own
+// left edge (no cut at all that column), up to fileIconFoldTaperCols-1
+// at lastCol (the deepest cut, right at the actual corner).
+func fileIconFoldHalfRowDepth(col, lastCol int) int {
+	return fileIconFoldTaperCols - 1 - (lastCol - col)
+}
 
 // folderTopRightTaperCols is how many columns, immediately left of the
 // folder box's own top-right corner, taper into it via the same
@@ -172,7 +184,7 @@ const folderTopRightTaperCols = 8
 // synthetic image.Image just to feed it back into a renderer meant for
 // real per-pixel data — only the corner/fold cells need an actual
 // glyph at all.
-func renderFileIconBox(bg, fg tcell.Color, glyph string, availableWidth int, roundCorners, foldTopRight bool) string {
+func renderFileIconBox(bg, fg, outsideBg tcell.Color, glyph string, availableWidth int, roundCorners, foldTopRight bool) string {
 	leftPad := (availableWidth - fileIconBoxCols) / 2
 	if leftPad < 0 {
 		leftPad = 0
@@ -181,6 +193,7 @@ func renderFileIconBox(bg, fg tcell.Color, glyph string, availableWidth int, rou
 	bgTag := colorTag(bg)
 	fgTag := colorTag(fg)
 	foldTag := colorTag(fileIconBoxFoldBackground)
+	outsideTag := colorTag(outsideBg)
 
 	centerRow := fileIconBoxRows / 2
 	centerCol := (fileIconBoxCols - 1) / 2
@@ -191,38 +204,43 @@ func renderFileIconBox(bg, fg tcell.Color, glyph string, availableWidth int, rou
 	for row := 0; row < fileIconBoxRows; row++ {
 		b.WriteString(margin)
 		for col := 0; col < fileIconBoxCols; col++ {
-			// Fold cell classification for this row (only rows 0-2, only
-			// when foldTopRight) — see fileIconFoldRows/fileIconFoldHStart's
-			// own doc comment for the shape. hLen is this row's own H
-			// band length; hasTransition is true only for row 0 and row 2
-			// (row 1 jumps straight from H to background, per the user's
-			// own explicit "Zeile 1 und 3" — 1-indexed — spec).
-			inFold := foldTopRight && row < fileIconFoldRows
-			hStart := lastCol - fileIconFoldHStart
-			hLen := 0
-			if inFold {
-				hLen = fileIconFoldHLen[row]
-			}
-			hasTransition := row == 0 || row == 2
-			transitionCol := hStart + hLen
-			bStart := hStart + hLen
-			if hasTransition {
-				bStart++
+			// Fold cell classification — a genuine half-row-per-column
+			// diagonal across the taper's own columns (see
+			// fileIconFoldTaperCols/fileIconFoldHalfRowDepth's own doc
+			// comments), only when foldTopRight. depth is this column's
+			// own boundary, in half-rows; fullRowsB is how many complete
+			// rows above the boundary are fully background; the
+			// half-row remainder (if any) lands as one "▀"/"▄" cell
+			// exactly at row==fullRowsB.
+			inTaper := foldTopRight && col > lastCol-fileIconFoldTaperCols && col <= lastCol
+			var fullRowsB int
+			var hasHalfRow bool
+			if inTaper {
+				depth := fileIconFoldHalfRowDepth(col, lastCol)
+				fullRowsB = depth / 2
+				hasHalfRow = depth%2 == 1
 			}
 
 			switch {
-			case inFold && col >= hStart && col < hStart+hLen:
-				// Solid light-gray fold band.
-				fmt.Fprintf(&b, "[-:%s:] ", foldTag)
-			case inFold && hasTransition && col == transitionCol:
-				// The one "right half-block" cell the user's own spec
-				// calls out explicitly: bottom half light gray (the fold
-				// band bleeding into this cell), top half background.
-				fmt.Fprintf(&b, "[%s:-:]▄", foldTag)
-			case inFold && col >= bStart:
-				// Past the H band (and its transition cell, if any):
-				// fully background, the corner "practically removed".
+			case inTaper && row < fullRowsB:
+				// Above the boundary: fully background, removed.
 				fmt.Fprintf(&b, "[-:-:] ")
+			case inTaper && hasHalfRow && row == fullRowsB:
+				// The half-step itself: top half background (drawn in
+				// outsideBg's own real color, not "-" — "-" as a glyph's
+				// foreground means the widget's default TEXT color, not
+				// "blend into the surrounding background", which only
+				// "-" used as a BACKGROUND already does for free), bottom
+				// half the fold's own light gray.
+				fmt.Fprintf(&b, "[%s:%s:]▀", outsideTag, foldTag)
+			case inTaper && row == fullRowsB:
+				// Boundary row, no half-row remainder: already fully the
+				// fold's own light gray here, same as every row below it.
+				fmt.Fprintf(&b, "[-:%s:] ", foldTag)
+			case inTaper && row > fullRowsB && row < fileIconFoldRows:
+				// Below the boundary (still within the fold's own
+				// shallow depth): solid light gray.
+				fmt.Fprintf(&b, "[-:%s:] ", foldTag)
 			case roundCorners && row == 0 && col == 0:
 				// Top-left: rounded.
 				fmt.Fprintf(&b, "[%s:-:]▄", bgTag)
