@@ -353,3 +353,38 @@ func TestScrollbarThumbColorKeepsDarkeningAMidToneTrack(t *testing.T) {
 		t.Errorf("thumb red channel %d is not darker than track's own %d, want darkening (not lightening) for a track this far from clipping at 0", hr, tr)
 	}
 }
+
+// TestTextViewContentRecomputesAfterSameLengthTextChanges is a real,
+// user-reported regression: clicking through Git Breach's own Commits
+// table, the new horizontal scrollbar sometimes "doesn't show up" even
+// on a commit whose diff genuinely has a long line. Root cause: both
+// totalRows and totalCols originally cached on len(text) alone, not the
+// text itself — two different diffs landing at the exact same byte
+// length (which real commits hit by coincidence, not rarely) collided
+// on that key, silently serving the previous diff's stale
+// totalRows/totalCols instead of recomputing. Pinned here directly
+// against the shared adapter rather than through the whole Git Breach
+// screen, since the bug is in textViewContent itself and would affect
+// any widget reusing it (Look, Help, Compare, toolWindow, ... all go
+// through the same type).
+func TestTextViewContentRecomputesAfterSameLengthTextChanges(t *testing.T) {
+	view := tview.NewTextView()
+	c := &textViewContent{view: view}
+
+	long := strings.Repeat("x", 100)   // one 100-column line
+	short := strings.Repeat("A\n", 50) // 50 one-column lines — same byte length as long, very different width
+
+	if len(long) != len(short) {
+		t.Fatalf("test setup: need equal byte length, got %d vs %d", len(long), len(short))
+	}
+
+	view.SetText(long)
+	if got, want := c.totalCols(), 100; got != want {
+		t.Fatalf("totalCols for the long line = %d, want %d", got, want)
+	}
+
+	view.SetText(short)
+	if got, want := c.totalCols(), 1; got != want {
+		t.Errorf("totalCols after switching to same-length but much narrower text = %d, want %d (stale cache not invalidated)", got, want)
+	}
+}
