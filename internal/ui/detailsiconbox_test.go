@@ -15,7 +15,8 @@ import (
 func TestRenderFileIconBoxHasOneCellMarginOnEverySide(t *testing.T) {
 	bg := tcell.NewRGBColor(224, 224, 224)
 	fg := tcell.NewRGBColor(40, 40, 40)
-	got := renderFileIconBox(bg, fg, "X", fileIconBoxCols, false, false)
+	outside := tcell.NewRGBColor(10, 10, 10)
+	got := renderFileIconBox(bg, fg, outside, "X", fileIconBoxCols, false, false)
 
 	lines := strings.Split(got, "\n")
 	if len(lines) != fileIconBoxRows {
@@ -38,8 +39,9 @@ func TestRenderFileIconBoxHasOneCellMarginOnEverySide(t *testing.T) {
 func TestRenderFileIconBoxCentersWithinAvailableWidth(t *testing.T) {
 	bg := tcell.NewRGBColor(224, 224, 224)
 	fg := tcell.NewRGBColor(40, 40, 40)
-	narrow := renderFileIconBox(bg, fg, "X", fileIconBoxCols, false, false)
-	wide := renderFileIconBox(bg, fg, "X", fileIconBoxCols+10, false, false)
+	outside := tcell.NewRGBColor(10, 10, 10)
+	narrow := renderFileIconBox(bg, fg, outside, "X", fileIconBoxCols, false, false)
+	wide := renderFileIconBox(bg, fg, outside, "X", fileIconBoxCols+10, false, false)
 
 	if len(wide) <= len(narrow) {
 		t.Errorf("a wider availableWidth should produce more leading padding, narrow=%d wide=%d bytes", len(narrow), len(wide))
@@ -49,31 +51,34 @@ func TestRenderFileIconBoxCentersWithinAvailableWidth(t *testing.T) {
 func TestRenderFileIconBoxDecoratesCornersWhenRequested(t *testing.T) {
 	bg := tcell.NewRGBColor(224, 224, 224)
 	fg := tcell.NewRGBColor(40, 40, 40)
-	got := renderFileIconBox(bg, fg, "X", fileIconBoxCols, true, true)
+	outside := tcell.NewRGBColor(10, 10, 10)
+	got := renderFileIconBox(bg, fg, outside, "X", fileIconBoxCols, true, true)
 	lines := strings.Split(got, "\n")
 	if len(lines) != fileIconBoxRows {
 		t.Fatalf("renderFileIconBox produced %d lines, want %d", len(lines), fileIconBoxRows)
 	}
 
-	// Top-right: the fold, confined to the top fileIconFoldRows rows
-	// (3) — each has a solid light-gray band (fileIconBoxFoldBackground)
-	// that grows by one column per row, rows 0 and 2 (not 1) also get
-	// one "▄" transition cell (bottom light gray, top background) right
-	// after that band, per the user's own explicit "Zeile 1 und 3"
-	// (1-indexed) spec.
+	// Top-right: a genuine half-row-per-column diagonal across the
+	// taper's own columns (see fileIconFoldTaperCols/
+	// fileIconFoldHalfRowDepth), confined to the top fileIconFoldRows
+	// rows — each row's own light-gray band (fileIconBoxFoldBackground)
+	// widens going down, with exactly one "▀" half-step cell per row
+	// (top background, bottom light gray) marking where that row's own
+	// boundary actually lands mid-cell, replacing an earlier version
+	// where the boundary jumped a whole cell at a time and read as
+	// uneven ("die Kante rechts... sollten alles Halbstufen sein").
 	foldTag := colorTag(fileIconBoxFoldBackground)
 	for row := 0; row < fileIconFoldRows; row++ {
 		if !strings.Contains(lines[row], foldTag) {
 			t.Errorf("row %d should reference the fold shade %s, got %q", row, foldTag, lines[row])
 		}
+		if strings.Count(lines[row], "▀") != 1 {
+			t.Errorf("row %d should contain exactly one ▀ half-step cell, got %q", row, lines[row])
+		}
 	}
-	// Row 0 has two ▄ glyphs: the top-left rounded corner and the
-	// fold's own transition cell.
-	if got := strings.Count(lines[0], "▄"); got != 2 {
-		t.Errorf("row 0 should contain 2 ▄ glyphs (top-left corner + fold transition), got %d in %q", got, lines[0])
-	}
-	if strings.Contains(lines[1], "▄") {
-		t.Errorf("row 1 should have a hard edge (no ▄ transition), got %q", lines[1])
+	// Row 0 also has the top-left rounded corner's own ▄.
+	if !strings.Contains(lines[0], "▄") {
+		t.Errorf("row 0 should still contain the top-left rounded-corner glyph ▄, got %q", lines[0])
 	}
 	last := lines[len(lines)-1]
 	if strings.Contains(last, foldTag) {
@@ -97,7 +102,8 @@ func TestRenderFileIconBoxDecoratesCornersWhenRequested(t *testing.T) {
 func TestRenderFileIconBoxSkipsCornerDecorationWhenNotRequested(t *testing.T) {
 	bg := tcell.NewRGBColor(224, 224, 224)
 	fg := tcell.NewRGBColor(40, 40, 40)
-	got := renderFileIconBox(bg, fg, "X", fileIconBoxCols, false, false)
+	outside := tcell.NewRGBColor(10, 10, 10)
+	got := renderFileIconBox(bg, fg, outside, "X", fileIconBoxCols, false, false)
 
 	for _, glyph := range []string{"▄", "▀", "▐"} {
 		if strings.Contains(got, glyph) {
@@ -118,7 +124,8 @@ func TestRenderFileIconBoxSkipsCornerDecorationWhenNotRequested(t *testing.T) {
 func TestRenderFileIconBoxRoundsAllFourCornersWithoutFold(t *testing.T) {
 	bg := tcell.NewRGBColor(224, 224, 224)
 	fg := tcell.NewRGBColor(40, 40, 40)
-	got := renderFileIconBox(bg, fg, "X", fileIconBoxCols, true, false)
+	outside := tcell.NewRGBColor(10, 10, 10)
+	got := renderFileIconBox(bg, fg, outside, "X", fileIconBoxCols, true, false)
 	lines := strings.Split(got, "\n")
 	if len(lines) != fileIconBoxRows {
 		t.Fatalf("renderFileIconBox produced %d lines, want %d", len(lines), fileIconBoxRows)
