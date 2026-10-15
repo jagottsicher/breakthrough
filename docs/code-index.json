@@ -1608,8 +1608,8 @@
     },
     {
       "path": "internal/ui/detailsiconbox.go",
-      "size": 5202,
-      "sha256": "f78fd5b5154ff62b90397565e73d62dbe2e6f9269a433bd910c8071f75fa1e8d"
+      "size": 5487,
+      "sha256": "eba1e64438a654e583adfcc94f81ee3978baea5e75ce9bca3a07bf919b4b4a9e"
     },
     {
       "path": "internal/ui/detailsiconbox_test.go",
@@ -25068,21 +25068,21 @@
       "file": "internal/ui/detailsiconbox.go",
       "name": "fileIconBoxCols",
       "kind": "const",
-      "line": 89
+      "line": 87
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox.go",
       "name": "fileIconBoxRows",
       "kind": "const",
-      "line": 90
+      "line": 88
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/detailsiconbox.go",
       "name": "renderFileIconBox",
       "kind": "function",
-      "line": 108
+      "line": 105
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50306,5 +50306,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "d17ac7907dbbcaafd01ce1aa21cd29eaf58ce61e183a0340299a4fafab469714"
+  "merkle_root": "c94e44f6c60f7b6f028d8de5dc5e4c11b37a5b974ee4de779cb114e9c9f8c6d4"
 }
