@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "size": 71397,
-      "sha256": "23a25193ab9b9b544a2472651e63d596db546a85ced2677fa8b68f4e6a214db9"
+      "size": 71571,
+      "sha256": "16375cbc3474e3a68f14404b8c1ca4b213ba20f0ac8acd122f0ceab701f50842"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -520,6 +520,16 @@
       "path": "internal/filterexpr/mtime_test.go",
       "size": 5519,
       "sha256": "e8010d91289044bea53bf9a8acd3258474077d02beb40916380fca1df5299333"
+    },
+    {
+      "path": "internal/filterexpr/query.go",
+      "size": 11527,
+      "sha256": "c9136eaa98239b721e9bbed3808c0f9a5887fe7543b1423ddce7267a50d08d5c"
+    },
+    {
+      "path": "internal/filterexpr/query_test.go",
+      "size": 6518,
+      "sha256": "0851f07f39af85a9c3164a04ef2ab32e34924ab7ddc95982ab30eea9aac59d3f"
     },
     {
       "path": "internal/filterexpr/size.go",
@@ -1778,8 +1788,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 97199,
-      "sha256": "38c9bb87d628635f3aef95f8c5b16ab2145636126344b66ba48edd777da8b8b5"
+      "size": 98535,
+      "sha256": "b2e1db86292252faf82d09803bb40699f2abd7540e172c614308b0b0da0de25a"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -1863,13 +1873,13 @@
     },
     {
       "path": "internal/ui/logaudit_test.go",
-      "size": 25583,
-      "sha256": "24c72de9cfd709c8a1f2930aed5032295684470e789257d0b887f55eea58f74e"
+      "size": 26700,
+      "sha256": "8e673ace4f65fb1f3c4aaeb2001d7766a557c4bb1a41aeea2dd8531d157b5dc7"
     },
     {
       "path": "internal/ui/logauditscreen.go",
-      "size": 41153,
-      "sha256": "0e184b3789143f9f20c2225674a217867cb6d6ed6733d81b16d164dd742a5808"
+      "size": 43587,
+      "sha256": "5b075506ef47e71e8471db0fe19b7ed40525e5527deaba9df2f76a692d366e05"
     },
     {
       "path": "internal/ui/logauditsource.go",
@@ -1878,8 +1888,8 @@
     },
     {
       "path": "internal/ui/logauditstats.go",
-      "size": 17479,
-      "sha256": "93e32abf06ceaa5bed5a6dab5c0bc4483b6d3840e388274a3470be3b9cd9c02d"
+      "size": 17517,
+      "sha256": "78ece90f280db64965accb9bac8e9c1e4892709b6e9603ac8165f09e999aed76"
     },
     {
       "path": "internal/ui/logauditstats_test.go",
@@ -2791,6 +2801,8 @@
         "internal/filterexpr/doc.go",
         "internal/filterexpr/mtime.go",
         "internal/filterexpr/mtime_test.go",
+        "internal/filterexpr/query.go",
+        "internal/filterexpr/query_test.go",
         "internal/filterexpr/size.go",
         "internal/filterexpr/size_test.go",
         "internal/filterexpr/words.go"
@@ -8548,6 +8560,355 @@
       "name": "TestParseMtimeKeywordsCaseInsensitive",
       "kind": "function",
       "line": 164
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "QueryFilter",
+      "kind": "type",
+      "line": 20
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "Match",
+      "kind": "method",
+      "receiver": "QueryFilter",
+      "line": 30
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "PositiveTerms",
+      "kind": "method",
+      "receiver": "QueryFilter",
+      "line": 47
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "collectPositiveTerms",
+      "kind": "function",
+      "line": 57
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "queryNode",
+      "kind": "type",
+      "line": 86
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "queryTerm",
+      "kind": "type",
+      "line": 90
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "eval",
+      "kind": "method",
+      "receiver": "*queryTerm",
+      "line": 92
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "queryNot",
+      "kind": "type",
+      "line": 97
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "eval",
+      "kind": "method",
+      "receiver": "*queryNot",
+      "line": 99
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "queryOp",
+      "kind": "type",
+      "line": 103
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "opAnd",
+      "kind": "const",
+      "line": 106
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "opOr",
+      "kind": "const",
+      "line": 107
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "opNand",
+      "kind": "const",
+      "line": 108
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "opNor",
+      "kind": "const",
+      "line": 109
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "queryBinary",
+      "kind": "type",
+      "line": 112
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "eval",
+      "kind": "method",
+      "receiver": "*queryBinary",
+      "line": 117
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "ParseQuery",
+      "kind": "function",
+      "line": 160
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "queryTokenKind",
+      "kind": "type",
+      "line": 180
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "tokTerm",
+      "kind": "const",
+      "line": 183
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "tokAnd",
+      "kind": "const",
+      "line": 184
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "tokOr",
+      "kind": "const",
+      "line": 185
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "tokNand",
+      "kind": "const",
+      "line": 186
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "tokNor",
+      "kind": "const",
+      "line": 187
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "tokNot",
+      "kind": "const",
+      "line": 188
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "tokLParen",
+      "kind": "const",
+      "line": 189
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "tokRParen",
+      "kind": "const",
+      "line": 190
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "queryToken",
+      "kind": "type",
+      "line": 193
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "queryKeywords",
+      "kind": "var",
+      "line": 203
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "tokenizeQuery",
+      "kind": "function",
+      "line": 215
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "queryParser",
+      "kind": "type",
+      "line": 269
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "peek",
+      "kind": "method",
+      "receiver": "*queryParser",
+      "line": 274
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "parseOrImpl",
+      "kind": "function",
+      "line": 281
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "startsOperand",
+      "kind": "function",
+      "line": 307
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "parseAnd",
+      "kind": "function",
+      "line": 316
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "parseNot",
+      "kind": "function",
+      "line": 353
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query.go",
+      "name": "parsePrimary",
+      "kind": "function",
+      "line": 366
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "matchStr",
+      "kind": "function",
+      "line": 5
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestParseQueryBareTermMatchesSourceOrMessage",
+      "kind": "function",
+      "line": 14
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestParseQueryImplicitAndBetweenAdjacentTerms",
+      "kind": "function",
+      "line": 31
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestParseQueryExplicitAndOr",
+      "kind": "function",
+      "line": 47
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestParseQueryUserExample",
+      "kind": "function",
+      "line": 69
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestParseQueryNandNor",
+      "kind": "function",
+      "line": 88
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestParseQueryNot",
+      "kind": "function",
+      "line": 107
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestParseQueryPrecedenceWithoutParens",
+      "kind": "function",
+      "line": 124
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestParseQueryQuotedLiteralOperatorWord",
+      "kind": "function",
+      "line": 139
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestParseQueryParens",
+      "kind": "function",
+      "line": 150
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestParseQueryErrors",
+      "kind": "function",
+      "line": 160
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "TestQueryFilterPositiveTerms",
+      "kind": "function",
+      "line": 176
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/query_test.go",
+      "name": "stringSlicesEqual",
+      "kind": "function",
+      "line": 202
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
@@ -30329,14 +30690,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -30353,7 +30714,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1572
+      "line": 1591
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30361,7 +30722,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1597
+      "line": 1616
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30369,7 +30730,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1614
+      "line": 1633
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30377,7 +30738,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1630
+      "line": 1649
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30385,7 +30746,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1650
+      "line": 1669
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30393,7 +30754,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1666
+      "line": 1685
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30401,7 +30762,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1692
+      "line": 1711
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30409,7 +30770,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1722
+      "line": 1741
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30417,7 +30778,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1740
+      "line": 1759
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31929,7 +32290,7 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
-      "name": "TestLogAuditMatchesKeyword",
+      "name": "TestLogAuditKeywordQueryMatchesSourceAndMessage",
       "kind": "function",
       "line": 500
     },
@@ -31938,56 +32299,63 @@
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditHighlightWrapsEveryOccurrence",
       "kind": "function",
-      "line": 516
+      "line": 523
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/logaudit_test.go",
+      "name": "TestLogAuditHighlightMultipleTerms",
+      "kind": "function",
+      "line": 533
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditHighlightEscapesLiteralBrackets",
       "kind": "function",
-      "line": 526
+      "line": 543
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditMinLevel",
       "kind": "function",
-      "line": 534
+      "line": 551
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditEntryVisibleCombinesAllThreeFilters",
       "kind": "function",
-      "line": 547
+      "line": 564
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditEntryVisibleExcludesUnknownLevelFromLevelFilter",
       "kind": "function",
-      "line": 576
+      "line": 598
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestToggleLogAuditFollowStartsAndStopsTicker",
       "kind": "function",
-      "line": 586
+      "line": 609
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestCloseLogAuditViewerStopsFollow",
       "kind": "function",
-      "line": 606
+      "line": 629
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestOpenLogAuditDetailShowsRawOnlyWhenDifferentFromMessage",
       "kind": "function",
-      "line": 621
+      "line": 644
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32151,37 +32519,44 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
-      "name": "logAuditMatchesKeyword",
+      "name": "logAuditKeywordQuery",
       "kind": "function",
-      "line": 393
+      "line": 400
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/logauditscreen.go",
+      "name": "logAuditMatchesQuery",
+      "kind": "function",
+      "line": 417
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditMinLevel",
       "kind": "function",
-      "line": 406
+      "line": 429
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditEntryVisible",
       "kind": "function",
-      "line": 426
+      "line": 452
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditMaxRenderedRows",
       "kind": "const",
-      "line": 452
+      "line": 478
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditHighlight",
       "kind": "function",
-      "line": 463
+      "line": 498
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32189,7 +32564,7 @@
       "name": "logAuditFilterFields",
       "kind": "method",
       "receiver": "*Root",
-      "line": 490
+      "line": 539
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32197,7 +32572,7 @@
       "name": "restyleLogAuditFilterFields",
       "kind": "method",
       "receiver": "*Root",
-      "line": 522
+      "line": 571
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32205,7 +32580,7 @@
       "name": "renderLogAuditFocusIndicator",
       "kind": "method",
       "receiver": "*Root",
-      "line": 549
+      "line": 598
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32213,7 +32588,7 @@
       "name": "renderLogAuditViewer",
       "kind": "method",
       "receiver": "*Root",
-      "line": 575
+      "line": 624
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32221,7 +32596,7 @@
       "name": "logAuditEntryAt",
       "kind": "method",
       "receiver": "*Root",
-      "line": 714
+      "line": 769
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32229,7 +32604,7 @@
       "name": "navigateLogAuditLevel",
       "kind": "method",
       "receiver": "*Root",
-      "line": 729
+      "line": 784
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32237,7 +32612,7 @@
       "name": "openLogAuditDetail",
       "kind": "method",
       "receiver": "*Root",
-      "line": 757
+      "line": 812
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32245,7 +32620,7 @@
       "name": "closeLogAuditDetail",
       "kind": "method",
       "receiver": "*Root",
-      "line": 795
+      "line": 854
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32253,7 +32628,7 @@
       "name": "captureLogAuditSelectionTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 803
+      "line": 862
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32261,7 +32636,7 @@
       "name": "logAuditViewerFieldDone",
       "kind": "method",
       "receiver": "*Root",
-      "line": 821
+      "line": 880
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32269,7 +32644,7 @@
       "name": "captureLogAuditViewerTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 838
+      "line": 897
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32277,7 +32652,7 @@
       "name": "captureLogAuditDetailKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 875
+      "line": 934
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32285,7 +32660,7 @@
       "name": "applyLogAuditTheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 885
+      "line": 944
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43461,14 +43836,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 26
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 26
     },
@@ -51118,5 +51493,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "b3f076701a19694f5e1f2fc936a76938dd466f3ace132fc0ec2e5ccb68c31b8f"
+  "merkle_root": "924b531c3039219de3b6235984e47c10df34ab7339901faaf8aec36e0813ec69"
 }

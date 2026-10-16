@@ -795,9 +795,28 @@ var helpText = strings.TrimLeft(`
   whichever Filter/Time/Level filters are active), not the family's
   full, unfiltered range.
 
-    Filter          Case-insensitive substring over Source and Message,
-                     narrowing the list live and highlighting every
-                     match
+    Filter          A boolean query over Source and Message, narrowing
+                     the list live and highlighting every positively-
+                     matching term (never one whose own absence is what
+                     made an entry match — see "not"/"nand"/"nor"
+                     below). A bare word is a case-insensitive substring
+                     match, same as before; two words with nothing
+                     between them ("foo bar") mean AND, the same as
+                     typing several words always has. AND, OR, NAND,
+                     NOR, NOT (case-insensitive) combine terms or
+                     parenthesized groups — "nand"/"nor" are the negated
+                     forms of "and"/"or" ("a nand b" is "not (a and
+                     b)"), precedence is NOT tightest, then AND/NAND,
+                     then OR/NOR, and parentheses override it:
+                     "keyword1 and (keyword2 or keyword3)" means exactly
+                     what it reads as. Quote a term in double quotes to
+                     search for a literal "and"/"or"/"not"/"nand"/"nor",
+                     or one containing a parenthesis or whitespace an
+                     operator would otherwise swallow. An expression
+                     that doesn't parse simply isn't applied, the same
+                     "no error shown, that part of the filter is just
+                     off" contract an unparseable Time/Level expression
+                     already has
     Time            Same "before"/"after"/"between ... and ..."/
                      relative expressions the Action Log's own Time
                      field already accepts
