@@ -846,8 +846,11 @@ terminal.
   detection (JSON Lines — including Docker's json-file log driver,
   syslog RFC 3164/5424, a generic "timestamp level message" line, or
   plain text as a fallback), transparent `.gz`/`.xz`/`.zst`/`.bz2`
-  decompression, a live keyword filter with match highlighting, a Time
-  field (same syntax as the Action Log) and a minimum-severity Level
+  decompression, a live keyword filter — a boolean query (AND/OR/NAND/
+  NOR/NOT, parentheses for grouping, e.g. `keyword1 and (keyword2 or
+  keyword3)`) over Source and Message, not just a flat substring —
+  with match highlighting, a Time field (same syntax as the Action Log)
+  and a minimum-severity Level
   field alongside it, a mini-timeline showing event density colored by
   severity, a Statistics overlay (counts by level and top sources),
   "e"/"w" to jump between errors and warnings, a follow mode ("f") that

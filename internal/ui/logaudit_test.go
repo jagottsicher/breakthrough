@@ -497,24 +497,31 @@ func TestRenderLogAuditSelectionShowsSizeAndModified(t *testing.T) {
 	}
 }
 
-func TestLogAuditMatchesKeyword(t *testing.T) {
+func TestLogAuditKeywordQueryMatchesSourceAndMessage(t *testing.T) {
 	e := logview.Entry{Source: "nginx", Message: "connection timeout"}
-	if !logAuditMatchesKeyword(e, "TIMEOUT") {
-		t.Error("expected case-insensitive match against Message")
+
+	mustMatch := func(keyword string, want bool) {
+		t.Helper()
+		query, hasQuery := logAuditKeywordQuery(keyword)
+		if got := logAuditMatchesQuery(e, query, hasQuery); got != want {
+			t.Errorf("logAuditMatchesQuery(keyword=%q) = %v, want %v", keyword, got, want)
+		}
 	}
-	if !logAuditMatchesKeyword(e, "NGINX") {
-		t.Error("expected case-insensitive match against Source")
-	}
-	if logAuditMatchesKeyword(e, "bogus") {
-		t.Error("expected no match")
-	}
-	if !logAuditMatchesKeyword(e, "") {
-		t.Error("expected blank keyword to match everything")
-	}
+	mustMatch("TIMEOUT", true) // case-insensitive match against Message
+	mustMatch("NGINX", true)   // case-insensitive match against Source
+	mustMatch("bogus", false)
+	mustMatch("", true) // blank keyword matches everything
+
+	// The feature the user asked for: "keyword1 AND (keyword2 OR
+	// keyword3)" — this entry's own Source/Message hold "nginx" and
+	// "connection timeout", so a query requiring "nginx" AND ("timeout"
+	// OR "bogus") must still match via the OR's first alternative.
+	mustMatch("nginx AND (timeout OR bogus)", true)
+	mustMatch("nginx AND (bogus OR evenmorebogus)", false)
 }
 
 func TestLogAuditHighlightWrapsEveryOccurrence(t *testing.T) {
-	got := logAuditHighlight("a timeout then another timeout", "timeout", tcell.ColorRed)
+	got := logAuditHighlight("a timeout then another timeout", []string{"timeout"}, tcell.ColorRed)
 	if count := strings.Count(got, "timeout"); count != 2 {
 		t.Errorf("highlighted text = %q, want the raw word \"timeout\" still present twice, got %d", got, count)
 	}
@@ -523,11 +530,21 @@ func TestLogAuditHighlightWrapsEveryOccurrence(t *testing.T) {
 	}
 }
 
+func TestLogAuditHighlightMultipleTerms(t *testing.T) {
+	got := logAuditHighlight("foo and bar both appear", []string{"foo", "bar"}, tcell.ColorRed)
+	if count := strings.Count(got, "[-:-:-]"); count != 2 {
+		t.Errorf("highlighted text = %q, want 2 reset tags (one per term occurrence)", got)
+	}
+	if !strings.Contains(got, "foo") || !strings.Contains(got, "bar") {
+		t.Errorf("highlighted text = %q, want both raw terms still present", got)
+	}
+}
+
 func TestLogAuditHighlightEscapesLiteralBrackets(t *testing.T) {
 	text := "tag[1] failed"
-	got := logAuditHighlight(text, "", tcell.ColorRed)
+	got := logAuditHighlight(text, nil, tcell.ColorRed)
 	if want := tview.Escape(text); got != want {
-		t.Errorf("logAuditHighlight(keyword=\"\") = %q, want tview.Escape's own output %q", got, want)
+		t.Errorf("logAuditHighlight(terms=nil) = %q, want tview.Escape's own output %q", got, want)
 	}
 }
 
@@ -552,33 +569,39 @@ func TestLogAuditEntryVisibleCombinesAllThreeFilters(t *testing.T) {
 		Source:  "app",
 		Message: "database connection timeout",
 	}
+	visible := func(keyword, timeExpr, levelText string) bool {
+		t.Helper()
+		query, hasQuery := logAuditKeywordQuery(keyword)
+		return logAuditEntryVisible(e, query, hasQuery, timeExpr, levelText, now)
+	}
 
-	if !logAuditEntryVisible(e, "", "", "", now) {
+	if !visible("", "", "") {
 		t.Error("no filters at all should show everything")
 	}
-	if !logAuditEntryVisible(e, "timeout", "", "warn", now) {
+	if !visible("timeout", "", "warn") {
 		t.Error("matching keyword + matching minimum level should show the entry")
 	}
-	if logAuditEntryVisible(e, "timeout", "", "error", now) {
+	if visible("timeout", "", "error") {
 		t.Error("Warn entry must not pass a >= Error level filter")
 	}
-	if logAuditEntryVisible(e, "bogus", "", "", now) {
+	if visible("bogus", "", "") {
 		t.Error("non-matching keyword should hide the entry regardless of level/time")
 	}
-	if !logAuditEntryVisible(e, "", "before 2026-10-07T17:00:00Z", "", now) {
+	if !visible("", "before 2026-10-07T17:00:00Z", "") {
 		t.Error("entry's own Time is before the time filter's cutoff, should pass")
 	}
-	if logAuditEntryVisible(e, "", "after 2026-10-07T17:00:00Z", "", now) {
+	if visible("", "after 2026-10-07T17:00:00Z", "") {
 		t.Error("entry's own Time is before the time filter's cutoff, should be excluded by 'after'")
 	}
 }
 
 func TestLogAuditEntryVisibleExcludesUnknownLevelFromLevelFilter(t *testing.T) {
 	e := logview.Entry{Level: logview.LevelUnknown, Message: "no level recognized here"}
-	if logAuditEntryVisible(e, "", "", "trace", time.Now()) {
+	noQuery, hasNoQuery := logAuditKeywordQuery("")
+	if logAuditEntryVisible(e, noQuery, hasNoQuery, "", "trace", time.Now()) {
 		t.Error("an entry with no recognized level should not pass even a >= trace filter")
 	}
-	if !logAuditEntryVisible(e, "", "", "", time.Now()) {
+	if !logAuditEntryVisible(e, noQuery, hasNoQuery, "", "", time.Now()) {
 		t.Error("with no level filter at all, the same entry should still show")
 	}
 }
