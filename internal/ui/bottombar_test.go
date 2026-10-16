@@ -85,6 +85,7 @@ func TestMain(m *testing.M) {
 
 	notifyPersistPath = func() string { return "" }
 	labelsPersistPath = func() string { return "" }
+	operationsPersistPath = func() string { return "" }
 
 	// mailDefaultMboxPath: the status bar's own mail badge (see
 	// mailBadgeCount in mail.go) auto-detects the current user's real

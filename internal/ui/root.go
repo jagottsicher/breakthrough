@@ -247,9 +247,12 @@ type Root struct {
 	// additionally reports its own start/pause-resume/end alongside the
 	// activityLog/notify calls already sitting at the same call sites.
 	// Never nil (see NewRoot), the same "no off switch to honor, always
-	// call it" shape notify itself already has — unlike notify, not
-	// persisted across restarts (see internal/operations' own doc
-	// comment on why not).
+	// call it" shape notify itself already has. Built via
+	// NewTrackerWithPersistence, not NewTracker — finished Operations
+	// survive a restart (their own summary only); a running/paused one
+	// never gets persisted at all, so it's correctly just absent, not
+	// shown as still running, after an unclean exit (see internal/
+	// operations' own persist.go doc comment).
 	operations *operations.Tracker
 
 	// labels is the shared, app-wide color-label store (see
@@ -2332,7 +2335,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		settingOrigins: settingOrigins,
 		theme:          theme,
 		notify:         notify.NewWithPersistence(notifyPersistPath()),
-		operations:     operations.NewTracker(),
+		operations:     operations.NewTrackerWithPersistence(operationsPersistPath()),
 		labels:         filelabels.NewWithPersistence(labelsPersistPath()),
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
