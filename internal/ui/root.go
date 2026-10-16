@@ -1138,6 +1138,17 @@ type Root struct {
 	// connection…", which isn't a history row at all.
 	connectionMenuHistoryRows map[int]remotefs.Connection
 
+	// connectionMenuRowColors maps a row index to the text color
+	// renderConnectionMenu already computed for it (connectionHistoryColor's
+	// green/red/muted-green, or theme.Text for "+ New") — unlike
+	// connectionMenuHistoryRows, populated for every row including "+
+	// New". connectionMenuRepaintLabelGroups reads this back to restore
+	// a row's own real color on its @/Host-IP/Identifier cells once the
+	// selection moves off it, since those cells' own foreground gets
+	// overwritten to theme.TextColor (matching connectionMenuTable's
+	// own SetSelectedStyle) while highlighted.
+	connectionMenuRowColors map[int]tcell.Color
+
 	// connectionMenuActiveRow is the row within connectionMenuTable
 	// (history rows only — see connectionMenuHistoryRows) that
 	// represents the active panel's own current connection, or -1 if

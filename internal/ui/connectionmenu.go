@@ -22,19 +22,16 @@ import (
 // idea.
 const connectionMenuMaxHistoryRows = 10
 
-// connectionMenuNewConnectionLabel is row 0's own label — the exact
-// "space, +, two spaces, label" shape tabswitcher.go's own
-// tabSwitcherNewRowLabel already establishes for "New tab", per the
-// user's own explicit request that the two read as the same kind of
-// row wherever they appear.
-const connectionMenuNewConnectionLabel = " +  New connection"
-
-// connectionMenuNewConnectionLabelExpanded is the same row's own label
-// in expanded mode specifically — short enough to never become the
-// widest thing in the User column (see renderConnectionMenu's own doc
-// comment on why that matters), unlike the full
-// connectionMenuNewConnectionLabel collapsed mode keeps using.
-const connectionMenuNewConnectionLabelExpanded = " +  New"
+// connectionMenuNewConnectionLabel is row 0's own label in both modes
+// — short deliberately, not the "+  New connection" shape
+// tabswitcher.go's own tabSwitcherNewRowLabel uses for "New tab": this
+// row sits in the same User column real usernames occupy, so anything
+// longer than a real username would drive that column's own width
+// every single time the dropdown opens, in both collapsed and expanded
+// mode (a real, user-reported regression when this was still the full
+// phrase, and again when it was expanded-only — see renderConnectionMenu's
+// own doc comment at its call site).
+const connectionMenuNewConnectionLabel = " +  New"
 
 // Column indices within the connection menu table — the same in both
 // collapsed and expanded mode (see r.settings.ConnectionMenuExpanded):
@@ -180,6 +177,7 @@ func (r *Root) renderConnectionMenu() {
 	table := r.connectionMenuTable
 	table.Clear()
 	r.connectionMenuHistoryRows = map[int]remotefs.Connection{}
+	r.connectionMenuRowColors = map[int]tcell.Color{}
 	r.connectionMenuActiveRow = -1
 	expanded := r.settings.ConnectionMenuExpanded
 	ejectCol, removeCol := connectionMenuEjectColumn(expanded), connectionMenuRemoveColumn(expanded)
@@ -235,14 +233,20 @@ func (r *Root) renderConnectionMenu() {
 
 		if isActive {
 			table.SetCell(thisRow, ejectCol,
-				tview.NewTableCell(" "+connectionHistoryEjectGlyph+" ").
+				// Three leading spaces, not one — the only gap between
+				// the label group and the action columns, so it needs
+				// to read as a deliberate break, not just the ordinary
+				// one-column inter-cell gap every other column pair
+				// already gets (the user's own explicit report that it
+				// looked like no gap at all).
+				tview.NewTableCell("   "+connectionHistoryEjectGlyph+" ").
 					SetTextColor(r.theme.MutedTextColor).
 					SetSelectable(true).
 					SetClickedFunc(r.clickConnectionMenuCell(thisRow, ejectCol)))
 			r.connectionMenuActiveRow = thisRow
 		} else {
 			table.SetCell(thisRow, ejectCol,
-				tview.NewTableCell(" "+connectionHistoryEditGlyph+" ").
+				tview.NewTableCell("   "+connectionHistoryEditGlyph+" ").
 					SetTextColor(r.theme.MutedTextColor).
 					SetSelectable(true).
 					SetClickedFunc(r.clickConnectionMenuCell(thisRow, ejectCol)))
@@ -255,31 +259,17 @@ func (r *Root) renderConnectionMenu() {
 				SetClickedFunc(r.clickConnectionMenuCell(thisRow, removeCol)))
 
 		r.connectionMenuHistoryRows[thisRow] = entry.Connection
+		r.connectionMenuRowColors[thisRow] = color
 		row++
 	}
 
 	newRow := row
-	// Expanded mode uses a short label here deliberately — neither a
-	// MaxWidth cap (truncates with "…", read as broken rather than
-	// deliberate) nor SetExpansion (tried and reverted: it affects the
-	// User column's width for every row, not just this one — "the
-	// maximum over all visible cells in that column is used", per
-	// tview's own doc comment — so a single Expansion-marked cell on
-	// this one row stretched User to swallow the table's entire unused
-	// width on *every* row, a real, user-reported regression). A short
-	// label never drives the column wider than real User values
-	// already do, so nothing needs capping or expanding in the first
-	// place — collapsed mode keeps the full label since its narrower,
-	// content-sized dropdown never had this problem to begin with.
-	newConnectionLabel := connectionMenuNewConnectionLabel
-	if expanded {
-		newConnectionLabel = connectionMenuNewConnectionLabelExpanded
-	}
-	newConnectionCell := tview.NewTableCell(newConnectionLabel).
+	newConnectionCell := tview.NewTableCell(connectionMenuNewConnectionLabel).
 		SetTextColor(r.theme.Text).
 		SetSelectable(true).
 		SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol))
 	table.SetCell(newRow, labelCol, newConnectionCell)
+	r.connectionMenuRowColors[newRow] = r.theme.Text
 	table.SetCell(newRow, connectionMenuColAt, blankConnectionMenuCell())
 	table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
 	if expanded {
@@ -328,6 +318,11 @@ func (r *Root) newConnectionMenuTable() *tview.Table {
 	table.SetSelectable(true, true)
 	table.SetInputCapture(r.captureConnectionMenuKey)
 	table.SetSelectedFunc(func(row, column int) { r.activateConnectionMenuCell(row, column) })
+	// SetSelectionChangedFunc is what makes the label group
+	// (User/@/Host-IP/Identifier) read as one visually highlighted unit
+	// — see connectionMenuRepaintLabelGroups' own doc comment for why
+	// this can't just be tview's native per-cell highlight.
+	table.SetSelectionChangedFunc(func(row, column int) { r.connectionMenuRepaintLabelGroups(row, column) })
 	return table
 }
 
@@ -756,5 +751,63 @@ func (r *Root) setConnectionMenuExpanded(expanded bool) {
 	if r.activePage == connectionMenuPage {
 		r.renderConnectionMenu()
 		r.positionConnectionMenu()
+	}
+}
+
+// connectionMenuRepaintLabelGroups is why the label group (User/@/
+// Host-IP/Identifier) reads as one highlighted unit instead of just
+// the single User cell tview's own selection would otherwise paint:
+// tview only highlights the literal (selectedRow, selectedColumn)
+// pair (verified against table.go's own Draw — SetSelectable(true,
+// true) means neither its rowsSelectable-only nor columnsSelectable-
+// only whole-row/-column highlight paths apply), and switching to
+// rows-only selectability to get that span natively (the way Panel's
+// own file table does it — see panel.go's own
+// SetSelectable(true, false)) would cost keyboard access to ✎/✕ as
+// separate stops, since rows-only selectability turns Left/Right into
+// plain horizontal scrolling instead of column navigation.
+//
+// So this manually paints every row's own @/Host-IP/Identifier cells
+// with the exact same background SetSelectedStyle already gives the
+// User cell (theme.SelectionBackground, wired in theme.go's own
+// applyTheme) whenever that row is the selected one *and* the
+// selection is actually on the label group (column == labelCol, the
+// only selectable column within it — see that const block's own doc
+// comment) — reverting to the table's own normal background
+// (theme.SurfaceBackground, matching connectionMenuTable's own
+// SetBackgroundColor in theme.go) everywhere else, including the same
+// row when the selection has moved on to ✎ or ✕ instead. Runs for
+// every row on every selection change rather than tracking and
+// clearing just the previously-painted one — simpler, and this
+// dropdown never has more than historyMaxEntries+1 rows to begin with.
+func (r *Root) connectionMenuRepaintLabelGroups(selectedRow, selectedColumn int) {
+	table := r.connectionMenuTable
+	expanded := r.settings.ConnectionMenuExpanded
+	groupCols := []int{connectionMenuColAt, connectionMenuColHost}
+	if expanded {
+		groupCols = append(groupCols, connectionMenuColIdentifier)
+	}
+	rows := table.GetRowCount()
+	for row := 0; row < rows; row++ {
+		bg := r.theme.SurfaceBackground
+		fg := r.connectionMenuRowColors[row]
+		if row == selectedRow && selectedColumn == connectionMenuColUser {
+			bg = r.theme.SelectionBackground
+			// theme.TextColor, not fg: the exact foreground
+			// connectionMenuTable's own SetSelectedStyle already gives
+			// the User cell while selected (theme.go's own applyTheme)
+			// — matched here so @/Host-IP/Identifier read with the
+			// same white-on-highlight look instead of keeping their
+			// own green/red/muted color underneath a highlighted
+			// background, which is illegible (the user's own explicit
+			// report).
+			fg = r.theme.TextColor
+		}
+		for _, col := range groupCols {
+			if cell := table.GetCell(row, col); cell != nil {
+				cell.SetBackgroundColor(bg)
+				cell.SetTextColor(fg)
+			}
+		}
 	}
 }

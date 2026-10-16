@@ -62,13 +62,20 @@ func cellTextColor(cell *tview.TableCell) tcell.Color {
 	return fg
 }
 
+// cellBackgroundColor is cellTextColor's own counterpart for the
+// background half of a cell's Style.
+func cellBackgroundColor(cell *tview.TableCell) tcell.Color {
+	_, bg, _ := cell.Style.Decompose()
+	return bg
+}
+
 func TestRenderConnectionMenuOnALocalPanelOffersOnlyNewConnection(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	r.renderConnectionMenu()
 
 	texts := connectionMenuLabelTexts(r.connectionMenuTable)
-	if len(texts) != 1 || !strings.Contains(texts[0], "New connection") {
-		t.Errorf("rows = %v, want exactly one \"New connection…\" row for a local panel", texts)
+	if len(texts) != 1 || !strings.Contains(texts[0], "New") {
+		t.Errorf("rows = %v, want exactly one \"New\" row for a local panel", texts)
 	}
 }
 
@@ -99,8 +106,8 @@ func TestRenderConnectionMenuOnAConnectedPanelListsTheActiveEntryThenNewConnecti
 	if !strings.Contains(texts[0], conn.Label()) {
 		t.Errorf("row 0 label = %q, want the active connection's own history row first", texts[0])
 	}
-	if !strings.Contains(texts[1], "New connection") {
-		t.Errorf("row 1 label = %q, want \"New connection…\" trailing, after every history entry", texts[1])
+	if !strings.Contains(texts[1], "New") {
+		t.Errorf("row 1 label = %q, want the trailing \"New\" row, after every history entry", texts[1])
 	}
 	ejectCell := r.connectionMenuTable.GetCell(0, connectionMenuEjectColumn(false))
 	if !strings.Contains(ejectCell.Text, connectionHistoryEjectGlyph) {
@@ -158,6 +165,60 @@ func TestRenderConnectionMenuCollapsedLabelIsExactlyUserAtHost(t *testing.T) {
 	texts := connectionMenuLabelTexts(r.connectionMenuTable)
 	if len(texts) == 0 || texts[0] != conn.Label() {
 		t.Errorf("row 0 label = %q, want exactly %q", texts[0], conn.Label())
+	}
+}
+
+// TestConnectionMenuSelectingTheLabelGroupHighlightsAllItsColumns pins
+// the user's own explicit, three-times-repeated request: the
+// highlighted background (and matching white-ish foreground — see
+// connectionMenuRepaintLabelGroups' own doc comment) must span every
+// visible column of the label group (User/@/Host-IP, Identifier too
+// when expanded), not just the single User cell tview's own native
+// per-cell selection would otherwise paint alone.
+func TestConnectionMenuSelectingTheLabelGroupHighlightsAllItsColumns(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.setConnectionMenuExpanded(true)
+
+	r.renderConnectionMenu()
+	r.connectionMenuTable.Select(0, connectionMenuColUser)
+
+	for _, col := range []int{connectionMenuColAt, connectionMenuColHost, connectionMenuColIdentifier} {
+		cell := r.connectionMenuTable.GetCell(0, col)
+		if got, want := cellBackgroundColor(cell), r.theme.SelectionBackground; got != want {
+			t.Errorf("column %d background = %v, want SelectionBackground %v", col, got, want)
+		}
+		if got, want := cellTextColor(cell), r.theme.TextColor; got != want {
+			t.Errorf("column %d text color = %v, want TextColor %v", col, got, want)
+		}
+	}
+}
+
+// TestConnectionMenuSelectingEjectDoesNotHighlightTheLabelGroup is the
+// negative case: once the selection has moved off the label group
+// (onto ✎/✕), that row's own @/Host-IP/Identifier cells must revert to
+// their real, row-specific color (connectionMenuRowColors) and the
+// table's own normal background — not stay highlighted just because
+// they're still in the same row.
+func TestConnectionMenuSelectingEjectDoesNotHighlightTheLabelGroup(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	r.renderConnectionMenu()
+	r.connectionMenuTable.Select(0, connectionMenuEjectColumn(false))
+
+	atCell := r.connectionMenuTable.GetCell(0, connectionMenuColAt)
+	if got, want := cellBackgroundColor(atCell), r.theme.SurfaceBackground; got != want {
+		t.Errorf("@ column background = %v, want the table's own normal SurfaceBackground %v, not left highlighted", got, want)
+	}
+	if got, want := cellTextColor(atCell), r.connectionMenuRowColors[0]; got != want {
+		t.Errorf("@ column text color = %v, want the row's own real color %v restored", got, want)
 	}
 }
 
