@@ -507,10 +507,10 @@ var helpText = strings.TrimLeft(`
                     on its own as jobs start/finish)
   Escape            Close the Transfers screen
 
-  Retrying a finished job, and remembering completed summaries across a
-  restart, aren't built yet — this first pass is read-only-plus-cancel/
-  pause, reflecting what's running right now rather than a durable
-  history.
+  Finished jobs survive a restart (their own summary only, never a full
+  file list) — a job still running when breakthrough exits is simply
+  gone from this list afterward rather than shown as still running,
+  since it isn't. Retrying a finished job isn't built yet.
 
 [::b]Mounts screen ("jm")[::-]
 

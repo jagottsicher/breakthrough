@@ -1,6 +1,9 @@
 package operations
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // State is whether an Operation is still live — mirrors the one real
 // mid-flight transition Paste already has (pause/resume, see
@@ -59,6 +62,30 @@ func (o Outcome) String() string {
 		return "cancelled"
 	default:
 		return "none"
+	}
+}
+
+// ParseOutcome reads back Outcome.String()'s own output, case-
+// insensitively — defaulting to OutcomeNone for anything unrecognized
+// (a hand-edited file, a future value an older build doesn't know yet)
+// rather than failing outright, the same "a bad value degrades to the
+// safe default" principle notify.ParseLevel already follows. The one
+// real caller is persist.go's own load, reading back what Finish's own
+// save already wrote via String() — never a raw int, so a persisted
+// file reads sensibly on its own without this package's source open
+// alongside it.
+func ParseOutcome(s string) Outcome {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "succeeded":
+		return OutcomeSucceeded
+	case "partial":
+		return OutcomePartial
+	case "failed":
+		return OutcomeFailed
+	case "cancelled":
+		return OutcomeCancelled
+	default:
+		return OutcomeNone
 	}
 }
 
