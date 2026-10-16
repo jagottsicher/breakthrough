@@ -22,16 +22,30 @@ import (
 // idea.
 const connectionMenuMaxHistoryRows = 10
 
-// connectionMenuNewConnectionLabel is row 0's own label in both modes
-// — short deliberately, not the "+  New connection" shape
-// tabswitcher.go's own tabSwitcherNewRowLabel uses for "New tab": this
-// row sits in the same User column real usernames occupy, so anything
-// longer than a real username would drive that column's own width
-// every single time the dropdown opens, in both collapsed and expanded
-// mode (a real, user-reported regression when this was still the full
-// phrase, and again when it was expanded-only — see renderConnectionMenu's
-// own doc comment at its call site).
-const connectionMenuNewConnectionLabel = " +  New"
+// connectionMenuNewConnectionUserLabel/connectionMenuNewConnectionHostLabel
+// are the "+ New connection" row's own two real cells, split across
+// User and Host/IP rather than tabswitcher.go's own single-cell
+// tabSwitcherNewRowLabel shape for "New tab": the User column holds
+// real usernames, and a 14+ character phrase there (collapsed or
+// expanded) drove that column's own width every single time the
+// dropdown opened — a real, user-reported regression, twice (once as
+// the full phrase, once as an expanded-only SetExpansion attempt — see
+// renderConnectionMenu's own doc comment at its call site for both).
+// "+" alone never does that; "New connection" lives in Host/IP
+// instead, whose own natural width from real hostnames/IPs is already
+// comparable.
+const (
+	connectionMenuNewConnectionUserLabel = " +"
+	connectionMenuNewConnectionHostLabel = "New connection"
+)
+
+// connectionMenuNewConnectionLabel is the "gs" SSH shell dropdown's own
+// equivalent row (see sshshell.go's own use of it) — a single label
+// column there, not User/Host/@ split the way the "@"/"gc" dropdown
+// above now is, so the full phrase never risked distorting anything
+// and stays as one cell, the same shape tabswitcher.go's own
+// tabSwitcherNewRowLabel uses for "New tab".
+const connectionMenuNewConnectionLabel = " +  New connection"
 
 // Column indices within the connection menu table — the same in both
 // collapsed and expanded mode (see r.settings.ConnectionMenuExpanded):
@@ -280,14 +294,29 @@ func (r *Root) renderConnectionMenu() {
 	}
 
 	newRow := row
-	newConnectionCell := tview.NewTableCell(connectionMenuNewConnectionLabel).
-		SetTextColor(r.theme.Text).
-		SetSelectable(true).
-		SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol))
-	table.SetCell(newRow, labelCol, newConnectionCell)
-	r.connectionMenuRowColors[newRow] = r.theme.Text
+	// Split across User ("+") and Host/IP ("New connection") rather
+	// than one cell carrying the whole phrase with the rest of the row
+	// left blank — the user's own explicit comparison to the header
+	// row, which looks "complete" precisely because every column has
+	// real content. "+" alone never widens User (real usernames are
+	// never shorter); "New connection" lives in Host/IP, whose own
+	// natural width from real hostnames/IPs is already comparable, so
+	// this doesn't reintroduce the column-widening regression the
+	// short "+ New" label was introduced to fix. Both cells carry the
+	// same click handler, so clicking either half still opens a blank
+	// Connect dialog.
+	table.SetCell(newRow, connectionMenuColUser,
+		tview.NewTableCell(connectionMenuNewConnectionUserLabel).
+			SetTextColor(r.theme.Text).
+			SetSelectable(true).
+			SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol)))
 	table.SetCell(newRow, connectionMenuColAt, blankConnectionMenuCell())
-	table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
+	table.SetCell(newRow, connectionMenuColHost,
+		tview.NewTableCell(connectionMenuNewConnectionHostLabel).
+			SetTextColor(r.theme.Text).
+			SetSelectable(false).
+			SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol)))
+	r.connectionMenuRowColors[newRow] = r.theme.Text
 	if expanded {
 		table.SetCell(newRow, connectionMenuColIdentifier, blankConnectionMenuCell())
 	}
