@@ -1589,6 +1589,11 @@ type Root struct {
 	detailsHashAnimFrame  int
 	detailsHashCancel     context.CancelFunc
 
+	// detailsHashOpID mirrors hashOpID above exactly, for Details'
+	// own independent copy of hash computation — see
+	// computeDetailsHashes/cancelDetailsHashComputationOperation.
+	detailsHashOpID uint64
+
 	// detailsPreviewCancel stops the image/PDF preview load for a target
 	// the cursor has already moved off (see startDetailsPreview). That
 	// work is the expensive part of showing an entry — decoding an
@@ -2201,6 +2206,15 @@ type Root struct {
 	hashInProgress bool
 	hashAnimFrame  int
 	hashCancel     context.CancelFunc
+
+	// hashOpID is computeHashes' own internal/operations.Tracker entry
+	// — set by Start right alongside hashInProgress, closed out by
+	// Finish either inside computeHashes itself (the real outcome, once
+	// hashFile actually returns) or by cancelHashComputationOperation
+	// (OutcomeCancelled, for the genuine external-teardown call sites —
+	// see its own doc comment for why those are the only ones that
+	// still need a wrapper around the plain cancelHashComputation).
+	hashOpID uint64
 
 	// hashBytesRead is how many bytes hashFile's in-flight call has
 	// streamed so far (see computeHashes' own onProgress callback),

@@ -14,7 +14,17 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/operations"
 )
+
+// hashOperationType is Operation.Type for a hash computation — a plain
+// string literal, not a reused notify.Category/activitylog.Category
+// constant: neither package has one for hashing (verified directly,
+// not assumed), and internal/operations deliberately never imports
+// either package itself (see its own doc comment) — a new one here
+// would just be a second definition of the same string to keep in
+// sync, for no reader this literal doesn't already tell plainly enough.
+const hashOperationType = "hash"
 
 const propertiesPage = "properties"
 
@@ -616,7 +626,7 @@ func (r *Root) loadPropertiesTarget() error {
 		return err
 	}
 
-	r.cancelHashComputation() // a previous target's own hash computation, if still running, is now stale
+	r.cancelHashComputationOperation() // a previous target's own hash computation, if still running, is now stale
 	r.propertiesTarget = r.target
 	r.propertiesStat = info
 	// Adopts Details' own result immediately if it already has one for
@@ -842,7 +852,7 @@ func (r *Root) markPropertiesDirty() {
 // written to the real file (see savePropertiesEdit, the only place any
 // of this actually touches disk).
 func (r *Root) cancelPropertiesEdit() {
-	r.cancelHashComputation()
+	r.cancelHashComputationOperation()
 	r.hideOverlay()
 }
 
@@ -854,7 +864,7 @@ func (r *Root) cancelPropertiesEdit() {
 // remaining edits is what recovering from that looks like for now, not
 // an automatic retry or rollback.
 func (r *Root) savePropertiesEdit() {
-	r.cancelHashComputation()
+	r.cancelHashComputationOperation()
 	target := r.propertiesTarget
 	var firstErr error
 
@@ -1538,6 +1548,7 @@ func (r *Root) computeHashes() {
 	r.rerenderProperties()
 
 	target := r.propertiesTarget
+	r.hashOpID = r.operations.Start(hashOperationType, target, "")
 	// Both wrapped in safeGo (see its own doc comment): a panic in
 	// either one used to take the whole process down without even
 	// restoring the terminal, since neither runs inside
@@ -1547,6 +1558,7 @@ func (r *Root) computeHashes() {
 	// doesn't leave Properties stuck believing a computation is still
 	// running forever.
 	onPanic := func() {
+		r.operations.Finish(r.hashOpID, operations.OutcomeFailed, 0, 1, 0, []string{"panic during hash computation"})
 		r.cancelHashComputation()
 		r.rerenderProperties()
 	}
@@ -1571,17 +1583,29 @@ func (r *Root) computeHashes() {
 			if ctx.Err() != nil {
 				return
 			}
-			r.cancelHashComputation()
-			if err != nil {
-				r.showError(err)
-				return
-			}
-			// Updates propertiesHashes/re-renders itself, then mirrors
-			// into Details too if that's showing the same target — see
-			// propagateHashResult's own doc comment (detailssidebar.go).
-			r.propagateHashResult(target, hashes)
+			r.finishHashComputation(target, hashes, err)
 		})
 	})
+}
+
+// finishHashComputation applies hashFile's own outcome (see
+// computeHashes) — split out specifically so a test can call it
+// directly, without needing a real event loop to drain
+// r.app.QueueUpdateDraw first (the same reasoning
+// connectdialog.go's own finishConnect gives for the identical split
+// there).
+func (r *Root) finishHashComputation(target string, hashes fsops.Hashes, err error) {
+	r.cancelHashComputation()
+	if err != nil {
+		r.operations.Finish(r.hashOpID, operations.OutcomeFailed, 0, 1, 0, []string{err.Error()})
+		r.showError(err)
+		return
+	}
+	r.operations.Finish(r.hashOpID, operations.OutcomeSucceeded, 1, 0, 0, nil)
+	// Updates propertiesHashes/re-renders itself, then mirrors into
+	// Details too if that's showing the same target — see
+	// propagateHashResult's own doc comment (detailssidebar.go).
+	r.propagateHashResult(target, hashes)
 }
 
 // animateHashProgress advances hashAnimFrame every hashAnimationInterval
@@ -1624,6 +1648,26 @@ func (r *Root) cancelHashComputation() {
 		r.hashCancel = nil
 	}
 	r.hashInProgress = false
+}
+
+// cancelHashComputationOperation is cancelHashComputation's own
+// counterpart for the genuine external-teardown call sites (Properties
+// closing or being reopened for a different target — see
+// loadPropertiesTarget/cancelPropertiesEdit/savePropertiesEdit) — the
+// two call sites *inside* computeHashes itself (onPanic, and the
+// normal completion once hashFile actually returns) already report the
+// real outcome via r.operations.Finish right there, so calling this
+// wrapper from either of those too would double-report the same
+// operation. hashInProgress is checked before cancelHashComputation
+// clears it: Finish is only correct to call at all while a computation
+// was actually still running — calling it against an already-finished
+// (or never-started) opID would record a cancellation for an operation
+// that already has a real outcome, or doesn't exist.
+func (r *Root) cancelHashComputationOperation() {
+	if r.hashInProgress {
+		r.operations.Finish(r.hashOpID, operations.OutcomeCancelled, 0, 0, 0, nil)
+	}
+	r.cancelHashComputation()
 }
 
 // hashesMouseCapture makes a click on the hash section compute hashes
