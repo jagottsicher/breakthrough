@@ -188,12 +188,28 @@ func (r *Root) renderConnectionMenu() {
 	// trailing "+ New connection" row's own clickable cell uses it too.
 	labelCol := connectionMenuColUser
 
+	// Row 0 is the column header — labels only, inert for now (every
+	// cell SetSelectable(false), no click handler): Phase 3's first
+	// step per the user's own request ("die Spalten haben keine
+	// Überschrift"), sorting itself (clickable/keyboard-reachable
+	// headers) is a separate, later step. Shifts every history row
+	// down by one, which is why the loop below starts at 1, not 0.
+	connectionMenuSetHeaderCell(table, connectionMenuColUser, "User", r.theme)
+	connectionMenuSetHeaderCell(table, connectionMenuColAt, "", r.theme)
+	connectionMenuSetHeaderCell(table, connectionMenuColHost, "Host/IP", r.theme)
+	if expanded {
+		connectionMenuSetHeaderCell(table, connectionMenuColIdentifier, "Identifier", r.theme)
+	}
+	connectionMenuSetHeaderCell(table, ejectCol, "", r.theme)
+	connectionMenuSetHeaderCell(table, removeCol, "", r.theme)
+	r.connectionMenuRowColors[0] = r.theme.MutedTextColor
+
 	// A read failure here just means an empty history section, not an
 	// error worth surfacing through a dropdown menu — the same
 	// "absence isn't an error" contract LoadHistory's own doc comment
 	// already promises callers.
 	history, _ := remotefs.LoadHistory()
-	row := 0
+	row := 1
 	for i, entry := range history {
 		if i >= connectionMenuMaxHistoryRows {
 			break
@@ -280,12 +296,13 @@ func (r *Root) renderConnectionMenu() {
 
 	// Default selection mirrors openTabSwitcher's own
 	// r.openTabSwitcher(r.activeTab): the active connection's own row
-	// if this panel has one, row 0 otherwise — never the trailing "New
+	// if this panel has one, row 1 (the first real row, after the
+	// inert header at row 0) otherwise — never the trailing "New
 	// connection" row by default, the same "land on whatever's already
 	// relevant, not on the fallback action" the tab switcher already
 	// establishes, per the user's own explicit request that the two
 	// dropdowns behave the same way here too.
-	initialRow := 0
+	initialRow := 1
 	if r.connectionMenuActiveRow >= 0 {
 		initialRow = r.connectionMenuActiveRow
 	}
@@ -340,6 +357,17 @@ func (r *Root) newConnectionMenuLayout() *tview.Flex {
 // steps over it when moving the selection.
 func blankConnectionMenuCell() *tview.TableCell {
 	return tview.NewTableCell(" ").SetSelectable(false)
+}
+
+// connectionMenuSetHeaderCell writes label into table's own row 0 at
+// col — inert for now (SetSelectable(false), no click handler): see
+// renderConnectionMenu's own doc comment on why row 0 doesn't yet
+// participate in keyboard/click dispatch the way every row below it
+// does.
+func connectionMenuSetHeaderCell(table *tview.Table, col int, label string, theme config.ResolvedTheme) {
+	table.SetCell(0, col, tview.NewTableCell(label).
+		SetTextColor(theme.MutedTextColor).
+		SetSelectable(false))
 }
 
 // activateConnectionMenuCell is Enter, Space or a click on one cell —

@@ -292,8 +292,9 @@ var helpText = strings.TrimLeft(`
   column view and a wider one adding Identifier as a fourth column,
   spanning the whole terminal width instead of just the active panel;
   remembered across restarts ("connection_menu_expanded", also in
-  Options → General). Column headers and sorting are not in yet. Auth
-  tries an ssh-agent, then
+  Options → General). Each column has a label row above it (User/Host-
+  IP, Identifier too once expanded) — clicking or sorting by one isn't
+  in yet. Auth tries an ssh-agent, then
   ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if unencrypted, then a typed
   password; host keys are checked against ~/.ssh/known_hosts, with a
   trust-on-first-use prompt for an unknown one and an outright refusal

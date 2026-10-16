@@ -715,9 +715,10 @@ terminal.
   similarly-named connections that otherwise only differ by host; `<`/
   `>` on the dropdown's own title bar adds it as a fourth column and
   spans the whole terminal width instead of just the active panel,
-  remembered across restarts (`connection_menu_expanded`). Column
-  headers and sorting aren't in yet. Connecting dials in the background
-  with a live progress line;
+  remembered across restarts (`connection_menu_expanded`). Each column
+  has a label above it (`User`/`Host/IP`, `Identifier` too once
+  expanded) — clicking or sorting by one isn't in yet. Connecting dials
+  in the background with a live progress line;
   authentication tries an `ssh-agent` first, then the usual default key
   files (`~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`), then a typed
   password as the last resort. Host keys are checked against the real

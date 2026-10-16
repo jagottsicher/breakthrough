@@ -31,10 +31,18 @@ func newTestRootForConnectionMenu(t *testing.T) *Root {
 // Identifier deliberately: it's a fourth, expanded-mode-only column,
 // not part of what used to be "the label" — tests that care about it
 // read connectionMenuColIdentifier directly instead.
+// Starts at row 1, skipping row 0 — the column header Phase 3 added
+// (see renderConnectionMenu's own doc comment) — so every existing
+// caller's texts[0] still means "the first real row", exactly as
+// before the header existed, rather than needing every call site
+// updated for the shift.
 func connectionMenuLabelTexts(table *tview.Table) []string {
 	rows := table.GetRowCount()
-	texts := make([]string, rows)
-	for i := 0; i < rows; i++ {
+	if rows == 0 {
+		return nil
+	}
+	texts := make([]string, rows-1)
+	for i := 1; i < rows; i++ {
 		user := table.GetCell(i, connectionMenuColUser)
 		at := table.GetCell(i, connectionMenuColAt)
 		host := table.GetCell(i, connectionMenuColHost)
@@ -48,7 +56,7 @@ func connectionMenuLabelTexts(table *tview.Table) []string {
 		if host != nil {
 			text += host.Text
 		}
-		texts[i] = text
+		texts[i-1] = text
 	}
 	return texts
 }
@@ -67,6 +75,64 @@ func cellTextColor(cell *tview.TableCell) tcell.Color {
 func cellBackgroundColor(cell *tview.TableCell) tcell.Color {
 	_, bg, _ := cell.Style.Decompose()
 	return bg
+}
+
+// TestRenderConnectionMenuHeaderRowShowsColumnLabels pins Phase 3's
+// own first step: a real column header, labelling User/Host-IP in
+// collapsed mode and adding Identifier once expanded — see
+// renderConnectionMenu's own doc comment on why this exists
+// (the user's own explicit report: "die Spalten haben keine
+// Überschrift").
+func TestRenderConnectionMenuHeaderRowShowsColumnLabels(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	r.renderConnectionMenu()
+
+	table := r.connectionMenuTable
+	if got, want := table.GetCell(0, connectionMenuColUser).Text, "User"; got != want {
+		t.Errorf("header User column = %q, want %q", got, want)
+	}
+	if got, want := table.GetCell(0, connectionMenuColHost).Text, "Host/IP"; got != want {
+		t.Errorf("header Host/IP column = %q, want %q", got, want)
+	}
+	// connectionMenuColIdentifier's own raw index coincides with
+	// connectionMenuEjectColumn(false) in collapsed mode (same reason
+	// connectionMenuRemoveColumn(false)+1 is the right column-count
+	// check elsewhere in this file) — the header's blank eject cell
+	// legitimately occupies that index, so column count is what
+	// actually distinguishes "no Identifier column" here.
+	if got, want := table.GetColumnCount(), connectionMenuRemoveColumn(false)+1; got != want {
+		t.Errorf("header column count = %d, want %d (no Identifier column while collapsed)", got, want)
+	}
+
+	r.setConnectionMenuExpanded(true)
+	r.renderConnectionMenu()
+	if got, want := table.GetCell(0, connectionMenuColIdentifier).Text, "Identifier"; got != want {
+		t.Errorf("header Identifier column (expanded) = %q, want %q", got, want)
+	}
+}
+
+// TestRenderConnectionMenuHeaderRowIsNotSelectable pins the other half
+// of Phase 3's first step: the header is inert for now (sorting is a
+// later step) — every cell in row 0 must be unreachable by keyboard
+// navigation, so Up from the first real row never lands there and
+// Right/Left skip it entirely, the same way @/Host-IP already skip
+// within the label group.
+func TestRenderConnectionMenuHeaderRowIsNotSelectable(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	if err := remotefs.RecordAttempt(remotefs.Connection{Host: "example.com", User: "tester"}, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.renderConnectionMenu()
+
+	for _, col := range []int{connectionMenuColUser, connectionMenuColAt, connectionMenuColHost, connectionMenuEjectColumn(false), connectionMenuRemoveColumn(false)} {
+		cell := r.connectionMenuTable.GetCell(0, col)
+		if cell == nil {
+			t.Fatalf("header column %d is nil", col)
+		}
+		if !cell.NotSelectable {
+			t.Errorf("header column %d is selectable, want inert for now (sorting is a later step)", col)
+		}
+	}
 }
 
 func TestRenderConnectionMenuOnALocalPanelOffersOnlyNewConnection(t *testing.T) {
@@ -109,12 +175,12 @@ func TestRenderConnectionMenuOnAConnectedPanelListsTheActiveEntryThenNewConnecti
 	if !strings.Contains(texts[1], "New") {
 		t.Errorf("row 1 label = %q, want the trailing \"New\" row, after every history entry", texts[1])
 	}
-	ejectCell := r.connectionMenuTable.GetCell(0, connectionMenuEjectColumn(false))
+	ejectCell := r.connectionMenuTable.GetCell(1, connectionMenuEjectColumn(false))
 	if !strings.Contains(ejectCell.Text, connectionHistoryEjectGlyph) {
-		t.Errorf("row 0 eject cell = %q, want it to carry the eject glyph", ejectCell.Text)
+		t.Errorf("row 1 eject cell = %q, want it to carry the eject glyph", ejectCell.Text)
 	}
-	if r.connectionMenuActiveRow != 0 {
-		t.Errorf("connectionMenuActiveRow = %d, want 0", r.connectionMenuActiveRow)
+	if r.connectionMenuActiveRow != 1 {
+		t.Errorf("connectionMenuActiveRow = %d, want 1 (the first real row, after the header)", r.connectionMenuActiveRow)
 	}
 }
 
@@ -184,10 +250,10 @@ func TestConnectionMenuSelectingTheLabelGroupHighlightsAllItsColumns(t *testing.
 	r.setConnectionMenuExpanded(true)
 
 	r.renderConnectionMenu()
-	r.connectionMenuTable.Select(0, connectionMenuColUser)
+	r.connectionMenuTable.Select(1, connectionMenuColUser)
 
 	for _, col := range []int{connectionMenuColAt, connectionMenuColHost, connectionMenuColIdentifier} {
-		cell := r.connectionMenuTable.GetCell(0, col)
+		cell := r.connectionMenuTable.GetCell(1, col)
 		if got, want := cellBackgroundColor(cell), r.theme.SelectionBackground; got != want {
 			t.Errorf("column %d background = %v, want SelectionBackground %v", col, got, want)
 		}
@@ -211,13 +277,13 @@ func TestConnectionMenuSelectingEjectDoesNotHighlightTheLabelGroup(t *testing.T)
 	}
 
 	r.renderConnectionMenu()
-	r.connectionMenuTable.Select(0, connectionMenuEjectColumn(false))
+	r.connectionMenuTable.Select(1, connectionMenuEjectColumn(false))
 
-	atCell := r.connectionMenuTable.GetCell(0, connectionMenuColAt)
+	atCell := r.connectionMenuTable.GetCell(1, connectionMenuColAt)
 	if got, want := cellBackgroundColor(atCell), r.theme.SurfaceBackground; got != want {
 		t.Errorf("@ column background = %v, want the table's own normal SurfaceBackground %v, not left highlighted", got, want)
 	}
-	if got, want := cellTextColor(atCell), r.connectionMenuRowColors[0]; got != want {
+	if got, want := cellTextColor(atCell), r.connectionMenuRowColors[1]; got != want {
 		t.Errorf("@ column text color = %v, want the row's own real color %v restored", got, want)
 	}
 }
@@ -279,16 +345,16 @@ func TestRenderConnectionMenuExpandedSplitsTheLabelIntoFourColumns(t *testing.T)
 	r.renderConnectionMenu()
 
 	table := r.connectionMenuTable
-	if got, want := table.GetCell(0, connectionMenuColUser).Text, "tester"; got != want {
+	if got, want := table.GetCell(1, connectionMenuColUser).Text, "tester"; got != want {
 		t.Errorf("User column = %q, want %q", got, want)
 	}
-	if got, want := table.GetCell(0, connectionMenuColAt).Text, "@"; got != want {
+	if got, want := table.GetCell(1, connectionMenuColAt).Text, "@"; got != want {
 		t.Errorf("@ column = %q, want %q", got, want)
 	}
-	if got, want := table.GetCell(0, connectionMenuColHost).Text, "example.com:2222"; got != want {
+	if got, want := table.GetCell(1, connectionMenuColHost).Text, "example.com:2222"; got != want {
 		t.Errorf("Host/IP column = %q, want %q", got, want)
 	}
-	if got, want := table.GetCell(0, connectionMenuColIdentifier).Text, "build-1"; got != want {
+	if got, want := table.GetCell(1, connectionMenuColIdentifier).Text, "build-1"; got != want {
 		t.Errorf("Identifier column = %q, want %q", got, want)
 	}
 }
@@ -307,7 +373,7 @@ func TestRenderConnectionMenuExpandedOmitsAtForAUserlessConnection(t *testing.T)
 
 	r.renderConnectionMenu()
 
-	if got := r.connectionMenuTable.GetCell(0, connectionMenuColAt).Text; got != "" {
+	if got := r.connectionMenuTable.GetCell(1, connectionMenuColAt).Text; got != "" {
 		t.Errorf("@ column = %q, want empty for a connection with no User", got)
 	}
 }
@@ -332,7 +398,7 @@ func TestClickingTheEjectCellInExpandedModeDisconnectsNotConnects(t *testing.T) 
 	r.setConnectionMenuExpanded(true)
 	r.renderConnectionMenu()
 
-	ejectCell := r.connectionMenuTable.GetCell(0, connectionMenuEjectColumn(true))
+	ejectCell := r.connectionMenuTable.GetCell(1, connectionMenuEjectColumn(true))
 	if !strings.Contains(ejectCell.Text, connectionHistoryEjectGlyph) {
 		t.Fatalf("expanded eject cell = %q, want it to carry the eject glyph", ejectCell.Text)
 	}
@@ -354,7 +420,7 @@ func TestClickingTheRemoveCellInExpandedModeRemovesNotConnects(t *testing.T) {
 	r.setConnectionMenuExpanded(true)
 	r.renderConnectionMenu()
 
-	removeCell := r.connectionMenuTable.GetCell(0, connectionMenuRemoveColumn(true))
+	removeCell := r.connectionMenuTable.GetCell(1, connectionMenuRemoveColumn(true))
 	removeCell.Clicked()
 
 	history, err := remotefs.LoadHistory()
@@ -469,7 +535,7 @@ func TestRenderConnectionMenuSelectsTheActiveConnectionRowByDefault(t *testing.T
 // so the default lands on row 0 — the first history entry, exactly
 // like the tab switcher's own r.activeTab defaults to 0 for the first
 // tab when nothing else is more specifically "active".
-func TestRenderConnectionMenuSelectsRowZeroByDefaultWithoutAnActiveConnection(t *testing.T) {
+func TestRenderConnectionMenuSelectsTheFirstRealRowByDefaultWithoutAnActiveConnection(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	if err := remotefs.RecordAttempt(remotefs.Connection{Host: "example.com", User: "tester"}, false); err != nil {
 		t.Fatalf("RecordAttempt: %v", err)
@@ -478,8 +544,8 @@ func TestRenderConnectionMenuSelectsRowZeroByDefaultWithoutAnActiveConnection(t 
 	r.renderConnectionMenu()
 
 	row, _ := r.connectionMenuTable.GetSelection()
-	if row != 0 {
-		t.Errorf("default selected row = %d, want 0 (no active connection to prefer)", row)
+	if row != 1 {
+		t.Errorf("default selected row = %d, want 1 (no active connection to prefer, row 0 is the header)", row)
 	}
 }
 
@@ -607,7 +673,7 @@ func TestPressingXOnNewConnectionRowDoesNothing(t *testing.T) {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
 	r.openConnectionMenu()
-	r.connectionMenuTable.Select(1, connectionMenuColUser) // "New connection…" trails the one history row
+	r.connectionMenuTable.Select(2, connectionMenuColUser) // "New connection…" trails the one history row (row 0 is the header, row 1 the history row)
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
