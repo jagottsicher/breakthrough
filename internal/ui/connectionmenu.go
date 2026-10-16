@@ -29,6 +29,13 @@ const connectionMenuMaxHistoryRows = 10
 // row wherever they appear.
 const connectionMenuNewConnectionLabel = " +  New connection"
 
+// connectionMenuNewConnectionLabelExpanded is the same row's own label
+// in expanded mode specifically — short enough to never become the
+// widest thing in the User column (see renderConnectionMenu's own doc
+// comment on why that matters), unlike the full
+// connectionMenuNewConnectionLabel collapsed mode keeps using.
+const connectionMenuNewConnectionLabelExpanded = " +  New"
+
 // Column indices within the connection menu table — the same in both
 // collapsed and expanded mode (see r.settings.ConnectionMenuExpanded):
 // User | @ | Host/IP in both, expanded mode's only difference is
@@ -252,26 +259,26 @@ func (r *Root) renderConnectionMenu() {
 	}
 
 	newRow := row
-	newConnectionCell := tview.NewTableCell(connectionMenuNewConnectionLabel).
+	// Expanded mode uses a short label here deliberately — neither a
+	// MaxWidth cap (truncates with "…", read as broken rather than
+	// deliberate) nor SetExpansion (tried and reverted: it affects the
+	// User column's width for every row, not just this one — "the
+	// maximum over all visible cells in that column is used", per
+	// tview's own doc comment — so a single Expansion-marked cell on
+	// this one row stretched User to swallow the table's entire unused
+	// width on *every* row, a real, user-reported regression). A short
+	// label never drives the column wider than real User values
+	// already do, so nothing needs capping or expanding in the first
+	// place — collapsed mode keeps the full label since its narrower,
+	// content-sized dropdown never had this problem to begin with.
+	newConnectionLabel := connectionMenuNewConnectionLabel
+	if expanded {
+		newConnectionLabel = connectionMenuNewConnectionLabelExpanded
+	}
+	newConnectionCell := tview.NewTableCell(newConnectionLabel).
 		SetTextColor(r.theme.Text).
 		SetSelectable(true).
 		SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol))
-	if expanded {
-		// Expansion, not a width cap: this row's own 18-character label
-		// would otherwise single-handedly stretch the User column to
-		// its own width, since real User values are only ever a
-		// handful of characters — but truncating it with "…" read as
-		// broken rather than as a deliberate, recognizable "+ New…"
-		// (the user's own explicit report). SetExpansion instead lets
-		// tview hand the User column whatever width is left over once
-		// every column's own natural content is accounted for (see its
-		// own doc comment: proportional, applies only when the table's
-		// actual rect is wider than its content needs — which expanded
-		// mode's own full-screen-width sizing always leaves true), so
-		// the full label renders without truncation and the slack goes
-		// where it already visually was, rather than being clipped.
-		newConnectionCell.SetExpansion(1)
-	}
 	table.SetCell(newRow, labelCol, newConnectionCell)
 	table.SetCell(newRow, connectionMenuColAt, blankConnectionMenuCell())
 	table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
