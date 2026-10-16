@@ -151,7 +151,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	// own explicit request to move every field's own example into the
 	// field itself (shown only while it's actually empty), the same
 	// row Time/Level's own "(e.g. ...)" labels used to carry instead.
-	r.logAuditKeywordField.SetPlaceholder("keyword")
+	r.logAuditKeywordField.SetPlaceholder(`keyword, keyword1 AND (keyword2 OR keyword3)`)
 	r.logAuditKeywordField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
 	r.logAuditKeywordField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditTimeField, r.logAuditViewerTable)
@@ -386,16 +386,39 @@ func logAuditLevelColor(theme config.ResolvedTheme, level logview.Level) tcell.C
 	}
 }
 
-// logAuditMatchesKeyword reports whether e's own Source or Message
-// contains keyword, case-insensitively — "" always matches, the same
-// "blank filter shows everything" contract filterActivityLogEntries
-// already has.
-func logAuditMatchesKeyword(e logview.Entry, keyword string) bool {
+// logAuditKeywordQuery parses the Keyword field's own boolean query
+// expression (see internal/filterexpr's ParseQuery: terms, AND/OR/NAND/
+// NOR/NOT, parentheses) — ok is false for a blank field or an
+// unparseable expression, the same graceful-degradation contract
+// logAuditMinLevel/the Time field (logAuditEntryVisible) already
+// follow: that part of the filter simply isn't applied, no error state
+// shown for it. Called once per render (see renderLogAuditViewer), not
+// once per entry — an expression's own parse cost is the same whether
+// the family holds ten lines or several million, so compiling it
+// 5.7 million times over would be pure waste on exactly the large
+// remote families 19a (feature_ideas.txt) is about.
+func logAuditKeywordQuery(keyword string) (filterexpr.QueryFilter, bool) {
+	keyword = strings.TrimSpace(keyword)
 	if keyword == "" {
+		return filterexpr.QueryFilter{}, false
+	}
+	q, err := filterexpr.ParseQuery(keyword)
+	if err != nil {
+		return filterexpr.QueryFilter{}, false
+	}
+	return q, true
+}
+
+// logAuditMatchesQuery reports whether e's own Source or Message
+// satisfies query — hasQuery false (a blank or unparseable Keyword
+// field, see logAuditKeywordQuery) always matches, the same "blank
+// filter shows everything" contract filterActivityLogEntries already
+// has.
+func logAuditMatchesQuery(e logview.Entry, query filterexpr.QueryFilter, hasQuery bool) bool {
+	if !hasQuery {
 		return true
 	}
-	keyword = strings.ToLower(keyword)
-	return strings.Contains(strings.ToLower(e.Message), keyword) || strings.Contains(strings.ToLower(e.Source), keyword)
+	return query.Match(e.Source, e.Message)
 }
 
 // logAuditMinLevel parses levelText (e.g. "warn", "ERROR") into a
@@ -417,14 +440,17 @@ func logAuditMinLevel(levelText string) (logview.Level, bool) {
 
 // logAuditEntryVisible combines all three viewer filters (AND, the
 // same combination rule filterActivityLogEntries' own keyword+time
-// pair already uses): keyword over Source/Message, a time range via
-// filterexpr.ParseMtime (the exact same grammar the Action Log's own
-// Time field already accepts), and a minimum Level severity. An entry
-// with LevelUnknown never passes a Level filter, even ">= trace" —
-// "no level recognized" and "this severity or worse" are different
-// claims, and the filter is explicitly about the latter.
-func logAuditEntryVisible(e logview.Entry, keyword, timeExpr, levelText string, now time.Time) bool {
-	if !logAuditMatchesKeyword(e, keyword) {
+// pair already uses): a boolean query over Source/Message (see
+// internal/filterexpr's ParseQuery — query/hasQuery come from
+// logAuditKeywordQuery, compiled once per render, not passed as a raw
+// string here), a time range via filterexpr.ParseMtime (the exact same
+// grammar the Action Log's own Time field already accepts), and a
+// minimum Level severity. An entry with LevelUnknown never passes a
+// Level filter, even ">= trace" — "no level recognized" and "this
+// severity or worse" are different claims, and the filter is
+// explicitly about the latter.
+func logAuditEntryVisible(e logview.Entry, query filterexpr.QueryFilter, hasQuery bool, timeExpr, levelText string, now time.Time) bool {
+	if !logAuditMatchesQuery(e, query, hasQuery) {
 		return false
 	}
 	if strings.TrimSpace(timeExpr) != "" {
@@ -453,34 +479,57 @@ const logAuditMaxRenderedRows = 2000
 
 // logAuditHighlight escapes text for safe use inside a tview cell (see
 // panel.go's own addRow doc comment on why escaping has to happen
-// before any tag is added, not after) and, if keyword is non-empty,
-// wraps every case-insensitive occurrence of it in a background tag
-// (reusing nameHighlightTags — panel.go — exactly as-is: it already
-// wraps an escaped string in "set background, then reset" tags) —
-// matching is done against the original, unescaped text so the
-// indices found are never thrown off by an escape sequence tview.Escape
-// may have inserted.
-func logAuditHighlight(text, keyword string, bg tcell.Color) string {
-	if keyword == "" {
+// before any tag is added, not after) and, if terms is non-empty,
+// wraps every case-insensitive occurrence of any of them in a
+// background tag (reusing nameHighlightTags — panel.go — exactly
+// as-is: it already wraps an escaped string in "set background, then
+// reset" tags) — matching is done against the original, unescaped text
+// so the indices found are never thrown off by an escape sequence
+// tview.Escape may have inserted.
+//
+// terms is a list, not a single keyword, since the Keyword field's own
+// boolean query (internal/filterexpr's ParseQuery) can carry several
+// terms at once — see QueryFilter.PositiveTerms's own doc comment for
+// why only the positively-matching ones (never one under NOT/NAND/NOR)
+// ever reach here. At each position, the longest term that matches
+// right there wins — so a shorter term that happens to be a prefix of
+// a longer one at the same spot (both given as terms) doesn't fire
+// twice or split the longer match apart.
+func logAuditHighlight(text string, terms []string, bg tcell.Color) string {
+	lowerTerms := make([]string, 0, len(terms))
+	for _, t := range terms {
+		if t != "" {
+			lowerTerms = append(lowerTerms, strings.ToLower(t))
+		}
+	}
+	if len(lowerTerms) == 0 {
 		return tview.Escape(text)
 	}
-	lower := strings.ToLower(text)
-	lowerKey := strings.ToLower(keyword)
 
+	lower := strings.ToLower(text)
 	var b strings.Builder
 	rest := text
 	restLower := lower
 	for {
-		idx := strings.Index(restLower, lowerKey)
-		if idx < 0 {
+		bestIdx, bestLen := -1, 0
+		for _, lt := range lowerTerms {
+			idx := strings.Index(restLower, lt)
+			if idx < 0 {
+				continue
+			}
+			if bestIdx < 0 || idx < bestIdx || (idx == bestIdx && len(lt) > bestLen) {
+				bestIdx, bestLen = idx, len(lt)
+			}
+		}
+		if bestIdx < 0 {
 			b.WriteString(tview.Escape(rest))
 			break
 		}
-		b.WriteString(tview.Escape(rest[:idx]))
-		match := rest[idx : idx+len(keyword)]
+		b.WriteString(tview.Escape(rest[:bestIdx]))
+		match := rest[bestIdx : bestIdx+bestLen]
 		b.WriteString(nameHighlightTags(tview.Escape(match), bg))
-		rest = rest[idx+len(keyword):]
-		restLower = restLower[idx+len(keyword):]
+		rest = rest[bestIdx+bestLen:]
+		restLower = restLower[bestIdx+bestLen:]
 	}
 	return b.String()
 }
@@ -598,9 +647,15 @@ func (r *Root) renderLogAuditViewer() {
 	header(logAuditColMessage, "Message")
 
 	keyword := r.logAuditKeywordField.GetText()
+	query, hasQuery := logAuditKeywordQuery(keyword)
 	timeExpr := r.logAuditTimeField.GetText()
 	levelText := r.logAuditLevelField.GetText()
 	now := time.Now()
+
+	var highlightTerms []string
+	if hasQuery {
+		highlightTerms = query.PositiveTerms()
+	}
 
 	var shown []logview.Entry
 	errCount, warnCount := 0, 0
@@ -611,7 +666,7 @@ func (r *Root) renderLogAuditViewer() {
 		case logview.LevelWarn:
 			warnCount++
 		}
-		if logAuditEntryVisible(e, keyword, timeExpr, levelText, now) {
+		if logAuditEntryVisible(e, query, hasQuery, timeExpr, levelText, now) {
 			shown = append(shown, e)
 		}
 	}
@@ -697,8 +752,8 @@ func (r *Root) renderLogAuditViewer() {
 		}
 		cell(logAuditColTime, padRight(logAuditTimeText(e.Time), 19), r.theme.Text)
 		cell(logAuditColLevel, padRight(e.Level.String(), 5), levelColor)
-		cell(logAuditColSource, logAuditHighlight(e.Source, keyword, bg), r.theme.Text)
-		cell(logAuditColMessage, logAuditHighlight(e.Message, keyword, bg), r.theme.Text)
+		cell(logAuditColSource, logAuditHighlight(e.Source, highlightTerms, bg), r.theme.Text)
+		cell(logAuditColMessage, logAuditHighlight(e.Message, highlightTerms, bg), r.theme.Text)
 		r.logAuditViewerTable.GetCell(row, logAuditColTime).SetReference(e)
 	}
 
@@ -765,7 +820,11 @@ func (r *Root) openLogAuditDetail(row int) {
 		width = screenWidth - 2
 	}
 
-	keyword := r.logAuditKeywordField.GetText()
+	query, hasQuery := logAuditKeywordQuery(r.logAuditKeywordField.GetText())
+	var highlightTerms []string
+	if hasQuery {
+		highlightTerms = query.PositiveTerms()
+	}
 	bg := r.theme.ButtonBackground
 	header := fmt.Sprintf("%s  %s  %s\n", logAuditTimeText(e.Time), e.Level.String(), e.File)
 	body := strings.Join(wrapText(e.Message, width), "\n")
@@ -779,7 +838,7 @@ func (r *Root) openLogAuditDetail(row int) {
 		full += "\n\nRaw:\n" + rawBody
 	}
 
-	text := tview.Escape(header) + logAuditHighlight(full[len(header):], keyword, bg)
+	text := tview.Escape(header) + logAuditHighlight(full[len(header):], highlightTerms, bg)
 	r.logAuditDetailView.SetText(text)
 	r.logAuditDetailTitleBar.SetText(" Log entry ")
 
