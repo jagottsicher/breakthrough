@@ -325,6 +325,94 @@ func TestGitBreachDiffSplitHScrollbarMovesBothPanes(t *testing.T) {
 	}
 }
 
+// TestGitBreachDiffSplitHScrollReconcilesNarrowerPane is a real,
+// user-reported regression: in the split view, scrolling horizontally
+// (keyboard or mouse) made the shared scrollbar's own thumb jump back
+// to the left, even though the pane actually being read was still
+// scrolled correctly. The cause: tview's own TextView.Draw clamps each
+// view's stored column offset against that view's OWN longest line
+// (textview.go) — it has no idea the other, linked pane is wider and
+// was scrolled further right. A changed line (short before, long
+// after) makes the two panes' own longest lines differ in the normal
+// case, not an edge case, so the left pane here is the narrower one:
+// after a scroll, its own stored offset silently clamps back down on
+// the very next Draw. gitBreachDiffSplitScrollOffset (and
+// gitBreachDiffSplitContent.scrollOffset, which now delegates to it)
+// fixes this by reading whichever pane's own copy is larger, since the
+// narrower pane can only under-report the real offset, never
+// over-report it.
+func TestGitBreachDiffSplitHScrollReconcilesNarrowerPane(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("short\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	wide := strings.Repeat("x", 200) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(wide), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := openGitBreachFilesDiff(t, dir, "a.txt")
+	r.app.SetFocus(r.gitBreachDiffView)
+	rawDiff, err := git.Diff(context.Background(), dir, "a.txt", false)
+	if err != nil {
+		t.Fatalf("git.Diff: %v", err)
+	}
+	r.gitBreachSetDiffText("test", gitBreachColorizeDiff(rawDiff, "a.txt", r.theme), rawDiff)
+	r.toggleGitBreachDiffSplit()
+	r.app.SetFocus(r.gitBreachDiffSplitLeft)
+
+	r.SetRect(0, 0, 60, 20)
+	r.gitBreachLayout.SetRect(0, 0, 60, 20)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(60, 20)
+	r.gitBreachLayout.Draw(screen)
+
+	// The left pane ("short") is the narrower of the two — scroll well
+	// past its own longest line, as the wider right pane ("x"*200)
+	// legitimately allows.
+	r.scrollGitBreachDiffSplit(0, 30)
+	r.gitBreachLayout.Draw(screen)
+
+	_, gotLeft := r.gitBreachDiffSplitLeft.GetScrollOffset()
+	if gotLeft >= 30 {
+		t.Fatalf("left pane's own column offset = %d, want it clamped below 30 by tview itself (that's the precondition this test exercises)", gotLeft)
+	}
+
+	row, col := r.gitBreachDiffSplitScrollOffset()
+	if col != 30 {
+		t.Errorf("gitBreachDiffSplitScrollOffset column = %d, want 30 (the real, un-clamped offset, reconciled from the wider right pane)", col)
+	}
+	if row != 0 {
+		t.Errorf("gitBreachDiffSplitScrollOffset row = %d, want 0", row)
+	}
+
+	sb := r.gitBreachDiffSplitHScrollbar
+	const trackCols = 20
+	gotThumbCols, gotThumbStart := sb.thumbGeometry(trackCols)
+	wantThumbCols, wantThumbStart := scrollbarThumbGeometry(trackCols, sb.content.totalCols(), sb.viewportCols(), 30)
+	if gotThumbStart != wantThumbStart || gotThumbCols != wantThumbCols {
+		t.Errorf("thumb geometry = (cols=%d, start=%d), want (cols=%d, start=%d) matching the real column 30, not the left pane's own clamped value", gotThumbCols, gotThumbStart, wantThumbCols, wantThumbStart)
+	}
+
+	// The Left key's own "leave Main at column 0" guard must use the
+	// reconciled offset too — reading the clamped left pane alone would
+	// wrongly treat column 30 as column 0 and exit the screen instead of
+	// scrolling back.
+	if got := r.captureGitBreachDiffSplitKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone)); got != nil {
+		t.Errorf("captureGitBreachDiffSplitKey(Left) at the real column 30 = %v, want nil (consumed, scrolls)", got)
+	}
+	if !r.gitBreachDiffSplitLeft.HasFocus() {
+		t.Error("Left while the reconciled column is still > 0 should scroll, not leave Main")
+	}
+}
+
 // TestGitBreachDiffScrollbarsDoNotShareTheCornerCell pins the user's own
 // explicit requirement that the vertical and horizontal bars never
 // overlap, for both the unified and split views.

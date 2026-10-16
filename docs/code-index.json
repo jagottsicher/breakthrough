@@ -1753,13 +1753,13 @@
     },
     {
       "path": "internal/ui/gitbreachdiffsplit.go",
-      "size": 20056,
-      "sha256": "ad8edbb701b476d9ce2e35179154a3da7b0a7fbff005cb78d0307ff8a17b94d5"
+      "size": 22538,
+      "sha256": "3a42a05612e8a047074c61f0964270c5d7c1223d90e0765711b5665c61b604d2"
     },
     {
       "path": "internal/ui/gitbreachdiffsplit_test.go",
-      "size": 23099,
-      "sha256": "2c0e7455cf86f84c34ebf39d4e7133e3f3f5b16b7e9ef805949755561ed4ab37"
+      "size": 27105,
+      "sha256": "423afc6f86375642f64782378a26a0ec8e6e2d648b4d5801ee891a5837d93f63"
     },
     {
       "path": "internal/ui/gitbreachscreen.go",
@@ -29478,7 +29478,7 @@
       "file": "internal/ui/gitbreachdiffsplit.go",
       "name": "gitBreachDiffSplitContent",
       "kind": "type",
-      "line": 168
+      "line": 169
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29486,7 +29486,15 @@
       "name": "scrollTo",
       "kind": "method",
       "receiver": "*gitBreachDiffSplitContent",
-      "line": 178
+      "line": 180
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachdiffsplit.go",
+      "name": "scrollOffset",
+      "kind": "method",
+      "receiver": "*gitBreachDiffSplitContent",
+      "line": 189
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29494,7 +29502,7 @@
       "name": "totalCols",
       "kind": "method",
       "receiver": "*gitBreachDiffSplitContent",
-      "line": 191
+      "line": 201
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29502,7 +29510,7 @@
       "name": "lineWidths",
       "kind": "method",
       "receiver": "*gitBreachDiffSplitContent",
-      "line": 208
+      "line": 218
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29510,7 +29518,7 @@
       "name": "drawGitBreachDiffSplitSeparator",
       "kind": "method",
       "receiver": "*Root",
-      "line": 227
+      "line": 237
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29518,7 +29526,7 @@
       "name": "toggleGitBreachDiffSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 244
+      "line": 254
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29526,7 +29534,7 @@
       "name": "gitBreachRenderDiffSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 278
+      "line": 288
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29534,7 +29542,15 @@
       "name": "gitBreachDiffSplitPageStep",
       "kind": "method",
       "receiver": "*Root",
-      "line": 324
+      "line": 334
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachdiffsplit.go",
+      "name": "gitBreachDiffSplitScrollOffset",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 367
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29542,7 +29558,7 @@
       "name": "scrollGitBreachDiffSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 338
+      "line": 386
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29550,7 +29566,7 @@
       "name": "captureGitBreachDiffSplitKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 362
+      "line": 410
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29558,7 +29574,7 @@
       "name": "captureGitBreachDiffSplitLeftMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 418
+      "line": 466
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29566,7 +29582,7 @@
       "name": "captureGitBreachDiffSplitRightMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 439
+      "line": 487
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29620,58 +29636,65 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachdiffsplit_test.go",
+      "name": "TestGitBreachDiffSplitHScrollReconcilesNarrowerPane",
+      "kind": "function",
+      "line": 344
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachdiffsplit_test.go",
       "name": "TestGitBreachDiffScrollbarsDoNotShareTheCornerCell",
       "kind": "function",
-      "line": 331
+      "line": 419
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachdiffsplit_test.go",
       "name": "TestCaptureGitBreachMainKeyVEntersSplitMode",
       "kind": "function",
-      "line": 358
+      "line": 446
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachdiffsplit_test.go",
       "name": "TestCaptureGitBreachDiffSplitKeyLeftAtColumnZeroLeavesMain",
       "kind": "function",
-      "line": 381
+      "line": 469
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachdiffsplit_test.go",
       "name": "TestCaptureGitBreachDiffSplitKeyLeftScrollsWhenNotAtColumnZero",
       "kind": "function",
-      "line": 409
+      "line": 497
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachdiffsplit_test.go",
       "name": "TestScrollGitBreachDiffSplitAlwaysMirrorsBothPanes",
       "kind": "function",
-      "line": 439
+      "line": 527
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachdiffsplit_test.go",
       "name": "TestGitBreachDiffSplitRightMouseLeftDownRedirectsFocusToLeft",
       "kind": "function",
-      "line": 479
+      "line": 567
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachdiffsplit_test.go",
       "name": "TestGitBreachDiffSplitLeftDrawReRendersTheHeader",
       "kind": "function",
-      "line": 513
+      "line": 601
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachdiffsplit_test.go",
       "name": "TestRenderGitBreachDiffHeaderUsesTheLongerSplitPane",
       "kind": "function",
-      "line": 571
+      "line": 659
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30306,14 +30329,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
@@ -51095,5 +51118,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "0aa03d86c3b173f12aa8bb218ed608460b4499daa0c5fc572f35c754b4975dc8"
+  "merkle_root": "b3f076701a19694f5e1f2fc936a76938dd466f3ace132fc0ec2e5ccb68c31b8f"
 }
