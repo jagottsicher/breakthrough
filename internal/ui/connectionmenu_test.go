@@ -311,15 +311,40 @@ func TestPositionConnectionMenuSpansTheFullScreenWidthWhenExpanded(t *testing.T)
 	if err := remotefs.RecordAttempt(conn, false); err != nil {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
+	// A real, generous rect: the default test rect is tiny (15 wide),
+	// which would make this assertion pass even if expanded mode fell
+	// back to collapsed-mode sizing by accident, since both would
+	// happen to clamp to roughly the same small number. 120 is wide
+	// enough that collapsed mode's own much narrower content-driven
+	// width (a single "tester@example.com" label) could never
+	// coincidentally match it.
+	r.SetRect(0, 0, 120, 30)
 	r.setConnectionMenuExpanded(true)
 	r.renderConnectionMenu()
 
 	r.positionConnectionMenu()
 
-	_, _, screenWidth, _ := r.GetRect()
-	_, _, gotWidth, _ := r.connectionMenuLayout.GetRect()
-	if gotWidth != screenWidth {
-		t.Errorf("connectionMenuLayout width = %d, want the full screen width %d", gotWidth, screenWidth)
+	if _, _, gotWidth, _ := r.connectionMenuLayout.GetRect(); gotWidth != 120 {
+		t.Errorf("connectionMenuLayout width = %d, want the full screen width 120", gotWidth)
+	}
+}
+
+// TestPositionConnectionMenuStaysPanelWidthWhenCollapsed is the
+// companion negative case: collapsed mode must still use clampToPanel,
+// not accidentally inherit the expanded path's full-screen width.
+func TestPositionConnectionMenuStaysPanelWidthWhenCollapsed(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.SetRect(0, 0, 120, 30)
+	r.renderConnectionMenu()
+
+	r.positionConnectionMenu()
+
+	if _, _, gotWidth, _ := r.connectionMenuLayout.GetRect(); gotWidth == 120 {
+		t.Error("connectionMenuLayout width = 120, want collapsed mode to stay content-sized, not full screen width")
 	}
 }
 

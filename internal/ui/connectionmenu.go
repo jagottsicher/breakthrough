@@ -29,6 +29,13 @@ const connectionMenuMaxHistoryRows = 10
 // row wherever they appear.
 const connectionMenuNewConnectionLabel = " +  New connection"
 
+// connectionMenuNewConnectionLabelMaxWidth caps connectionMenuNewConnectionLabel's
+// own rendered width in expanded mode only (see renderConnectionMenu) —
+// long enough to stay obviously "+ New…", short enough that it never
+// drives the User column's own auto-sized width the way its full 18
+// characters otherwise would.
+const connectionMenuNewConnectionLabelMaxWidth = 10
+
 // Column indices within the connection menu table, collapsed mode
 // (the default — see r.settings.ConnectionMenuExpanded) — the same
 // label/action-cell/action-cell shape tabswitcher.go's own
@@ -247,11 +254,25 @@ func (r *Root) renderConnectionMenu() {
 	}
 
 	newRow := row
-	table.SetCell(newRow, labelCol,
-		tview.NewTableCell(connectionMenuNewConnectionLabel).
-			SetTextColor(r.theme.Text).
-			SetSelectable(true).
-			SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol)))
+	newConnectionCell := tview.NewTableCell(connectionMenuNewConnectionLabel).
+		SetTextColor(r.theme.Text).
+		SetSelectable(true).
+		SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol))
+	if expanded {
+		// Capped so this one row's own 18-character label doesn't
+		// single-handedly stretch the User column to its own width on
+		// every open — real User values are a handful of characters
+		// (connectionMenuColUser never otherwise competes with
+		// anything this long). MaxWidth truncates with a trailing "…"
+		// once the rendered column is narrower than the cell's actual
+		// text (verified against tview's own table.go Draw, not
+		// guessed), which only ever affects this one row — the leading
+		// "+" is already this app's own established "this is the
+		// create-new row" signal (see tabSwitcherNewRowLabel), so it
+		// stays recognizable even truncated.
+		newConnectionCell.SetMaxWidth(connectionMenuNewConnectionLabelMaxWidth)
+	}
+	table.SetCell(newRow, labelCol, newConnectionCell)
 	if expanded {
 		table.SetCell(newRow, connectionMenuColAt, blankConnectionMenuCell())
 		table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
