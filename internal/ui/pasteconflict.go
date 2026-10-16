@@ -15,6 +15,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/notify"
+	"github.com/jagottsicher/breakthrough/internal/operations"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
@@ -104,6 +105,14 @@ type queuedPaste struct {
 type pasteJob struct {
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// opID is this job's own internal/operations.Tracker entry — set
+	// once, right after r.operations.Start in reallyStartPaste, read by
+	// finishPasteJob/cancelPasteJob/cancelPastePauseKeepQueue (Finish)
+	// and requestPastePause/resumePastePause (SetState) — see root.go's
+	// own operations field doc comment for why this exists alongside
+	// activityLog/notify rather than instead of either.
+	opID uint64
 
 	// pauseMu guards resumeCh below — pause/resume (see their own doc
 	// comments) are always called from the UI thread (Root.
@@ -444,6 +453,13 @@ func (r *Root) reallyStartPaste(items []string, cut bool, destDir string, follow
 		srcClient:             srcClient,
 		destClient:            destClient,
 	}
+	source := destDir // Restore-from-Trash has no single meaningful "source" dir of its own (see restoreDests); an ordinary Paste's real source(s) are items themselves
+	if len(items) == 1 {
+		source = items[0]
+	} else if len(items) > 1 {
+		source = fmt.Sprintf("%d items", len(items))
+	}
+	job.opID = r.operations.Start(string(notify.CategoryPaste), source, destDir)
 	r.pasteJob = job
 
 	// Guarded the same way finishPasteJob is, not a bare "r.pasteJob =
@@ -593,12 +609,31 @@ func (r *Root) cancelPasteJob() {
 	if r.pasteJob == nil {
 		return
 	}
+	r.finishPasteOperation(r.pasteJob, operations.OutcomeCancelled)
 	r.pasteJob.cancel()
 	if r.pasteJob.current != nil && r.activePage == pasteConflictPage {
 		r.hideOverlay()
 	}
 	r.pasteJob = nil
 	r.pasteQueue = nil
+}
+
+// finishPasteOperation closes out job's own internal/operations.
+// Tracker entry — outcome supplied by the caller (finishPasteJob's own
+// succeeded/errors counters decide it for a normal completion;
+// cancelPasteJob/cancelPastePauseKeepQueue always pass
+// operations.OutcomeCancelled, since neither of those ever reaches
+// finishPasteJob at all — see its own "already superseded/cancelled"
+// early return). Without this at both of those call sites too, a
+// cancelled job's own Operation would sit stuck in StateRunning
+// forever, visible as still "in progress" to anything reading the
+// Tracker.
+func (r *Root) finishPasteOperation(job *pasteJob, outcome operations.Outcome) {
+	errs := make([]string, len(job.errors))
+	for i, err := range job.errors {
+		errs[i] = err.Error()
+	}
+	r.operations.Finish(job.opID, outcome, job.succeeded, len(job.errors), len(job.skippedSymlinks), errs)
 }
 
 // pasteWalk is startPaste's own background body — walks items in order,
@@ -1200,6 +1235,15 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 		r.notify.Push(notify.LevelSuccess, notify.CategoryPaste,
 			fmt.Sprintf("%s %d item(s)", pasteLogVerb(job), job.succeeded))
 	}
+	outcome := operations.OutcomeSucceeded
+	if len(job.errors) > 0 {
+		if job.succeeded > 0 {
+			outcome = operations.OutcomePartial
+		} else {
+			outcome = operations.OutcomeFailed
+		}
+	}
+	r.finishPasteOperation(job, outcome)
 
 	// Once this job's own wrap-up above is fully settled, not before —
 	// the next queued Paste (if any) starting mid-cleanup here could

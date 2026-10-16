@@ -57,6 +57,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/notify"
+	"github.com/jagottsicher/breakthrough/internal/operations"
 	"github.com/jagottsicher/breakthrough/internal/rsync"
 )
 
@@ -69,6 +70,13 @@ type rsyncJob struct {
 	startedAt time.Time
 	label     string // "sourceBase -> destBase", the status bar's own trailing text
 	destPath  string // job.Destination.Path — reload whichever open tab shows this once it finishes
+
+	// opID is this job's own internal/operations.Tracker entry — set
+	// once, right after r.operations.Start in reallyStartRsyncBackground,
+	// closed out by finishRsyncJob — see root.go's own operations field
+	// doc comment for why this exists alongside activityLog/notify
+	// rather than instead of either.
+	opID uint64
 
 	// percent is -1 until rsync's own first progress line arrives (still
 	// starting — connecting, or building its file list) and 0-100 after.
@@ -208,6 +216,7 @@ func (r *Root) reallyStartRsyncBackground(job rsync.Job, label string) {
 		startedAt: time.Now(), label: label, destPath: job.Destination.Path,
 	}
 	rj.percent.Store(-1)
+	rj.opID = r.operations.Start(string(notify.CategoryRsync), job.Source.Path, job.Destination.Path)
 	r.rsyncJob = rj
 
 	if err := cmd.Start(); err != nil {
@@ -396,6 +405,14 @@ func (r *Root) finishRsyncJob(job *rsyncJob, err error) {
 	case !wasCancelled:
 		r.activityLog.Action(activitylog.CategoryRsync, fmt.Sprintf("rsync %s", job.label))
 		r.notify.Push(notify.LevelSuccess, notify.CategoryRsync, fmt.Sprintf("rsync %s finished", job.label))
+	}
+	switch {
+	case wasCancelled:
+		r.operations.Finish(job.opID, operations.OutcomeCancelled, 0, 0, 0, nil)
+	case err != nil:
+		r.operations.Finish(job.opID, operations.OutcomeFailed, 0, 1, 0, []string{err.Error()})
+	default:
+		r.operations.Finish(job.opID, operations.OutcomeSucceeded, 1, 0, 0, nil)
 	}
 	r.forEachTab(func(p *Panel) {
 		if p.path == job.destPath {

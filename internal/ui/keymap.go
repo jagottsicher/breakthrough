@@ -559,6 +559,11 @@ func chordFamilies() []chordFamily {
 			// logaudit.go's own doc comment on openLogAudit for why that
 			// makes it unlike every other member of this family.
 			{'L', "Log Holepunch", func(r *Root) { r.openLogAudit() }},
+			// "t" for "Transfers" — the Transfer-Zentrale screen (see
+			// transfercenter.go), reading internal/operations rather than
+			// shelling out to a system command the way every other member
+			// of this family does.
+			{'t', "Transfers", func(r *Root) { r.openTransferCenter() }},
 		}},
 		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
 			{'m', "chmod", func(r *Root) { r.openChmod() }},
