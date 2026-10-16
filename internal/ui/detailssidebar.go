@@ -15,6 +15,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/filemeta"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/operations"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
@@ -305,7 +306,7 @@ func (r *Root) preserveFocusAcross(f func()) {
 // focus would end up parked on a now-invisible primitive, with nothing
 // left able to receive it back.
 func (r *Root) hideDetailsSidebar() {
-	r.cancelDetailsHashComputation()
+	r.cancelDetailsHashComputationOperation()
 	r.cancelDetailsDirSizeComputation()
 	r.cancelDetailsMetadataFetch()
 	hadFocus := r.detailsSidebar.HasFocus()
@@ -519,7 +520,7 @@ func (r *Root) refreshDetailsIfShowing(oldTarget, newTarget string) {
 // into this sidebar's own much narrower width than Look ever has to
 // account for.
 func (r *Root) loadDetailsTarget(path string) {
-	r.cancelDetailsHashComputation()
+	r.cancelDetailsHashComputationOperation()
 	r.cancelDetailsDirSizeComputation()
 	r.cancelDetailsMetadataFetch()
 	r.cancelDetailsPreview()
@@ -1188,6 +1189,7 @@ func (r *Root) computeDetailsHashes() {
 	r.renderDetailsSidebar()
 
 	target := r.detailsTarget
+	r.detailsHashOpID = r.operations.Start(hashOperationType, target, "")
 	// Both wrapped in safeGo (see its own doc comment): a panic in
 	// either one used to take the whole process down without even
 	// restoring the terminal, since neither runs inside
@@ -1197,6 +1199,7 @@ func (r *Root) computeDetailsHashes() {
 	// panic doesn't leave the sidebar stuck believing a computation is
 	// still running forever.
 	onPanic := func() {
+		r.operations.Finish(r.detailsHashOpID, operations.OutcomeFailed, 0, 1, 0, []string{"panic during hash computation"})
 		r.cancelDetailsHashComputation()
 		r.renderDetailsSidebar()
 	}
@@ -1210,17 +1213,27 @@ func (r *Root) computeDetailsHashes() {
 			if ctx.Err() != nil {
 				return
 			}
-			r.cancelDetailsHashComputation()
-			if err != nil {
-				r.showError(err)
-				return
-			}
-			// Updates detailsHashes/renders itself, then mirrors into
-			// Properties too if that's showing the same target — see
-			// propagateHashResult's own doc comment.
-			r.propagateHashResult(target, hashes)
+			r.finishDetailsHashComputation(target, hashes, err)
 		})
 	})
+}
+
+// finishDetailsHashComputation mirrors finishHashComputation
+// (properties.go) exactly, for Details' own independent copy of hash
+// computation — split out so a test can call it directly, without
+// needing a real event loop to drain r.app.QueueUpdateDraw first.
+func (r *Root) finishDetailsHashComputation(target string, hashes fsops.Hashes, err error) {
+	r.cancelDetailsHashComputation()
+	if err != nil {
+		r.operations.Finish(r.detailsHashOpID, operations.OutcomeFailed, 0, 1, 0, []string{err.Error()})
+		r.showError(err)
+		return
+	}
+	r.operations.Finish(r.detailsHashOpID, operations.OutcomeSucceeded, 1, 0, 0, nil)
+	// Updates detailsHashes/renders itself, then mirrors into
+	// Properties too if that's showing the same target — see
+	// propagateHashResult's own doc comment.
+	r.propagateHashResult(target, hashes)
 }
 
 // propagateHashResult is the one place computeHashes/computeDetailsHashes
@@ -1317,6 +1330,19 @@ func (r *Root) cancelDetailsHashComputation() {
 		r.detailsHashCancel = nil
 	}
 	r.detailsHashInProgress = false
+}
+
+// cancelDetailsHashComputationOperation mirrors
+// cancelHashComputationOperation (properties.go) exactly, for Details'
+// own independent copy of hash computation — see its own doc comment
+// for why only the genuine external-teardown call sites
+// (hideDetailsSidebar/loadDetailsTarget) go through this wrapper,
+// never the two call sites inside computeDetailsHashes itself.
+func (r *Root) cancelDetailsHashComputationOperation() {
+	if r.detailsHashInProgress {
+		r.operations.Finish(r.detailsHashOpID, operations.OutcomeCancelled, 0, 0, 0, nil)
+	}
+	r.cancelDetailsHashComputation()
 }
 
 // detailsPreviewDebounce is how long the cursor has to rest on an entry

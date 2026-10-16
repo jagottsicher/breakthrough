@@ -58,6 +58,7 @@ import (
 	"time"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/operations"
 )
 
 // compressJob is one backgrounded Compress or Extract run's own async
@@ -108,6 +109,17 @@ type compressJob struct {
 	// app.QueueUpdateDraw closure, which always runs on tview's own UI
 	// goroutine, never concurrently with itself.
 	animFrame int
+
+	// opID is this job's own internal/operations.Tracker entry — set
+	// once, right after r.operations.Start in reallyStartCompressJob/
+	// reallyStartCompressGoFunc, closed out by finishCompressJob. No
+	// separate cancel-path handling needed, unlike pasteJob's own opID
+	// (see finishPasteOperation's own doc comment): cancelCompressJob/
+	// cancelCompressKeepQueue both just cancel job.ctx and let the
+	// already-running goroutine's own completion still reach
+	// finishCompressJob — the same reason finishRsyncJob never needed
+	// it either.
+	opID uint64
 }
 
 // compressRequest is everything one Compress/Extract run needs — both
@@ -191,10 +203,12 @@ func (r *Root) reallyStartCompressJob(req compressRequest) {
 		errContext: req.errContext, destDir: req.destDir, deleteOriginal: req.deleteOriginal,
 		onSuccess: req.onSuccess,
 	}
+	job.opID = r.operations.Start(string(activitylog.CategoryArchive), req.label, req.destDir)
 	r.compressJob = job
 
 	if err := cmd.Start(); err != nil {
 		cancel()
+		r.operations.Finish(job.opID, operations.OutcomeFailed, 0, 1, 0, []string{err.Error()})
 		r.showError(fmt.Errorf("%s: %w", req.errContext, err))
 		r.compressJob = nil
 		return
@@ -238,6 +252,7 @@ func (r *Root) reallyStartCompressGoFunc(req compressRequest) {
 		errContext: req.errContext, destDir: req.destDir, deleteOriginal: req.deleteOriginal,
 		onSuccess: req.onSuccess,
 	}
+	job.opID = r.operations.Start(string(activitylog.CategoryArchive), req.label, req.destDir)
 	r.compressJob = job
 
 	r.safeGo(req.errContext+" job", func() { r.finishCompressJob(job, nil) }, func() {
@@ -289,6 +304,14 @@ func (r *Root) finishCompressJob(job *compressJob, err error) {
 		if job.onSuccess != nil {
 			job.onSuccess(r)
 		}
+	}
+	switch {
+	case wasCancelled:
+		r.operations.Finish(job.opID, operations.OutcomeCancelled, 0, 0, 0, nil)
+	case err != nil:
+		r.operations.Finish(job.opID, operations.OutcomeFailed, 0, 1, 0, []string{err.Error()})
+	default:
+		r.operations.Finish(job.opID, operations.OutcomeSucceeded, 1, 0, 0, nil)
 	}
 	r.refreshStatusBar()
 	r.advanceCompressQueue()
