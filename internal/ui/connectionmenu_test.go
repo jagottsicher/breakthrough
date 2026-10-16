@@ -23,17 +23,32 @@ func newTestRootForConnectionMenu(t *testing.T) *Root {
 	return r
 }
 
-// connectionMenuLabelTexts reads every row's own label cell — the
-// Table equivalent of the old List's itemTexts, now that each row is
-// three independent cells (see connectionMenuCol* and this file's own
-// doc comment on why) rather than one string.
+// connectionMenuLabelTexts reconstructs every row's own "user@host"
+// label by joining the User/@/Host-IP columns back together — the
+// Table equivalent of the old List's itemTexts, now that each row's
+// label is three independent cells (see connectionMenuCol* and that
+// const block's own doc comment on why) rather than one string. Omits
+// Identifier deliberately: it's a fourth, expanded-mode-only column,
+// not part of what used to be "the label" — tests that care about it
+// read connectionMenuColIdentifier directly instead.
 func connectionMenuLabelTexts(table *tview.Table) []string {
 	rows := table.GetRowCount()
 	texts := make([]string, rows)
 	for i := 0; i < rows; i++ {
-		if cell := table.GetCell(i, connectionMenuColLabel); cell != nil {
-			texts[i] = cell.Text
+		user := table.GetCell(i, connectionMenuColUser)
+		at := table.GetCell(i, connectionMenuColAt)
+		host := table.GetCell(i, connectionMenuColHost)
+		if user == nil {
+			continue
 		}
+		text := user.Text
+		if at != nil {
+			text += at.Text
+		}
+		if host != nil {
+			text += host.Text
+		}
+		texts[i] = text
 	}
 	return texts
 }
@@ -87,7 +102,7 @@ func TestRenderConnectionMenuOnAConnectedPanelListsTheActiveEntryThenNewConnecti
 	if !strings.Contains(texts[1], "New connection") {
 		t.Errorf("row 1 label = %q, want \"New connection…\" trailing, after every history entry", texts[1])
 	}
-	ejectCell := r.connectionMenuTable.GetCell(0, connectionMenuColEject)
+	ejectCell := r.connectionMenuTable.GetCell(0, connectionMenuEjectColumn(false))
 	if !strings.Contains(ejectCell.Text, connectionHistoryEjectGlyph) {
 		t.Errorf("row 0 eject cell = %q, want it to carry the eject glyph", ejectCell.Text)
 	}
@@ -96,13 +111,19 @@ func TestRenderConnectionMenuOnAConnectedPanelListsTheActiveEntryThenNewConnecti
 	}
 }
 
-// TestRenderConnectionMenuAppendsTheIdentifierToTheLabel pins Phase
-// 1's own display rule: an entry's Identifier (see remotefs.Connection's
-// own doc comment) shows up appended to its row's label, via
-// connectionMenuIdentifierSuffix — not folded into Connection.Label()
-// itself, which stays shared with the panel header button and
-// activity-log messages (see that function's own doc comment).
-func TestRenderConnectionMenuAppendsTheIdentifierToTheLabel(t *testing.T) {
+// TestRenderConnectionMenuCollapsedNeverShowsTheIdentifierColumn pins
+// the user's own explicit, later-revised design: collapsed mode is a
+// real User/@/Host-IP column table (not a single merged string — see
+// connectionMenuLabelTexts' own doc comment), but Identifier is only
+// ever a column at all in expanded mode. An Identifier set on the
+// connection must not leak into collapsed mode in any form — neither
+// appended to another column's own text, nor as a column of its own.
+// connectionMenuColIdentifier itself is not a useful index to probe
+// here: its raw number (3) coincides with connectionMenuEjectColumn's
+// own collapsed-mode value, so GetCell at that index legitimately
+// returns the Eject/Edit cell instead of nil — the real column count
+// is what actually distinguishes the two modes.
+func TestRenderConnectionMenuCollapsedNeverShowsTheIdentifierColumn(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	conn := remotefs.Connection{Host: "example.com", User: "tester", Identifier: "build-1"}
 	if err := remotefs.RecordAttempt(conn, false); err != nil {
@@ -112,15 +133,20 @@ func TestRenderConnectionMenuAppendsTheIdentifierToTheLabel(t *testing.T) {
 	r.renderConnectionMenu()
 
 	texts := connectionMenuLabelTexts(r.connectionMenuTable)
-	if len(texts) == 0 || !strings.Contains(texts[0], "build-1") {
-		t.Errorf("row 0 label = %q, want it to mention the Identifier \"build-1\"", texts[0])
+	if len(texts) == 0 || strings.Contains(texts[0], "build-1") {
+		t.Errorf("row 0 label = %q, want it to never mention the Identifier in collapsed mode", texts[0])
+	}
+	if got, want := r.connectionMenuTable.GetColumnCount(), connectionMenuRemoveColumn(false)+1; got != want {
+		t.Errorf("column count = %d, want %d (User/@/Host-IP/Eject/Remove, no Identifier column)", got, want)
 	}
 }
 
-// TestRenderConnectionMenuOmitsTheIdentifierSuffixWhenUnset pins the
-// other half: an entry nobody ever named looks exactly as it did
-// before this field existed, no trailing empty parentheses.
-func TestRenderConnectionMenuOmitsTheIdentifierSuffixWhenUnset(t *testing.T) {
+// TestRenderConnectionMenuCollapsedLabelIsExactlyUserAtHost pins the
+// reconstructed label's own exact shape: collapsed mode's three real
+// columns (User/@/Host-IP) joined back together must read identically
+// to Connection.Label() — same content, just split across cells
+// instead of one string.
+func TestRenderConnectionMenuCollapsedLabelIsExactlyUserAtHost(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	conn := remotefs.Connection{Host: "example.com", User: "tester"}
 	if err := remotefs.RecordAttempt(conn, false); err != nil {
@@ -131,7 +157,7 @@ func TestRenderConnectionMenuOmitsTheIdentifierSuffixWhenUnset(t *testing.T) {
 
 	texts := connectionMenuLabelTexts(r.connectionMenuTable)
 	if len(texts) == 0 || texts[0] != conn.Label() {
-		t.Errorf("row 0 label = %q, want exactly %q with no suffix", texts[0], conn.Label())
+		t.Errorf("row 0 label = %q, want exactly %q", texts[0], conn.Label())
 	}
 }
 
@@ -245,7 +271,7 @@ func TestClickingTheEjectCellInExpandedModeDisconnectsNotConnects(t *testing.T) 
 	r.setConnectionMenuExpanded(true)
 	r.renderConnectionMenu()
 
-	ejectCell := r.connectionMenuTable.GetCell(0, connectionMenuColExpandedEject)
+	ejectCell := r.connectionMenuTable.GetCell(0, connectionMenuEjectColumn(true))
 	if !strings.Contains(ejectCell.Text, connectionHistoryEjectGlyph) {
 		t.Fatalf("expanded eject cell = %q, want it to carry the eject glyph", ejectCell.Text)
 	}
@@ -267,7 +293,7 @@ func TestClickingTheRemoveCellInExpandedModeRemovesNotConnects(t *testing.T) {
 	r.setConnectionMenuExpanded(true)
 	r.renderConnectionMenu()
 
-	removeCell := r.connectionMenuTable.GetCell(0, connectionMenuColExpandedRemove)
+	removeCell := r.connectionMenuTable.GetCell(0, connectionMenuRemoveColumn(true))
 	removeCell.Clicked()
 
 	history, err := remotefs.LoadHistory()
@@ -429,11 +455,11 @@ func TestRenderConnectionMenuListsHistoryColoredByState(t *testing.T) {
 		t.Fatalf("history rows = %+v, want both entries listed", r.connectionMenuHistoryRows)
 	}
 
-	failedColor := cellTextColor(r.connectionMenuTable.GetCell(failedRow, connectionMenuColLabel))
+	failedColor := cellTextColor(r.connectionMenuTable.GetCell(failedRow, connectionMenuColUser))
 	if failedColor != r.theme.CriticalText {
 		t.Errorf("failed entry color = %v, want %v (theme.CriticalText)", failedColor, r.theme.CriticalText)
 	}
-	okColor := cellTextColor(r.connectionMenuTable.GetCell(okRow, connectionMenuColLabel))
+	okColor := cellTextColor(r.connectionMenuTable.GetCell(okRow, connectionMenuColUser))
 	if okColor == r.theme.CriticalText {
 		t.Errorf("successful entry incorrectly carries the critical color %v", okColor)
 	}
@@ -452,7 +478,7 @@ func TestRenderConnectionMenuColorsTheCurrentlyActiveEntryGreen(t *testing.T) {
 	r.renderConnectionMenu()
 
 	row := historyRowFor(t, r, conn)
-	got := cellTextColor(r.connectionMenuTable.GetCell(row, connectionMenuColLabel))
+	got := cellTextColor(r.connectionMenuTable.GetCell(row, connectionMenuColUser))
 	if got != r.theme.EntryExecutable {
 		t.Errorf("active connection's row color = %v, want %v (theme.EntryExecutable)", got, r.theme.EntryExecutable)
 	}
@@ -477,7 +503,7 @@ func TestRenderConnectionMenuColorsAPreviouslySuccessfulEntryAMutedGreen(t *test
 	r.renderConnectionMenu()
 
 	row := historyRowFor(t, r, conn)
-	got := cellTextColor(r.connectionMenuTable.GetCell(row, connectionMenuColLabel))
+	got := cellTextColor(r.connectionMenuTable.GetCell(row, connectionMenuColUser))
 	if got == r.theme.EntryExecutable {
 		t.Error("an inactive entry carries the full-brightness connected color, want a dimmer shade")
 	}
@@ -498,7 +524,7 @@ func TestPressingXOnAHistoryRowRemovesItFromHistory(t *testing.T) {
 	}
 	r.openConnectionMenu()
 	row := historyRowFor(t, r, conn)
-	r.connectionMenuTable.Select(row, connectionMenuColLabel)
+	r.connectionMenuTable.Select(row, connectionMenuColUser)
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
@@ -520,7 +546,7 @@ func TestPressingXOnNewConnectionRowDoesNothing(t *testing.T) {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
 	r.openConnectionMenu()
-	r.connectionMenuTable.Select(1, connectionMenuColLabel) // "New connection…" trails the one history row
+	r.connectionMenuTable.Select(1, connectionMenuColUser) // "New connection…" trails the one history row
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
@@ -551,7 +577,7 @@ func TestClickingTheRemoveCellRemovesTheRow(t *testing.T) {
 	r.openConnectionMenu()
 	row := historyRowFor(t, r, conn)
 
-	r.connectionMenuTable.GetCell(row, connectionMenuColRemove).Clicked()
+	r.connectionMenuTable.GetCell(row, connectionMenuRemoveColumn(false)).Clicked()
 
 	history, err := remotefs.LoadHistory()
 	if err != nil {
@@ -575,7 +601,7 @@ func TestPressingEOnTheActiveConnectionRowDisconnects(t *testing.T) {
 		t.Fatalf("connectRemote: %v", err)
 	}
 	r.openConnectionMenu()
-	r.connectionMenuTable.Select(r.connectionMenuActiveRow, connectionMenuColLabel)
+	r.connectionMenuTable.Select(r.connectionMenuActiveRow, connectionMenuColUser)
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone))
 
@@ -597,7 +623,7 @@ func TestDisconnectConnectionRowLogsAnAction(t *testing.T) {
 		t.Fatalf("connectRemote: %v", err)
 	}
 	r.openConnectionMenu()
-	r.connectionMenuTable.Select(r.connectionMenuActiveRow, connectionMenuColLabel)
+	r.connectionMenuTable.Select(r.connectionMenuActiveRow, connectionMenuColUser)
 	readLog := attachTestActivityLog(t, r)
 
 	if !r.disconnectConnectionRow(r.connectionMenuActiveRow) {
@@ -624,7 +650,7 @@ func TestPressingEOnANonActiveHistoryRowOpensEditPrefilled(t *testing.T) {
 	}
 	r.openConnectionMenu()
 	row := historyRowFor(t, r, conn)
-	r.connectionMenuTable.Select(row, connectionMenuColLabel)
+	r.connectionMenuTable.Select(row, connectionMenuColUser)
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone))
 
@@ -672,7 +698,7 @@ func TestPressingEOnANonActiveHistoryRowDoesNotDisconnectTheActivePanel(t *testi
 	}
 	r.openConnectionMenu()
 	row := historyRowFor(t, r, other)
-	r.connectionMenuTable.Select(row, connectionMenuColLabel)
+	r.connectionMenuTable.Select(row, connectionMenuColUser)
 
 	r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone))
 
@@ -692,7 +718,7 @@ func TestClickingTheEditCellOpensEditPrefilled(t *testing.T) {
 	r.openConnectionMenu()
 	row := historyRowFor(t, r, conn)
 
-	editCell := r.connectionMenuTable.GetCell(row, connectionMenuColEject)
+	editCell := r.connectionMenuTable.GetCell(row, connectionMenuEjectColumn(false))
 	if !strings.Contains(editCell.Text, connectionHistoryEditGlyph) {
 		t.Fatalf("non-active row's own eject-column cell = %q, want it to carry the edit glyph", editCell.Text)
 	}
@@ -724,7 +750,7 @@ func TestClickingTheEjectCellDisconnectsTheActiveConnection(t *testing.T) {
 	r.openConnectionMenu()
 	row := r.connectionMenuActiveRow
 
-	r.connectionMenuTable.GetCell(row, connectionMenuColEject).Clicked()
+	r.connectionMenuTable.GetCell(row, connectionMenuEjectColumn(false)).Clicked()
 
 	if r.panel.remote != nil {
 		t.Error("panel is still connected after clicking the eject cell")

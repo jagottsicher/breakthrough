@@ -708,14 +708,16 @@ terminal.
   other history row carries a `✎` in that same spot instead ("e" there
   too), opening the Connect dialog prefilled from it without immediately
   retrying, so a saved Host/Port/User can be fixed before reconnecting.
-  An optional "Identifier" field on that dialog tells apart several
-  similarly-named connections that otherwise only differ by host,
-  shown appended to a history row's own label once set; `<`/`>` on the
-  dropdown's own title bar switches between this compact list and a
-  full column table (`User | @ | Host/IP | Identifier`) spanning the
-  whole terminal width, remembered across restarts
-  (`connection_menu_expanded`). Connecting dials in the background with
-  a live progress line;
+  Every row is a real `User | @ | Host/IP` column table, not one merged
+  string — `User` is the one keyboard stop for the whole label group
+  (clicking anywhere across `@`/`Host/IP` still connects too). An
+  optional "Identifier" field on the Connect dialog tells apart several
+  similarly-named connections that otherwise only differ by host; `<`/
+  `>` on the dropdown's own title bar adds it as a fourth column and
+  spans the whole terminal width instead of just the active panel,
+  remembered across restarts (`connection_menu_expanded`). Column
+  headers and sorting aren't in yet. Connecting dials in the background
+  with a live progress line;
   authentication tries an `ssh-agent` first, then the usual default key
   files (`~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`), then a typed
   password as the last resort. Host keys are checked against the real

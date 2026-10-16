@@ -29,61 +29,50 @@ const connectionMenuMaxHistoryRows = 10
 // row wherever they appear.
 const connectionMenuNewConnectionLabel = " +  New connection"
 
-// connectionMenuNewConnectionLabelMaxWidth caps connectionMenuNewConnectionLabel's
-// own rendered width in expanded mode only (see renderConnectionMenu) —
-// long enough to stay obviously "+ New…", short enough that it never
-// drives the User column's own auto-sized width the way its full 18
-// characters otherwise would.
-const connectionMenuNewConnectionLabelMaxWidth = 10
-
-// Column indices within the connection menu table, collapsed mode
-// (the default — see r.settings.ConnectionMenuExpanded) — the same
-// label/action-cell/action-cell shape tabswitcher.go's own
-// tabSwitcherCol* constants already establish for an identical reason:
-// each row carries more than one independent thing to act on. Left
-// unchanged by the expanded column table below (connectionMenuColUser
-// etc.) so every test written against these three before expanded mode
-// existed keeps working without modification.
-const (
-	connectionMenuColLabel = iota
-	connectionMenuColEject
-	connectionMenuColRemove
-)
-
-// Column indices within the connection menu table, expanded mode —
-// User | @ | Host/IP | Identifier | Eject/Edit | Remove, replacing
-// collapsed mode's single Label column with its own four separate
-// pieces (see renderConnectionMenu). Only ever consulted when
-// r.settings.ConnectionMenuExpanded is true.
+// Column indices within the connection menu table — the same in both
+// collapsed and expanded mode (see r.settings.ConnectionMenuExpanded):
+// User | @ | Host/IP in both, expanded mode's only difference is
+// Identifier inserted right after Host/IP, shifting Eject/Remove one
+// column further right (see connectionMenuEjectColumn/
+// connectionMenuRemoveColumn). Per the user's own explicit request,
+// collapsed is a real column table too now, not single merged "user@
+// host" string — just missing the one column (Identifier) expanded
+// mode adds.
+//
+// Only connectionMenuColUser is ever selectable — @/Host-IP/Identifier
+// each still carry their own SetClickedFunc (see renderConnectionMenu),
+// so clicking anywhere across the whole label group still connects
+// (tview's own Table.MouseHandler calls a cell's Clicked() regardless
+// of its own Selectable flag, verified against table.go, not guessed),
+// but Left/Right keyboard navigation skips straight over them to the
+// row's other two real stops, ✎ and ✕ — exactly the "the whole label
+// group is one stop, I don't need to navigate its own pieces
+// separately" behavior the user asked for, since every one of those
+// cells does the exact same thing (connect) regardless of which one
+// was actually activated.
 const (
 	connectionMenuColUser = iota
 	connectionMenuColAt
 	connectionMenuColHost
-	connectionMenuColIdentifier
-	connectionMenuColExpandedEject
-	connectionMenuColExpandedRemove
+	connectionMenuColIdentifier // present only when expanded
 )
 
 // connectionMenuEjectColumn/connectionMenuRemoveColumn resolve the
 // eject/edit and remove columns' own index for the given expand state
 // — the one place activateConnectionMenuCell and renderConnectionMenu
 // both go through, so a click on either glyph is routed by the layout
-// actually on screen rather than by the collapsed-mode constants alone
-// (which, in expanded mode, would otherwise land on the Identifier and
-// Eject columns instead — the exact class of bug a fixed column
-// constant invites once the table's own column count varies by state).
+// actually on screen: expanded mode has one more label column
+// (Identifier) ahead of them than collapsed mode does, shifting both
+// one column to the right.
 func connectionMenuEjectColumn(expanded bool) int {
 	if expanded {
-		return connectionMenuColExpandedEject
+		return connectionMenuColIdentifier + 1
 	}
-	return connectionMenuColEject
+	return connectionMenuColHost + 1
 }
 
 func connectionMenuRemoveColumn(expanded bool) int {
-	if expanded {
-		return connectionMenuColExpandedRemove
-	}
-	return connectionMenuColRemove
+	return connectionMenuEjectColumn(expanded) + 1
 }
 
 // openConnectionMenu shows the connection dropdown for the currently
@@ -95,10 +84,23 @@ func connectionMenuRemoveColumn(expanded bool) int {
 func (r *Root) openConnectionMenu() {
 	r.renderConnectionMenu()
 	r.positionConnectionMenu()
-	// connectionMenuTable is the real focus target, connectionMenuLayout
-	// (title bar + table) what Pages actually shows — the identical split
-	// openTabSwitcher's own doc comment explains for the tab switcher.
-	r.showOverlay(connectionMenuPage, r.connectionMenuTable)
+	// connectionMenuLayout (title bar + table), not just the table —
+	// unlike openTabSwitcher's own identical-looking split, this title
+	// bar now has its own clickable expand/collapse glyph (see
+	// renderConnectionMenuTitleBar), and r.activeWidget is what
+	// captureOutsideClick's own primitiveContains check uses to decide
+	// "did this click land on the open overlay" — passing just the
+	// table there excludes the title bar's own row entirely, so a
+	// click on the toggle glyph read as "outside the overlay" and
+	// closed the whole dropdown before the title bar's own
+	// captureConnectionMenuTitleBarMouse ever ran (a real, user-
+	// reported bug). Keyboard focus still lands on the table either
+	// way: tview's own Flex.Focus delegates to whichever item was
+	// added with Focus=true (connectionMenuTable, see
+	// newConnectionMenuLayout) regardless of which ancestor
+	// Application.SetFocus was actually called on — verified directly
+	// against flex.go/application.go, not guessed.
+	r.showOverlay(connectionMenuPage, r.connectionMenuLayout)
 }
 
 // positionConnectionMenu sizes and places connectionMenuLayout against
@@ -175,14 +177,11 @@ func (r *Root) renderConnectionMenu() {
 	expanded := r.settings.ConnectionMenuExpanded
 	ejectCol, removeCol := connectionMenuEjectColumn(expanded), connectionMenuRemoveColumn(expanded)
 	// labelCol is wherever a click/Enter on a non-action cell should
-	// land focus by default (table.Select below) and what the trailing
-	// "+ New connection" row's own clickable cell uses — Label in
-	// collapsed mode, User (the first of the four expanded columns) in
-	// expanded mode.
-	labelCol := connectionMenuColLabel
-	if expanded {
-		labelCol = connectionMenuColUser
-	}
+	// land focus by default (table.Select below), and the only
+	// selectable column within the User/@/Host-IP/Identifier label
+	// group (see the column constants' own doc comment) — the
+	// trailing "+ New connection" row's own clickable cell uses it too.
+	labelCol := connectionMenuColUser
 
 	// A read failure here just means an empty history section, not an
 	// error worth surfacing through a dropdown menu — the same
@@ -199,33 +198,32 @@ func (r *Root) renderConnectionMenu() {
 		isActive := panel.remote != nil && panel.remoteConn.Equal(entry.Connection)
 		color := connectionHistoryColor(r.theme, isActive, entry.LastFailed)
 
+		// User is the label group's own one keyboard-selectable stop;
+		// @/Host-IP (and Identifier, expanded only) each still carry
+		// their own SetClickedFunc, so a mouse click anywhere across
+		// the whole group still connects — see the column constants'
+		// own doc comment for why only User is selectable.
+		table.SetCell(thisRow, connectionMenuColUser,
+			tview.NewTableCell(entry.User).
+				SetTextColor(color).
+				SetSelectable(true).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColUser)))
+		table.SetCell(thisRow, connectionMenuColAt,
+			tview.NewTableCell(connectionMenuAtColumnText(entry.Connection)).
+				SetTextColor(color).
+				SetSelectable(false).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColAt)))
+		table.SetCell(thisRow, connectionMenuColHost,
+			tview.NewTableCell(entry.HostPort()).
+				SetTextColor(color).
+				SetSelectable(false).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColHost)))
 		if expanded {
-			table.SetCell(thisRow, connectionMenuColUser,
-				tview.NewTableCell(entry.User).
-					SetTextColor(color).
-					SetSelectable(true).
-					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColUser)))
-			table.SetCell(thisRow, connectionMenuColAt,
-				tview.NewTableCell(connectionMenuAtColumnText(entry.Connection)).
-					SetTextColor(color).
-					SetSelectable(true).
-					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColAt)))
-			table.SetCell(thisRow, connectionMenuColHost,
-				tview.NewTableCell(entry.HostPort()).
-					SetTextColor(color).
-					SetSelectable(true).
-					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColHost)))
 			table.SetCell(thisRow, connectionMenuColIdentifier,
 				tview.NewTableCell(entry.Identifier).
 					SetTextColor(color).
-					SetSelectable(true).
+					SetSelectable(false).
 					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColIdentifier)))
-		} else {
-			table.SetCell(thisRow, connectionMenuColLabel,
-				tview.NewTableCell(entry.Label()+connectionMenuIdentifierSuffix(entry.Connection)).
-					SetTextColor(color).
-					SetSelectable(true).
-					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColLabel)))
 		}
 
 		if isActive {
@@ -259,23 +257,25 @@ func (r *Root) renderConnectionMenu() {
 		SetSelectable(true).
 		SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol))
 	if expanded {
-		// Capped so this one row's own 18-character label doesn't
-		// single-handedly stretch the User column to its own width on
-		// every open — real User values are a handful of characters
-		// (connectionMenuColUser never otherwise competes with
-		// anything this long). MaxWidth truncates with a trailing "…"
-		// once the rendered column is narrower than the cell's actual
-		// text (verified against tview's own table.go Draw, not
-		// guessed), which only ever affects this one row — the leading
-		// "+" is already this app's own established "this is the
-		// create-new row" signal (see tabSwitcherNewRowLabel), so it
-		// stays recognizable even truncated.
-		newConnectionCell.SetMaxWidth(connectionMenuNewConnectionLabelMaxWidth)
+		// Expansion, not a width cap: this row's own 18-character label
+		// would otherwise single-handedly stretch the User column to
+		// its own width, since real User values are only ever a
+		// handful of characters — but truncating it with "…" read as
+		// broken rather than as a deliberate, recognizable "+ New…"
+		// (the user's own explicit report). SetExpansion instead lets
+		// tview hand the User column whatever width is left over once
+		// every column's own natural content is accounted for (see its
+		// own doc comment: proportional, applies only when the table's
+		// actual rect is wider than its content needs — which expanded
+		// mode's own full-screen-width sizing always leaves true), so
+		// the full label renders without truncation and the slack goes
+		// where it already visually was, rather than being clipped.
+		newConnectionCell.SetExpansion(1)
 	}
 	table.SetCell(newRow, labelCol, newConnectionCell)
+	table.SetCell(newRow, connectionMenuColAt, blankConnectionMenuCell())
+	table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
 	if expanded {
-		table.SetCell(newRow, connectionMenuColAt, blankConnectionMenuCell())
-		table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
 		table.SetCell(newRow, connectionMenuColIdentifier, blankConnectionMenuCell())
 	}
 	table.SetCell(newRow, ejectCol, blankConnectionMenuCell())
@@ -540,7 +540,7 @@ func (r *Root) connectionMenuSize() (width, height int) {
 		return screenWidth, height
 	}
 
-	columnWidths := make([]int, connectionMenuColRemove+1)
+	columnWidths := make([]int, connectionMenuRemoveColumn(false)+1)
 	for row := 0; row < rows; row++ {
 		for column := range columnWidths {
 			cell := table.GetCell(row, column)

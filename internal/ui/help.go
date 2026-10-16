@@ -280,16 +280,20 @@ var helpText = strings.TrimLeft(`
   "✎" there instead: opens the Connect dialog prefilled from that entry
   without dialing it immediately, so a saved Host/Port/User can be
   fixed before reconnecting, rather than only ever being retyped from
-  scratch or fired off as-is — "e" on that row does the same). The
-  Connect dialog's own optional "Identifier" field (letters/digits/_/-,
-  32 characters max) tells apart several similarly-named connections
-  that otherwise only differ by host — shown appended to a history
-  row's own label once set. "<"/">" on the dropdown's own title bar (or
-  typing either character while it has focus) switches between this
-  compact list and a full column table (User/@/Host-IP/Identifier)
+  scratch or fired off as-is — "e" on that row does the same). Every
+  row is a real User/@/Host-IP column table, not one merged string —
+  User is the one keyboard stop for the whole label group (Left/Right
+  skips straight from it to "✎"/"✕"; clicking anywhere across @/
+  Host-IP still connects too). The Connect dialog's own optional
+  "Identifier" field (letters/digits/_/-, 32 characters max) tells apart
+  several similarly-named connections that otherwise only differ by
+  host. "<"/">" on the dropdown's own title bar (or typing either
+  character while it has focus) switches between that compact three-
+  column view and a wider one adding Identifier as a fourth column,
   spanning the whole terminal width instead of just the active panel;
   remembered across restarts ("connection_menu_expanded", also in
-  Options → General). Auth tries an ssh-agent, then
+  Options → General). Column headers and sorting are not in yet. Auth
+  tries an ssh-agent, then
   ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if unencrypted, then a typed
   password; host keys are checked against ~/.ssh/known_hosts, with a
   trust-on-first-use prompt for an unknown one and an outright refusal
