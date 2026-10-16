@@ -21,12 +21,15 @@
 // the first, for a number no caller of this package actually needs
 // yet. Add it later, once a real screen exists that would use it.
 //
-// No persistence either, deliberately: feature_ideas.txt's own spec
-// for this explicitly says not to keep sensitive data or whole file
-// lists around longer than needed, and an in-memory, bounded history is
-// enough for "what's running / what just finished" — a future Undo
-// feature's own durable record is a separate design question, not
-// something this package's shape should be bent to guess at now.
+// Persistence (see persist.go) covers *finished* Operations only, per
+// feature_ideas.txt's own explicit "Nur abgeschlossene, relevante
+// Zusammenfassungen persistieren; laufende Jobs nach Programmende
+// nicht vortäuschen" — a running/paused Operation is never written to
+// disk, so one killed mid-run by the process exiting is simply absent
+// from the file afterward, by construction rather than by a special
+// case checking for it. A future Undo feature's own durable record is
+// still a separate design question this summary-only file was never
+// meant to answer.
 //
 // Type reuses the exact string values notify.Category/
 // activitylog.Category already use ("paste", "rsync", ...) — a plain

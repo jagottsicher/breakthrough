@@ -125,6 +125,7 @@ func (r *Root) newGitBreachDiffSplit() {
 	splitContent := &gitBreachDiffSplitContent{
 		textViewContent: &textViewContent{view: r.gitBreachDiffSplitLeft},
 		right:           r.gitBreachDiffSplitRight,
+		root:            r,
 	}
 	r.gitBreachDiffSplitScrollbar = newVerticalScrollbar(r, splitContent)
 	r.gitBreachDiffSplitScrollbar.EnableTextDensityMinimap() // both panes are SetWrap(false)
@@ -168,6 +169,7 @@ func (r *Root) newGitBreachDiffSplit() {
 type gitBreachDiffSplitContent struct {
 	*textViewContent
 	right *tview.TextView
+	root  *Root
 
 	// rightCols caches the right pane's own totalCols the same way
 	// textViewContent itself caches the left pane's — see totalCols
@@ -178,6 +180,14 @@ type gitBreachDiffSplitContent struct {
 func (c *gitBreachDiffSplitContent) scrollTo(row, col int) {
 	c.textViewContent.scrollTo(row, col)
 	c.right.ScrollTo(row, col)
+}
+
+// scrollOffset overrides the embedded textViewContent's own method,
+// which would otherwise read the left pane alone — see
+// gitBreachDiffSplitScrollOffset's own doc comment for why that's
+// wrong whenever the left pane happens to be the narrower of the two.
+func (c *gitBreachDiffSplitContent) scrollOffset() (row, col int) {
+	return c.root.gitBreachDiffSplitScrollOffset()
 }
 
 // totalCols overrides the embedded textViewContent's own method: the
@@ -329,14 +339,52 @@ func (r *Root) gitBreachDiffSplitPageStep() int {
 	return height
 }
 
+// gitBreachDiffSplitScrollOffset is the split view's own authoritative
+// scroll offset — a real, reported bug fix, not a hypothetical one:
+// reading the left pane's own GetScrollOffset alone (as every call
+// site here used to) breaks the moment the two panes' longest lines
+// differ, which an ordinary changed line (shorter before, longer
+// after, or vice versa) makes the common case, not an edge case.
+// tview's own TextView.Draw clamps each view's stored column offset
+// against that view's OWN longest line (textview.go, "Adjust column
+// offset") — it has no idea the other, wider pane was scrolled
+// further right. So after a scroll driven by the wider pane (directly,
+// or via scrollTo's own "move both" mirroring), the narrower pane's
+// next Draw silently snaps its own copy back down, and anything
+// reading that pane's offset back — the shared horizontal scrollbar's
+// thumb, a further keyboard scroll, the Left-at-column-zero guard —
+// sees the clamped value and misbehaves: the thumb visibly jumps back
+// to the left even though the actually-focused pane's content is still
+// scrolled correctly, exactly the user's own report.
+//
+// The fix: take whichever pane's own copy is larger. The Pair
+// invariant gitBreachRenderDiffSplit enforces guarantees both panes
+// always have the same row, so row can come from either; column must
+// come from whichever pane is wide enough not to have clamped yet,
+// which is always the one reporting the larger value (the narrower
+// pane can only under-report its own actual scroll target, never
+// over-report it).
+func (r *Root) gitBreachDiffSplitScrollOffset() (row, col int) {
+	row, leftCol := r.gitBreachDiffSplitLeft.GetScrollOffset()
+	_, rightCol := r.gitBreachDiffSplitRight.GetScrollOffset()
+	if rightCol > leftCol {
+		return row, rightCol
+	}
+	return row, leftCol
+}
+
 // scrollGitBreachDiffSplit moves both panes by the same row/column
 // delta — always, unconditionally: unlike comparediff.go's own
 // scrollCompareDiff, there is no unlinked mode here to check (see
 // newGitBreachDiffSplit's own doc comment for why). TextView's own Draw
 // clamps an out-of-range row/column back into bounds on its own, the
-// same as every other scroll call in this app relies on.
+// same as every other scroll call in this app relies on. The starting
+// offset comes from gitBreachDiffSplitScrollOffset, not either pane
+// directly — see its own doc comment for why reading the left pane
+// alone can silently stall the scroll at that pane's own narrower
+// width.
 func (r *Root) scrollGitBreachDiffSplit(rowDelta, colDelta int) {
-	row, col := r.gitBreachDiffSplitLeft.GetScrollOffset()
+	row, col := r.gitBreachDiffSplitScrollOffset()
 	row += rowDelta
 	col += colDelta
 	r.gitBreachDiffSplitLeft.ScrollTo(row, col)
@@ -383,7 +431,7 @@ func (r *Root) captureGitBreachDiffSplitKey(event *tcell.EventKey) *tcell.EventK
 		r.scrollGitBreachDiffSplit(r.gitBreachDiffSplitPageStep(), 0)
 		return nil
 	case tcell.KeyLeft:
-		if _, col := r.gitBreachDiffSplitLeft.GetScrollOffset(); col <= 0 {
+		if _, col := r.gitBreachDiffSplitScrollOffset(); col <= 0 {
 			r.deactivateGitBreachMain()
 			return nil
 		}

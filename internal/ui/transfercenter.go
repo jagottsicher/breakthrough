@@ -14,13 +14,23 @@ import (
 // internal/operations' own Tracker — every Paste and backgrounded Rsync
 // currently running or recently finished, per feature_ideas.txt's own
 // "3. Aufgaben- und Transferzentrale". Cancel and pause/resume are the
-// only real actions this screen takes — Retry and persisting completed
-// summaries across restarts are both deliberately out of scope for this
-// first pass (see internal/operations' own doc comment: Operation
-// doesn't hold enough to re-run a job, and there's no persistence to
-// retrieve a summary from after a restart in the first place).
+// only real actions this screen takes — Retry is deliberately out of
+// scope (see internal/operations' own doc comment: Operation doesn't
+// hold enough to re-run a job). Finished summaries do survive a
+// restart now (see internal/operations/persist.go); a running/paused
+// one never does, so it's correctly absent rather than shown as still
+// running after an unclean exit.
 
 const transferCenterPage = "transfer-center"
+
+// operationsPersistPath is operations.DefaultPath, indirected through
+// a package-level var the same way notifyPersistPath (notifybar.go) and
+// labelsPersistPath already are — so a test can point NewRoot's own
+// operations.NewTrackerWithPersistence call somewhere isolated instead
+// of every one of this package's hundreds of NewRoot calls touching
+// whatever real file session.StateDir resolves to on the machine
+// running `go test`.
+var operationsPersistPath = operations.DefaultPath
 
 // Column indices within transferCenterTable. Source/Target come last —
 // both unbounded (a long path, a remote connection label) and the two

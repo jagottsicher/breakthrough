@@ -29,6 +29,13 @@ type Tracker struct {
 	ops      []Operation
 	nextID   uint64
 	onChange func(Operation)
+
+	// persistPath is where Finish saves every currently-finished
+	// Operation to afterward (see persist.go's own doc comment) — ""
+	// (NewTracker's own zero value) means an ordinary in-memory-only
+	// Tracker, the same as before persistence existed; only
+	// NewTrackerWithPersistence ever sets it.
+	persistPath string
 }
 
 // NewTracker returns an empty Tracker, ready for immediate use.
@@ -116,6 +123,7 @@ func (t *Tracker) Finish(id uint64, outcome Outcome, succeeded, failed, skipped 
 		op.EndTime = timeNow()
 	})
 	if found {
+		t.save()
 		t.notify(op)
 	}
 	return found
