@@ -1068,27 +1068,28 @@ type Root struct {
 
 	// connectForm/connectButtons/connectLayout make up the "Connect"
 	// dialog (see connectdialog.go) — a fixed field set (Host/Port/
-	// User/Password), so it's built once here rather than rebuilt fresh
-	// per open the way Sed Replace's own variable field set is (see
-	// newSedForm's own doc comment on that distinction). connectStatus
-	// is the one-line area below the form showing either an in-progress
-	// "Connecting…" animation or the last attempt's own error, in
-	// place, without closing the dialog. connectCancelBtn/
+	// User/Password/Identifier), so it's built once here rather than
+	// rebuilt fresh per open the way Sed Replace's own variable field
+	// set is (see newSedForm's own doc comment on that distinction).
+	// connectStatus is the one-line area below the form showing either
+	// an in-progress "Connecting…" animation or the last attempt's own
+	// error, in place, without closing the dialog. connectCancelBtn/
 	// connectConnectBtn are a real button pair (see newConnectButtons'
 	// own doc comment for why, not a List).
-	connectForm          *tview.Form
-	connectHostField     *tview.InputField
-	connectPortField     *tview.InputField
-	connectUserField     *tview.InputField
-	connectPasswordField *tview.InputField
-	connectStatus        *tview.TextView
-	connectCancelBtn     *tview.Button
-	connectConnectBtn    *tview.Button
-	connectButtons       *tview.Flex
-	connectTitleBar      *tview.TextView
-	connectLayout        *tview.Flex
-	connectCancel        context.CancelFunc
-	connectAnimFrame     int
+	connectForm            *tview.Form
+	connectHostField       *tview.InputField
+	connectPortField       *tview.InputField
+	connectUserField       *tview.InputField
+	connectPasswordField   *tview.InputField
+	connectIdentifierField *tview.InputField
+	connectStatus          *tview.TextView
+	connectCancelBtn       *tview.Button
+	connectConnectBtn      *tview.Button
+	connectButtons         *tview.Flex
+	connectTitleBar        *tview.TextView
+	connectLayout          *tview.Flex
+	connectCancel          context.CancelFunc
+	connectAnimFrame       int
 	// connectPendingSkipHostKey/connectPendingSkipHostKeyConn back the
 	// "Connect anyway" retry after a HostKeyMismatchError (see
 	// connectdialog.go's own finishConnect/runConnect) — set only once

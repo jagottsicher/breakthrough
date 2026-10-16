@@ -111,7 +111,7 @@ func (r *Root) renderConnectionMenu() {
 		isActive := panel.remote != nil && panel.remoteConn.Equal(entry.Connection)
 
 		table.SetCell(thisRow, connectionMenuColLabel,
-			tview.NewTableCell(entry.Label()).
+			tview.NewTableCell(entry.Label()+connectionMenuIdentifierSuffix(entry.Connection)).
 				SetTextColor(connectionHistoryColor(r.theme, isActive, entry.LastFailed)).
 				SetSelectable(true).
 				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColLabel)))
@@ -386,6 +386,23 @@ func (r *Root) connectionMenuSize() (width, height int) {
 	width += 2
 	// +1 for the title bar's own row (see connectionMenuLayout).
 	return width, rows + 1
+}
+
+// connectionMenuIdentifierSuffix appends conn's own Identifier (see
+// remotefs.Connection's own doc comment) to its row's label — "" if
+// unset, so an entry nobody ever named looks exactly as it does today.
+// Appended here, at this one call site, rather than folded into
+// Connection.Label() itself: Label() is deliberately shared with
+// activity-log messages, compress/duplicate error text, and the panel
+// header's own "@" button (see Label's own doc comment, and
+// shellFlagsSuffix's identical reasoning for sshshell.go's own history
+// rows), none of which should suddenly start showing a per-row
+// Identifier just because the connection dropdown wants to.
+func connectionMenuIdentifierSuffix(conn remotefs.Connection) string {
+	if conn.Identifier == "" {
+		return ""
+	}
+	return "  (" + conn.Identifier + ")"
 }
 
 // connectionHistorySuccessBlend blends theme.EntryExecutable toward

@@ -63,6 +63,18 @@ type Connection struct {
 	ShellCompression     bool `json:",omitempty"`
 	ShellVerbose         bool `json:",omitempty"`
 	ShellX11Forwarding   bool `json:",omitempty"`
+
+	// Identifier is an optional, user-assigned short name distinguishing
+	// this Connection from others that otherwise look the same —
+	// several similarly-named servers (e.g. multiple build runners)
+	// sharing a Host/User pattern is the case this exists for. Never
+	// part of Equal below: renaming an entry's Identifier must update
+	// its existing history entry (see history.go's own RecordAttempt),
+	// not create a duplicate alongside it. A connections.json written
+	// before this field existed simply omits it (json:",omitempty"),
+	// which decodes as "" — the same "absence isn't an error" contract
+	// every other field here already follows.
+	Identifier string `json:",omitempty"`
 }
 
 // Port22IfZero returns c.Port, or defaultSFTPPort if it's unset.

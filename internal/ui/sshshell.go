@@ -47,13 +47,17 @@ func (r *Root) openSSHShellMenu() {
 // renderSSHShellMenu rebuilds the dropdown's own rows from the exact
 // same persisted history openConnectionMenu reads (see
 // remotefs.LoadHistory) — the user's own explicit "wiederverwenden"
-// request: a host saved from either dropdown shows up in both. Each
-// label gets shellFlagsSuffix appended, since — unlike the "@"/"gc"
+// request: a host saved from either dropdown shows up in both, same
+// Identifier suffix included (connectionMenuIdentifierSuffix) even
+// though this dialog has no field of its own to set one — it only ever
+// inherits whatever the Connect dialog (or a prior attempt) already
+// recorded (see remotefs.RecordAttempt's own inherit rule). Each label
+// also gets shellFlagsSuffix appended, since — unlike the "@"/"gc"
 // dropdown, which only ever shows one entry per distinct Host/User/
 // Port — this one can show several rows that share all three, each
 // opened with a different combination of the four Shell* flags (see
-// remotefs.Connection's own doc comment); the suffix is what tells
-// those apart from one another at a glance.
+// remotefs.Connection's own doc comment); that second suffix is what
+// tells those apart from one another at a glance.
 func (r *Root) renderSSHShellMenu() {
 	table := r.sshShellMenuTable
 	table.Clear()
@@ -74,7 +78,7 @@ func (r *Root) renderSSHShellMenu() {
 		}
 
 		table.SetCell(thisRow, sshShellMenuColLabel,
-			tview.NewTableCell(entry.Label()+shellFlagsSuffix(entry.Connection)).
+			tview.NewTableCell(entry.Label()+connectionMenuIdentifierSuffix(entry.Connection)+shellFlagsSuffix(entry.Connection)).
 				SetTextColor(color).
 				SetSelectable(true).
 				SetClickedFunc(r.clickSSHShellMenuCell(thisRow, sshShellMenuColLabel)))

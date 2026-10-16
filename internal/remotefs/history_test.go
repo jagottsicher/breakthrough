@@ -71,6 +71,55 @@ func TestRecordAttemptOnAnExistingConnectionMovesItToTheFrontInsteadOfDuplicatin
 	}
 }
 
+// TestRecordAttemptInheritsThePreviousIdentifierWhenNoneIsGiven pins
+// the inherit half of RecordAttempt's own documented rule: reconnecting
+// via a history row's own label — which never goes through the
+// Identifier field at all, so conn always arrives with Identifier ==
+// "" — must not blank out an Identifier a previous attempt already
+// set.
+func TestRecordAttemptInheritsThePreviousIdentifierWhenNoneIsGiven(t *testing.T) {
+	withTestConfigHome(t)
+	named := Connection{Host: "a.example.com", User: "jens", Identifier: "build-1"}
+	if err := RecordAttempt(named, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	reconnect := Connection{Host: "a.example.com", User: "jens"} // no Identifier, as a plain reconnect builds it
+	if err := RecordAttempt(reconnect, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Identifier != "build-1" {
+		t.Errorf("entries = %+v, want the Identifier \"build-1\" to survive a reconnect that didn't specify one", entries)
+	}
+}
+
+// TestRecordAttemptANewNonEmptyIdentifierWins pins the other half: a
+// freshly typed, non-empty Identifier always overwrites whatever the
+// matched entry had before — renaming it, not merely setting it the
+// first time.
+func TestRecordAttemptANewNonEmptyIdentifierWins(t *testing.T) {
+	withTestConfigHome(t)
+	if err := RecordAttempt(Connection{Host: "a.example.com", User: "jens", Identifier: "build-1"}, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := RecordAttempt(Connection{Host: "a.example.com", User: "jens", Identifier: "build-2"}, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Identifier != "build-2" {
+		t.Errorf("entries = %+v, want the Identifier renamed to \"build-2\", not stuck on \"build-1\"", entries)
+	}
+}
+
 // TestRecordAttemptOnABrandNewConnectionThatFailsIsNotAdded pins the
 // user's own explicit request: a connection nobody has ever reached
 // before, that fails on its very first attempt, must not clutter the

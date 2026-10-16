@@ -95,6 +95,45 @@ func TestRenderConnectionMenuOnAConnectedPanelListsTheActiveEntryThenNewConnecti
 	}
 }
 
+// TestRenderConnectionMenuAppendsTheIdentifierToTheLabel pins Phase
+// 1's own display rule: an entry's Identifier (see remotefs.Connection's
+// own doc comment) shows up appended to its row's label, via
+// connectionMenuIdentifierSuffix — not folded into Connection.Label()
+// itself, which stays shared with the panel header button and
+// activity-log messages (see that function's own doc comment).
+func TestRenderConnectionMenuAppendsTheIdentifierToTheLabel(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester", Identifier: "build-1"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	r.renderConnectionMenu()
+
+	texts := connectionMenuLabelTexts(r.connectionMenuTable)
+	if len(texts) == 0 || !strings.Contains(texts[0], "build-1") {
+		t.Errorf("row 0 label = %q, want it to mention the Identifier \"build-1\"", texts[0])
+	}
+}
+
+// TestRenderConnectionMenuOmitsTheIdentifierSuffixWhenUnset pins the
+// other half: an entry nobody ever named looks exactly as it did
+// before this field existed, no trailing empty parentheses.
+func TestRenderConnectionMenuOmitsTheIdentifierSuffixWhenUnset(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	r.renderConnectionMenu()
+
+	texts := connectionMenuLabelTexts(r.connectionMenuTable)
+	if len(texts) == 0 || texts[0] != conn.Label() {
+		t.Errorf("row 0 label = %q, want exactly %q with no suffix", texts[0], conn.Label())
+	}
+}
+
 // TestRenderConnectionMenuSelectsTheActiveConnectionRowByDefault pins
 // the same default-selection rule openTabSwitcher's own
 // r.openTabSwitcher(r.activeTab) already establishes for the tab
@@ -365,7 +404,7 @@ func TestDisconnectConnectionRowLogsAnAction(t *testing.T) {
 // its own row (see TestPressingEOnTheActiveConnectionRowDisconnects).
 func TestPressingEOnANonActiveHistoryRowOpensEditPrefilled(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
-	conn := remotefs.Connection{Host: "example.com", Port: 2222, User: "tester"}
+	conn := remotefs.Connection{Host: "example.com", Port: 2222, User: "tester", Identifier: "build-1"}
 	if err := remotefs.RecordAttempt(conn, false); err != nil {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
@@ -389,6 +428,9 @@ func TestPressingEOnANonActiveHistoryRowOpensEditPrefilled(t *testing.T) {
 	}
 	if got := r.connectUserField.GetText(); got != conn.User {
 		t.Errorf("User field = %q, want %q", got, conn.User)
+	}
+	if got := r.connectIdentifierField.GetText(); got != conn.Identifier {
+		t.Errorf("Identifier field = %q, want %q", got, conn.Identifier)
 	}
 	if r.panel.remote != nil {
 		t.Error("editing a history row must not connect anything on its own")

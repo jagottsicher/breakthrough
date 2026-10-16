@@ -65,3 +65,16 @@ func TestConnectionEqualIgnoresNothingWhenAllShellFlagsMatch(t *testing.T) {
 		t.Error("Equal(a, b) = false, want true — identical Host/User/Port and identical shell flags are the same endpoint")
 	}
 }
+
+// TestConnectionEqualIgnoresIdentifier pins the one deliberate
+// exception Connection's own doc comment calls out: Identifier is
+// never part of Equal, so renaming an entry's Identifier (see
+// history.go's own RecordAttempt) matches and updates its existing
+// history entry instead of creating a duplicate alongside it.
+func TestConnectionEqualIgnoresIdentifier(t *testing.T) {
+	a := Connection{Host: "example.com", User: "jens", Identifier: "build-1"}
+	b := Connection{Host: "example.com", User: "jens", Identifier: "build-2"}
+	if !a.Equal(b) {
+		t.Error("Equal(a, b) = false, want true — differing only in Identifier must still compare equal")
+	}
+}
