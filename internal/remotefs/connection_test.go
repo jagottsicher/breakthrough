@@ -23,6 +23,20 @@ func TestConnectionLabelOmitsPortWhenItIsExactlyTheDefault(t *testing.T) {
 	}
 }
 
+func TestConnectionHostPortOmitsTheDefaultPort(t *testing.T) {
+	c := Connection{Host: "example.com", User: "jens"}
+	if got, want := c.HostPort(), "example.com"; got != want {
+		t.Errorf("HostPort() = %q, want %q (User must never appear here)", got, want)
+	}
+}
+
+func TestConnectionHostPortIncludesANonDefaultPort(t *testing.T) {
+	c := Connection{Host: "example.com", Port: 2222}
+	if got, want := c.HostPort(), "example.com:2222"; got != want {
+		t.Errorf("HostPort() = %q, want %q", got, want)
+	}
+}
+
 func TestConnectionAddrFillsInTheDefaultPort(t *testing.T) {
 	c := Connection{Host: "example.com"}
 	if got, want := c.Addr(), "example.com:22"; got != want {

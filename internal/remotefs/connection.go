@@ -90,6 +90,18 @@ func (c Connection) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port22IfZero())
 }
 
+// HostPort renders c's own "host", plus a ":port" suffix only when it
+// isn't the default — the exact same port-shown-only-if-not-obvious
+// rule Label below applies, just without the "user@" prefix, for
+// anything that needs that half on its own (the connection dropdown's
+// own expanded Host/IP column — see internal/ui's connectionmenu.go).
+func (c Connection) HostPort() string {
+	if c.Port != 0 && c.Port != defaultSFTPPort {
+		return fmt.Sprintf("%s:%d", c.Host, c.Port)
+	}
+	return c.Host
+}
+
 // Label renders c the way a shell prompt or `ssh` invocation would —
 // "user@host", plus a ":port" suffix only when it isn't the default,
 // so the overwhelmingly common case stays exactly as short as typing
@@ -98,12 +110,9 @@ func (c Connection) Addr() string {
 // connectionmenu.go/remoteheader.go) — one shared rendering, so the
 // two can never drift apart from each other.
 func (c Connection) Label() string {
-	label := c.Host
+	label := c.HostPort()
 	if c.User != "" {
-		label = c.User + "@" + c.Host
-	}
-	if c.Port != 0 && c.Port != defaultSFTPPort {
-		label = fmt.Sprintf("%s:%d", label, c.Port)
+		label = c.User + "@" + label
 	}
 	return label
 }

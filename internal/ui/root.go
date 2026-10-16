@@ -2614,6 +2614,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// menu's own dropdown.
 	r.connectionMenuTable = r.newConnectionMenuTable()
 	r.connectionMenuTitleBar = newPlainTitleBar("Connections")
+	r.connectionMenuTitleBar.SetMouseCapture(r.captureConnectionMenuTitleBarMouse)
 	r.connectionMenuLayout = r.newConnectionMenuLayout()
 
 	// The "gs" SSH shell dropdown ("Open shell to") and its own "Add

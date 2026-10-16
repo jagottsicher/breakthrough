@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -131,6 +132,194 @@ func TestRenderConnectionMenuOmitsTheIdentifierSuffixWhenUnset(t *testing.T) {
 	texts := connectionMenuLabelTexts(r.connectionMenuTable)
 	if len(texts) == 0 || texts[0] != conn.Label() {
 		t.Errorf("row 0 label = %q, want exactly %q with no suffix", texts[0], conn.Label())
+	}
+}
+
+// TestToggleConnectionMenuExpandedFlipsTheStoredSetting pins the same
+// "flip, persist, apply if currently open" shape toggleSplitStacked's
+// own test establishes for an identical kind of stored display
+// preference.
+func TestToggleConnectionMenuExpandedFlipsTheStoredSetting(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	if r.settings.ConnectionMenuExpanded {
+		t.Fatal("ConnectionMenuExpanded should start false (the default)")
+	}
+
+	r.toggleConnectionMenuExpanded()
+	if !r.settings.ConnectionMenuExpanded {
+		t.Error("toggleConnectionMenuExpanded did not flip the setting on")
+	}
+
+	r.toggleConnectionMenuExpanded()
+	if r.settings.ConnectionMenuExpanded {
+		t.Error("a second toggle did not flip it back off")
+	}
+}
+
+// TestConnectionMenuExpandedSurvivesIntoTheConfigFile mirrors
+// TestSplitOrientationSurvivesIntoTheConfigFile (split_test.go) for
+// this setting.
+func TestConnectionMenuExpandedSurvivesIntoTheConfigFile(t *testing.T) {
+	first := t.TempDir()
+	configPath := isolateUserConfigFile(t)
+	r, err := NewRoot(tview.NewApplication(), first)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.toggleConnectionMenuExpanded()
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("reading the config back: %v", err)
+	}
+	if got := string(data); !strings.Contains(got, "connection_menu_expanded = true") {
+		t.Errorf("config = %q, want it to record connection_menu_expanded", got)
+	}
+}
+
+// TestRenderConnectionMenuExpandedSplitsTheLabelIntoFourColumns pins
+// Phase 2's own column rework: User | @ | Host/IP | Identifier,
+// instead of collapsed mode's single Label column.
+func TestRenderConnectionMenuExpandedSplitsTheLabelIntoFourColumns(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", Port: 2222, User: "tester", Identifier: "build-1"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.setConnectionMenuExpanded(true)
+
+	r.renderConnectionMenu()
+
+	table := r.connectionMenuTable
+	if got, want := table.GetCell(0, connectionMenuColUser).Text, "tester"; got != want {
+		t.Errorf("User column = %q, want %q", got, want)
+	}
+	if got, want := table.GetCell(0, connectionMenuColAt).Text, "@"; got != want {
+		t.Errorf("@ column = %q, want %q", got, want)
+	}
+	if got, want := table.GetCell(0, connectionMenuColHost).Text, "example.com:2222"; got != want {
+		t.Errorf("Host/IP column = %q, want %q", got, want)
+	}
+	if got, want := table.GetCell(0, connectionMenuColIdentifier).Text, "build-1"; got != want {
+		t.Errorf("Identifier column = %q, want %q", got, want)
+	}
+}
+
+// TestRenderConnectionMenuExpandedOmitsAtForAUserlessConnection pins
+// connectionMenuAtColumnText's own rule: no User, no "@" — the exact
+// same condition Connection.Label() already uses to decide whether to
+// show "@" at all.
+func TestRenderConnectionMenuExpandedOmitsAtForAUserlessConnection(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.setConnectionMenuExpanded(true)
+
+	r.renderConnectionMenu()
+
+	if got := r.connectionMenuTable.GetCell(0, connectionMenuColAt).Text; got != "" {
+		t.Errorf("@ column = %q, want empty for a connection with no User", got)
+	}
+}
+
+// TestClickingTheEjectCellInExpandedModeDisconnectsNotConnects pins the
+// regression connectionMenuEjectColumn/connectionMenuRemoveColumn
+// exist to prevent: in expanded mode, Eject/Remove sit at a different
+// absolute column index than in collapsed mode (four label columns
+// precede them instead of one), so a click there must still route to
+// disconnectConnectionRow — not fall through to the default "connect"
+// case the way comparing against the collapsed-mode constants directly
+// would.
+func TestClickingTheEjectCellInExpandedModeDisconnectsNotConnects(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := r.panel.connectRemote(fakeConnectedClient(), conn); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.setConnectionMenuExpanded(true)
+	r.renderConnectionMenu()
+
+	ejectCell := r.connectionMenuTable.GetCell(0, connectionMenuColExpandedEject)
+	if !strings.Contains(ejectCell.Text, connectionHistoryEjectGlyph) {
+		t.Fatalf("expanded eject cell = %q, want it to carry the eject glyph", ejectCell.Text)
+	}
+	ejectCell.Clicked()
+
+	if r.panel.remote != nil {
+		t.Error("clicking the expanded-mode eject cell did not disconnect — it fell through to connect/reconnect instead")
+	}
+}
+
+// TestClickingTheRemoveCellInExpandedModeRemovesNotConnects is the
+// companion regression test for the Remove column's own shifted index.
+func TestClickingTheRemoveCellInExpandedModeRemovesNotConnects(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.setConnectionMenuExpanded(true)
+	r.renderConnectionMenu()
+
+	removeCell := r.connectionMenuTable.GetCell(0, connectionMenuColExpandedRemove)
+	removeCell.Clicked()
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 0 {
+		t.Errorf("history = %+v, want the entry removed, not reconnected to", history)
+	}
+}
+
+// TestRenderConnectionMenuTitleBarShowsTheExpandGlyphWhenCollapsed and
+// its companion below pin the title bar's own toggle glyph (see
+// renderConnectionMenuTitleBar's own doc comment on the direction
+// convention).
+func TestRenderConnectionMenuTitleBarShowsTheExpandGlyphWhenCollapsed(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	r.renderConnectionMenuTitleBar(40)
+	if got := r.connectionMenuTitleBar.GetText(true); !strings.Contains(got, connectionMenuExpandGlyph) {
+		t.Errorf("title bar = %q, want it to carry the expand glyph %q while collapsed", got, connectionMenuExpandGlyph)
+	}
+}
+
+func TestRenderConnectionMenuTitleBarShowsTheCollapseGlyphWhenExpanded(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	r.setConnectionMenuExpanded(true)
+	r.renderConnectionMenuTitleBar(40)
+	if got := r.connectionMenuTitleBar.GetText(true); !strings.Contains(got, connectionMenuCollapseGlyph) {
+		t.Errorf("title bar = %q, want it to carry the collapse glyph %q while expanded", got, connectionMenuCollapseGlyph)
+	}
+}
+
+// TestPositionConnectionMenuSpansTheFullScreenWidthWhenExpanded pins
+// the width strategy itself: expanded mode must use clampToScreen
+// (the whole terminal), not clampToPanel (only the active panel) —
+// see positionConnectionMenu's own doc comment for why collapsed mode
+// couldn't simply reuse clampToPanel's own result here.
+func TestPositionConnectionMenuSpansTheFullScreenWidthWhenExpanded(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.setConnectionMenuExpanded(true)
+	r.renderConnectionMenu()
+
+	r.positionConnectionMenu()
+
+	_, _, screenWidth, _ := r.GetRect()
+	_, _, gotWidth, _ := r.connectionMenuLayout.GetRect()
+	if gotWidth != screenWidth {
+		t.Errorf("connectionMenuLayout width = %d, want the full screen width %d", gotWidth, screenWidth)
 	}
 }
 

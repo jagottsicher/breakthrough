@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -27,15 +29,55 @@ const connectionMenuMaxHistoryRows = 10
 // row wherever they appear.
 const connectionMenuNewConnectionLabel = " +  New connection"
 
-// Column indices within the connection menu table — the same
+// Column indices within the connection menu table, collapsed mode
+// (the default — see r.settings.ConnectionMenuExpanded) — the same
 // label/action-cell/action-cell shape tabswitcher.go's own
 // tabSwitcherCol* constants already establish for an identical reason:
-// each row carries more than one independent thing to act on.
+// each row carries more than one independent thing to act on. Left
+// unchanged by the expanded column table below (connectionMenuColUser
+// etc.) so every test written against these three before expanded mode
+// existed keeps working without modification.
 const (
 	connectionMenuColLabel = iota
 	connectionMenuColEject
 	connectionMenuColRemove
 )
+
+// Column indices within the connection menu table, expanded mode —
+// User | @ | Host/IP | Identifier | Eject/Edit | Remove, replacing
+// collapsed mode's single Label column with its own four separate
+// pieces (see renderConnectionMenu). Only ever consulted when
+// r.settings.ConnectionMenuExpanded is true.
+const (
+	connectionMenuColUser = iota
+	connectionMenuColAt
+	connectionMenuColHost
+	connectionMenuColIdentifier
+	connectionMenuColExpandedEject
+	connectionMenuColExpandedRemove
+)
+
+// connectionMenuEjectColumn/connectionMenuRemoveColumn resolve the
+// eject/edit and remove columns' own index for the given expand state
+// — the one place activateConnectionMenuCell and renderConnectionMenu
+// both go through, so a click on either glyph is routed by the layout
+// actually on screen rather than by the collapsed-mode constants alone
+// (which, in expanded mode, would otherwise land on the Identifier and
+// Eject columns instead — the exact class of bug a fixed column
+// constant invites once the table's own column count varies by state).
+func connectionMenuEjectColumn(expanded bool) int {
+	if expanded {
+		return connectionMenuColExpandedEject
+	}
+	return connectionMenuColEject
+}
+
+func connectionMenuRemoveColumn(expanded bool) int {
+	if expanded {
+		return connectionMenuColExpandedRemove
+	}
+	return connectionMenuColRemove
+}
 
 // openConnectionMenu shows the connection dropdown for the currently
 // active panel — reached via a click on the header's own "@" button
@@ -45,15 +87,43 @@ const (
 // for its own dropdown, and openTabSwitcher for its own.
 func (r *Root) openConnectionMenu() {
 	r.renderConnectionMenu()
-
-	right, top := r.connectionMenuAnchor()
-	width, height := r.connectionMenuSize()
-	x, y, width, height := r.clampToPanel(right-width, top, width, height)
-	r.connectionMenuLayout.SetRect(x, y, width, height)
+	r.positionConnectionMenu()
 	// connectionMenuTable is the real focus target, connectionMenuLayout
 	// (title bar + table) what Pages actually shows — the identical split
 	// openTabSwitcher's own doc comment explains for the tab switcher.
 	r.showOverlay(connectionMenuPage, r.connectionMenuTable)
+}
+
+// positionConnectionMenu sizes and places connectionMenuLayout against
+// its own current collapsed/expanded state — the one place
+// openConnectionMenu and removeConnectionHistoryRow both go through
+// (see its own doc comment there), so a row disappearing while
+// expanded can never snap the dropdown back to collapsed-mode sizing
+// just because only one of the two call sites learned about expanded
+// mode.
+//
+// Collapsed: unchanged from before expanded mode existed —
+// clampToPanel, anchored under the "@" button, never wider than the
+// active panel. Expanded: clampToScreen instead (root.go's own
+// "orient against the whole view instead of the active panel" helper,
+// not guessed — see its own doc comment), x pinned to 0 and width to
+// the full screen rather than right-width, since the point is
+// deliberately to span the entire terminal, not just whatever room is
+// left to the button's own left. y still comes from
+// connectionMenuAnchor (already an absolute screen position via
+// GetInnerRect, same in both branches) so the dropdown still opens at
+// the same row either way, just wider when expanded.
+func (r *Root) positionConnectionMenu() {
+	right, top := r.connectionMenuAnchor()
+	width, height := r.connectionMenuSize()
+	var x, y int
+	if r.settings.ConnectionMenuExpanded {
+		x, y, width, height = r.clampToScreen(0, top, width, height)
+	} else {
+		x, y, width, height = r.clampToPanel(right-width, top, width, height)
+	}
+	r.connectionMenuLayout.SetRect(x, y, width, height)
+	r.renderConnectionMenuTitleBar(width)
 }
 
 // connectionMenuAnchor returns the screen position the header's own
@@ -95,6 +165,17 @@ func (r *Root) renderConnectionMenu() {
 	table.Clear()
 	r.connectionMenuHistoryRows = map[int]remotefs.Connection{}
 	r.connectionMenuActiveRow = -1
+	expanded := r.settings.ConnectionMenuExpanded
+	ejectCol, removeCol := connectionMenuEjectColumn(expanded), connectionMenuRemoveColumn(expanded)
+	// labelCol is wherever a click/Enter on a non-action cell should
+	// land focus by default (table.Select below) and what the trailing
+	// "+ New connection" row's own clickable cell uses — Label in
+	// collapsed mode, User (the first of the four expanded columns) in
+	// expanded mode.
+	labelCol := connectionMenuColLabel
+	if expanded {
+		labelCol = connectionMenuColUser
+	}
 
 	// A read failure here just means an empty history section, not an
 	// error worth surfacing through a dropdown menu — the same
@@ -109,46 +190,75 @@ func (r *Root) renderConnectionMenu() {
 		entry := entry
 		thisRow := row
 		isActive := panel.remote != nil && panel.remoteConn.Equal(entry.Connection)
+		color := connectionHistoryColor(r.theme, isActive, entry.LastFailed)
 
-		table.SetCell(thisRow, connectionMenuColLabel,
-			tview.NewTableCell(entry.Label()+connectionMenuIdentifierSuffix(entry.Connection)).
-				SetTextColor(connectionHistoryColor(r.theme, isActive, entry.LastFailed)).
-				SetSelectable(true).
-				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColLabel)))
+		if expanded {
+			table.SetCell(thisRow, connectionMenuColUser,
+				tview.NewTableCell(entry.User).
+					SetTextColor(color).
+					SetSelectable(true).
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColUser)))
+			table.SetCell(thisRow, connectionMenuColAt,
+				tview.NewTableCell(connectionMenuAtColumnText(entry.Connection)).
+					SetTextColor(color).
+					SetSelectable(true).
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColAt)))
+			table.SetCell(thisRow, connectionMenuColHost,
+				tview.NewTableCell(entry.HostPort()).
+					SetTextColor(color).
+					SetSelectable(true).
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColHost)))
+			table.SetCell(thisRow, connectionMenuColIdentifier,
+				tview.NewTableCell(entry.Identifier).
+					SetTextColor(color).
+					SetSelectable(true).
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColIdentifier)))
+		} else {
+			table.SetCell(thisRow, connectionMenuColLabel,
+				tview.NewTableCell(entry.Label()+connectionMenuIdentifierSuffix(entry.Connection)).
+					SetTextColor(color).
+					SetSelectable(true).
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColLabel)))
+		}
 
 		if isActive {
-			table.SetCell(thisRow, connectionMenuColEject,
+			table.SetCell(thisRow, ejectCol,
 				tview.NewTableCell(" "+connectionHistoryEjectGlyph+" ").
 					SetTextColor(r.theme.MutedTextColor).
 					SetSelectable(true).
-					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColEject)))
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, ejectCol)))
 			r.connectionMenuActiveRow = thisRow
 		} else {
-			table.SetCell(thisRow, connectionMenuColEject,
+			table.SetCell(thisRow, ejectCol,
 				tview.NewTableCell(" "+connectionHistoryEditGlyph+" ").
 					SetTextColor(r.theme.MutedTextColor).
 					SetSelectable(true).
-					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColEject)))
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, ejectCol)))
 		}
 
-		table.SetCell(thisRow, connectionMenuColRemove,
+		table.SetCell(thisRow, removeCol,
 			tview.NewTableCell(" "+connectionHistoryRemoveGlyph+" ").
 				SetTextColor(r.theme.MutedTextColor).
 				SetSelectable(true).
-				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColRemove)))
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, removeCol)))
 
 		r.connectionMenuHistoryRows[thisRow] = entry.Connection
 		row++
 	}
 
 	newRow := row
-	table.SetCell(newRow, connectionMenuColLabel,
+	table.SetCell(newRow, labelCol,
 		tview.NewTableCell(connectionMenuNewConnectionLabel).
 			SetTextColor(r.theme.Text).
 			SetSelectable(true).
-			SetClickedFunc(r.clickConnectionMenuCell(newRow, connectionMenuColLabel)))
-	table.SetCell(newRow, connectionMenuColEject, blankConnectionMenuCell())
-	table.SetCell(newRow, connectionMenuColRemove, blankConnectionMenuCell())
+			SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol)))
+	if expanded {
+		table.SetCell(newRow, connectionMenuColAt, blankConnectionMenuCell())
+		table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
+		table.SetCell(newRow, connectionMenuColIdentifier, blankConnectionMenuCell())
+	}
+	table.SetCell(newRow, ejectCol, blankConnectionMenuCell())
+	table.SetCell(newRow, removeCol, blankConnectionMenuCell())
 
 	// Default selection mirrors openTabSwitcher's own
 	// r.openTabSwitcher(r.activeTab): the active connection's own row
@@ -161,7 +271,19 @@ func (r *Root) renderConnectionMenu() {
 	if r.connectionMenuActiveRow >= 0 {
 		initialRow = r.connectionMenuActiveRow
 	}
-	table.Select(initialRow, connectionMenuColLabel)
+	table.Select(initialRow, labelCol)
+}
+
+// connectionMenuAtColumnText renders the expanded column table's own
+// "@" column: a literal "@" when conn has a User to join to its own
+// Host column, "" otherwise — mirroring the exact condition
+// Connection.Label() already uses for whether to show "@" at all, just
+// pulled out into its own column instead of inline punctuation.
+func connectionMenuAtColumnText(conn remotefs.Connection) string {
+	if conn.User == "" {
+		return ""
+	}
+	return "@"
 }
 
 // newConnectionMenuTable builds the dropdown's own Table — no border,
@@ -204,10 +326,14 @@ func blankConnectionMenuCell() *tview.TableCell {
 // connectionMenuHistoryRows at all — the only other kind of row this
 // table ever has — regardless of column: it has nothing in its own
 // eject/remove cells to tell apart in the first place.
-// connectionMenuColEject carries two different actions depending on
-// the row, not one — see connectionHistoryEditGlyph's own doc comment
-// for why the same column position works for both without ever being
-// ambiguous.
+// connectionMenuEjectColumn's own column carries two different actions
+// depending on the row, not one — see connectionHistoryEditGlyph's own
+// doc comment for why the same column position works for both without
+// ever being ambiguous. Resolved per r.settings.ConnectionMenuExpanded
+// rather than compared against the collapsed-mode constants directly:
+// expanded mode has more columns before Eject/Remove, so their own
+// absolute column index shifts (see connectionMenuEjectColumn's own
+// doc comment on the bug this would otherwise be).
 func (r *Root) activateConnectionMenuCell(row, column int) {
 	conn, ok := r.connectionMenuHistoryRows[row]
 	if !ok {
@@ -215,14 +341,15 @@ func (r *Root) activateConnectionMenuCell(row, column int) {
 		r.openConnectDialog(remotefs.Connection{})
 		return
 	}
+	expanded := r.settings.ConnectionMenuExpanded
 	switch column {
-	case connectionMenuColEject:
+	case connectionMenuEjectColumn(expanded):
 		if row == r.connectionMenuActiveRow {
 			r.disconnectConnectionRow(row)
 		} else {
 			r.editConnectionHistoryRow(conn)
 		}
-	case connectionMenuColRemove:
+	case connectionMenuRemoveColumn(expanded):
 		r.removeConnectionHistoryRow(row)
 	default:
 		r.hideOverlay()
@@ -284,6 +411,20 @@ func (r *Root) captureConnectionMenuKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
+	// "<"/">" are the keyboard equivalent of the title bar's own
+	// expand/collapse glyph (see renderConnectionMenuTitleBar) — either
+	// one flips it, since there's only one button to mirror, not a pair
+	// split across two locations the way Details' own open/close
+	// buttons are (see that const block's own doc comment on this
+	// dropdown's own, simpler convention). Safe to consume unconditionally
+	// here: this table has no free-text entry of its own for either
+	// character to otherwise mean something else to.
+	isToggleKey := event.Key() == tcell.KeyRune && (event.Rune() == '<' || event.Rune() == '>')
+	if isToggleKey {
+		r.toggleConnectionMenuExpanded()
+		return nil
+	}
+
 	isRemoveKey := (event.Key() == tcell.KeyRune && event.Rune() == 'x') || event.Key() == tcell.KeyDelete
 	if isRemoveKey && r.removeConnectionHistoryRow(row) {
 		return nil
@@ -321,11 +462,12 @@ func (r *Root) removeConnectionHistoryRow(row int) bool {
 	// The dropdown's own box was sized to the old row count in
 	// openConnectionMenu — one fewer row now, so it needs the same
 	// resize that a fresh open would give it, or removing an entry
-	// would leave dead space where that row used to be.
-	right, top := r.connectionMenuAnchor()
-	width, height := r.connectionMenuSize()
-	x, y, width, height := r.clampToPanel(right-width, top, width, height)
-	r.connectionMenuLayout.SetRect(x, y, width, height)
+	// would leave dead space where that row used to be. Goes through
+	// positionConnectionMenu rather than repeating the anchor/size/
+	// clamp sequence inline — see its own doc comment for why this
+	// must be the one place both callers agree on, expanded mode
+	// included.
+	r.positionConnectionMenu()
 	return true
 }
 
@@ -362,6 +504,20 @@ func (r *Root) disconnectConnectionRow(row int) bool {
 func (r *Root) connectionMenuSize() (width, height int) {
 	table := r.connectionMenuTable
 	rows := table.GetRowCount()
+	// +1 for the title bar's own row (see connectionMenuLayout), in
+	// both branches below.
+	height = rows + 1
+
+	// Expanded mode deliberately spans the whole terminal width (see
+	// positionConnectionMenu's own doc comment on why) regardless of
+	// actual column content, so there's nothing for a per-column
+	// measurement to usefully compute here — screenWidth itself is the
+	// answer, and clampToScreen downstream still caps it on a genuinely
+	// narrow terminal.
+	if r.settings.ConnectionMenuExpanded {
+		_, _, screenWidth, _ := r.GetRect()
+		return screenWidth, height
+	}
 
 	columnWidths := make([]int, connectionMenuColRemove+1)
 	for row := 0; row < rows; row++ {
@@ -384,8 +540,7 @@ func (r *Root) connectionMenuSize() (width, height int) {
 
 	// +2 for the table's own left/right border padding.
 	width += 2
-	// +1 for the title bar's own row (see connectionMenuLayout).
-	return width, rows + 1
+	return width, height
 }
 
 // connectionMenuIdentifierSuffix appends conn's own Identifier (see
@@ -483,5 +638,95 @@ func connectionHistoryColor(theme config.ResolvedTheme, isActive, lastFailed boo
 		return theme.CriticalText
 	default:
 		return blendToward(theme.EntryExecutable, theme.MutedTextColor, connectionHistorySuccessBlend)
+	}
+}
+
+// connectionMenuExpandGlyph/connectionMenuCollapseGlyph are the
+// connection dropdown's own title-bar toggle, right-aligned the same
+// one-column-in-from-the-edge spacing toolWindowCloseButtonCol already
+// establishes for every other close/collapse button in this app
+// (toolWindow's own, Help's own, Details sidebar's own — see
+// detailssidebar.go). Unlike Details' own single ">"-while-open
+// collapse button (paired with a separate "<"-while-closed expand
+// button elsewhere in the panel header, two buttons in two different
+// locations), this dropdown only ever has one place for a button at
+// all, so the glyph names the action a click performs instead of the
+// current state: ">" while collapsed (click to expand into the full
+// column table), "<" while expanded (click to collapse back to the
+// single-label list).
+const (
+	connectionMenuExpandGlyph   = ">"
+	connectionMenuCollapseGlyph = "<"
+)
+
+// renderConnectionMenuTitleBar sets connectionMenuTitleBar's own text
+// to "Connections", padded out to width columns, with the expand/
+// collapse glyph in its own top-right corner (see the two constants'
+// own doc comment above). Called from positionConnectionMenu, so the
+// glyph's own column stays correct whenever the dropdown is resized or
+// toggled, not just once at open time — the same reasoning
+// renderDetailsTitleBar's own doc comment gives for being called from
+// repositionDetailsSidebar rather than just once at show time.
+func (r *Root) renderConnectionMenuTitleBar(width int) {
+	label := " Connections "
+	glyph := connectionMenuExpandGlyph
+	if r.settings.ConnectionMenuExpanded {
+		glyph = connectionMenuCollapseGlyph
+	}
+	closeCol := toolWindowCloseButtonCol(0, width)
+	padding := closeCol - len(label)
+	if padding < 0 {
+		padding = 0
+	}
+	r.connectionMenuTitleBar.SetText(label + strings.Repeat(" ", padding) + glyph + " ")
+}
+
+// captureConnectionMenuTitleBarMouse toggles expand/collapse when the
+// click lands exactly on the glyph's own column — the mouse
+// counterpart to "<"/">" in captureConnectionMenuKey, the identical
+// hit-test shape captureDetailsTitleBarMouse already establishes for
+// its own single collapse button.
+func (r *Root) captureConnectionMenuTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if !r.connectionMenuTitleBar.InRect(event.Position()) {
+		return action, event
+	}
+	if action != tview.MouseLeftClick {
+		return tview.MouseConsumed, nil
+	}
+	x, y := event.Position()
+	rectX, rectY, width, _ := r.connectionMenuTitleBar.GetRect()
+	if y != rectY || x != rectX+toolWindowCloseButtonCol(0, width) {
+		// A "miss" — every other click on the title bar is inert, same
+		// as Details' own (see func's own doc comment) — passed
+		// through rather than consumed, same as before this existed:
+		// TextView's own default MouseLeftClick handling does nothing
+		// here regardless (no region tags on this bar), so nothing this
+		// would let slip through by mistake.
+		return action, event
+	}
+	r.toggleConnectionMenuExpanded()
+	return tview.MouseConsumed, nil
+}
+
+// toggleConnectionMenuExpanded flips the collapsed/expanded preference
+// and, if the dropdown is currently open, re-renders and re-positions
+// it immediately — the same "flip, persist, apply if currently
+// relevant" shape toggleSplitStacked/setSplitStacked already establish
+// for an identical kind of stored display preference.
+func (r *Root) toggleConnectionMenuExpanded() {
+	r.setConnectionMenuExpanded(!r.settings.ConnectionMenuExpanded)
+}
+
+// setConnectionMenuExpanded applies a specific collapsed/expanded state
+// — toggleConnectionMenuExpanded's own body with the value passed in
+// rather than derived by flipping, so the Options screen can set one
+// directly through exactly the same path (the same split
+// setSplitStacked already makes for its own toggle/Options pair).
+func (r *Root) setConnectionMenuExpanded(expanded bool) {
+	r.settings.ConnectionMenuExpanded = expanded
+	r.persistSetting("connection_menu_expanded", strconv.FormatBool(expanded))
+	if r.activePage == connectionMenuPage {
+		r.renderConnectionMenu()
+		r.positionConnectionMenu()
 	}
 }
