@@ -16,6 +16,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/operations"
 )
 
 func TestPermString(t *testing.T) {
@@ -600,6 +601,159 @@ func TestComputeHashesShowsPercentProgress(t *testing.T) {
 	text := r.propertiesText.GetText(true)
 	if !strings.Contains(text, "50%") {
 		t.Errorf("propertiesText should show 50%% progress for a 100/200-byte read, got:\n%s", text)
+	}
+}
+
+// TestComputeHashesStartsOperation pins the internal/operations wiring
+// (see computeHashes): starting a hash computation records a running
+// Operation, not just hashInProgress/the animation.
+func TestComputeHashesStartsOperation(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	r.target = path
+	r.openProperties()
+
+	r.computeHashes()
+	<-started
+
+	ops := r.operations.List()
+	if len(ops) != 1 {
+		t.Fatalf("operations.List() = %d entries, want 1", len(ops))
+	}
+	op := ops[0]
+	if op.ID != r.hashOpID {
+		t.Errorf("Operation.ID = %d, want r.hashOpID = %d", op.ID, r.hashOpID)
+	}
+	if op.Type != hashOperationType {
+		t.Errorf("Operation.Type = %q, want %q", op.Type, hashOperationType)
+	}
+	if op.Source != path {
+		t.Errorf("Operation.Source = %q, want %q", op.Source, path)
+	}
+	if op.State != operations.StateRunning {
+		t.Errorf("Operation.State = %v, want StateRunning", op.State)
+	}
+}
+
+// TestFinishHashComputationRecordsSucceeded/Failed pin
+// finishHashComputation's own outcome reporting — split out from
+// computeHashes specifically so these can call it directly, without a
+// real event loop to drain r.app.QueueUpdateDraw first (see its own
+// doc comment).
+func TestFinishHashComputationRecordsSucceeded(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+	r.propertiesTarget = path
+	r.hashInProgress = true
+	r.hashOpID = r.operations.Start(hashOperationType, path, "")
+
+	r.finishHashComputation(path, fsops.Hashes{MD5: "deadbeef"}, nil)
+
+	ops := r.operations.List()
+	if len(ops) != 1 {
+		t.Fatalf("operations.List() = %d entries, want 1", len(ops))
+	}
+	if op := ops[0]; op.State != operations.StateDone || op.Outcome != operations.OutcomeSucceeded {
+		t.Errorf("Operation = %+v, want StateDone/OutcomeSucceeded", op)
+	}
+	if r.hashInProgress {
+		t.Error("hashInProgress should be false once finishHashComputation has run")
+	}
+	if r.propertiesHashes == nil || r.propertiesHashes.MD5 != "deadbeef" {
+		t.Errorf("propertiesHashes = %+v, want the computed result propagated", r.propertiesHashes)
+	}
+}
+
+func TestFinishHashComputationRecordsFailed(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+	r.hashOpID = r.operations.Start(hashOperationType, path, "")
+
+	r.finishHashComputation(path, fsops.Hashes{}, fmt.Errorf("permission denied"))
+
+	ops := r.operations.List()
+	if len(ops) != 1 {
+		t.Fatalf("operations.List() = %d entries, want 1", len(ops))
+	}
+	op := ops[0]
+	if op.State != operations.StateDone || op.Outcome != operations.OutcomeFailed {
+		t.Errorf("Operation = %+v, want StateDone/OutcomeFailed", op)
+	}
+	if len(op.Errors) != 1 || op.Errors[0] != "permission denied" {
+		t.Errorf("Operation.Errors = %v, want [\"permission denied\"]", op.Errors)
+	}
+}
+
+// TestCancelHashComputationOperationRecordsCancelled pins the one
+// scenario cancelHashComputationOperation exists for: tearing down
+// Properties (or reopening it for a different target) while a
+// computation is still genuinely running records OutcomeCancelled,
+// unlike the two call sites inside computeHashes itself (which always
+// report the real outcome directly, never through this wrapper).
+func TestCancelHashComputationOperationRecordsCancelled(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	r.target = path
+	r.openProperties()
+
+	r.computeHashes()
+	<-started
+
+	r.cancelHashComputationOperation()
+
+	ops := r.operations.List()
+	if len(ops) != 1 {
+		t.Fatalf("operations.List() = %d entries, want 1", len(ops))
+	}
+	if op := ops[0]; op.State != operations.StateDone || op.Outcome != operations.OutcomeCancelled {
+		t.Errorf("Operation = %+v, want StateDone/OutcomeCancelled", op)
+	}
+}
+
+// TestCancelHashComputationOperationIsNoOpWithoutARunningComputation
+// pins the hashInProgress guard: calling the wrapper when nothing is
+// actually running (the common case — Properties closing normally,
+// with no computation ever started) must not record a phantom
+// cancelled Operation for opID 0.
+func TestCancelHashComputationOperationIsNoOpWithoutARunningComputation(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.cancelHashComputationOperation()
+
+	if ops := r.operations.List(); len(ops) != 0 {
+		t.Errorf("operations.List() = %d entries, want 0 (nothing was ever started)", len(ops))
 	}
 }
 

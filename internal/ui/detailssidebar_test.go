@@ -3,6 +3,7 @@ package ui
 import (
 	"archive/zip"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -19,6 +20,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/filemeta"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/operations"
 )
 
 // TestToggleDetailsSidebarShortcutShowsAndHides pins
@@ -1138,6 +1140,136 @@ func TestComputeHashesShortcutTargetsDetailsWhenPropertiesNotOpen(t *testing.T) 
 	}
 	if r.hashInProgress {
 		t.Error("hashInProgress (Properties') should stay false — Properties was never opened")
+	}
+}
+
+// detailsHashTestRoot opens a Root with the Details sidebar showing a
+// single real file's row — the common setup every
+// computeDetailsHashes-operations test below needs. Mirrors
+// TestComputeHashesShortcutTargetsDetailsWhenPropertiesNotOpen's own
+// plain t.TempDir() setup (not fixtureDir — see its own doc comment on
+// why fixtureDir's "app-data" subdirectory makes row 1 unreliable here).
+func detailsHashTestRoot(t *testing.T) (*Root, string) {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	return r, path
+}
+
+// TestComputeDetailsHashesStartsOperation mirrors
+// TestComputeHashesStartsOperation (properties_test.go) exactly, for
+// Details' own independent copy of hash computation.
+func TestComputeDetailsHashesStartsOperation(t *testing.T) {
+	r, path := detailsHashTestRoot(t)
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelDetailsHashComputation)
+
+	r.computeDetailsHashes()
+	<-started
+
+	ops := r.operations.List()
+	if len(ops) != 1 {
+		t.Fatalf("operations.List() = %d entries, want 1", len(ops))
+	}
+	op := ops[0]
+	if op.ID != r.detailsHashOpID {
+		t.Errorf("Operation.ID = %d, want r.detailsHashOpID = %d", op.ID, r.detailsHashOpID)
+	}
+	if op.Type != hashOperationType {
+		t.Errorf("Operation.Type = %q, want %q", op.Type, hashOperationType)
+	}
+	if op.Source != path {
+		t.Errorf("Operation.Source = %q, want %q", op.Source, path)
+	}
+	if op.State != operations.StateRunning {
+		t.Errorf("Operation.State = %v, want StateRunning", op.State)
+	}
+}
+
+// TestFinishDetailsHashComputationRecordsSucceeded/Failed mirror
+// TestFinishHashComputationRecordsSucceeded/Failed (properties_test.go)
+// exactly, for finishDetailsHashComputation.
+func TestFinishDetailsHashComputationRecordsSucceeded(t *testing.T) {
+	r, path := detailsHashTestRoot(t)
+	r.detailsHashInProgress = true
+	r.detailsHashOpID = r.operations.Start(hashOperationType, path, "")
+
+	r.finishDetailsHashComputation(path, fsops.Hashes{MD5: "deadbeef"}, nil)
+
+	ops := r.operations.List()
+	if len(ops) != 1 {
+		t.Fatalf("operations.List() = %d entries, want 1", len(ops))
+	}
+	if op := ops[0]; op.State != operations.StateDone || op.Outcome != operations.OutcomeSucceeded {
+		t.Errorf("Operation = %+v, want StateDone/OutcomeSucceeded", op)
+	}
+	if r.detailsHashInProgress {
+		t.Error("detailsHashInProgress should be false once finishDetailsHashComputation has run")
+	}
+	if r.detailsHashes == nil || r.detailsHashes.MD5 != "deadbeef" {
+		t.Errorf("detailsHashes = %+v, want the computed result propagated", r.detailsHashes)
+	}
+}
+
+func TestFinishDetailsHashComputationRecordsFailed(t *testing.T) {
+	r, path := detailsHashTestRoot(t)
+	r.detailsHashOpID = r.operations.Start(hashOperationType, path, "")
+
+	r.finishDetailsHashComputation(path, fsops.Hashes{}, fmt.Errorf("permission denied"))
+
+	ops := r.operations.List()
+	if len(ops) != 1 {
+		t.Fatalf("operations.List() = %d entries, want 1", len(ops))
+	}
+	op := ops[0]
+	if op.State != operations.StateDone || op.Outcome != operations.OutcomeFailed {
+		t.Errorf("Operation = %+v, want StateDone/OutcomeFailed", op)
+	}
+	if len(op.Errors) != 1 || op.Errors[0] != "permission denied" {
+		t.Errorf("Operation.Errors = %v, want [\"permission denied\"]", op.Errors)
+	}
+}
+
+// TestCancelDetailsHashComputationOperationRecordsCancelled/IsNoOp
+// mirror TestCancelHashComputationOperationRecordsCancelled/IsNoOp
+// (properties_test.go) exactly, for
+// cancelDetailsHashComputationOperation.
+func TestCancelDetailsHashComputationOperationRecordsCancelled(t *testing.T) {
+	r, _ := detailsHashTestRoot(t)
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelDetailsHashComputation)
+
+	r.computeDetailsHashes()
+	<-started
+
+	r.cancelDetailsHashComputationOperation()
+
+	ops := r.operations.List()
+	if len(ops) != 1 {
+		t.Fatalf("operations.List() = %d entries, want 1", len(ops))
+	}
+	if op := ops[0]; op.State != operations.StateDone || op.Outcome != operations.OutcomeCancelled {
+		t.Errorf("Operation = %+v, want StateDone/OutcomeCancelled", op)
+	}
+}
+
+func TestCancelDetailsHashComputationOperationIsNoOpWithoutARunningComputation(t *testing.T) {
+	r, _ := detailsHashTestRoot(t)
+
+	r.cancelDetailsHashComputationOperation()
+
+	if ops := r.operations.List(); len(ops) != 0 {
+		t.Errorf("operations.List() = %d entries, want 0 (nothing was ever started)", len(ops))
 	}
 }
 

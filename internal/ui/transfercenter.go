@@ -91,7 +91,7 @@ func (r *Root) newTransferCenterScreen() {
 	r.transferCenterTable.SetFixed(1, 0)
 	r.transferCenterTable.SetInputCapture(r.captureTransferCenterKey)
 
-	r.transferCenterTitleBar = newPlainTitleBar("Transfers")
+	r.transferCenterTitleBar = newPlainTitleBar("Undertow")
 	r.transferCenterTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.transferCenterTitleBar, r.reloadTransferCenter, r.closeTransferCenter))
 
 	r.transferCenterHint = tview.NewTextView()
@@ -214,7 +214,7 @@ func transferCenterStatusColor(op operations.Operation, theme config.ResolvedThe
 func (r *Root) renderTransferCenter() {
 	r.transferCenterTable.Clear()
 
-	renderReloadCloseTitleBar(r.transferCenterTitleBar, " Transfers ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.transferCenterTitleBar, " Undertow ", r.lastScreenWidth)
 
 	header := func(col int, text string) {
 		r.transferCenterTable.SetCell(0, col,
