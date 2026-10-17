@@ -37,7 +37,7 @@ func newTestRootForConnect(t *testing.T) *Root {
 	return r
 }
 
-// TestTabFromThePasswordFieldReachesTheCancelButton pins a real,
+// TestTabFromTheIdentifierFieldReachesTheCancelButton pins a real,
 // live-tmux-discovered bug: tview.Form.Focus unconditionally overwrites
 // every item's own SetFinishedFunc whenever the form itself gains
 // focus (verified directly against tview's own form.go), so a bare
@@ -45,30 +45,33 @@ func newTestRootForConnect(t *testing.T) *Root {
 // just wraps back to the first field instead of ever reaching
 // connectCancelBtn — see newConnectForm's own doc comment on why a
 // SetInputCapture is what actually has to intercept it instead.
-func TestTabFromThePasswordFieldReachesTheCancelButton(t *testing.T) {
+// connectIdentifierField is the last field now (added after
+// connectPasswordField) — see newConnectForm's own doc comment for why
+// this wiring moved with it.
+func TestTabFromTheIdentifierFieldReachesTheCancelButton(t *testing.T) {
 	r := newTestRootForConnect(t)
 	noop := func(tview.Primitive) {}
 
-	r.app.SetFocus(r.connectPasswordField)
-	r.connectPasswordField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	r.app.SetFocus(r.connectIdentifierField)
+	r.connectIdentifierField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
 
 	if !r.connectCancelBtn.HasFocus() {
-		t.Error("Tab from the password field did not move focus to connectCancelBtn")
+		t.Error("Tab from the identifier field did not move focus to connectCancelBtn")
 	}
 }
 
-// TestEnterInThePasswordFieldSubmitsTheForm pins the companion
+// TestEnterInTheIdentifierFieldSubmitsTheForm pins the companion
 // convenience: Enter in the last field runs Connect directly, the same
 // "last field, Enter submits" shape a real login form has, rather than
 // also just wrapping focus back to Host the way tview.Form's own
 // default Enter handling would.
-func TestEnterInThePasswordFieldSubmitsTheForm(t *testing.T) {
+func TestEnterInTheIdentifierFieldSubmitsTheForm(t *testing.T) {
 	r := newTestRootForConnect(t)
 	r.connectHostField.SetText("") // deliberately invalid, so runConnect leaves an observable trace
 	noop := func(tview.Primitive) {}
 
-	r.app.SetFocus(r.connectPasswordField)
-	r.connectPasswordField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
+	r.app.SetFocus(r.connectIdentifierField)
+	r.connectIdentifierField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
 
 	if !strings.Contains(r.connectStatus.GetText(true), "Host is required") {
 		t.Errorf("status = %q, want runConnect to have actually run", r.connectStatus.GetText(true))
@@ -77,7 +80,7 @@ func TestEnterInThePasswordFieldSubmitsTheForm(t *testing.T) {
 
 // TestBacktabFromTheCancelButtonReturnsToTheForm is the reverse
 // direction of the same fix — see
-// TestTabFromThePasswordFieldReachesTheCancelButton's own doc comment.
+// TestTabFromTheIdentifierFieldReachesTheCancelButton's own doc comment.
 func TestBacktabFromTheCancelButtonReturnsToTheForm(t *testing.T) {
 	r := newTestRootForConnect(t)
 	noop := func(tview.Primitive) {}
@@ -314,5 +317,48 @@ func TestOpenConnectDialogClearsAnyPendingConnectAnywayState(t *testing.T) {
 	}
 	if got := r.connectConnectBtn.GetLabel(); got != "Connect" {
 		t.Errorf("Connect button label = %q, want the plain %q after reopening", got, "Connect")
+	}
+}
+
+// TestOpenConnectDialogClearsTheIdentifierFieldForABlankPrefill pins
+// the same "never inherits a stale previous open" rule for
+// connectIdentifierField specifically: reopening for a brand-new
+// connection must not leave an earlier one's Identifier sitting in the
+// field.
+func TestOpenConnectDialogClearsTheIdentifierFieldForABlankPrefill(t *testing.T) {
+	r := newTestRootForConnect(t)
+	r.openConnectDialog(remotefs.Connection{Host: "a.example.com", Identifier: "build-1"})
+	if got := r.connectIdentifierField.GetText(); got != "build-1" {
+		t.Fatalf("connectIdentifierField = %q, want %q (prefilled)", got, "build-1")
+	}
+
+	r.openConnectDialog(remotefs.Connection{Host: "b.example.com"})
+
+	if got := r.connectIdentifierField.GetText(); got != "" {
+		t.Errorf("connectIdentifierField = %q, want empty after reopening for a different, unnamed connection", got)
+	}
+}
+
+// TestConnectIdentifierAcceptanceFuncAllowsTheDocumentedCharacterSet
+// pins the field's own live-typed constraint (see its doc comment):
+// letters, digits, underscore, hyphen — nothing else, no spaces.
+func TestConnectIdentifierAcceptanceFuncAllowsTheDocumentedCharacterSet(t *testing.T) {
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"", true},
+		{"build-1", true},
+		{"Build_Runner-02", true},
+		{"has space", false},
+		{"slash/not-allowed", false},
+		{"dot.not-allowed", false},
+		{strings.Repeat("a", connectIdentifierMaxLength), true},
+		{strings.Repeat("a", connectIdentifierMaxLength+1), false},
+	}
+	for _, c := range cases {
+		if got := connectIdentifierAcceptanceFunc(c.text, 0); got != c.want {
+			t.Errorf("connectIdentifierAcceptanceFunc(%q, _) = %v, want %v", c.text, got, c.want)
+		}
 	}
 }

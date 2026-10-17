@@ -132,6 +132,15 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     wide terminal has room for two full listings beside each other, a
 //     short-but-wide one over SSH often doesn't have the rows to spare
 //     for stacking, and neither answer is right for everyone.
+//   - connection_menu_expanded: whether the "@"/"gc" connection dropdown
+//     opens in its full column table (User/@/Host-IP/Identifier) or
+//     today's single-label list (see internal/ui's connectionmenu.go).
+//     false by default, the same single-label shape this app already
+//     had before the column table existed. A stored preference, not
+//     just a live toggle, the same reasoning split_stacked's own doc
+//     comment gives: whichever one someone settled on last time is
+//     almost certainly what they want again next time, not a decision
+//     worth re-making every single open.
 //   - mouse_enabled: whether tview's own mouse reporting is on at
 //     startup (see internal/ui's Root.mouseEnabled/app.EnableMouse) —
 //     true by default. Enabling it is what lets clicks/drags work at
@@ -321,17 +330,18 @@ type Settings struct {
 	// application has no way to detect (see internal/fileicons' own
 	// package doc comment) — so the safe, always-correct choice is the
 	// unconditional ASCII/MC-compatible fallback until the user opts in.
-	FileIcons         bool
-	Pager             string
-	TrashConfirm      bool
-	TrashPersistent   bool
-	TrashMaxAgeDays   int
-	TrashQuotaPercent int
-	RestoreTabs       bool
-	SplitStacked      bool
-	MouseEnabled      bool
-	FilterPersistent  bool
-	ChordTimeoutMS    int
+	FileIcons              bool
+	Pager                  string
+	TrashConfirm           bool
+	TrashPersistent        bool
+	TrashMaxAgeDays        int
+	TrashQuotaPercent      int
+	RestoreTabs            bool
+	SplitStacked           bool
+	ConnectionMenuExpanded bool
+	MouseEnabled           bool
+	FilterPersistent       bool
+	ChordTimeoutMS         int
 
 	StatusBarShowUsername bool
 	StatusBarShowMouse    bool
@@ -550,22 +560,23 @@ func (s Settings) LabelName(id int) string {
 // identically to before this existed.
 func DefaultSettings() Settings {
 	return Settings{
-		ColorScheme:       "default",
-		Language:          "en",
-		ShowHidden:        true,
-		SizeBytes:         false,
-		MtimeUnix:         false,
-		FileIcons:         false,
-		Pager:             "builtin",
-		TrashConfirm:      false,
-		TrashPersistent:   true,
-		TrashMaxAgeDays:   30,
-		TrashQuotaPercent: 10,
-		RestoreTabs:       false,
-		SplitStacked:      false,
-		MouseEnabled:      true,
-		FilterPersistent:  true,
-		ChordTimeoutMS:    4000,
+		ColorScheme:            "default",
+		Language:               "en",
+		ShowHidden:             true,
+		SizeBytes:              false,
+		MtimeUnix:              false,
+		FileIcons:              false,
+		Pager:                  "builtin",
+		TrashConfirm:           false,
+		TrashPersistent:        true,
+		TrashMaxAgeDays:        30,
+		TrashQuotaPercent:      10,
+		RestoreTabs:            false,
+		SplitStacked:           false,
+		ConnectionMenuExpanded: false,
+		MouseEnabled:           true,
+		FilterPersistent:       true,
+		ChordTimeoutMS:         4000,
 
 		StatusBarShowUsername: true,
 		StatusBarShowMouse:    true,
@@ -699,6 +710,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.RestoreTabs)
 	case "split_stacked":
 		return parseBool(&s.SplitStacked)
+	case "connection_menu_expanded":
+		return parseBool(&s.ConnectionMenuExpanded)
 	case "mouse_enabled":
 		return parseBool(&s.MouseEnabled)
 	case "filter_persistent":

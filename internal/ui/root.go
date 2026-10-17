@@ -1068,27 +1068,28 @@ type Root struct {
 
 	// connectForm/connectButtons/connectLayout make up the "Connect"
 	// dialog (see connectdialog.go) — a fixed field set (Host/Port/
-	// User/Password), so it's built once here rather than rebuilt fresh
-	// per open the way Sed Replace's own variable field set is (see
-	// newSedForm's own doc comment on that distinction). connectStatus
-	// is the one-line area below the form showing either an in-progress
-	// "Connecting…" animation or the last attempt's own error, in
-	// place, without closing the dialog. connectCancelBtn/
+	// User/Password/Identifier), so it's built once here rather than
+	// rebuilt fresh per open the way Sed Replace's own variable field
+	// set is (see newSedForm's own doc comment on that distinction).
+	// connectStatus is the one-line area below the form showing either
+	// an in-progress "Connecting…" animation or the last attempt's own
+	// error, in place, without closing the dialog. connectCancelBtn/
 	// connectConnectBtn are a real button pair (see newConnectButtons'
 	// own doc comment for why, not a List).
-	connectForm          *tview.Form
-	connectHostField     *tview.InputField
-	connectPortField     *tview.InputField
-	connectUserField     *tview.InputField
-	connectPasswordField *tview.InputField
-	connectStatus        *tview.TextView
-	connectCancelBtn     *tview.Button
-	connectConnectBtn    *tview.Button
-	connectButtons       *tview.Flex
-	connectTitleBar      *tview.TextView
-	connectLayout        *tview.Flex
-	connectCancel        context.CancelFunc
-	connectAnimFrame     int
+	connectForm            *tview.Form
+	connectHostField       *tview.InputField
+	connectPortField       *tview.InputField
+	connectUserField       *tview.InputField
+	connectPasswordField   *tview.InputField
+	connectIdentifierField *tview.InputField
+	connectStatus          *tview.TextView
+	connectCancelBtn       *tview.Button
+	connectConnectBtn      *tview.Button
+	connectButtons         *tview.Flex
+	connectTitleBar        *tview.TextView
+	connectLayout          *tview.Flex
+	connectCancel          context.CancelFunc
+	connectAnimFrame       int
 	// connectPendingSkipHostKey/connectPendingSkipHostKeyConn back the
 	// "Connect anyway" retry after a HostKeyMismatchError (see
 	// connectdialog.go's own finishConnect/runConnect) — set only once
@@ -1127,7 +1128,15 @@ type Root struct {
 	// renderFilterMenu's own doc comment already gives for its dropdown.
 	connectionMenuTable    *tview.Table
 	connectionMenuTitleBar *tview.TextView
-	connectionMenuLayout   *tview.Flex
+	// connectionMenuSearchField/connectionMenuTitleRow are the
+	// dropdown's own always-present search box and the FlexColumn
+	// holding it alongside connectionMenuTitleBar (now just the
+	// expand/collapse glyph, nothing else — see
+	// newConnectionMenuTitleRow's own doc comment for why the old
+	// single-widget "Connections" title bar was replaced entirely).
+	connectionMenuSearchField *tview.InputField
+	connectionMenuTitleRow    *tview.Flex
+	connectionMenuLayout      *tview.Flex
 
 	// connectionMenuHistoryRows maps a row index in connectionMenuTable
 	// to the Connection that row represents — populated fresh by
@@ -1136,6 +1145,25 @@ type Root struct {
 	// which entry a given row actually is. Never populated for "New
 	// connection…", which isn't a history row at all.
 	connectionMenuHistoryRows map[int]remotefs.Connection
+
+	// connectionMenuRowColors maps a row index to the text color
+	// renderConnectionMenu already computed for it (connectionHistoryColor's
+	// green/red/muted-green, or theme.Text for "+ New") — unlike
+	// connectionMenuHistoryRows, populated for every row including "+
+	// New". connectionMenuRepaintLabelGroups reads this back to restore
+	// a row's own real color on its @/Host-IP/Identifier cells once the
+	// selection moves off it, since those cells' own foreground gets
+	// overwritten to theme.TextColor (matching connectionMenuTable's
+	// own SetSelectedStyle) while highlighted.
+	connectionMenuRowColors map[int]tcell.Color
+
+	// connectionMenuSortKey/connectionMenuSortDescending track which
+	// column header (if any) the dropdown's own history rows are
+	// currently sorted by — reset every time the dropdown opens (see
+	// openConnectionMenu), never persisted, per the "transient, not
+	// persisted" decision in feature_ideas.txt section 9a.
+	connectionMenuSortKey        connectionMenuSortKey
+	connectionMenuSortDescending bool
 
 	// connectionMenuActiveRow is the row within connectionMenuTable
 	// (history rows only — see connectionMenuHistoryRows) that
@@ -2612,7 +2640,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// on every open (see renderConnectionMenu), the same as the filter
 	// menu's own dropdown.
 	r.connectionMenuTable = r.newConnectionMenuTable()
-	r.connectionMenuTitleBar = newPlainTitleBar("Connections")
+	r.connectionMenuTitleBar = newPlainTitleBar("")
+	r.connectionMenuTitleBar.SetMouseCapture(r.captureConnectionMenuTitleBarMouse)
+	r.connectionMenuSearchField = r.newConnectionMenuSearchField()
+	r.connectionMenuTitleRow = r.newConnectionMenuTitleRow()
 	r.connectionMenuLayout = r.newConnectionMenuLayout()
 
 	// The "gs" SSH shell dropdown ("Open shell to") and its own "Add

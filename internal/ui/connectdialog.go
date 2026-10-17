@@ -38,16 +38,17 @@ func (r *Root) openConnectDialog(prefill remotefs.Connection) {
 	}
 	r.connectUserField.SetText(prefill.User)
 	r.connectPasswordField.SetText("")
+	r.connectIdentifierField.SetText(prefill.Identifier)
 	r.setConnectStatus("", r.theme.Text)
 	r.resetConnectAnywayState()
 
 	// height covers connectTitleBar's own row plus connectLayout's three
-	// stacked pieces (connectForm's own 9, see newConnectLayout's own
+	// stacked pieces (connectForm's own 11, see newConnectLayout's own
 	// doc comment on why; connectStatus's 1; connectButtons' 1) —
 	// checked against a real render, not guessed; a shorter value
 	// silently clipped the bottom rows (see openSedReplace's own
 	// identical comment on its own dialog).
-	width, height := 64, 12
+	width, height := 64, 14
 	_, _, screenWidth, screenHeight := r.GetRect()
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -92,6 +93,15 @@ func (r *Root) newConnectForm() *tview.Form {
 	r.connectPasswordField.SetMaskCharacter('*')
 	f.AddFormItem(r.connectPasswordField)
 
+	// A short label like every other field here — the character-set/
+	// length rule itself lives in the placeholder, only visible once
+	// the field has real width to show it in (same reasoning
+	// connectPasswordField's own doc comment gives for its label).
+	r.connectIdentifierField = tview.NewInputField().SetLabel("Identifier")
+	r.connectIdentifierField.SetPlaceholder("optional, a-z/0-9/_/- , max 32 chars")
+	r.connectIdentifierField.SetAcceptanceFunc(connectIdentifierAcceptanceFunc)
+	f.AddFormItem(r.connectIdentifierField)
+
 	// Tab/Enter on the form's own last field would otherwise just wrap
 	// back to its first one instead of ever reaching connectCancelBtn/
 	// connectConnectBtn: verified directly against tview's own form.go,
@@ -103,10 +113,11 @@ func (r *Root) newConnectForm() *tview.Form {
 	// at all. Enter goes one step further and submits the form
 	// outright, the same "last field, Enter submits" convenience a real
 	// login form has — the same reasoning this is only wired on the
-	// *last* field: every other field's own Tab/Enter already does the
-	// right thing (move to the next field) via the form's own default
-	// handling.
-	r.connectPasswordField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	// *last* field (now connectIdentifierField, since it was added
+	// after connectPasswordField): every other field's own Tab/Enter
+	// already does the right thing (move to the next field) via the
+	// form's own default handling.
+	r.connectIdentifierField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
 			r.app.SetFocus(r.connectCancelBtn)
@@ -119,6 +130,48 @@ func (r *Root) newConnectForm() *tview.Form {
 	})
 
 	return f
+}
+
+// connectIdentifierAcceptanceFunc enforces the Identifier field's own
+// character set (letters, digits, underscore, hyphen — no spaces) and
+// 32-character cap live, as each keystroke (or paste) arrives — the
+// same SetAcceptanceFunc-as-validator shape chmodEditField/
+// propertiesEditField already use elsewhere in this app. tview's own
+// InputField has no SetMaxLength in this version (verified directly
+// against inputfield.go, not guessed — see chmodEditField's own doc
+// comment, which found this gap first), so rejecting anything past the
+// cap here is the actual mechanism. Checks every rune in textToCheck,
+// not just lastChar, so a paste that introduces a disallowed character
+// partway through is rejected outright rather than silently admitting
+// everything before it.
+func connectIdentifierAcceptanceFunc(textToCheck string, lastChar rune) bool {
+	if len(textToCheck) > connectIdentifierMaxLength {
+		return false
+	}
+	for _, r := range textToCheck {
+		if !isConnectIdentifierRune(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// connectIdentifierMaxLength caps the Identifier field at a short,
+// glance-readable length — long enough to tell several similarly-named
+// servers apart, short enough to never dominate a connection history
+// row next to the actual Host/User it's labeling.
+const connectIdentifierMaxLength = 32
+
+// isConnectIdentifierRune reports whether r is allowed in an
+// Identifier: ASCII letters, digits, underscore, hyphen — no spaces,
+// so a rendered row's own "label, Identifier" shape (see
+// connectionMenuIdentifierSuffix) never needs to worry about an
+// Identifier itself containing the separator it's rendered with.
+func isConnectIdentifierRune(r rune) bool {
+	return r == '-' || r == '_' ||
+		(r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9')
 }
 
 // newConnectButtons builds a real Cancel/Connect button pair,
@@ -136,15 +189,15 @@ func (r *Root) newConnectButtons() *tview.Flex {
 	r.connectConnectBtn.SetInputCapture(spaceAlsoActivates(r.runConnect))
 
 	// Tab/Backtab cycle between the two buttons and back into the form
-	// (connectPasswordField's own forward Tab is the other half of this
-	// — see newConnectForm's own doc comment); Escape always cancels,
-	// the same as everywhere else in this dialog.
+	// (connectIdentifierField's own forward Tab is the other half of
+	// this — see newConnectForm's own doc comment); Escape always
+	// cancels, the same as everywhere else in this dialog.
 	r.connectCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
 			r.app.SetFocus(r.connectConnectBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.connectPasswordField)
+			r.app.SetFocus(r.connectIdentifierField)
 		case tcell.KeyEscape:
 			r.cancelConnect()
 		}
@@ -176,15 +229,16 @@ func (r *Root) newConnectButtons() *tview.Flex {
 func (r *Root) newConnectLayout() *tview.Flex {
 	r.connectTitleBar = newPlainTitleBar("Connect")
 	r.connectStatus = tview.NewTextView().SetDynamicColors(true)
-	// 9 rows for connectForm: tview.NewForm() reserves a 1-row border
+	// 11 rows for connectForm: tview.NewForm() reserves a 1-row border
 	// padding top and bottom of its own (SetBorderPadding(1,1,1,1),
 	// independent of whether a visible border line is drawn at all —
 	// verified directly against tview's own form.go, not guessed, after
 	// a real render silently clipped the fourth field otherwise) on top
-	// of its own four one-row fields plus itemPadding's default 1-row
-	// gap between each: 2 (padding) + 4 (fields) + 3 (gaps) = 9.
+	// of its own five one-row fields (Host/Port/User/Password/
+	// Identifier) plus itemPadding's default 1-row gap between each:
+	// 2 (padding) + 5 (fields) + 4 (gaps) = 11.
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.connectForm, 9, 0, true).
+		AddItem(r.connectForm, 11, 0, true).
 		AddItem(r.connectStatus, 1, 0, false).
 		AddItem(r.connectButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
@@ -258,8 +312,13 @@ func (r *Root) runConnect() {
 	if password := r.connectPasswordField.GetText(); password != "" {
 		passwordPrompt = func() (string, error) { return password, nil }
 	}
+	// No TrimSpace needed: connectIdentifierAcceptanceFunc already
+	// rejects spaces outright, so GetText() is already exactly what
+	// gets persisted (see remotefs.RecordAttempt's own inherit rule for
+	// what happens when this is empty).
+	identifier := r.connectIdentifierField.GetText()
 
-	conn := remotefs.Connection{Host: host, Port: port, User: user}
+	conn := remotefs.Connection{Host: host, Port: port, User: user, Identifier: identifier}
 
 	// skipHostKeyVerification only ever fires for the exact Connection a
 	// prior attempt's own HostKeyMismatchError was just shown for (see

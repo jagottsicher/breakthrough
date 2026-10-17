@@ -100,6 +100,17 @@ func SaveHistory(entries []HistoryEntry) error {
 // the signal LastFailed/the dropdown's red coloring exists to surface,
 // and losing that by dropping the entry instead would hide a real
 // regression a sysadmin actively wants to notice.
+//
+// Identifier inherit rule: conn arrives built fresh by its caller (see
+// connectdialog.go/sshshell.go) with no way to already know what the
+// matched history entry's own Identifier was — Equal deliberately
+// ignores Identifier (see Connection's own doc comment), so a renamed
+// or freshly reconnected entry would otherwise lose it on every single
+// reconnect. A non-empty conn.Identifier always wins (the user just
+// typed one in the Connect dialog); an empty one inherits whatever the
+// matched entry already had, so reconnecting via a history row's own
+// label — which never goes through the Identifier field at all —
+// can't silently blank it out.
 func RecordAttempt(conn Connection, failed bool) error {
 	entries, err := LoadHistory()
 	if err != nil {
@@ -107,10 +118,12 @@ func RecordAttempt(conn Connection, failed bool) error {
 	}
 
 	var existed bool
+	var previousIdentifier string
 	kept := entries[:0]
 	for _, e := range entries {
 		if e.Equal(conn) {
 			existed = true
+			previousIdentifier = e.Identifier
 			continue
 		}
 		kept = append(kept, e)
@@ -118,6 +131,10 @@ func RecordAttempt(conn Connection, failed bool) error {
 
 	if failed && !existed {
 		return nil
+	}
+
+	if conn.Identifier == "" {
+		conn.Identifier = previousIdentifier
 	}
 
 	updated := append([]HistoryEntry{{Connection: conn, LastUsed: time.Now(), LastFailed: failed}}, kept...)
