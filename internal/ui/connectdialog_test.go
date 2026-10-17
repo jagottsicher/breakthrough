@@ -33,7 +33,7 @@ func newTestRootForConnect(t *testing.T) *Root {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.openConnectDialog(remotefs.Connection{})
+	r.openConnectDialog(remotefs.Connection{}, connectDialogModeNew)
 	return r
 }
 
@@ -60,21 +60,47 @@ func TestTabFromTheTagsFieldReachesTheCancelButton(t *testing.T) {
 	}
 }
 
-// TestEnterInTheTagsFieldSubmitsTheForm pins the companion
-// convenience: Enter in the last field runs Connect directly, the same
-// "last field, Enter submits" shape a real login form has, rather than
-// also just wrapping focus back to Host the way tview.Form's own
-// default Enter handling would.
-func TestEnterInTheTagsFieldSubmitsTheForm(t *testing.T) {
+// TestEnterInTheTagsFieldRunsOKNotConnect pins the companion
+// convenience: Enter in the last field runs OK directly — save, not
+// dial — the default action per the user's own explicit request, not
+// Connect, and not tview.Form's own default Enter handling (wrapping
+// focus back to Host).
+func TestEnterInTheTagsFieldRunsOKNotConnect(t *testing.T) {
+	withTestConfigHome(t)
 	r := newTestRootForConnect(t)
-	r.connectHostField.SetText("") // deliberately invalid, so runConnect leaves an observable trace
+	r.connectHostField.SetText("example.com")
+	r.connectTagsField.SetText("web, build")
+	noop := func(tview.Primitive) {}
+
+	r.app.SetFocus(r.connectTagsField)
+	r.connectTagsField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 1 || !history[0].Untested {
+		t.Fatalf("history = %+v, want one Untested entry saved via OK, not a Dial attempt", history)
+	}
+	if r.activePage == connectDialogPage {
+		t.Error("the Connect dialog is still open after a successful OK")
+	}
+}
+
+// TestEnterInTheTagsFieldOnAnEmptyHostShowsTheSameValidationRunConnectWould
+// pins that OK validates identically to Connect (connectFormHostPortUser
+// is shared) — an empty Host is rejected the same way either action
+// would reject it.
+func TestEnterInTheTagsFieldOnAnEmptyHostShowsTheSameValidationRunConnectWould(t *testing.T) {
+	r := newTestRootForConnect(t)
+	r.connectHostField.SetText("")
 	noop := func(tview.Primitive) {}
 
 	r.app.SetFocus(r.connectTagsField)
 	r.connectTagsField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
 
 	if !strings.Contains(r.connectStatus.GetText(true), "Host is required") {
-		t.Errorf("status = %q, want runConnect to have actually run", r.connectStatus.GetText(true))
+		t.Errorf("status = %q, want runConnectOK to validate the same way runConnect does", r.connectStatus.GetText(true))
 	}
 }
 
@@ -93,21 +119,56 @@ func TestBacktabFromTheCancelButtonReturnsToTheForm(t *testing.T) {
 	}
 }
 
-// TestTabCyclesFromCancelToConnectAndBacktabReturns pins the cycle
-// between the dialog's own two buttons themselves.
-func TestTabCyclesFromCancelToConnectAndBacktabReturns(t *testing.T) {
+// TestTabCyclesThroughAllThreeButtonsInNewMode pins the cycle between
+// the dialog's own three buttons in connectDialogModeNew: Cancel ->
+// OK -> Connect, and back.
+func TestTabCyclesThroughAllThreeButtonsInNewMode(t *testing.T) {
 	r := newTestRootForConnect(t)
 	noop := func(tview.Primitive) {}
 
 	r.app.SetFocus(r.connectCancelBtn)
 	r.connectCancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	if !r.connectOKBtn.HasFocus() {
+		t.Fatal("Tab from connectCancelBtn did not move focus to connectOKBtn")
+	}
+
+	r.connectOKBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
 	if !r.connectConnectBtn.HasFocus() {
-		t.Fatal("Tab from connectCancelBtn did not move focus to connectConnectBtn")
+		t.Fatal("Tab from connectOKBtn did not move focus to connectConnectBtn")
 	}
 
 	r.connectConnectBtn.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	if !r.connectOKBtn.HasFocus() {
+		t.Fatal("Backtab from connectConnectBtn did not move focus back to connectOKBtn")
+	}
+
+	r.connectOKBtn.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
 	if !r.connectCancelBtn.HasFocus() {
-		t.Error("Backtab from connectConnectBtn did not move focus back to connectCancelBtn")
+		t.Error("Backtab from connectOKBtn did not move focus back to connectCancelBtn")
+	}
+}
+
+// TestTabCyclesThroughBothButtonsInEditMode mirrors the New-mode cycle
+// above for connectDialogModeEdit: only Cancel/OK exist — no Connect
+// button at all, per the user's own explicit request.
+func TestTabCyclesThroughBothButtonsInEditMode(t *testing.T) {
+	r := newTestRootForConnect(t)
+	r.openConnectDialog(remotefs.Connection{Host: "example.com"}, connectDialogModeEdit)
+	noop := func(tview.Primitive) {}
+
+	if got, want := r.connectButtons.GetItemCount(), 2; got != want {
+		t.Fatalf("connectButtons item count = %d, want %d (Cancel/OK, no Connect)", got, want)
+	}
+
+	r.app.SetFocus(r.connectCancelBtn)
+	r.connectCancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	if !r.connectOKBtn.HasFocus() {
+		t.Fatal("Tab from connectCancelBtn did not move focus to connectOKBtn")
+	}
+
+	r.connectOKBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	if !r.connectForm.HasFocus() {
+		t.Error("Tab from connectOKBtn in edit mode did not wrap back to the form (there is no Connect button to land on)")
 	}
 }
 
@@ -310,7 +371,7 @@ func TestOpenConnectDialogClearsAnyPendingConnectAnywayState(t *testing.T) {
 	r.connectPendingSkipHostKeyConn = remotefs.Connection{Host: "example.com", User: "tester"}
 	r.connectConnectBtn.SetLabel("Connect anyway")
 
-	r.openConnectDialog(remotefs.Connection{})
+	r.openConnectDialog(remotefs.Connection{}, connectDialogModeNew)
 
 	if r.connectPendingSkipHostKey {
 		t.Error("openConnectDialog should clear a pending bypass from an earlier attempt")
@@ -327,12 +388,12 @@ func TestOpenConnectDialogClearsAnyPendingConnectAnywayState(t *testing.T) {
 // field.
 func TestOpenConnectDialogClearsTheIdentifierFieldForABlankPrefill(t *testing.T) {
 	r := newTestRootForConnect(t)
-	r.openConnectDialog(remotefs.Connection{Host: "a.example.com", Identifier: "build-1"})
+	r.openConnectDialog(remotefs.Connection{Host: "a.example.com", Identifier: "build-1"}, connectDialogModeNew)
 	if got := r.connectIdentifierField.GetText(); got != "build-1" {
 		t.Fatalf("connectIdentifierField = %q, want %q (prefilled)", got, "build-1")
 	}
 
-	r.openConnectDialog(remotefs.Connection{Host: "b.example.com"})
+	r.openConnectDialog(remotefs.Connection{Host: "b.example.com"}, connectDialogModeNew)
 
 	if got := r.connectIdentifierField.GetText(); got != "" {
 		t.Errorf("connectIdentifierField = %q, want empty after reopening for a different, unnamed connection", got)
@@ -392,12 +453,12 @@ func TestConnectTagsAcceptanceFuncAllowsTheDocumentedCharacterSet(t *testing.T) 
 // TestOpenConnectDialogClearsTheIdentifierFieldForABlankPrefill.
 func TestOpenConnectDialogClearsTheTagsFieldForABlankPrefill(t *testing.T) {
 	r := newTestRootForConnect(t)
-	r.openConnectDialog(remotefs.Connection{Host: "a.example.com", Tags: []string{"build", "staging"}})
+	r.openConnectDialog(remotefs.Connection{Host: "a.example.com", Tags: []string{"build", "staging"}}, connectDialogModeNew)
 	if got := r.connectTagsField.GetText(); got != "build, staging" {
 		t.Fatalf("connectTagsField = %q, want %q (prefilled)", got, "build, staging")
 	}
 
-	r.openConnectDialog(remotefs.Connection{Host: "b.example.com"})
+	r.openConnectDialog(remotefs.Connection{Host: "b.example.com"}, connectDialogModeNew)
 
 	if got := r.connectTagsField.GetText(); got != "" {
 		t.Errorf("connectTagsField = %q, want empty after reopening for a different, untagged connection", got)

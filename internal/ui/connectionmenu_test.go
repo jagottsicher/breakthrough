@@ -1029,6 +1029,50 @@ func TestRenderConnectionMenuListsHistoryColoredByState(t *testing.T) {
 	}
 }
 
+// TestConnectionHistoryColorForEveryStateCombination pins
+// connectionHistoryColor's own four-way split directly, including the
+// one combination no render-level test can exercise on its own:
+// isActive and untested both true at once (saved via SaveConnection,
+// but the panel happens to already be connected to that exact
+// endpoint by some other means) — isActive must win outright, per the
+// function's own doc comment.
+func TestConnectionHistoryColorForEveryStateCombination(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	cases := []struct {
+		name                           string
+		isActive, lastFailed, untested bool
+		want                           tcell.Color
+	}{
+		{"active wins over everything", true, true, true, r.theme.EntryExecutable},
+		{"active, not failed, not untested", true, false, false, r.theme.EntryExecutable},
+		{"failed, inactive", false, true, false, r.theme.CriticalText},
+		{"untested, inactive, not failed", false, false, true, r.theme.Text},
+		{"worked before, inactive", false, false, false, blendToward(r.theme.EntryExecutable, r.theme.MutedTextColor, connectionHistorySuccessBlend)},
+	}
+	for _, c := range cases {
+		if got := connectionHistoryColor(r.theme, c.isActive, c.lastFailed, c.untested); got != c.want {
+			t.Errorf("%s: connectionHistoryColor(isActive=%v, lastFailed=%v, untested=%v) = %v, want %v",
+				c.name, c.isActive, c.lastFailed, c.untested, got, c.want)
+		}
+	}
+}
+
+// TestRenderConnectionMenuColorsAnUntestedEntryPlain pins the render
+// path end to end: an entry SaveConnection added (never dialed) shows
+// in the dropdown with theme.Text, neither green nor red.
+func TestRenderConnectionMenuColorsAnUntestedEntryPlain(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	if err := remotefs.SaveConnection(remotefs.Connection{Host: "future.example.com", User: "tester"}); err != nil {
+		t.Fatalf("SaveConnection: %v", err)
+	}
+
+	r.renderConnectionMenu()
+
+	if got, want := cellTextColor(r.connectionMenuTable.GetCell(1, connectionMenuColUser)), r.theme.Text; got != want {
+		t.Errorf("untested entry color = %v, want theme.Text %v", got, want)
+	}
+}
+
 func TestRenderConnectionMenuColorsTheCurrentlyActiveEntryGreen(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	conn := remotefs.Connection{Host: "example.com", User: "tester"}

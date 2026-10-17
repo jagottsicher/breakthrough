@@ -316,3 +316,117 @@ func TestRemoveFromHistoryOnAnEntryThatWasNeverThereIsANoOp(t *testing.T) {
 		t.Errorf("len(entries) = %d, want the unrelated entry left untouched", len(entries))
 	}
 }
+
+// TestSaveConnectionOnABrandNewConnectionAddsItAsUntested pins
+// SaveConnection's own deliberate override of RecordAttempt's "never
+// tried, never added" rule: the user's own explicit request to be able
+// to prepare several connections ahead of the servers behind them
+// actually existing.
+func TestSaveConnectionOnABrandNewConnectionAddsItAsUntested(t *testing.T) {
+	withTestConfigHome(t)
+	conn := Connection{Host: "future.example.com", User: "jens"}
+
+	if err := SaveConnection(conn); err != nil {
+		t.Fatalf("SaveConnection: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 1 || !entries[0].Untested || entries[0].LastFailed {
+		t.Errorf("entries = %+v, want one Untested, not-failed entry", entries)
+	}
+}
+
+// TestSaveConnectionOnAnExistingEntryUpdatesInPlaceWithoutMovingIt is
+// the case the advisor flagged: editing an already-tested entry's
+// Identifier/Tags through "OK" must not jump it to the front of
+// "most recently used", since nothing was actually used — and must not
+// touch its real, previously-observed LastFailed/Untested status
+// either, since nothing was actually tried this time.
+func TestSaveConnectionOnAnExistingEntryUpdatesInPlaceWithoutMovingIt(t *testing.T) {
+	withTestConfigHome(t)
+	older := Connection{Host: "older.example.com", User: "jens"}
+	target := Connection{Host: "target.example.com", User: "jens"}
+	if err := RecordAttempt(target, false); err != nil {
+		t.Fatalf("RecordAttempt(target): %v", err)
+	}
+	if err := RecordAttempt(older, false); err != nil {
+		t.Fatalf("RecordAttempt(older): %v", err)
+	}
+	// History is now [older, target] (most-recently-recorded first).
+
+	renamed := target
+	renamed.Identifier = "renamed"
+	if err := SaveConnection(renamed); err != nil {
+		t.Fatalf("SaveConnection: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 2 || entries[0].Host != "older.example.com" {
+		t.Fatalf("entries = %+v, want [older, target] order preserved, not target jumped to the front", entries)
+	}
+	if entries[1].Identifier != "renamed" || entries[1].Untested {
+		t.Errorf("entries[1] = %+v, want the renamed target, still not Untested (it really did connect before)", entries[1])
+	}
+}
+
+// TestSaveConnectionOnAChangedIdentityCreatesASeparateUntestedEntry
+// pins the user's own explicit description: changing Host/User/Port
+// (the fields Connection.Equal actually keys on) makes it a different
+// endpoint, so it gets its own new, Untested entry rather than
+// updating the old one in place — exactly what falls out of matching
+// by Equal with no special-case code needed.
+func TestSaveConnectionOnAChangedIdentityCreatesASeparateUntestedEntry(t *testing.T) {
+	withTestConfigHome(t)
+	original := Connection{Host: "a.example.com", User: "jens"}
+	if err := RecordAttempt(original, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	changed := Connection{Host: "b.example.com", User: "jens"}
+	if err := SaveConnection(changed); err != nil {
+		t.Fatalf("SaveConnection: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entries = %+v, want both the old and the new entry kept", entries)
+	}
+	if entries[0].Host != "b.example.com" || !entries[0].Untested {
+		t.Errorf("entries[0] = %+v, want the new, Untested entry at the front", entries[0])
+	}
+	if entries[1].Host != "a.example.com" || entries[1].Untested {
+		t.Errorf("entries[1] = %+v, want the original, already-tested entry left exactly as it was", entries[1])
+	}
+}
+
+// TestSaveConnectionOnABrandNewConnectionThatFailsBeforeIsStillAddedUntested
+// is the flip side of RecordAttempt's own "a brand-new failed attempt
+// is never added" rule: SaveConnection never dials at all, so there is
+// no failure to speak of — it always adds a never-seen-before
+// connection, unconditionally.
+func TestSaveConnectionAlwaysAddsEvenConsecutively(t *testing.T) {
+	withTestConfigHome(t)
+	if err := SaveConnection(Connection{Host: "a.example.com"}); err != nil {
+		t.Fatalf("SaveConnection(a): %v", err)
+	}
+	if err := SaveConnection(Connection{Host: "b.example.com"}); err != nil {
+		t.Fatalf("SaveConnection(b): %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("entries = %+v, want both untested connections kept", entries)
+	}
+}

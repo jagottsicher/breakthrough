@@ -22,14 +22,38 @@ import (
 // background goroutine calls that a test needs to observe or control.
 var dialFunc = remotefs.Dial
 
+// connectDialogMode decides which buttons setConnectButtonsMode shows
+// for this particular open of the Connect dialog.
+type connectDialogMode int
+
+const (
+	// connectDialogModeNew is a brand-new connection (the dropdown's
+	// own "+New" row) or the automatic, immediate reconnect-by-row-
+	// click path (activateConnectionMenuCell's default case) — shows
+	// all three buttons, Cancel/OK/Connect, with OK the default action
+	// (Enter in the last field runs it, not Connect) per the user's
+	// own explicit request: typing fresh data and pressing Enter must
+	// save it, not immediately dial it. The row-click path is
+	// unaffected by any of this — it calls runConnect directly, right
+	// after opening, never through a button or Enter at all.
+	connectDialogModeNew connectDialogMode = iota
+	// connectDialogModeEdit is editConnectionHistoryRow's own "✎" path
+	// — an existing entry whose Host/Port/User/Identifier/Tags can be
+	// fixed. Per the user's own explicit request, this path never
+	// offers a way to dial at all, only Cancel/OK.
+	connectDialogModeEdit
+)
+
 // openConnectDialog shows the "Connect" form, prefilled from prefill —
 // the zero Connection for a blank "New connection…" open (see
 // connectionmenu.go), or a history entry's own Connection when
-// reconnecting to it. Never touches connectPasswordField: a password
-// is never persisted (see remotefs.Connection's own doc comment), so
-// there's nothing to prefill it with even when reconnecting to an
-// entry that originally needed one.
-func (r *Root) openConnectDialog(prefill remotefs.Connection) {
+// reconnecting to it or editing it (mode tells the two apart — see
+// connectDialogMode's own doc comment). Never touches
+// connectPasswordField: a password is never persisted (see
+// remotefs.Connection's own doc comment), so there's nothing to
+// prefill it with even when reconnecting to an entry that originally
+// needed one.
+func (r *Root) openConnectDialog(prefill remotefs.Connection, mode connectDialogMode) {
 	r.connectHostField.SetText(prefill.Host)
 	if prefill.Port != 0 {
 		r.connectPortField.SetText(strconv.Itoa(prefill.Port))
@@ -42,6 +66,7 @@ func (r *Root) openConnectDialog(prefill remotefs.Connection) {
 	r.connectTagsField.SetText(strings.Join(prefill.Tags, ", "))
 	r.setConnectStatus("", r.theme.Text)
 	r.resetConnectAnywayState()
+	r.setConnectButtonsMode(mode)
 
 	// height covers connectTitleBar's own row plus connectLayout's three
 	// stacked pieces (connectForm's own 13, see newConnectLayout's own
@@ -139,7 +164,7 @@ func (r *Root) newConnectForm() *tview.Form {
 			r.app.SetFocus(r.connectCancelBtn)
 			return nil
 		case tcell.KeyEnter:
-			r.runConnect()
+			r.runConnectOK()
 			return nil
 		}
 		return event
@@ -228,30 +253,90 @@ func connectTagsAcceptanceFunc(textToCheck string, lastChar rune) bool {
 	return true
 }
 
-// newConnectButtons builds a real Cancel/Connect button pair,
-// bottom-left/bottom-right — the same shape
-// newChmodButtons/newSearchButtons/newPropertiesButtons/
-// newDuplicateButtons all already establish for their own dialogs, per
-// the user's own explicit, repeated request that every dialog's own
-// action row match that established look rather than Sed Replace's
-// own vertical two-item List (see newDuplicateButtons' own doc comment
-// for the first time this exact correction was made).
+// newConnectButtons builds the real Cancel/OK/Connect button trio —
+// the same established look newChmodButtons/newSearchButtons/
+// newPropertiesButtons/newDuplicateButtons all already give their own
+// dialogs, per the user's own explicit, repeated request that every
+// dialog's own action row match it rather than Sed Replace's own
+// vertical two-item List (see newDuplicateButtons' own doc comment for
+// the first time this exact correction was made). All three widgets
+// are built once, here, and shared across every open — only which of
+// them setConnectButtonsMode actually puts in the Flex (and therefore
+// where Tab/Backtab lead) changes per mode, not the widgets
+// themselves.
 func (r *Root) newConnectButtons() *tview.Flex {
 	r.connectCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelConnect)
+	r.connectOKBtn = tview.NewButton("OK").SetSelectedFunc(r.runConnectOK)
 	r.connectConnectBtn = tview.NewButton("Connect").SetSelectedFunc(r.runConnect)
 	r.connectCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelConnect))
+	r.connectOKBtn.SetInputCapture(spaceAlsoActivates(r.runConnectOK))
 	r.connectConnectBtn.SetInputCapture(spaceAlsoActivates(r.runConnect))
 
-	// Tab/Backtab cycle between the two buttons and back into the form
-	// (connectTagsField's own forward Tab is the other half of this —
-	// see newConnectForm's own doc comment); Escape always cancels, the
-	// same as everywhere else in this dialog.
+	r.connectButtons = tview.NewFlex().SetDirection(tview.FlexColumn)
+	r.setConnectButtonsMode(connectDialogModeNew)
+	return r.connectButtons
+}
+
+// setConnectButtonsMode rebuilds connectButtons' own contents and
+// Tab/Backtab wiring for mode — called from openConnectDialog on every
+// single open, not just once from newConnectButtons: the same three
+// button widgets are shared across every open, so both which of them
+// are actually in the Flex *and* where their own Tab/Backtab lead have
+// to be set together here, every time. Wiring SetExitFunc only once in
+// newConnectButtons would leave edit mode's own Tab cycle still
+// pointing at connectConnectBtn, a button that by then isn't even in
+// the Flex anymore — keeping both concerns in the one place they can't
+// drift apart from each other.
+//
+// Equal proportion (0, 1) each, nothing else, so however many buttons
+// are present this time fill the whole row edge to edge, split evenly
+// — the same shape newChmodButtons/newDuplicateButtons already use for
+// their own two-button case.
+func (r *Root) setConnectButtonsMode(mode connectDialogMode) {
+	r.connectMode = mode
+	r.connectButtons.Clear()
+	r.connectButtons.AddItem(r.connectCancelBtn, 0, 1, false)
+	r.connectButtons.AddItem(r.connectOKBtn, 0, 1, false)
+
+	// Escape always cancels, the same as everywhere else in this
+	// dialog, regardless of mode.
 	r.connectCancelBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.connectOKBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.connectTagsField)
+		case tcell.KeyEscape:
+			r.cancelConnect()
+		}
+	})
+
+	if mode == connectDialogModeEdit {
+		// No Connect button at all — per the user's own explicit
+		// request, editing an entry never offers a way to dial from
+		// here. OK's own Tab wraps straight back to the form, the
+		// same "last real stop, wrap to Host" shape the three-button
+		// case below gives Connect instead.
+		r.connectOKBtn.SetExitFunc(func(key tcell.Key) {
+			switch key {
+			case tcell.KeyTab:
+				r.app.SetFocus(r.connectHostField)
+			case tcell.KeyBacktab:
+				r.app.SetFocus(r.connectCancelBtn)
+			case tcell.KeyEscape:
+				r.cancelConnect()
+			}
+		})
+		return
+	}
+
+	r.connectButtons.AddItem(r.connectConnectBtn, 0, 1, false)
+	r.connectOKBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
 			r.app.SetFocus(r.connectConnectBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.connectTagsField)
+			r.app.SetFocus(r.connectCancelBtn)
 		case tcell.KeyEscape:
 			r.cancelConnect()
 		}
@@ -261,18 +346,11 @@ func (r *Root) newConnectButtons() *tview.Flex {
 		case tcell.KeyTab:
 			r.app.SetFocus(r.connectHostField)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.connectCancelBtn)
+			r.app.SetFocus(r.connectOKBtn)
 		case tcell.KeyEscape:
 			r.cancelConnect()
 		}
 	})
-
-	// Equal proportion (0, 1) each, nothing else, so the two together
-	// fill the whole row edge to edge, split exactly in half — the same
-	// shape newChmodButtons/newDuplicateButtons already use.
-	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.connectCancelBtn, 0, 1, false).
-		AddItem(r.connectConnectBtn, 0, 1, false)
 }
 
 // newConnectLayout wraps connectTitleBar over the form, a one-line
@@ -333,6 +411,79 @@ func (r *Root) cancelConnectAttempt() {
 	}
 }
 
+// connectFormHostPortUser validates and returns Host/Port/User from
+// the form's own fields — shared between runConnect (which also
+// dials) and runConnectOK (which only saves), so the two can never
+// validate differently. Sets an error status and returns ok=false on
+// an invalid field (a missing Host, an out-of-range Port), the same
+// messages either action already showed inline before this was
+// pulled out.
+func (r *Root) connectFormHostPortUser() (host string, port int, user string, ok bool) {
+	host = strings.TrimSpace(r.connectHostField.GetText())
+	if host == "" {
+		r.setConnectStatus("Host is required.", r.theme.CriticalText)
+		return "", 0, "", false
+	}
+	if text := strings.TrimSpace(r.connectPortField.GetText()); text != "" {
+		p, err := strconv.Atoi(text)
+		if err != nil || p <= 0 || p > 65535 {
+			r.setConnectStatus("Port must be a number from 1 to 65535.", r.theme.CriticalText)
+			return "", 0, "", false
+		}
+		port = p
+	}
+	user = strings.TrimSpace(r.connectUserField.GetText())
+	if user == "" {
+		user = currentUsername()
+	}
+	return host, port, user, true
+}
+
+// connectFormIdentifierAndTags reads Identifier/Tags from the form's
+// own fields — shared the same way connectFormHostPortUser is, between
+// runConnect and runConnectOK.
+func (r *Root) connectFormIdentifierAndTags() (identifier string, tags []string) {
+	// No TrimSpace needed: connectIdentifierAcceptanceFunc already
+	// rejects spaces outright, so GetText() is already exactly what
+	// gets persisted (see remotefs.RecordAttempt's own inherit rule for
+	// what happens when this is empty).
+	identifier = r.connectIdentifierField.GetText()
+	// connectTagsField's own text is already normalized by the time
+	// either button can even be reached (normalizeConnectTagsField
+	// fires on blur, and every exit from the field — Tab to Cancel, or
+	// Enter — blurs it first), but ParseTags is idempotent on
+	// already-normalized input, so running it again here is cheap
+	// insurance rather than trusting that invariant blindly.
+	tags = remotefs.ParseTags(r.connectTagsField.GetText())
+	return identifier, tags
+}
+
+// runConnectOK is the "OK" button's own action, and the default one
+// for a +New or Edit dialog (anything other than the automatic,
+// immediate reconnect-by-row-click path, which calls runConnect
+// directly right after opening and never goes through a button or
+// Enter at all — see activateConnectionMenuCell's own default case):
+// validates and saves the typed fields into history via
+// remotefs.SaveConnection, without ever dialing — see that function's
+// own doc comment for why a brand-new entry it creates is marked
+// Untested rather than excluded the way a never-attempted
+// RecordAttempt failure would be.
+func (r *Root) runConnectOK() {
+	host, port, user, ok := r.connectFormHostPortUser()
+	if !ok {
+		return
+	}
+	identifier, tags := r.connectFormIdentifierAndTags()
+	conn := remotefs.Connection{Host: host, Port: port, User: user, Identifier: identifier, Tags: tags}
+
+	if err := remotefs.SaveConnection(conn); err != nil {
+		r.setConnectStatus(err.Error(), r.theme.CriticalText)
+		return
+	}
+	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("saved %s", conn.Label()))
+	r.hideOverlay()
+}
+
 // runConnect reads the form, validates just enough to dial (a host is
 // required; a malformed port is rejected before ever touching the
 // network), and attempts the connection in the background — see
@@ -344,40 +495,15 @@ func (r *Root) cancelConnectAttempt() {
 // when Connect was actually clicked (see finishConnect's own
 // hasTab guard for the case that tab is gone by the time it matters).
 func (r *Root) runConnect() {
-	host := strings.TrimSpace(r.connectHostField.GetText())
-	if host == "" {
-		r.setConnectStatus("Host is required.", r.theme.CriticalText)
+	host, port, user, ok := r.connectFormHostPortUser()
+	if !ok {
 		return
-	}
-	port := 0
-	if text := strings.TrimSpace(r.connectPortField.GetText()); text != "" {
-		p, err := strconv.Atoi(text)
-		if err != nil || p <= 0 || p > 65535 {
-			r.setConnectStatus("Port must be a number from 1 to 65535.", r.theme.CriticalText)
-			return
-		}
-		port = p
-	}
-	user := strings.TrimSpace(r.connectUserField.GetText())
-	if user == "" {
-		user = currentUsername()
 	}
 	var passwordPrompt remotefs.PasswordPrompt
 	if password := r.connectPasswordField.GetText(); password != "" {
 		passwordPrompt = func() (string, error) { return password, nil }
 	}
-	// No TrimSpace needed: connectIdentifierAcceptanceFunc already
-	// rejects spaces outright, so GetText() is already exactly what
-	// gets persisted (see remotefs.RecordAttempt's own inherit rule for
-	// what happens when this is empty).
-	identifier := r.connectIdentifierField.GetText()
-	// connectTagsField's own text is already normalized by the time
-	// Connect can even be reached (normalizeConnectTagsField fires on
-	// blur, and both exits from the field — Tab to Cancel, or Enter —
-	// blur it first), but ParseTags is idempotent on already-normalized
-	// input, so running it again here is cheap insurance rather than
-	// trusting that invariant blindly.
-	tags := remotefs.ParseTags(r.connectTagsField.GetText())
+	identifier, tags := r.connectFormIdentifierAndTags()
 
 	conn := remotefs.Connection{Host: host, Port: port, User: user, Identifier: identifier, Tags: tags}
 
