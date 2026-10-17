@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -88,6 +89,74 @@ func connectionMenuRemoveColumn(expanded bool) int {
 	return connectionMenuEjectColumn(expanded) + 1
 }
 
+// connectionMenuSortKey identifies which column, if any, the dropdown's
+// own history rows are currently sorted by — reset to
+// connectionMenuSortNone every time the dropdown opens (see
+// openConnectionMenu), per the plan's own "transient, not persisted"
+// decision (feature_ideas.txt section 9a): sorting resets to
+// LoadHistory's own "most recently used first" order on the next open,
+// the same way renderConnectionMenu itself is already rebuilt fresh on
+// every open rather than kept in sync incrementally.
+type connectionMenuSortKey int
+
+const (
+	connectionMenuSortNone connectionMenuSortKey = iota
+	connectionMenuSortUser
+	connectionMenuSortHost
+	connectionMenuSortIdentifier
+)
+
+// connectionMenuSortHistory sorts history in place by key — stable, so
+// entries that compare equal (most often: no User, or no Identifier)
+// keep LoadHistory's own most-recently-used order rather than an
+// arbitrary one. connectionMenuSortNone leaves history untouched,
+// since LoadHistory's own order already is "most recent first".
+func connectionMenuSortHistory(history []remotefs.HistoryEntry, key connectionMenuSortKey, descending bool) {
+	if key == connectionMenuSortNone {
+		return
+	}
+	less := func(i, j int) bool {
+		switch key {
+		case connectionMenuSortUser:
+			return history[i].User < history[j].User
+		case connectionMenuSortHost:
+			return history[i].HostPort() < history[j].HostPort()
+		case connectionMenuSortIdentifier:
+			return history[i].Identifier < history[j].Identifier
+		}
+		return false
+	}
+	sort.SliceStable(history, func(i, j int) bool {
+		if descending {
+			return less(j, i)
+		}
+		return less(i, j)
+	})
+}
+
+// setConnectionMenuSortKey is what clicking a column header (or its own
+// U/H/I keyboard equivalent — see captureConnectionMenuKey) does:
+// switch to sorting by key, ascending — or, if key is already the
+// active one, flip direction instead. The same "click a new column:
+// ascending; click the active one again: reverse" convention
+// Panel.setSortKey already establishes for the file panel's own column
+// headers (panel.go:2976). A no-op for Identifier while collapsed:
+// there's no Identifier column to sort by at all then (see that
+// column's own const block doc comment).
+func (r *Root) setConnectionMenuSortKey(key connectionMenuSortKey) {
+	if key == connectionMenuSortIdentifier && !r.settings.ConnectionMenuExpanded {
+		return
+	}
+	if r.connectionMenuSortKey == key {
+		r.connectionMenuSortDescending = !r.connectionMenuSortDescending
+	} else {
+		r.connectionMenuSortKey = key
+		r.connectionMenuSortDescending = false
+	}
+	r.renderConnectionMenu()
+	r.positionConnectionMenu()
+}
+
 // openConnectionMenu shows the connection dropdown for the currently
 // active panel — reached via a click on the header's own "@" button
 // (see buildHeaderSpans/Panel.onOpenConnectionMenu) or the "gc" chord
@@ -95,6 +164,11 @@ func connectionMenuRemoveColumn(expanded bool) int {
 // below what it drops down from" placement openFilterMenu establishes
 // for its own dropdown, and openTabSwitcher for its own.
 func (r *Root) openConnectionMenu() {
+	// Sorting is transient per open (see connectionMenuSortKey's own
+	// doc comment) — reset here, every time, rather than only once at
+	// NewRoot, so a previous open's own sort never leaks into this one.
+	r.connectionMenuSortKey = connectionMenuSortNone
+	r.connectionMenuSortDescending = false
 	r.renderConnectionMenu()
 	r.positionConnectionMenu()
 	// connectionMenuLayout (title bar + table), not just the table —
@@ -197,20 +271,22 @@ func (r *Root) renderConnectionMenu() {
 	// trailing "+ New connection" row's own clickable cell uses it too.
 	labelCol := connectionMenuColUser
 
-	// Row 0 is the column header — labels only, inert for now (every
-	// cell SetSelectable(false), no click handler): Phase 3's first
-	// step per the user's own request ("die Spalten haben keine
-	// Überschrift"), sorting itself (clickable/keyboard-reachable
-	// headers) is a separate, later step. Shifts every history row
-	// down by one, which is why the loop below starts at 1, not 0.
-	connectionMenuSetHeaderCell(table, connectionMenuColUser, "User", r.theme)
-	connectionMenuSetHeaderCell(table, connectionMenuColAt, "", r.theme)
-	connectionMenuSetHeaderCell(table, connectionMenuColHost, "Host/IP", r.theme)
+	// Row 0 is the column header — click (or its own U/H/I keyboard
+	// equivalent, see captureConnectionMenuKey) sorts by that column;
+	// still never keyboard-*navigable* (SetSelectable(false) on every
+	// cell) the same way Panel's own file-listing header
+	// (panel.go:908) is mouse-click-only too — sorting through table
+	// navigation would reopen the row-kind-discriminator problem a
+	// selectable header row would otherwise need. Shifts every history
+	// row down by one, which is why the loop below starts at 1, not 0.
+	r.connectionMenuSetHeaderCell(connectionMenuColUser, "User", connectionMenuSortUser)
+	r.connectionMenuSetHeaderCell(connectionMenuColAt, "", connectionMenuSortNone)
+	r.connectionMenuSetHeaderCell(connectionMenuColHost, "Host/IP", connectionMenuSortHost)
 	if expanded {
-		connectionMenuSetHeaderCell(table, connectionMenuColIdentifier, "Identifier", r.theme)
+		r.connectionMenuSetHeaderCell(connectionMenuColIdentifier, "Identifier", connectionMenuSortIdentifier)
 	}
-	connectionMenuSetHeaderCell(table, ejectCol, "", r.theme)
-	connectionMenuSetHeaderCell(table, removeCol, "", r.theme)
+	r.connectionMenuSetHeaderCell(ejectCol, "", connectionMenuSortNone)
+	r.connectionMenuSetHeaderCell(removeCol, "", connectionMenuSortNone)
 	r.connectionMenuRowColors[0] = r.theme.MutedTextColor
 
 	// A read failure here just means an empty history section, not an
@@ -218,6 +294,7 @@ func (r *Root) renderConnectionMenu() {
 	// "absence isn't an error" contract LoadHistory's own doc comment
 	// already promises callers.
 	history, _ := remotefs.LoadHistory()
+	connectionMenuSortHistory(history, r.connectionMenuSortKey, r.connectionMenuSortDescending)
 	row := 1
 	for i, entry := range history {
 		if i >= connectionMenuMaxHistoryRows {
@@ -392,11 +469,34 @@ func blankConnectionMenuCell() *tview.TableCell {
 // that (true means "noSelect", skipping tview's own t.Select call
 // entirely) — once Phase 3 step 2 makes headers sortable, this same
 // handler becomes the sort trigger, still returning true.
-func connectionMenuSetHeaderCell(table *tview.Table, col int, label string, theme config.ResolvedTheme) {
-	table.SetCell(0, col, tview.NewTableCell(label).
-		SetTextColor(theme.MutedTextColor).
-		SetSelectable(false).
-		SetClickedFunc(func() bool { return true }))
+// connectionMenuSetHeaderCell writes label into table's own row 0 at
+// col, plus sortArrow's own " ↑"/" ↓" suffix (panel.go:2831, reused
+// directly rather than duplicated) when key is the currently active
+// sort column. SetSelectable(false) always — see renderConnectionMenu's
+// own doc comment at its call site for why the header stays
+// click-only, never keyboard-navigable. key ==
+// connectionMenuSortNone is for the @/Eject/Remove columns, which
+// never sort anything: their own SetClickedFunc still has to return
+// true (tview's own "noSelect" signal — see this method's own doc
+// comment where it was first added) so a stray click there can't move
+// the real selection onto the header either.
+func (r *Root) connectionMenuSetHeaderCell(col int, label string, key connectionMenuSortKey) {
+	text := label
+	if key != connectionMenuSortNone && key == r.connectionMenuSortKey {
+		text += sortArrow(r.connectionMenuSortDescending)
+	}
+	cell := tview.NewTableCell(text).
+		SetTextColor(r.theme.MutedTextColor).
+		SetSelectable(false)
+	if key == connectionMenuSortNone {
+		cell.SetClickedFunc(func() bool { return true })
+	} else {
+		cell.SetClickedFunc(func() bool {
+			r.setConnectionMenuSortKey(key)
+			return true
+		})
+	}
+	r.connectionMenuTable.SetCell(0, col, cell)
 }
 
 // activateConnectionMenuCell is Enter, Space or a click on one cell —
@@ -503,6 +603,31 @@ func (r *Root) captureConnectionMenuKey(event *tcell.EventKey) *tcell.EventKey {
 	if isToggleKey {
 		r.toggleConnectionMenuExpanded()
 		return nil
+	}
+
+	// U/H/I are the keyboard equivalent of clicking a column header to
+	// sort by it (see connectionMenuSetHeaderCell) — the header itself
+	// is deliberately not keyboard-navigable (see renderConnectionMenu's
+	// own doc comment), so this is the only way to sort without a
+	// mouse, the same reasoning Panel's own "z" then N/S/T gives for
+	// its file-listing header (panel.go:580). Capitalized specifically,
+	// mirroring Panel's own N/S/T: lowercase u/h/i stay free for Phase
+	// 5's filter field, which will want ordinary letters once it
+	// exists. setConnectionMenuSortKey itself is a no-op for 'I' while
+	// collapsed (no Identifier column to sort by), so nothing special
+	// is needed here for that case.
+	if event.Key() == tcell.KeyRune {
+		switch event.Rune() {
+		case 'U':
+			r.setConnectionMenuSortKey(connectionMenuSortUser)
+			return nil
+		case 'H':
+			r.setConnectionMenuSortKey(connectionMenuSortHost)
+			return nil
+		case 'I':
+			r.setConnectionMenuSortKey(connectionMenuSortIdentifier)
+			return nil
+		}
 	}
 
 	isRemoveKey := (event.Key() == tcell.KeyRune && event.Rune() == 'x') || event.Key() == tcell.KeyDelete

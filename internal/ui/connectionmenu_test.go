@@ -170,6 +170,108 @@ func TestClickingAHeaderCellDoesNotMoveTheSelection(t *testing.T) {
 	}
 }
 
+// TestClickingTheUserHeaderSortsByUserAscendingThenDescending pins
+// setConnectionMenuSortKey's own "click a new column: ascending; click
+// the active one again: reverse" convention (mirroring
+// Panel.setSortKey), driven through the header cell's own
+// SetClickedFunc exactly as a real click would.
+func TestClickingTheUserHeaderSortsByUserAscendingThenDescending(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	for _, u := range []string{"web128", "jens", "pi"} {
+		if err := remotefs.RecordAttempt(remotefs.Connection{Host: u + ".example.com", User: u}, false); err != nil {
+			t.Fatalf("RecordAttempt: %v", err)
+		}
+	}
+	r.renderConnectionMenu()
+
+	r.connectionMenuTable.GetCell(0, connectionMenuColUser).Clicked()
+	texts := connectionMenuLabelTexts(r.connectionMenuTable)
+	if len(texts) < 3 || texts[0][:4] != "jens" {
+		t.Fatalf("after ascending sort, rows = %v, want jens first", texts)
+	}
+	if got := r.connectionMenuTable.GetCell(0, connectionMenuColUser).Text; got != "User ↑" {
+		t.Errorf("User header = %q, want the ascending sortArrow suffix", got)
+	}
+
+	r.connectionMenuTable.GetCell(0, connectionMenuColUser).Clicked()
+	texts = connectionMenuLabelTexts(r.connectionMenuTable)
+	if len(texts) < 3 || texts[0][:4] != "web1" {
+		t.Fatalf("after a second click (descending), rows = %v, want web128 first", texts)
+	}
+	if got := r.connectionMenuTable.GetCell(0, connectionMenuColUser).Text; got != "User ↓" {
+		t.Errorf("User header = %q, want the descending sortArrow suffix", got)
+	}
+}
+
+// TestPressingHSortsByHost pins the keyboard equivalent of clicking the
+// Host/IP header — captureConnectionMenuKey's own "H" handling.
+func TestPressingHSortsByHost(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	for _, h := range []string{"zzz.example.com", "aaa.example.com"} {
+		if err := remotefs.RecordAttempt(remotefs.Connection{Host: h, User: "tester"}, false); err != nil {
+			t.Fatalf("RecordAttempt: %v", err)
+		}
+	}
+	r.renderConnectionMenu()
+
+	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'H', tcell.ModNone))
+	if got != nil {
+		t.Error("captureConnectionMenuKey did not consume \"H\"")
+	}
+
+	texts := connectionMenuLabelTexts(r.connectionMenuTable)
+	if len(texts) < 2 || !strings.Contains(texts[0], "aaa.example.com") {
+		t.Errorf("rows = %v, want aaa.example.com sorted first", texts)
+	}
+}
+
+// TestPressingIWhileCollapsedDoesNothing pins
+// setConnectionMenuSortKey's own no-op guard: there's no Identifier
+// column to sort by while collapsed, so "I" must leave the history
+// order untouched rather than silently setting a sort key that has no
+// visible column to show its own arrow on.
+func TestPressingIWhileCollapsedDoesNothing(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	for _, c := range []remotefs.Connection{
+		{Host: "b.example.com", User: "tester", Identifier: "zzz"},
+		{Host: "a.example.com", User: "tester", Identifier: "aaa"},
+	} {
+		if err := remotefs.RecordAttempt(c, false); err != nil {
+			t.Fatalf("RecordAttempt: %v", err)
+		}
+	}
+	r.renderConnectionMenu()
+	before := connectionMenuLabelTexts(r.connectionMenuTable)
+
+	r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'I', tcell.ModNone))
+
+	if r.connectionMenuSortKey != connectionMenuSortNone {
+		t.Errorf("connectionMenuSortKey = %v, want connectionMenuSortNone while collapsed", r.connectionMenuSortKey)
+	}
+	after := connectionMenuLabelTexts(r.connectionMenuTable)
+	if len(after) != len(before) || after[0] != before[0] {
+		t.Errorf("row order = %v, want it unchanged by \"I\" while collapsed (got %v before)", after, before)
+	}
+}
+
+// TestOpenConnectionMenuResetsAnyPreviousSort pins the plan's own
+// "transient, not persisted" decision for sorting: a sort set during
+// one open must not survive into the next.
+func TestOpenConnectionMenuResetsAnyPreviousSort(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	r.connectionMenuSortKey = connectionMenuSortHost
+	r.connectionMenuSortDescending = true
+
+	r.openConnectionMenu()
+
+	if r.connectionMenuSortKey != connectionMenuSortNone {
+		t.Errorf("connectionMenuSortKey = %v, want connectionMenuSortNone reset on open", r.connectionMenuSortKey)
+	}
+	if r.connectionMenuSortDescending {
+		t.Error("connectionMenuSortDescending = true, want reset to false on open")
+	}
+}
+
 func TestRenderConnectionMenuOnALocalPanelOffersOnlyNewConnection(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	r.renderConnectionMenu()

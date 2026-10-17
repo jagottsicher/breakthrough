@@ -717,8 +717,12 @@ terminal.
   spans the whole terminal width instead of just the active panel,
   remembered across restarts (`connection_menu_expanded`). Each column
   has a label above it (`User`/`Host/IP`, `Identifier` too once
-  expanded) — clicking or sorting by one isn't in yet. Connecting dials
-  in the background with a live progress line;
+  expanded) — click one, or `U`/`H`/`I` while the dropdown has focus,
+  to sort by it (a second click/press of the same one reverses it),
+  shown with an `↑`/`↓` suffix; the header itself is mouse-only, not
+  reachable by arrow keys, and sorting resets to "most recently used
+  first" the next time the dropdown opens. Connecting dials in the
+  background with a live progress line;
   authentication tries an `ssh-agent` first, then the usual default key
   files (`~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`), then a typed
   password as the last resort. Host keys are checked against the real

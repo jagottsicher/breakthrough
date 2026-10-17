@@ -293,8 +293,12 @@ var helpText = strings.TrimLeft(`
   spanning the whole terminal width instead of just the active panel;
   remembered across restarts ("connection_menu_expanded", also in
   Options → General). Each column has a label row above it (User/Host-
-  IP, Identifier too once expanded) — clicking or sorting by one isn't
-  in yet. Auth tries an ssh-agent, then
+  IP, Identifier too once expanded) — click one, or "U"/"H"/"I" while
+  the dropdown has focus, to sort by it (ascending, or descending on a
+  second click/press of the same one), with an " ↑"/" ↓" suffix showing
+  which; the header itself stays mouse-only, not reachable by arrow
+  keys. Sorting resets to "most recently used first" the next time the
+  dropdown opens. Auth tries an ssh-agent, then
   ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if unencrypted, then a typed
   password; host keys are checked against ~/.ssh/known_hosts, with a
   trust-on-first-use prompt for an unknown one and an outright refusal

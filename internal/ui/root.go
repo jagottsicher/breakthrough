@@ -1149,6 +1149,14 @@ type Root struct {
 	// own SetSelectedStyle) while highlighted.
 	connectionMenuRowColors map[int]tcell.Color
 
+	// connectionMenuSortKey/connectionMenuSortDescending track which
+	// column header (if any) the dropdown's own history rows are
+	// currently sorted by — reset every time the dropdown opens (see
+	// openConnectionMenu), never persisted, per the "transient, not
+	// persisted" decision in feature_ideas.txt section 9a.
+	connectionMenuSortKey        connectionMenuSortKey
+	connectionMenuSortDescending bool
+
 	// connectionMenuActiveRow is the row within connectionMenuTable
 	// (history rows only — see connectionMenuHistoryRows) that
 	// represents the active panel's own current connection, or -1 if
