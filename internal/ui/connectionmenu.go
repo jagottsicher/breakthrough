@@ -534,7 +534,11 @@ func (r *Root) styleConnectionMenuSearchField(focused bool) {
 
 func (r *Root) newConnectionMenuSearchField() *tview.InputField {
 	f := tview.NewInputField()
-	f.SetLabel(fmt.Sprintf("[:%s:] / [-:-:-]Search: ", colorTag(r.theme.ButtonBackground)))
+	// "Filter:", not "Search:" — this app's own established term for
+	// exactly this behavior (narrows a list live as you type, see
+	// Panel.filterField/filter_persistent) rather than something that
+	// implies jumping to or finding a single match.
+	f.SetLabel(fmt.Sprintf("[:%s:] / [-:-:-]Filter: ", colorTag(r.theme.ButtonBackground)))
 	// styleConnectionMenuSearchField (not styleInput directly — see its
 	// own doc comment) wired via Focus/Blur rather than set once: a
 	// fixed background regardless of focus state is what made this

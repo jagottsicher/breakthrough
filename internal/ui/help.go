@@ -298,7 +298,7 @@ var helpText = strings.TrimLeft(`
   or descending on a second click/press of the same one), with an
   " ↑"/" ↓" suffix showing which; the header itself stays mouse-only,
   not reachable by arrow keys. Sorting resets to "most recently used
-  first" the next time the dropdown opens. A search field fills the
+  first" the next time the dropdown opens. A "Filter:" field fills the
   rest of the top row, always there — click it or press "/" while the
   dropdown has focus to type directly, Escape or Enter returns focus to
   the list without clearing what was typed (Escape again closes the

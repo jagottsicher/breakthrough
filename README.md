@@ -721,7 +721,7 @@ terminal.
   to sort by it (a second click/press of the same one reverses it),
   shown with an `↑`/`↓` suffix; the header itself is mouse-only, not
   reachable by arrow keys, and sorting resets to "most recently used
-  first" the next time the dropdown opens. An always-present search
+  first" the next time the dropdown opens. An always-present "Filter:"
   field fills the rest of the top row — click it or press `/` while
   the dropdown has focus, Escape or Enter returns to the list without
   clearing what was typed (Escape again closes the dropdown). Narrows
