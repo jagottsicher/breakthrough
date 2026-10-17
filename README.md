@@ -721,8 +721,15 @@ terminal.
   to sort by it (a second click/press of the same one reverses it),
   shown with an `↑`/`↓` suffix; the header itself is mouse-only, not
   reachable by arrow keys, and sorting resets to "most recently used
-  first" the next time the dropdown opens. Connecting dials in the
-  background with a live progress line;
+  first" the next time the dropdown opens. An always-present search
+  field fills the rest of the top row — click it or press `/` while
+  the dropdown has focus, Escape or Enter returns to the list without
+  clearing what was typed (Escape again closes the dropdown). Narrows
+  the list live across User/Host-IP (and Identifier once expanded)
+  using the same AND/OR/NAND/NOR/NOT expression grammar as Log
+  Holepunch's own keyword field; resets empty the next time the
+  dropdown opens, same as sorting. Connecting dials in the background
+  with a live progress line;
   authentication tries an `ssh-agent` first, then the usual default key
   files (`~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`), then a typed
   password as the last resort. Host keys are checked against the real

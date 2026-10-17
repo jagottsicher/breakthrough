@@ -1128,7 +1128,15 @@ type Root struct {
 	// renderFilterMenu's own doc comment already gives for its dropdown.
 	connectionMenuTable    *tview.Table
 	connectionMenuTitleBar *tview.TextView
-	connectionMenuLayout   *tview.Flex
+	// connectionMenuSearchField/connectionMenuTitleRow are the
+	// dropdown's own always-present search box and the FlexColumn
+	// holding it alongside connectionMenuTitleBar (now just the
+	// expand/collapse glyph, nothing else — see
+	// newConnectionMenuTitleRow's own doc comment for why the old
+	// single-widget "Connections" title bar was replaced entirely).
+	connectionMenuSearchField *tview.InputField
+	connectionMenuTitleRow    *tview.Flex
+	connectionMenuLayout      *tview.Flex
 
 	// connectionMenuHistoryRows maps a row index in connectionMenuTable
 	// to the Connection that row represents — populated fresh by
@@ -2632,8 +2640,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// on every open (see renderConnectionMenu), the same as the filter
 	// menu's own dropdown.
 	r.connectionMenuTable = r.newConnectionMenuTable()
-	r.connectionMenuTitleBar = newPlainTitleBar("Connections")
+	r.connectionMenuTitleBar = newPlainTitleBar("")
 	r.connectionMenuTitleBar.SetMouseCapture(r.captureConnectionMenuTitleBarMouse)
+	r.connectionMenuSearchField = r.newConnectionMenuSearchField()
+	r.connectionMenuTitleRow = r.newConnectionMenuTitleRow()
 	r.connectionMenuLayout = r.newConnectionMenuLayout()
 
 	// The "gs" SSH shell dropdown ("Open shell to") and its own "Add

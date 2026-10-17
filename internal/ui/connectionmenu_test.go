@@ -344,6 +344,150 @@ func TestOpenConnectionMenuResetsAnyPreviousSort(t *testing.T) {
 	}
 }
 
+// TestConnectionMenuFilterHistoryMatchesUserOrHost pins
+// connectionMenuFilterHistory's own basic contract: a query matching
+// either the User or Host/IP field keeps that entry, reusing
+// filterexpr.QueryFilter — the user's own explicit request to share
+// the exact AND/OR/NAND/NOR/NOT grammar Log Holepunch's own keyword
+// field already uses, rather than a second, simpler parser.
+func TestConnectionMenuFilterHistoryMatchesUserOrHost(t *testing.T) {
+	history := []remotefs.HistoryEntry{
+		{Connection: remotefs.Connection{Host: "example.com", User: "jens"}},
+		{Connection: remotefs.Connection{Host: "other.example.com", User: "web128"}},
+	}
+
+	got := connectionMenuFilterHistory(history, "jens", false)
+	if len(got) != 1 || got[0].User != "jens" {
+		t.Errorf("filtered = %+v, want only the jens entry", got)
+	}
+
+	got = connectionMenuFilterHistory(history, "example", false)
+	if len(got) != 2 {
+		t.Errorf("filtered = %+v, want both entries (both hosts contain \"example\")", got)
+	}
+}
+
+// TestConnectionMenuFilterHistoryBooleanOperators pins the actual
+// reason filterexpr was reused instead of a plain substring check:
+// AND/OR/NOT combine across the visible fields.
+func TestConnectionMenuFilterHistoryBooleanOperators(t *testing.T) {
+	history := []remotefs.HistoryEntry{
+		{Connection: remotefs.Connection{Host: "prod.example.com", User: "jens"}},
+		{Connection: remotefs.Connection{Host: "staging.example.com", User: "jens"}},
+		{Connection: remotefs.Connection{Host: "prod.example.com", User: "web128"}},
+	}
+
+	got := connectionMenuFilterHistory(history, "jens AND prod", false)
+	if len(got) != 1 || got[0].Host != "prod.example.com" || got[0].User != "jens" {
+		t.Errorf("filtered = %+v, want only jens@prod.example.com", got)
+	}
+
+	got = connectionMenuFilterHistory(history, "jens NOT staging", false)
+	if len(got) != 1 || got[0].Host != "prod.example.com" {
+		t.Errorf("filtered = %+v, want jens AND NOT staging to leave only the prod entry", got)
+	}
+}
+
+// TestConnectionMenuFilterHistoryIgnoresIdentifierWhileCollapsed and
+// its companion below pin the state-dependent search scope already
+// decided in feature_ideas.txt section 9a: Identifier is only ever
+// searched once expanded, the same rule that decides whether it's even
+// a visible column.
+func TestConnectionMenuFilterHistoryIgnoresIdentifierWhileCollapsed(t *testing.T) {
+	history := []remotefs.HistoryEntry{
+		{Connection: remotefs.Connection{Host: "example.com", User: "tester", Identifier: "build-1"}},
+	}
+
+	got := connectionMenuFilterHistory(history, "build-1", false)
+	if len(got) != 0 {
+		t.Errorf("filtered = %+v, want no match for an Identifier-only query while collapsed", got)
+	}
+}
+
+func TestConnectionMenuFilterHistoryMatchesIdentifierWhileExpanded(t *testing.T) {
+	history := []remotefs.HistoryEntry{
+		{Connection: remotefs.Connection{Host: "example.com", User: "tester", Identifier: "build-1"}},
+	}
+
+	got := connectionMenuFilterHistory(history, "build-1", true)
+	if len(got) != 1 {
+		t.Errorf("filtered = %+v, want the entry matched by its own Identifier while expanded", got)
+	}
+}
+
+// TestConnectionMenuFilterHistoryTreatsAnUnparseableQueryAsNoFilter
+// pins filterexpr's own documented mid-keystroke convention (see
+// internal/filterexpr's own package doc comment): an incomplete
+// expression — here, a trailing "AND" with nothing after it — must
+// never hide every row while the user is still typing.
+func TestConnectionMenuFilterHistoryTreatsAnUnparseableQueryAsNoFilter(t *testing.T) {
+	history := []remotefs.HistoryEntry{
+		{Connection: remotefs.Connection{Host: "example.com", User: "tester"}},
+	}
+
+	got := connectionMenuFilterHistory(history, "tester AND", false)
+	if len(got) != 1 {
+		t.Errorf("filtered = %+v, want the unparseable query treated as no filter yet", got)
+	}
+}
+
+// TestRenderConnectionMenuAppliesTheSearchFieldsOwnText pins the
+// actual wiring, not just connectionMenuFilterHistory in isolation:
+// typing into connectionMenuSearchField and re-rendering must narrow
+// the real table's own rows.
+func TestRenderConnectionMenuAppliesTheSearchFieldsOwnText(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	for _, u := range []string{"jens", "web128"} {
+		if err := remotefs.RecordAttempt(remotefs.Connection{Host: u + ".example.com", User: u}, false); err != nil {
+			t.Fatalf("RecordAttempt: %v", err)
+		}
+	}
+	r.renderConnectionMenu()
+	if len(connectionMenuLabelTexts(r.connectionMenuTable)) != 3 { // 2 history rows + "+ New"
+		t.Fatalf("unfiltered rows = %v, want 3", connectionMenuLabelTexts(r.connectionMenuTable))
+	}
+
+	r.connectionMenuSearchField.SetText("web128")
+	r.renderConnectionMenu()
+
+	texts := connectionMenuLabelTexts(r.connectionMenuTable)
+	if len(texts) != 2 || !strings.Contains(texts[0], "web128") { // 1 history row + "+ New"
+		t.Errorf("filtered rows = %v, want only web128 plus \"+ New\"", texts)
+	}
+}
+
+// TestPressingSlashFocusesTheSearchField pins the only (besides a
+// direct click) way into the field — see newConnectionMenuSearchField's
+// own doc comment on why "just start typing" isn't safe here.
+func TestPressingSlashFocusesTheSearchField(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	r.openConnectionMenu()
+
+	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone))
+	if got != nil {
+		t.Error("captureConnectionMenuKey did not consume \"/\"")
+	}
+	if !r.connectionMenuSearchField.HasFocus() {
+		t.Error("\"/\" did not move focus to the search field")
+	}
+}
+
+// TestOpenConnectionMenuResetsAnyPreviousSearch mirrors
+// TestOpenConnectionMenuResetsAnyPreviousSort for the search field: a
+// query typed during one open must not survive into the next (the
+// same "a stale filter would read as 'my history is gone'" reasoning
+// openConnectionMenu's own doc comment gives).
+func TestOpenConnectionMenuResetsAnyPreviousSearch(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	r.connectionMenuSearchField.SetText("leftover query")
+
+	r.openConnectionMenu()
+
+	if got := r.connectionMenuSearchField.GetText(); got != "" {
+		t.Errorf("search field text = %q, want cleared on open", got)
+	}
+}
+
 func TestRenderConnectionMenuOnALocalPanelOffersOnlyNewConnection(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	r.renderConnectionMenu()
@@ -647,7 +791,7 @@ func TestClickingTheRemoveCellInExpandedModeRemovesNotConnects(t *testing.T) {
 // convention).
 func TestRenderConnectionMenuTitleBarShowsTheExpandGlyphWhenCollapsed(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
-	r.renderConnectionMenuTitleBar(40)
+	r.renderConnectionMenuTitleBar()
 	if got := r.connectionMenuTitleBar.GetText(true); !strings.Contains(got, connectionMenuExpandGlyph) {
 		t.Errorf("title bar = %q, want it to carry the expand glyph %q while collapsed", got, connectionMenuExpandGlyph)
 	}
@@ -656,7 +800,7 @@ func TestRenderConnectionMenuTitleBarShowsTheExpandGlyphWhenCollapsed(t *testing
 func TestRenderConnectionMenuTitleBarShowsTheCollapseGlyphWhenExpanded(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	r.setConnectionMenuExpanded(true)
-	r.renderConnectionMenuTitleBar(40)
+	r.renderConnectionMenuTitleBar()
 	if got := r.connectionMenuTitleBar.GetText(true); !strings.Contains(got, connectionMenuCollapseGlyph) {
 		t.Errorf("title bar = %q, want it to carry the collapse glyph %q while expanded", got, connectionMenuCollapseGlyph)
 	}

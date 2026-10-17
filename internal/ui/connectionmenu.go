@@ -11,6 +11,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
@@ -157,6 +158,57 @@ func (r *Root) setConnectionMenuSortKey(key connectionMenuSortKey) {
 	r.positionConnectionMenu()
 }
 
+// connectionMenuFilterPlaceholder names, for the search field's own
+// placeholder text, exactly which fields a query actually searches —
+// collapsed/expanded differ (see connectionMenuFilterHistory's own doc
+// comment), so this has to track that split rather than being a fixed
+// string.
+func connectionMenuFilterPlaceholder(expanded bool) string {
+	if expanded {
+		return "user, host/ip, identifier"
+	}
+	return "user, host/ip"
+}
+
+// connectionMenuFilterHistory returns the subset of history whose
+// currently visible fields (User+Host-IP always; Identifier too, but
+// only once expanded — collapsed has no Identifier column for a query
+// to plausibly mean) match query, reusing filterexpr.QueryFilter
+// (internal/filterexpr/query.go) — the same AND/OR/NAND/NOR/NOT
+// boolean grammar Log Holepunch's own keyword field already uses, per
+// the user's own explicit request for the two to feel the same rather
+// than inventing a second parser for a dropdown with at most
+// historyMaxEntries (20) rows to search in the first place.
+//
+// An empty or unparseable query (query midway through being typed —
+// an unterminated "(" or trailing "AND", say) means "no filter yet",
+// the same convention this package's own doc comment already
+// documents for its own callers — never an error surfaced to the user,
+// since every character typed is itself a transient, possibly-
+// incomplete expression until they stop.
+func connectionMenuFilterHistory(history []remotefs.HistoryEntry, query string, expanded bool) []remotefs.HistoryEntry {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return history
+	}
+	filter, err := filterexpr.ParseQuery(query)
+	if err != nil {
+		return history
+	}
+	filtered := make([]remotefs.HistoryEntry, 0, len(history))
+	for _, entry := range history {
+		source := entry.User + " " + entry.HostPort()
+		message := ""
+		if expanded {
+			message = entry.Identifier
+		}
+		if filter.Match(source, message) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
 // openConnectionMenu shows the connection dropdown for the currently
 // active panel — reached via a click on the header's own "@" button
 // (see buildHeaderSpans/Panel.onOpenConnectionMenu) or the "gc" chord
@@ -167,8 +219,13 @@ func (r *Root) openConnectionMenu() {
 	// Sorting is transient per open (see connectionMenuSortKey's own
 	// doc comment) — reset here, every time, rather than only once at
 	// NewRoot, so a previous open's own sort never leaks into this one.
+	// The search query resets the same way and for the same reason: a
+	// stale filter silently hiding entries the next time this opens
+	// would read as "my connection history is gone", not "I forgot to
+	// clear a search".
 	r.connectionMenuSortKey = connectionMenuSortNone
 	r.connectionMenuSortDescending = false
+	r.connectionMenuSearchField.SetText("")
 	r.renderConnectionMenu()
 	r.positionConnectionMenu()
 	// connectionMenuLayout (title bar + table), not just the table —
@@ -219,7 +276,7 @@ func (r *Root) positionConnectionMenu() {
 		x, y, width, height = r.clampToPanel(right-width, top, width, height)
 	}
 	r.connectionMenuLayout.SetRect(x, y, width, height)
-	r.renderConnectionMenuTitleBar(width)
+	r.renderConnectionMenuTitleBar()
 }
 
 // connectionMenuAnchor returns the screen position the header's own
@@ -295,6 +352,8 @@ func (r *Root) renderConnectionMenu() {
 	// already promises callers.
 	history, _ := remotefs.LoadHistory()
 	connectionMenuSortHistory(history, r.connectionMenuSortKey, r.connectionMenuSortDescending)
+	history = connectionMenuFilterHistory(history, r.connectionMenuSearchField.GetText(), expanded)
+	r.connectionMenuSearchField.SetPlaceholder(connectionMenuFilterPlaceholder(expanded))
 	row := 1
 	for i, entry := range history {
 		if i >= connectionMenuMaxHistoryRows {
@@ -438,9 +497,80 @@ func (r *Root) newConnectionMenuTable() *tview.Table {
 	return table
 }
 
+// newConnectionMenuSearchField builds the dropdown's own always-present
+// search box — see newConnectionMenuTitleRow's own doc comment on why
+// it replaces the old static "Connections" label entirely rather than
+// the title bar transforming into one only once activated. The label
+// itself carries the "/" mnemonic the same way a column header's own
+// U/H/I do (connectionMenuSetHeaderCell's own ButtonBackground chip,
+// here on InputField.SetLabel instead of a TableCell — verified
+// against tview's own textarea.go that TextArea.Draw's label half goes
+// through the same tag-aware printWithStyle a Table cell's own text
+// does, so the markup renders identically). The field is never focused
+// by default (SetFocus) — "/" in captureConnectionMenuKey, or a direct
+// click, are the only ways in; typing without either first would
+// otherwise be ambiguous with the table's own single-letter shortcuts
+// (U/H/I/e/x/</>).
+func (r *Root) newConnectionMenuSearchField() *tview.InputField {
+	f := tview.NewInputField()
+	f.SetLabel(fmt.Sprintf("[:%s:] / [-:-:-]Search: ", colorTag(r.theme.ButtonBackground)))
+	// styleInput (theme.go) is this app's own shared "look like a real
+	// input, not a label" styling — InputBackground normally,
+	// InputFocusedBackground while focused, the exact convention
+	// logAuditKeywordField already uses for an identical kind of
+	// boolean-query field. Wired here via Focus/Blur rather than set
+	// once: a fixed background regardless of focus state is what made
+	// this field unrecognizable as something you can type into at all
+	// (the user's own explicit report) — applyTheme's own call picks
+	// the right one for whatever the actual focus state is at the
+	// moment a theme gets (re)applied.
+	f.SetFocusFunc(func() { styleInput(f, r.theme, true) })
+	f.SetBlurFunc(func() { styleInput(f, r.theme, false) })
+	f.SetChangedFunc(func(text string) {
+		if r.activePage == connectionMenuPage {
+			r.renderConnectionMenu()
+		}
+	})
+	// Enter and Escape both just return focus to the table — neither
+	// clears the typed query (a filter that silently vanishes the
+	// instant you stop editing it would be more surprising than
+	// useful) nor closes the dropdown (that's still Escape on the
+	// table itself, via captureConnectionMenuKey, a deliberate second
+	// stage: the first Escape leaves the field, the second closes the
+	// whole dropdown).
+	f.SetDoneFunc(func(key tcell.Key) {
+		r.app.SetFocus(r.connectionMenuTable)
+	})
+	return f
+}
+
+// connectionMenuToggleWidth is connectionMenuTitleBar's own fixed
+// width within connectionMenuTitleRow — just the "<"/">" glyph plus
+// one column of padding either side, now that it's its own Flex item
+// rather than the right-hand end of a wide "Connections" label (see
+// newConnectionMenuTitleRow's own doc comment on why the label went
+// away entirely).
+const connectionMenuToggleWidth = 3
+
+// newConnectionMenuTitleRow replaces the old single-widget title bar
+// ("Connections" label, with the expand/collapse glyph right-aligned
+// into the same TextView) with a search field filling the whole row
+// instead — per the user's own explicit request: a search box that's
+// always there, not a static label that transforms into one, with the
+// toggle staying a fixed-width item on the right. connectionMenuTitleBar
+// keeps its existing name but is now just that glyph, nothing else —
+// see renderConnectionMenuTitleBar's own doc comment for how much
+// simpler that made it.
+func (r *Root) newConnectionMenuTitleRow() *tview.Flex {
+	row := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.connectionMenuSearchField, 0, 1, false).
+		AddItem(r.connectionMenuTitleBar, connectionMenuToggleWidth, 0, false)
+	return row
+}
+
 func (r *Root) newConnectionMenuLayout() *tview.Flex {
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.connectionMenuTitleBar, 1, 0, false).
+		AddItem(r.connectionMenuTitleRow, 1, 0, false).
 		AddItem(r.connectionMenuTable, 0, 1, true)
 }
 
@@ -616,6 +746,15 @@ func (r *Root) captureConnectionMenuKey(event *tcell.EventKey) *tcell.EventKey {
 	isToggleKey := event.Key() == tcell.KeyRune && (event.Rune() == '<' || event.Rune() == '>')
 	if isToggleKey {
 		r.toggleConnectionMenuExpanded()
+		return nil
+	}
+
+	// "/" focuses the search field — the only way in besides a direct
+	// click (see newConnectionMenuSearchField's own doc comment on why
+	// "just start typing" would be ambiguous with every other
+	// single-letter shortcut this table already has).
+	if event.Key() == tcell.KeyRune && event.Rune() == '/' {
+		r.app.SetFocus(r.connectionMenuSearchField)
 		return nil
 	}
 
@@ -886,42 +1025,32 @@ const (
 // toggled, not just once at open time — the same reasoning
 // renderDetailsTitleBar's own doc comment gives for being called from
 // repositionDetailsSidebar rather than just once at show time.
-func (r *Root) renderConnectionMenuTitleBar(width int) {
-	label := " Connections "
+// renderConnectionMenuTitleBar sets connectionMenuTitleBar's own text
+// to just the expand/collapse glyph — no padding math needed anymore
+// (unlike the old single-widget title bar, which right-aligned this
+// glyph within a wide "Connections" label): the glyph is its own fixed
+// connectionMenuToggleWidth-wide Flex item now (see
+// newConnectionMenuTitleRow), so its own rect already is exactly the
+// glyph's own column.
+func (r *Root) renderConnectionMenuTitleBar() {
 	glyph := connectionMenuExpandGlyph
 	if r.settings.ConnectionMenuExpanded {
 		glyph = connectionMenuCollapseGlyph
 	}
-	closeCol := toolWindowCloseButtonCol(0, width)
-	padding := closeCol - len(label)
-	if padding < 0 {
-		padding = 0
-	}
-	r.connectionMenuTitleBar.SetText(label + strings.Repeat(" ", padding) + glyph + " ")
+	r.connectionMenuTitleBar.SetText(" " + glyph + " ")
 }
 
-// captureConnectionMenuTitleBarMouse toggles expand/collapse when the
-// click lands exactly on the glyph's own column — the mouse
-// counterpart to "<"/">" in captureConnectionMenuKey, the identical
-// hit-test shape captureDetailsTitleBarMouse already establishes for
-// its own single collapse button.
+// captureConnectionMenuTitleBarMouse toggles expand/collapse on any
+// click inside connectionMenuTitleBar's own rect — no exact-column hit
+// test needed anymore (unlike when this bar was wide and the glyph was
+// just its right-hand end): the whole widget is the glyph now, nothing
+// else sits inside its rect to miss.
 func (r *Root) captureConnectionMenuTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if !r.connectionMenuTitleBar.InRect(event.Position()) {
 		return action, event
 	}
 	if action != tview.MouseLeftClick {
 		return tview.MouseConsumed, nil
-	}
-	x, y := event.Position()
-	rectX, rectY, width, _ := r.connectionMenuTitleBar.GetRect()
-	if y != rectY || x != rectX+toolWindowCloseButtonCol(0, width) {
-		// A "miss" — every other click on the title bar is inert, same
-		// as Details' own (see func's own doc comment) — passed
-		// through rather than consumed, same as before this existed:
-		// TextView's own default MouseLeftClick handling does nothing
-		// here regardless (no region tags on this bar), so nothing this
-		// would let slip through by mistake.
-		return action, event
 	}
 	r.toggleConnectionMenuExpanded()
 	return tview.MouseConsumed, nil

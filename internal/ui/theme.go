@@ -573,6 +573,18 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		Foreground(theme.TextColor))
 	r.connectionMenuTitleBar.SetBackgroundColor(theme.SurfaceBackground)
 	r.connectionMenuTitleBar.SetTextColor(theme.Text)
+	// styleInput, not a one-off SetFieldBackgroundColor: the shared
+	// InputBackground/InputFocusedBackground convention every real
+	// input field in this app already uses (logAuditKeywordField —
+	// filterexpr's own other caller — among them), reflecting whatever
+	// the field's actual focus state is right now so a live theme
+	// switch mid-focus doesn't reset it to the unfocused look. A flat
+	// SurfaceBackground/AccentBackground here (both "darkslategray" in
+	// the default theme, see DefaultTheme's own doc comment) made the
+	// field visually identical to the dropdown's own background — a
+	// real, user-reported regression: it didn't read as something you
+	// could type into at all.
+	styleInput(r.connectionMenuSearchField, theme, r.connectionMenuSearchField.HasFocus())
 
 	// The "gs" SSH shell dropdown/dialog pair (see sshshell.go) — the
 	// identical two blocks just above, mirrored one-for-one: "Add new
