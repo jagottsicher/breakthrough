@@ -24,18 +24,6 @@ import (
 // idea.
 const connectionMenuMaxHistoryRows = 10
 
-// connectionMenuTagsColumnWidth caps the Tags column's own rendered
-// width (truncateMiddle, internal/ui/columns.go — the same helper that
-// already shortens long filenames in the panel) at a glance-readable
-// size. Needed because SetExpansion is per-column, not per-cell (a
-// real width bug from an earlier phase — see connectionMenuSize's own
-// doc comment on the "+ New connection" row), so a single entry with
-// many or long tags would otherwise be free to stretch the whole
-// column, at everyone else's expense, even though the dropdown's own
-// expanded mode already spans the full terminal width regardless of
-// content.
-const connectionMenuTagsColumnWidth = 40
-
 // connectionMenuNewConnectionLabel is row 0's own label in both
 // collapsed and expanded mode — short deliberately, not the
 // "+  New connection" shape tabswitcher.go's own tabSwitcherNewRowLabel
@@ -419,8 +407,21 @@ func (r *Root) renderConnectionMenu() {
 					SetTextColor(color).
 					SetSelectable(false).
 					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColIdentifier)))
+			// Not run through truncateMiddle, deliberately — same as
+			// Identifier right next to it (see renderConnectionMenu's
+			// own loop above, which never truncates it either): "columns
+			// use as much horizontal space as they need" is tview's own
+			// stated default (table.go's own doc comment), and expanded
+			// mode already spans the full terminal width specifically so
+			// a wide entry has somewhere to actually show. An earlier
+			// version capped this at a fixed width regardless of
+			// available room — a real, user-reported regression (tags
+			// cut with "…" even on a wide terminal with plenty of free
+			// space) — removed rather than tuned, since any fixed cap
+			// reintroduces the same problem the moment a terminal is
+			// wider than that guess.
 			table.SetCell(thisRow, connectionMenuColTags,
-				tview.NewTableCell(truncateMiddle(strings.Join(entry.Tags, ", "), connectionMenuTagsColumnWidth)).
+				tview.NewTableCell(strings.Join(entry.Tags, ", ")).
 					SetTextColor(color).
 					SetSelectable(false).
 					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColTags)))
