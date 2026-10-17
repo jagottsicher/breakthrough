@@ -92,3 +92,15 @@ func TestConnectionEqualIgnoresIdentifier(t *testing.T) {
 		t.Error("Equal(a, b) = false, want true — differing only in Identifier must still compare equal")
 	}
 }
+
+// TestConnectionEqualIgnoresTags mirrors
+// TestConnectionEqualIgnoresIdentifier exactly, for Tags: retagging an
+// entry (see history.go's own RecordAttempt) must match and update its
+// existing history entry, not create a duplicate alongside it.
+func TestConnectionEqualIgnoresTags(t *testing.T) {
+	a := Connection{Host: "example.com", User: "jens", Tags: []string{"build"}}
+	b := Connection{Host: "example.com", User: "jens", Tags: []string{"staging", "web"}}
+	if !a.Equal(b) {
+		t.Error("Equal(a, b) = false, want true — differing only in Tags must still compare equal")
+	}
+}

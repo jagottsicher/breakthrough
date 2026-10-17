@@ -132,6 +132,13 @@ func TestRenderConnectionMenuHeaderRowShowsColumnLabels(t *testing.T) {
 	if got, want := connectionMenuHeaderText(table.GetCell(0, connectionMenuColIdentifier).Text), "Identifier"; got != want {
 		t.Errorf("header Identifier column (expanded) = %q, want %q", got, want)
 	}
+	// Tags carries no mnemonic markup at all (connectionMenuSortNone —
+	// see renderConnectionMenu's own doc comment on why it's filterable,
+	// not sortable), so the plain header text equals its own cell text,
+	// nothing to strip.
+	if got, want := table.GetCell(0, connectionMenuColTags).Text, "Tags"; got != want {
+		t.Errorf("header Tags column (expanded) = %q, want %q", got, want)
+	}
 }
 
 // TestRenderConnectionMenuHeaderHighlightsItsOwnMnemonicLetter pins the
@@ -415,6 +422,32 @@ func TestConnectionMenuFilterHistoryMatchesIdentifierWhileExpanded(t *testing.T)
 	}
 }
 
+// TestConnectionMenuFilterHistoryIgnoresTagsWhileCollapsed/
+// MatchesTagsWhileExpanded mirror the Identifier pair above exactly —
+// Tags joins the same scope rule (feature_ideas.txt section 9a, Phase
+// 6): only ever searched once expanded, same as its own column.
+func TestConnectionMenuFilterHistoryIgnoresTagsWhileCollapsed(t *testing.T) {
+	history := []remotefs.HistoryEntry{
+		{Connection: remotefs.Connection{Host: "example.com", User: "tester", Tags: []string{"build", "staging"}}},
+	}
+
+	got := connectionMenuFilterHistory(history, "staging", false)
+	if len(got) != 0 {
+		t.Errorf("filtered = %+v, want no match for a Tags-only query while collapsed", got)
+	}
+}
+
+func TestConnectionMenuFilterHistoryMatchesTagsWhileExpanded(t *testing.T) {
+	history := []remotefs.HistoryEntry{
+		{Connection: remotefs.Connection{Host: "example.com", User: "tester", Tags: []string{"build", "staging"}}},
+	}
+
+	got := connectionMenuFilterHistory(history, "staging", true)
+	if len(got) != 1 {
+		t.Errorf("filtered = %+v, want the entry matched by its own Tags while expanded", got)
+	}
+}
+
 // TestConnectionMenuFilterHistoryTreatsAnUnparseableQueryAsNoFilter
 // pins filterexpr's own documented mid-keystroke convention (see
 // internal/filterexpr's own package doc comment): an incomplete
@@ -551,7 +584,7 @@ func TestRenderConnectionMenuOnAConnectedPanelListsTheActiveEntryThenNewConnecti
 // is what actually distinguishes the two modes.
 func TestRenderConnectionMenuCollapsedNeverShowsTheIdentifierColumn(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
-	conn := remotefs.Connection{Host: "example.com", User: "tester", Identifier: "build-1"}
+	conn := remotefs.Connection{Host: "example.com", User: "tester", Identifier: "build-1", Tags: []string{"build"}}
 	if err := remotefs.RecordAttempt(conn, false); err != nil {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
@@ -563,7 +596,7 @@ func TestRenderConnectionMenuCollapsedNeverShowsTheIdentifierColumn(t *testing.T
 		t.Errorf("row 0 label = %q, want it to never mention the Identifier in collapsed mode", texts[0])
 	}
 	if got, want := r.connectionMenuTable.GetColumnCount(), connectionMenuRemoveColumn(false)+1; got != want {
-		t.Errorf("column count = %d, want %d (User/@/Host-IP/Eject/Remove, no Identifier column)", got, want)
+		t.Errorf("column count = %d, want %d (User/@/Host-IP/Eject/Remove, no Identifier/Tags columns)", got, want)
 	}
 }
 
@@ -587,6 +620,55 @@ func TestRenderConnectionMenuCollapsedLabelIsExactlyUserAtHost(t *testing.T) {
 	}
 }
 
+// TestRenderConnectionMenuExpandedShowsTheTagsColumn pins the new
+// Phase 6 column itself: present (comma-joined) once expanded, absent
+// while collapsed — the same expand-state split Identifier already
+// established.
+func TestRenderConnectionMenuExpandedShowsTheTagsColumn(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester", Tags: []string{"build", "staging"}}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.setConnectionMenuExpanded(true)
+
+	r.renderConnectionMenu()
+
+	if got, want := r.connectionMenuTable.GetCell(1, connectionMenuColTags).Text, "build, staging"; got != want {
+		t.Errorf("row 1 Tags cell = %q, want %q", got, want)
+	}
+	if got, want := r.connectionMenuTable.GetColumnCount(), connectionMenuRemoveColumn(true)+1; got != want {
+		t.Errorf("expanded column count = %d, want %d (User/@/Host-IP/Identifier/Tags/Eject/Remove)", got, want)
+	}
+}
+
+// TestRenderConnectionMenuTruncatesAnOverlyLongTagsCell pins why the
+// Tags cell goes through truncateMiddle at all (see
+// connectionMenuTagsColumnWidth's own doc comment): SetExpansion is
+// per-column, not per-cell, so without this a single entry with many
+// long tags would be free to stretch the whole column.
+func TestRenderConnectionMenuTruncatesAnOverlyLongTagsCell(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{
+		Host: "example.com", User: "tester",
+		Tags: []string{"aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc", "dddddddddd", "eeeeeeeeee"},
+	}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.setConnectionMenuExpanded(true)
+
+	r.renderConnectionMenu()
+
+	got := r.connectionMenuTable.GetCell(1, connectionMenuColTags).Text
+	if len([]rune(got)) > connectionMenuTagsColumnWidth {
+		t.Errorf("Tags cell = %q (%d runes), want at most %d", got, len([]rune(got)), connectionMenuTagsColumnWidth)
+	}
+	if !strings.Contains(got, "…") {
+		t.Errorf("Tags cell = %q, want it visibly truncated", got)
+	}
+}
+
 // TestConnectionMenuSelectingTheLabelGroupHighlightsAllItsColumns pins
 // the user's own explicit, three-times-repeated request: the
 // highlighted background (and matching white-ish foreground — see
@@ -605,7 +687,7 @@ func TestConnectionMenuSelectingTheLabelGroupHighlightsAllItsColumns(t *testing.
 	r.renderConnectionMenu()
 	r.connectionMenuTable.Select(1, connectionMenuColUser)
 
-	for _, col := range []int{connectionMenuColAt, connectionMenuColHost, connectionMenuColIdentifier} {
+	for _, col := range []int{connectionMenuColAt, connectionMenuColHost, connectionMenuColIdentifier, connectionMenuColTags} {
 		cell := r.connectionMenuTable.GetCell(1, col)
 		if got, want := cellBackgroundColor(cell), r.theme.SelectionBackground; got != want {
 			t.Errorf("column %d background = %v, want SelectionBackground %v", col, got, want)
@@ -924,10 +1006,10 @@ func TestRenderConnectionMenuListsHistoryColoredByState(t *testing.T) {
 
 	okRow, failedRow := -1, -1
 	for row, conn := range r.connectionMenuHistoryRows {
-		switch conn {
-		case ok:
+		switch {
+		case conn.Equal(ok):
 			okRow = row
-		case failed:
+		case conn.Equal(failed):
 			failedRow = row
 		}
 	}
@@ -1246,7 +1328,7 @@ func TestClickingTheEjectCellDisconnectsTheActiveConnection(t *testing.T) {
 func historyRowFor(t *testing.T, r *Root, conn remotefs.Connection) int {
 	t.Helper()
 	for row, c := range r.connectionMenuHistoryRows {
-		if c == conn {
+		if c.Equal(conn) {
 			return row
 		}
 	}

@@ -111,6 +111,14 @@ func SaveHistory(entries []HistoryEntry) error {
 // matched entry already had, so reconnecting via a history row's own
 // label — which never goes through the Identifier field at all —
 // can't silently blank it out.
+//
+// Tags inherit exactly the same way, for exactly the same reason:
+// Equal ignores Tags too (see Connection's own doc comment), so a
+// non-empty conn.Tags (the Connect dialog's own field, already run
+// through ParseTags) replaces the matched entry's Tags outright, and
+// an empty conn.Tags inherits whatever it already had — a plain
+// reconnect through a history row's own label can never go through the
+// Tags field at all, so it must not silently clear it either.
 func RecordAttempt(conn Connection, failed bool) error {
 	entries, err := LoadHistory()
 	if err != nil {
@@ -119,11 +127,13 @@ func RecordAttempt(conn Connection, failed bool) error {
 
 	var existed bool
 	var previousIdentifier string
+	var previousTags []string
 	kept := entries[:0]
 	for _, e := range entries {
 		if e.Equal(conn) {
 			existed = true
 			previousIdentifier = e.Identifier
+			previousTags = e.Tags
 			continue
 		}
 		kept = append(kept, e)
@@ -135,6 +145,9 @@ func RecordAttempt(conn Connection, failed bool) error {
 
 	if conn.Identifier == "" {
 		conn.Identifier = previousIdentifier
+	}
+	if len(conn.Tags) == 0 {
+		conn.Tags = previousTags
 	}
 
 	updated := append([]HistoryEntry{{Connection: conn, LastUsed: time.Now(), LastFailed: failed}}, kept...)

@@ -37,7 +37,7 @@ func newTestRootForConnect(t *testing.T) *Root {
 	return r
 }
 
-// TestTabFromTheIdentifierFieldReachesTheCancelButton pins a real,
+// TestTabFromTheTagsFieldReachesTheCancelButton pins a real,
 // live-tmux-discovered bug: tview.Form.Focus unconditionally overwrites
 // every item's own SetFinishedFunc whenever the form itself gains
 // focus (verified directly against tview's own form.go), so a bare
@@ -45,33 +45,33 @@ func newTestRootForConnect(t *testing.T) *Root {
 // just wraps back to the first field instead of ever reaching
 // connectCancelBtn — see newConnectForm's own doc comment on why a
 // SetInputCapture is what actually has to intercept it instead.
-// connectIdentifierField is the last field now (added after
-// connectPasswordField) — see newConnectForm's own doc comment for why
-// this wiring moved with it.
-func TestTabFromTheIdentifierFieldReachesTheCancelButton(t *testing.T) {
+// connectTagsField is the last field now (added after
+// connectIdentifierField) — see newConnectForm's own doc comment for
+// why this wiring moved with it.
+func TestTabFromTheTagsFieldReachesTheCancelButton(t *testing.T) {
 	r := newTestRootForConnect(t)
 	noop := func(tview.Primitive) {}
 
-	r.app.SetFocus(r.connectIdentifierField)
-	r.connectIdentifierField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	r.app.SetFocus(r.connectTagsField)
+	r.connectTagsField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
 
 	if !r.connectCancelBtn.HasFocus() {
-		t.Error("Tab from the identifier field did not move focus to connectCancelBtn")
+		t.Error("Tab from the tags field did not move focus to connectCancelBtn")
 	}
 }
 
-// TestEnterInTheIdentifierFieldSubmitsTheForm pins the companion
+// TestEnterInTheTagsFieldSubmitsTheForm pins the companion
 // convenience: Enter in the last field runs Connect directly, the same
 // "last field, Enter submits" shape a real login form has, rather than
 // also just wrapping focus back to Host the way tview.Form's own
 // default Enter handling would.
-func TestEnterInTheIdentifierFieldSubmitsTheForm(t *testing.T) {
+func TestEnterInTheTagsFieldSubmitsTheForm(t *testing.T) {
 	r := newTestRootForConnect(t)
 	r.connectHostField.SetText("") // deliberately invalid, so runConnect leaves an observable trace
 	noop := func(tview.Primitive) {}
 
-	r.app.SetFocus(r.connectIdentifierField)
-	r.connectIdentifierField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
+	r.app.SetFocus(r.connectTagsField)
+	r.connectTagsField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
 
 	if !strings.Contains(r.connectStatus.GetText(true), "Host is required") {
 		t.Errorf("status = %q, want runConnect to have actually run", r.connectStatus.GetText(true))
@@ -80,7 +80,7 @@ func TestEnterInTheIdentifierFieldSubmitsTheForm(t *testing.T) {
 
 // TestBacktabFromTheCancelButtonReturnsToTheForm is the reverse
 // direction of the same fix — see
-// TestTabFromTheIdentifierFieldReachesTheCancelButton's own doc comment.
+// TestTabFromTheTagsFieldReachesTheCancelButton's own doc comment.
 func TestBacktabFromTheCancelButtonReturnsToTheForm(t *testing.T) {
 	r := newTestRootForConnect(t)
 	noop := func(tview.Primitive) {}
@@ -360,5 +360,62 @@ func TestConnectIdentifierAcceptanceFuncAllowsTheDocumentedCharacterSet(t *testi
 		if got := connectIdentifierAcceptanceFunc(c.text, 0); got != c.want {
 			t.Errorf("connectIdentifierAcceptanceFunc(%q, _) = %v, want %v", c.text, got, c.want)
 		}
+	}
+}
+
+// TestConnectTagsAcceptanceFuncAllowsTheDocumentedCharacterSet mirrors
+// TestConnectIdentifierAcceptanceFuncAllowsTheDocumentedCharacterSet —
+// the Tags field's own wider charset additionally allows spaces (a tag
+// can be "web server") and "," (the field's own separator), unlike
+// Identifier.
+func TestConnectTagsAcceptanceFuncAllowsTheDocumentedCharacterSet(t *testing.T) {
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"", true},
+		{"build,staging", true},
+		{"web server, build-1", true},
+		{"slash/not-allowed", false},
+		{"dot.not-allowed", false},
+		{strings.Repeat("a", connectTagsFieldMaxLength), true},
+		{strings.Repeat("a", connectTagsFieldMaxLength+1), false},
+	}
+	for _, c := range cases {
+		if got := connectTagsAcceptanceFunc(c.text, 0); got != c.want {
+			t.Errorf("connectTagsAcceptanceFunc(%q, _) = %v, want %v", c.text, got, c.want)
+		}
+	}
+}
+
+// TestOpenConnectDialogClearsTheTagsFieldForABlankPrefill mirrors
+// TestOpenConnectDialogClearsTheIdentifierFieldForABlankPrefill.
+func TestOpenConnectDialogClearsTheTagsFieldForABlankPrefill(t *testing.T) {
+	r := newTestRootForConnect(t)
+	r.openConnectDialog(remotefs.Connection{Host: "a.example.com", Tags: []string{"build", "staging"}})
+	if got := r.connectTagsField.GetText(); got != "build, staging" {
+		t.Fatalf("connectTagsField = %q, want %q (prefilled)", got, "build, staging")
+	}
+
+	r.openConnectDialog(remotefs.Connection{Host: "b.example.com"})
+
+	if got := r.connectTagsField.GetText(); got != "" {
+		t.Errorf("connectTagsField = %q, want empty after reopening for a different, untagged connection", got)
+	}
+}
+
+// TestBlurringTheTagsFieldNormalizesItsOwnText pins
+// normalizeConnectTagsField's own commit-time-only contract (see its
+// doc comment): the raw, as-typed text is left untouched while the
+// field still has focus, and only trimmed/deduplicated/sorted once it
+// loses it.
+func TestBlurringTheTagsFieldNormalizesItsOwnText(t *testing.T) {
+	r := newTestRootForConnect(t)
+	r.connectTagsField.SetText(" web , build ,web")
+
+	r.connectTagsField.Blur()
+
+	if got, want := r.connectTagsField.GetText(), "build, web"; got != want {
+		t.Errorf("connectTagsField after blur = %q, want %q", got, want)
 	}
 }
