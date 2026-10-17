@@ -39,16 +39,17 @@ func (r *Root) openConnectDialog(prefill remotefs.Connection) {
 	r.connectUserField.SetText(prefill.User)
 	r.connectPasswordField.SetText("")
 	r.connectIdentifierField.SetText(prefill.Identifier)
+	r.connectTagsField.SetText(strings.Join(prefill.Tags, ", "))
 	r.setConnectStatus("", r.theme.Text)
 	r.resetConnectAnywayState()
 
 	// height covers connectTitleBar's own row plus connectLayout's three
-	// stacked pieces (connectForm's own 11, see newConnectLayout's own
+	// stacked pieces (connectForm's own 13, see newConnectLayout's own
 	// doc comment on why; connectStatus's 1; connectButtons' 1) —
 	// checked against a real render, not guessed; a shorter value
 	// silently clipped the bottom rows (see openSedReplace's own
 	// identical comment on its own dialog).
-	width, height := 64, 14
+	width, height := 64, 16
 	_, _, screenWidth, screenHeight := r.GetRect()
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -102,6 +103,21 @@ func (r *Root) newConnectForm() *tview.Form {
 	r.connectIdentifierField.SetAcceptanceFunc(connectIdentifierAcceptanceFunc)
 	f.AddFormItem(r.connectIdentifierField)
 
+	r.connectTagsField = tview.NewInputField().SetLabel("Tags")
+	r.connectTagsField.SetPlaceholder("optional, comma-separated, max 10")
+	r.connectTagsField.SetAcceptanceFunc(connectTagsAcceptanceFunc)
+	// Normalizes (trims, drops empties, dedupes, sorts, caps — see
+	// remotefs.ParseTags) only once the field actually loses focus, not
+	// on every keystroke: sorting/deduplicating live, mid-keystroke,
+	// would move the text the user is still typing right out from
+	// under their own cursor. SetBlurFunc fires regardless of *why*
+	// focus left (our own Tab-to-Cancel below, tview's native
+	// Backtab/click navigation, or connectForm's own Escape capture
+	// dismissing the whole dialog) — a single hook rather than
+	// duplicating the normalization at every one of those exits.
+	r.connectTagsField.SetBlurFunc(func() { r.normalizeConnectTagsField() })
+	f.AddFormItem(r.connectTagsField)
+
 	// Tab/Enter on the form's own last field would otherwise just wrap
 	// back to its first one instead of ever reaching connectCancelBtn/
 	// connectConnectBtn: verified directly against tview's own form.go,
@@ -113,11 +129,11 @@ func (r *Root) newConnectForm() *tview.Form {
 	// at all. Enter goes one step further and submits the form
 	// outright, the same "last field, Enter submits" convenience a real
 	// login form has — the same reasoning this is only wired on the
-	// *last* field (now connectIdentifierField, since it was added
-	// after connectPasswordField): every other field's own Tab/Enter
+	// *last* field (now connectTagsField, since it was added after
+	// connectIdentifierField): every other field's own Tab/Enter
 	// already does the right thing (move to the next field) via the
 	// form's own default handling.
-	r.connectIdentifierField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	r.connectTagsField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
 			r.app.SetFocus(r.connectCancelBtn)
@@ -130,6 +146,14 @@ func (r *Root) newConnectForm() *tview.Form {
 	})
 
 	return f
+}
+
+// normalizeConnectTagsField rewrites connectTagsField's own text to
+// remotefs.ParseTags' normalized form (trimmed, deduplicated, sorted,
+// capped) — see connectTagsField's own SetBlurFunc for why this runs
+// only once the field loses focus, never live.
+func (r *Root) normalizeConnectTagsField() {
+	r.connectTagsField.SetText(strings.Join(remotefs.ParseTags(r.connectTagsField.GetText()), ", "))
 }
 
 // connectIdentifierAcceptanceFunc enforces the Identifier field's own
@@ -174,6 +198,36 @@ func isConnectIdentifierRune(r rune) bool {
 		(r >= '0' && r <= '9')
 }
 
+// connectTagsFieldMaxLength is a generous live-typing cap on the Tags
+// field's raw, comma-separated text — not a tight fit around 10 tags
+// of 32 chars each, just a backstop against unbounded growth while
+// typing. remotefs.ParseTags enforces the real per-tag length and
+// count caps at commit time (normalizeConnectTagsField) regardless of
+// how much raw text got this far.
+const connectTagsFieldMaxLength = 400
+
+// connectTagsAcceptanceFunc enforces the Tags field's own live
+// character set: remotefs.IsValidTagRune's letters/digits/underscore/
+// hyphen/space, plus "," itself as the only separator a raw Tags field
+// needs that a single tag never contains (see
+// connectTagsFieldMaxLength and remotefs.ParseTags, which is what
+// actually turns this raw text into a well-formed Tags value once the
+// field loses focus) — the same per-rune, paste-safe check
+// connectIdentifierAcceptanceFunc already establishes for Identifier,
+// just with a wider character set and no attempt to validate
+// individual tags here (ParseTags' own job, not a single keystroke's).
+func connectTagsAcceptanceFunc(textToCheck string, lastChar rune) bool {
+	if len(textToCheck) > connectTagsFieldMaxLength {
+		return false
+	}
+	for _, r := range textToCheck {
+		if r != ',' && !remotefs.IsValidTagRune(r) {
+			return false
+		}
+	}
+	return true
+}
+
 // newConnectButtons builds a real Cancel/Connect button pair,
 // bottom-left/bottom-right — the same shape
 // newChmodButtons/newSearchButtons/newPropertiesButtons/
@@ -189,15 +243,15 @@ func (r *Root) newConnectButtons() *tview.Flex {
 	r.connectConnectBtn.SetInputCapture(spaceAlsoActivates(r.runConnect))
 
 	// Tab/Backtab cycle between the two buttons and back into the form
-	// (connectIdentifierField's own forward Tab is the other half of
-	// this — see newConnectForm's own doc comment); Escape always
-	// cancels, the same as everywhere else in this dialog.
+	// (connectTagsField's own forward Tab is the other half of this —
+	// see newConnectForm's own doc comment); Escape always cancels, the
+	// same as everywhere else in this dialog.
 	r.connectCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
 			r.app.SetFocus(r.connectConnectBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.connectIdentifierField)
+			r.app.SetFocus(r.connectTagsField)
 		case tcell.KeyEscape:
 			r.cancelConnect()
 		}
@@ -229,16 +283,16 @@ func (r *Root) newConnectButtons() *tview.Flex {
 func (r *Root) newConnectLayout() *tview.Flex {
 	r.connectTitleBar = newPlainTitleBar("Connect")
 	r.connectStatus = tview.NewTextView().SetDynamicColors(true)
-	// 11 rows for connectForm: tview.NewForm() reserves a 1-row border
+	// 13 rows for connectForm: tview.NewForm() reserves a 1-row border
 	// padding top and bottom of its own (SetBorderPadding(1,1,1,1),
 	// independent of whether a visible border line is drawn at all —
 	// verified directly against tview's own form.go, not guessed, after
 	// a real render silently clipped the fourth field otherwise) on top
-	// of its own five one-row fields (Host/Port/User/Password/
-	// Identifier) plus itemPadding's default 1-row gap between each:
-	// 2 (padding) + 5 (fields) + 4 (gaps) = 11.
+	// of its own six one-row fields (Host/Port/User/Password/
+	// Identifier/Tags) plus itemPadding's default 1-row gap between
+	// each: 2 (padding) + 6 (fields) + 5 (gaps) = 13.
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.connectForm, 11, 0, true).
+		AddItem(r.connectForm, 13, 0, true).
 		AddItem(r.connectStatus, 1, 0, false).
 		AddItem(r.connectButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
@@ -317,8 +371,15 @@ func (r *Root) runConnect() {
 	// gets persisted (see remotefs.RecordAttempt's own inherit rule for
 	// what happens when this is empty).
 	identifier := r.connectIdentifierField.GetText()
+	// connectTagsField's own text is already normalized by the time
+	// Connect can even be reached (normalizeConnectTagsField fires on
+	// blur, and both exits from the field — Tab to Cancel, or Enter —
+	// blur it first), but ParseTags is idempotent on already-normalized
+	// input, so running it again here is cheap insurance rather than
+	// trusting that invariant blindly.
+	tags := remotefs.ParseTags(r.connectTagsField.GetText())
 
-	conn := remotefs.Connection{Host: host, Port: port, User: user, Identifier: identifier}
+	conn := remotefs.Connection{Host: host, Port: port, User: user, Identifier: identifier, Tags: tags}
 
 	// skipHostKeyVerification only ever fires for the exact Connection a
 	// prior attempt's own HostKeyMismatchError was just shown for (see

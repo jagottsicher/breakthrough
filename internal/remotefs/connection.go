@@ -75,6 +75,16 @@ type Connection struct {
 	// which decodes as "" — the same "absence isn't an error" contract
 	// every other field here already follows.
 	Identifier string `json:",omitempty"`
+
+	// Tags is an optional, user-assigned set of short labels for
+	// grouping/filtering this Connection — see ParseTags for the only
+	// way a well-formed value is ever produced (sorted, deduplicated,
+	// capped at tagsMaxCount entries). Mirrors Identifier's own
+	// contract exactly: never part of Equal below (retagging an entry
+	// must update it, not duplicate it), omitted entirely from JSON
+	// when empty so an old connections.json stays readable, decoding
+	// as nil either way.
+	Tags []string `json:",omitempty"`
 }
 
 // Port22IfZero returns c.Port, or defaultSFTPPort if it's unset.

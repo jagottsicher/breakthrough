@@ -1,6 +1,7 @@
 package remotefs
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -117,6 +118,55 @@ func TestRecordAttemptANewNonEmptyIdentifierWins(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Identifier != "build-2" {
 		t.Errorf("entries = %+v, want the Identifier renamed to \"build-2\", not stuck on \"build-1\"", entries)
+	}
+}
+
+// TestRecordAttemptInheritsThePreviousTagsWhenNoneAreGiven mirrors
+// TestRecordAttemptInheritsThePreviousIdentifierWhenNoneIsGiven exactly,
+// for Tags: a plain reconnect built from a history row's own label never
+// goes through the Connect dialog's Tags field at all, so conn always
+// arrives with Tags == nil — that must not blank out Tags a previous
+// attempt already set.
+func TestRecordAttemptInheritsThePreviousTagsWhenNoneAreGiven(t *testing.T) {
+	withTestConfigHome(t)
+	tagged := Connection{Host: "a.example.com", User: "jens", Tags: []string{"build", "staging"}}
+	if err := RecordAttempt(tagged, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	reconnect := Connection{Host: "a.example.com", User: "jens"} // no Tags, as a plain reconnect builds it
+	if err := RecordAttempt(reconnect, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 1 || !reflect.DeepEqual(entries[0].Tags, []string{"build", "staging"}) {
+		t.Errorf("entries = %+v, want Tags [build staging] to survive a reconnect that didn't specify any", entries)
+	}
+}
+
+// TestRecordAttemptANewNonEmptyTagsListWins mirrors
+// TestRecordAttemptANewNonEmptyIdentifierWins exactly, for Tags: a
+// freshly entered, non-empty Tags list always replaces whatever the
+// matched entry had before — retagging, not merging.
+func TestRecordAttemptANewNonEmptyTagsListWins(t *testing.T) {
+	withTestConfigHome(t)
+	if err := RecordAttempt(Connection{Host: "a.example.com", User: "jens", Tags: []string{"build"}}, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := RecordAttempt(Connection{Host: "a.example.com", User: "jens", Tags: []string{"staging", "web"}}, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 1 || !reflect.DeepEqual(entries[0].Tags, []string{"staging", "web"}) {
+		t.Errorf("entries = %+v, want Tags replaced with [staging web], not merged with [build]", entries)
 	}
 }
 

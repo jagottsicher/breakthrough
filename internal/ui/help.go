@@ -287,24 +287,30 @@ var helpText = strings.TrimLeft(`
   Host-IP still connects too). The Connect dialog's own optional
   "Identifier" field (letters/digits/_/-, 32 characters max) tells apart
   several similarly-named connections that otherwise only differ by
-  host. The "<"/">" button on the dropdown's own top-right corner (or
-  typing either character while it has focus) switches between that
-  compact three-column view and a wider one adding Identifier as a
-  fourth column, spanning the whole terminal width instead of just the
-  active panel; remembered across restarts ("connection_menu_expanded",
-  also in Options → General). Each column has a label row above it
-  (User/Host-IP, Identifier too once expanded) — click one, or
-  "U"/"H"/"I" while the dropdown has focus, to sort by it (ascending,
-  or descending on a second click/press of the same one), with an
-  " ↑"/" ↓" suffix showing which; the header itself stays mouse-only,
-  not reachable by arrow keys. Sorting resets to "most recently used
+  host; an optional "Tags" field next to it (comma-separated, up to 10,
+  each up to 32 characters, letters/digits/_/-/space) adds a second,
+  set-valued way to group and filter connections — normalized
+  (trimmed, deduplicated, sorted) once the field loses focus, not while
+  still typing. The "<"/">" button on the dropdown's own top-right
+  corner (or typing either character while it has focus) switches
+  between that compact three-column view and a wider one adding
+  Identifier and Tags as a fourth and fifth column, spanning the whole
+  terminal width instead of just the active panel; remembered across
+  restarts ("connection_menu_expanded", also in Options → General).
+  Each column has a label row above it (User/Host-IP, Identifier too
+  once expanded) — click one, or "U"/"H"/"I" while the dropdown has
+  focus, to sort by it (ascending, or descending on a second
+  click/press of the same one), with an " ↑"/" ↓" suffix showing which;
+  the header itself stays mouse-only, not reachable by arrow keys. Tags
+  has no header mnemonic and isn't sortable, only filterable (a tag set
+  has no single natural order). Sorting resets to "most recently used
   first" the next time the dropdown opens. A "Filter:" field fills the
   rest of the top row, always there — click it or press "/" while the
   dropdown has focus to type directly, Escape or Enter returns focus to
   the list without clearing what was typed (Escape again closes the
   whole dropdown). The same AND/OR/NAND/NOR/NOT expression grammar Log
   Holepunch's own keyword field uses (see below) narrows the list live,
-  across User/Host-IP (and Identifier too once expanded) — an
+  across User/Host-IP (and Identifier/Tags too once expanded) — an
   incomplete expression, mid-keystroke, is treated as no filter yet
   rather than hiding everything. Resets empty the next time the
   dropdown opens, the same as sorting. Auth tries an ssh-agent, then
