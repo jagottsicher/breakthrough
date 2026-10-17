@@ -511,21 +511,39 @@ func (r *Root) newConnectionMenuTable() *tview.Table {
 // click, are the only ways in; typing without either first would
 // otherwise be ambiguous with the table's own single-letter shortcuts
 // (U/H/I/e/x/</>).
+// styleConnectionMenuSearchField applies styleInput (theme.go) — this
+// app's own shared InputBackground/InputFocusedBackground "look like a
+// real input" convention, the same one logAuditKeywordField already
+// uses for an identical kind of boolean-query field — and then
+// overrides the label's own base style back to SurfaceBackground/
+// MutedTextColor, so "Search: " reads as ordinary dropdown chrome
+// instead of also picking up the lighter input-field background
+// styleInput's own SetLabelStyle call would otherwise give it (the
+// user's own explicit, later report: only the typed/placeholder area
+// itself — never "Search: " — should look different from the rest of
+// the dropdown). The "/" mnemonic keeps its own distinct
+// ButtonBackground regardless, since that's an inline color tag inside
+// the label's own text (see newConnectionMenuSearchField's own
+// SetLabel call), never touched by SetLabelStyle's base at all.
+func (r *Root) styleConnectionMenuSearchField(focused bool) {
+	styleInput(r.connectionMenuSearchField, r.theme, focused)
+	r.connectionMenuSearchField.SetLabelStyle(tcell.StyleDefault.
+		Background(r.theme.SurfaceBackground).
+		Foreground(r.theme.MutedTextColor))
+}
+
 func (r *Root) newConnectionMenuSearchField() *tview.InputField {
 	f := tview.NewInputField()
 	f.SetLabel(fmt.Sprintf("[:%s:] / [-:-:-]Search: ", colorTag(r.theme.ButtonBackground)))
-	// styleInput (theme.go) is this app's own shared "look like a real
-	// input, not a label" styling — InputBackground normally,
-	// InputFocusedBackground while focused, the exact convention
-	// logAuditKeywordField already uses for an identical kind of
-	// boolean-query field. Wired here via Focus/Blur rather than set
-	// once: a fixed background regardless of focus state is what made
-	// this field unrecognizable as something you can type into at all
-	// (the user's own explicit report) — applyTheme's own call picks
+	// styleConnectionMenuSearchField (not styleInput directly — see its
+	// own doc comment) wired via Focus/Blur rather than set once: a
+	// fixed background regardless of focus state is what made this
+	// field unrecognizable as something you can type into at all (the
+	// user's own first explicit report) — applyTheme's own call picks
 	// the right one for whatever the actual focus state is at the
 	// moment a theme gets (re)applied.
-	f.SetFocusFunc(func() { styleInput(f, r.theme, true) })
-	f.SetBlurFunc(func() { styleInput(f, r.theme, false) })
+	f.SetFocusFunc(func() { r.styleConnectionMenuSearchField(true) })
+	f.SetBlurFunc(func() { r.styleConnectionMenuSearchField(false) })
 	f.SetChangedFunc(func(text string) {
 		if r.activePage == connectionMenuPage {
 			r.renderConnectionMenu()
