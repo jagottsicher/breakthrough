@@ -984,15 +984,21 @@ func (r *Root) connectionMenuRepaintLabelGroups(selectedRow, selectedColumn int)
 		groupCols = append(groupCols, connectionMenuColIdentifier)
 	}
 	rows := table.GetRowCount()
-	for row := 0; row < rows; row++ {
+	// row 0 is the header, skipped entirely — not just exempted from
+	// the highlight condition below, which used to still leave this
+	// loop free to overwrite its own Host-IP/Identifier cells with
+	// SetBackgroundColor/SetTextColor on every single selection change
+	// (this function runs on every one, including the table.Select at
+	// the very end of renderConnectionMenu). That silently erased
+	// connectionMenuSetHeaderCell's own embedded "[:ButtonBackground:]"
+	// mnemonic markup on those two cells specifically — User never
+	// showed the bug because it isn't in groupCols at all, which is
+	// exactly what made this easy to miss (a real, user-reported
+	// regression: only User's own "U" stayed highlighted).
+	for row := 1; row < rows; row++ {
 		bg := r.theme.SurfaceBackground
 		fg := r.connectionMenuRowColors[row]
-		// row == 0 (the header) is never a legitimate highlight target
-		// even if selectedRow somehow ends up there — defense in depth
-		// alongside connectionMenuSetHeaderCell's own SetClickedFunc
-		// guard, which is what actually stops selectedRow from landing
-		// there via a click in the first place.
-		if row != 0 && row == selectedRow && selectedColumn == connectionMenuColUser {
+		if row == selectedRow && selectedColumn == connectionMenuColUser {
 			bg = r.theme.SelectionBackground
 			// theme.TextColor, not fg: the exact foreground
 			// connectionMenuTable's own SetSelectedStyle already gives

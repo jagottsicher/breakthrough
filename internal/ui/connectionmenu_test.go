@@ -150,6 +150,39 @@ func TestRenderConnectionMenuHeaderHighlightsItsOwnMnemonicLetter(t *testing.T) 
 	}
 }
 
+// TestConnectionMenuSelectionChangeDoesNotEraseTheHostIdentifierHeaderMnemonic
+// pins a real, user-reported bug: connectionMenuRepaintLabelGroups runs
+// on every selection change (including the one table.Select fires at
+// the end of renderConnectionMenu itself) and used to loop over row 0
+// too, overwriting Host-IP/Identifier's own embedded mnemonic markup
+// with a plain SetBackgroundColor/SetTextColor call — User never
+// showed the bug since it isn't one of the columns that function ever
+// touches, which is exactly why only "U" stayed highlighted while "H"
+// and "I" silently lost theirs.
+func TestConnectionMenuSelectionChangeDoesNotEraseTheHostIdentifierHeaderMnemonic(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester", Identifier: "build-1"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.setConnectionMenuExpanded(true)
+	r.renderConnectionMenu()
+
+	// Force another selection change after the render, the same way a
+	// real arrow-key press or click would — this is what used to erase
+	// the markup.
+	r.connectionMenuTable.Select(1, connectionMenuEjectColumn(true))
+
+	wantHost := fmt.Sprintf("[:%s:]H[-:-:-]ost/IP", colorTag(r.theme.ButtonBackground))
+	if got := r.connectionMenuTable.GetCell(0, connectionMenuColHost).Text; got != wantHost {
+		t.Errorf("header Host/IP column = %q, want %q (markup erased by the selection change)", got, wantHost)
+	}
+	wantIdentifier := fmt.Sprintf("[:%s:]I[-:-:-]dentifier", colorTag(r.theme.ButtonBackground))
+	if got := r.connectionMenuTable.GetCell(0, connectionMenuColIdentifier).Text; got != wantIdentifier {
+		t.Errorf("header Identifier column = %q, want %q (markup erased by the selection change)", got, wantIdentifier)
+	}
+}
+
 // TestRenderConnectionMenuHeaderRowIsNotSelectable pins the other half
 // of Phase 3's first step: the header is inert for now (sorting is a
 // later step) — every cell in row 0 must be unreachable by keyboard
