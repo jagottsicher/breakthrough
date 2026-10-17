@@ -369,6 +369,17 @@ func optionCategories() []optionCategory {
 					func(r *Root) bool { return r.settings.SplitStacked },
 					func(r *Root, b bool) { r.setSplitStacked(b) },
 				)),
+				withSection("General", boolOption("connection_menu_expanded", "Connection menu expanded",
+					"How the \"@\"/\"gc\" connection dropdown opens.\n\n"+
+						"Off (the default) shows today's compact single-label list. On opens it "+
+						"as a full column table (User/@/Host-IP/Identifier) spanning the whole "+
+						"terminal width instead of just the active panel.\n\n"+
+						"\"<\"/\">\" on the dropdown's own title bar flips this too, without "+
+						"coming here.",
+					false,
+					func(r *Root) bool { return r.settings.ConnectionMenuExpanded },
+					func(r *Root, b bool) { r.setConnectionMenuExpanded(b) },
+				)),
 				withSection("General", boolOption("mouse_enabled", "Mouse reporting",
 					"Whether clicks and drags work in breakthrough at all.\n\n"+
 						"On (the default) lets you click, drag, and scroll — but it also hands "+
@@ -1361,6 +1372,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.RestoreTabs), true
 	case "split_stacked":
 		return strconv.FormatBool(s.SplitStacked), true
+	case "connection_menu_expanded":
+		return strconv.FormatBool(s.ConnectionMenuExpanded), true
 	case "mouse_enabled":
 		return strconv.FormatBool(s.MouseEnabled), true
 	case "filter_persistent":

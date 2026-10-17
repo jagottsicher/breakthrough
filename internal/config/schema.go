@@ -117,6 +117,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "connection_menu_expanded",
+			Default:     strconv.FormatBool(d.ConnectionMenuExpanded),
+			Kind:        KindBool,
+			Summary:     "The \"@\"/\"gc\" connection dropdown opens in its full column table instead of today's single-label list.",
+			Implemented: true,
+		},
+		{
 			Key:         "mouse_enabled",
 			Default:     strconv.FormatBool(d.MouseEnabled),
 			Kind:        KindBool,

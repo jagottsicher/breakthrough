@@ -23,6 +23,20 @@ func TestConnectionLabelOmitsPortWhenItIsExactlyTheDefault(t *testing.T) {
 	}
 }
 
+func TestConnectionHostPortOmitsTheDefaultPort(t *testing.T) {
+	c := Connection{Host: "example.com", User: "jens"}
+	if got, want := c.HostPort(), "example.com"; got != want {
+		t.Errorf("HostPort() = %q, want %q (User must never appear here)", got, want)
+	}
+}
+
+func TestConnectionHostPortIncludesANonDefaultPort(t *testing.T) {
+	c := Connection{Host: "example.com", Port: 2222}
+	if got, want := c.HostPort(), "example.com:2222"; got != want {
+		t.Errorf("HostPort() = %q, want %q", got, want)
+	}
+}
+
 func TestConnectionAddrFillsInTheDefaultPort(t *testing.T) {
 	c := Connection{Host: "example.com"}
 	if got, want := c.Addr(), "example.com:22"; got != want {
@@ -63,5 +77,18 @@ func TestConnectionEqualIgnoresNothingWhenAllShellFlagsMatch(t *testing.T) {
 	b := Connection{Host: "example.com", User: "jens", ShellAgentForwarding: true, ShellVerbose: true}
 	if !a.Equal(b) {
 		t.Error("Equal(a, b) = false, want true — identical Host/User/Port and identical shell flags are the same endpoint")
+	}
+}
+
+// TestConnectionEqualIgnoresIdentifier pins the one deliberate
+// exception Connection's own doc comment calls out: Identifier is
+// never part of Equal, so renaming an entry's Identifier (see
+// history.go's own RecordAttempt) matches and updates its existing
+// history entry instead of creating a duplicate alongside it.
+func TestConnectionEqualIgnoresIdentifier(t *testing.T) {
+	a := Connection{Host: "example.com", User: "jens", Identifier: "build-1"}
+	b := Connection{Host: "example.com", User: "jens", Identifier: "build-2"}
+	if !a.Equal(b) {
+		t.Error("Equal(a, b) = false, want true — differing only in Identifier must still compare equal")
 	}
 }
