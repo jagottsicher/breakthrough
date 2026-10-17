@@ -642,12 +642,17 @@ func TestRenderConnectionMenuExpandedShowsTheTagsColumn(t *testing.T) {
 	}
 }
 
-// TestRenderConnectionMenuTruncatesAnOverlyLongTagsCell pins why the
-// Tags cell goes through truncateMiddle at all (see
-// connectionMenuTagsColumnWidth's own doc comment): SetExpansion is
-// per-column, not per-cell, so without this a single entry with many
-// long tags would be free to stretch the whole column.
-func TestRenderConnectionMenuTruncatesAnOverlyLongTagsCell(t *testing.T) {
+// TestRenderConnectionMenuNeverTruncatesTheTagsCell pins a real,
+// user-reported regression: an earlier version ran the Tags cell
+// through truncateMiddle at a fixed width regardless of how much room
+// the dropdown actually had, cutting it with "…" even on a wide
+// terminal with plenty of free space. Removed rather than tuned —
+// Tags now renders exactly like Identifier right next to it (see
+// renderConnectionMenu's own doc comment at the call site): untouched,
+// relying on tview's own stated column-sizing default ("columns use as
+// much horizontal space as they need") rather than a second-guessed
+// cap.
+func TestRenderConnectionMenuNeverTruncatesTheTagsCell(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	conn := remotefs.Connection{
 		Host: "example.com", User: "tester",
@@ -660,12 +665,9 @@ func TestRenderConnectionMenuTruncatesAnOverlyLongTagsCell(t *testing.T) {
 
 	r.renderConnectionMenu()
 
-	got := r.connectionMenuTable.GetCell(1, connectionMenuColTags).Text
-	if len([]rune(got)) > connectionMenuTagsColumnWidth {
-		t.Errorf("Tags cell = %q (%d runes), want at most %d", got, len([]rune(got)), connectionMenuTagsColumnWidth)
-	}
-	if !strings.Contains(got, "…") {
-		t.Errorf("Tags cell = %q, want it visibly truncated", got)
+	want := "aaaaaaaaaa, bbbbbbbbbb, cccccccccc, dddddddddd, eeeeeeeeee"
+	if got := r.connectionMenuTable.GetCell(1, connectionMenuColTags).Text; got != want {
+		t.Errorf("Tags cell = %q, want the full, untruncated %q", got, want)
 	}
 }
 
