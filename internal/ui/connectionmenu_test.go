@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -77,6 +78,28 @@ func cellBackgroundColor(cell *tview.TableCell) tcell.Color {
 	return bg
 }
 
+// connectionMenuStripMnemonicMarkup strips the "[:ButtonBackground:]"
+// mnemonic markup connectionMenuSetHeaderCell wraps its own first rune
+// in (see that method's own doc comment), leaving everything else —
+// including a trailing sortArrow suffix, if any — untouched.
+func connectionMenuStripMnemonicMarkup(text string) string {
+	text = strings.ReplaceAll(text, "[-:-:-]", "")
+	if i := strings.Index(text, "]"); i >= 0 && strings.HasPrefix(text, "[:") {
+		text = text[i+1:]
+	}
+	return text
+}
+
+// connectionMenuHeaderText is connectionMenuStripMnemonicMarkup's own
+// further reduction to just the plain word, also dropping any trailing
+// sortArrow suffix — for tests that only care about the label itself,
+// not whether (or which way) that column happens to be sorted right
+// now.
+func connectionMenuHeaderText(text string) string {
+	text = connectionMenuStripMnemonicMarkup(text)
+	return strings.NewReplacer(" ↑", "", " ↓", "").Replace(text)
+}
+
 // TestRenderConnectionMenuHeaderRowShowsColumnLabels pins Phase 3's
 // own first step: a real column header, labelling User/Host-IP in
 // collapsed mode and adding Identifier once expanded — see
@@ -88,10 +111,10 @@ func TestRenderConnectionMenuHeaderRowShowsColumnLabels(t *testing.T) {
 	r.renderConnectionMenu()
 
 	table := r.connectionMenuTable
-	if got, want := table.GetCell(0, connectionMenuColUser).Text, "User"; got != want {
+	if got, want := connectionMenuHeaderText(table.GetCell(0, connectionMenuColUser).Text), "User"; got != want {
 		t.Errorf("header User column = %q, want %q", got, want)
 	}
-	if got, want := table.GetCell(0, connectionMenuColHost).Text, "Host/IP"; got != want {
+	if got, want := connectionMenuHeaderText(table.GetCell(0, connectionMenuColHost).Text), "Host/IP"; got != want {
 		t.Errorf("header Host/IP column = %q, want %q", got, want)
 	}
 	// connectionMenuColIdentifier's own raw index coincides with
@@ -106,8 +129,24 @@ func TestRenderConnectionMenuHeaderRowShowsColumnLabels(t *testing.T) {
 
 	r.setConnectionMenuExpanded(true)
 	r.renderConnectionMenu()
-	if got, want := table.GetCell(0, connectionMenuColIdentifier).Text, "Identifier"; got != want {
+	if got, want := connectionMenuHeaderText(table.GetCell(0, connectionMenuColIdentifier).Text), "Identifier"; got != want {
 		t.Errorf("header Identifier column (expanded) = %q, want %q", got, want)
+	}
+}
+
+// TestRenderConnectionMenuHeaderHighlightsItsOwnMnemonicLetter pins the
+// user's own explicit request: the U/H/I a header sorts by (see
+// captureConnectionMenuKey) gets the same ButtonBackground chip every
+// other keyboard shortcut in this app already uses (bottombar.go's own
+// highlightKey) — colored in place as the label's own first rune,
+// since that's always the mnemonic itself.
+func TestRenderConnectionMenuHeaderHighlightsItsOwnMnemonicLetter(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	r.renderConnectionMenu()
+
+	want := fmt.Sprintf("[:%s:]U[-:-:-]ser", colorTag(r.theme.ButtonBackground))
+	if got := r.connectionMenuTable.GetCell(0, connectionMenuColUser).Text; got != want {
+		t.Errorf("header User column = %q, want %q", got, want)
 	}
 }
 
@@ -189,7 +228,7 @@ func TestClickingTheUserHeaderSortsByUserAscendingThenDescending(t *testing.T) {
 	if len(texts) < 3 || texts[0][:4] != "jens" {
 		t.Fatalf("after ascending sort, rows = %v, want jens first", texts)
 	}
-	if got := r.connectionMenuTable.GetCell(0, connectionMenuColUser).Text; got != "User ↑" {
+	if got, want := connectionMenuStripMnemonicMarkup(r.connectionMenuTable.GetCell(0, connectionMenuColUser).Text), "User ↑"; got != want {
 		t.Errorf("User header = %q, want the ascending sortArrow suffix", got)
 	}
 
@@ -198,7 +237,7 @@ func TestClickingTheUserHeaderSortsByUserAscendingThenDescending(t *testing.T) {
 	if len(texts) < 3 || texts[0][:4] != "web1" {
 		t.Fatalf("after a second click (descending), rows = %v, want web128 first", texts)
 	}
-	if got := r.connectionMenuTable.GetCell(0, connectionMenuColUser).Text; got != "User ↓" {
+	if got, want := connectionMenuStripMnemonicMarkup(r.connectionMenuTable.GetCell(0, connectionMenuColUser).Text), "User ↓"; got != want {
 		t.Errorf("User header = %q, want the descending sortArrow suffix", got)
 	}
 }

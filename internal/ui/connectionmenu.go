@@ -482,8 +482,22 @@ func blankConnectionMenuCell() *tview.TableCell {
 // the real selection onto the header either.
 func (r *Root) connectionMenuSetHeaderCell(col int, label string, key connectionMenuSortKey) {
 	text := label
-	if key != connectionMenuSortNone && key == r.connectionMenuSortKey {
-		text += sortArrow(r.connectionMenuSortDescending)
+	if key != connectionMenuSortNone {
+		// The mnemonic letter (U/H/I — always label's own first rune,
+		// since User/Host/Identifier were named with this in mind) gets
+		// the same ButtonBackground chip bottombar.go's own
+		// highlightKey gives every other keyboard shortcut in this app,
+		// per the user's own explicit request that this header read the
+		// same way. Colored in place rather than prefixed the way
+		// highlightKey itself does it (" U " ahead of the full word):
+		// this column is already as narrow as "User"/"Host/IP"/
+		// "Identifier" themselves, and a separate prefix chip would
+		// both widen it and read as a redundant repeat of the letter
+		// right there in the word.
+		text = fmt.Sprintf("[:%s:]%c[-:-:-]%s", colorTag(r.theme.ButtonBackground), label[0], label[1:])
+		if key == r.connectionMenuSortKey {
+			text += sortArrow(r.connectionMenuSortDescending)
+		}
 	}
 	cell := tview.NewTableCell(text).
 		SetTextColor(r.theme.MutedTextColor).
