@@ -135,6 +135,41 @@ func TestRenderConnectionMenuHeaderRowIsNotSelectable(t *testing.T) {
 	}
 }
 
+// TestClickingAHeaderCellDoesNotMoveTheSelection pins a real,
+// user-reported bug: NotSelectable alone does NOT stop a click from
+// moving the real selection there — tview's own Table.MouseHandler
+// calls t.Select(row, column) on any clicked cell whose own Clicked
+// func is nil, regardless of NotSelectable (verified against table.go,
+// not guessed: NotSelectable only gates the keyboard forward/backward
+// scan). Without connectionMenuSetHeaderCell's own SetClickedFunc
+// returning true, clicking "User" in the header moved selectedRow to
+// 0, and connectionMenuRepaintLabelGroups then highlighted the header
+// itself.
+func TestClickingAHeaderCellDoesNotMoveTheSelection(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.renderConnectionMenu()
+
+	beforeRow, beforeCol := r.connectionMenuTable.GetSelection()
+
+	// The return value itself is the actual contract tview's own
+	// MouseHandler relies on (true = "noSelect", see table.go's own
+	// MouseLeftClick case) — asserting it directly, not just the
+	// selection's own before/after state, pins the real mechanism
+	// rather than one of its effects.
+	if noSelect := r.connectionMenuTable.GetCell(0, connectionMenuColUser).Clicked(); !noSelect {
+		t.Error("header cell's own Clicked() returned false, want true (tview's own \"noSelect\" signal)")
+	}
+
+	afterRow, afterCol := r.connectionMenuTable.GetSelection()
+	if afterRow != beforeRow || afterCol != beforeCol {
+		t.Errorf("selection moved to (%d, %d) after clicking the header, want it to stay at (%d, %d)", afterRow, afterCol, beforeRow, beforeCol)
+	}
+}
+
 func TestRenderConnectionMenuOnALocalPanelOffersOnlyNewConnection(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	r.renderConnectionMenu()

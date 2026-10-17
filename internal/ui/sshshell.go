@@ -99,7 +99,7 @@ func (r *Root) renderSSHShellMenu() {
 
 	newRow := row
 	table.SetCell(newRow, sshShellMenuColLabel,
-		tview.NewTableCell(connectionMenuNewConnectionLabel).
+		tview.NewTableCell(sshShellMenuNewConnectionLabel).
 			SetTextColor(r.theme.Text).
 			SetSelectable(true).
 			SetClickedFunc(r.clickSSHShellMenuCell(newRow, sshShellMenuColLabel)))

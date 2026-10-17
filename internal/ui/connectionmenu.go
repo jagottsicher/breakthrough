@@ -22,30 +22,25 @@ import (
 // idea.
 const connectionMenuMaxHistoryRows = 10
 
-// connectionMenuNewConnectionUserLabel/connectionMenuNewConnectionHostLabel
-// are the "+ New connection" row's own two real cells, split across
-// User and Host/IP rather than tabswitcher.go's own single-cell
-// tabSwitcherNewRowLabel shape for "New tab": the User column holds
-// real usernames, and a 14+ character phrase there (collapsed or
-// expanded) drove that column's own width every single time the
-// dropdown opened — a real, user-reported regression, twice (once as
-// the full phrase, once as an expanded-only SetExpansion attempt — see
-// renderConnectionMenu's own doc comment at its call site for both).
-// "+" alone never does that; "New connection" lives in Host/IP
-// instead, whose own natural width from real hostnames/IPs is already
-// comparable.
-const (
-	connectionMenuNewConnectionUserLabel = " +"
-	connectionMenuNewConnectionHostLabel = "New connection"
-)
+// connectionMenuNewConnectionLabel is row 0's own label in both
+// collapsed and expanded mode — short deliberately, not the
+// "+  New connection" shape tabswitcher.go's own tabSwitcherNewRowLabel
+// uses for "New tab" (sshShellMenuNewConnectionLabel below keeps that
+// full phrase, for a dropdown that never had this problem). This one
+// sits in the User column real usernames occupy, so anything longer
+// than a real username drove that column's own width every single
+// time the dropdown opened — a real, user-reported regression three
+// times over: the full phrase, an expanded-only SetExpansion attempt,
+// and a User/Host-IP split that "looked like Mist" per the user's own
+// words. Short and in one cell is what's left once all three
+// alternatives were tried and reverted.
+const connectionMenuNewConnectionLabel = " +  New"
 
-// connectionMenuNewConnectionLabel is the "gs" SSH shell dropdown's own
-// equivalent row (see sshshell.go's own use of it) — a single label
-// column there, not User/Host/@ split the way the "@"/"gc" dropdown
-// above now is, so the full phrase never risked distorting anything
-// and stays as one cell, the same shape tabswitcher.go's own
-// tabSwitcherNewRowLabel uses for "New tab".
-const connectionMenuNewConnectionLabel = " +  New connection"
+// sshShellMenuNewConnectionLabel is the "gs" SSH shell dropdown's own
+// equivalent row (see sshshell.go) — a single label column there, not
+// User/Host/@ split the way the "@"/"gc" dropdown above now is, so the
+// full phrase never risked distorting anything and stays as one cell.
+const sshShellMenuNewConnectionLabel = " +  New connection"
 
 // Column indices within the connection menu table — the same in both
 // collapsed and expanded mode (see r.settings.ConnectionMenuExpanded):
@@ -294,29 +289,23 @@ func (r *Root) renderConnectionMenu() {
 	}
 
 	newRow := row
-	// Split across User ("+") and Host/IP ("New connection") rather
-	// than one cell carrying the whole phrase with the rest of the row
-	// left blank — the user's own explicit comparison to the header
-	// row, which looks "complete" precisely because every column has
-	// real content. "+" alone never widens User (real usernames are
-	// never shorter); "New connection" lives in Host/IP, whose own
-	// natural width from real hostnames/IPs is already comparable, so
-	// this doesn't reintroduce the column-widening regression the
-	// short "+ New" label was introduced to fix. Both cells carry the
-	// same click handler, so clicking either half still opens a blank
-	// Connect dialog.
+	// Back to one short cell in User ("+  New") — the split across
+	// User/Host-IP ("+" / "New connection") was tried and reverted
+	// (the user's own explicit report: "sieht Mist aus"). Still short
+	// deliberately, not the full "+  New connection" phrase
+	// tabswitcher.go's own tabSwitcherNewRowLabel uses: that's what
+	// drove the User column's own width every time the dropdown
+	// opened, in both collapsed and expanded mode, before this existed
+	// (see this row's own earlier history in connectionmenu.go's git
+	// log for the two separate regressions this already caused).
 	table.SetCell(newRow, connectionMenuColUser,
-		tview.NewTableCell(connectionMenuNewConnectionUserLabel).
+		tview.NewTableCell(connectionMenuNewConnectionLabel).
 			SetTextColor(r.theme.Text).
 			SetSelectable(true).
 			SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol)))
-	table.SetCell(newRow, connectionMenuColAt, blankConnectionMenuCell())
-	table.SetCell(newRow, connectionMenuColHost,
-		tview.NewTableCell(connectionMenuNewConnectionHostLabel).
-			SetTextColor(r.theme.Text).
-			SetSelectable(false).
-			SetClickedFunc(r.clickConnectionMenuCell(newRow, labelCol)))
 	r.connectionMenuRowColors[newRow] = r.theme.Text
+	table.SetCell(newRow, connectionMenuColAt, blankConnectionMenuCell())
+	table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
 	if expanded {
 		table.SetCell(newRow, connectionMenuColIdentifier, blankConnectionMenuCell())
 	}
@@ -389,14 +378,25 @@ func blankConnectionMenuCell() *tview.TableCell {
 }
 
 // connectionMenuSetHeaderCell writes label into table's own row 0 at
-// col — inert for now (SetSelectable(false), no click handler): see
-// renderConnectionMenu's own doc comment on why row 0 doesn't yet
-// participate in keyboard/click dispatch the way every row below it
-// does.
+// col — inert for now (see renderConnectionMenu's own doc comment on
+// why row 0 doesn't yet participate in keyboard/click dispatch the way
+// every row below it does). SetSelectable(false) alone does NOT
+// guarantee that: tview's own Table.MouseHandler calls t.Select(row,
+// column) on any clicked cell whose own Clicked func is nil,
+// completely ignoring NotSelectable (verified directly against
+// table.go, not guessed — NotSelectable only gates the keyboard
+// forward/backward scan) — a real, user-reported bug where clicking a
+// header cell moved the real selection onto the header, and
+// connectionMenuRepaintLabelGroups then dutifully highlighted it. The
+// explicit SetClickedFunc returning true is what actually prevents
+// that (true means "noSelect", skipping tview's own t.Select call
+// entirely) — once Phase 3 step 2 makes headers sortable, this same
+// handler becomes the sort trigger, still returning true.
 func connectionMenuSetHeaderCell(table *tview.Table, col int, label string, theme config.ResolvedTheme) {
 	table.SetCell(0, col, tview.NewTableCell(label).
 		SetTextColor(theme.MutedTextColor).
-		SetSelectable(false))
+		SetSelectable(false).
+		SetClickedFunc(func() bool { return true }))
 }
 
 // activateConnectionMenuCell is Enter, Space or a click on one cell —
@@ -848,7 +848,12 @@ func (r *Root) connectionMenuRepaintLabelGroups(selectedRow, selectedColumn int)
 	for row := 0; row < rows; row++ {
 		bg := r.theme.SurfaceBackground
 		fg := r.connectionMenuRowColors[row]
-		if row == selectedRow && selectedColumn == connectionMenuColUser {
+		// row == 0 (the header) is never a legitimate highlight target
+		// even if selectedRow somehow ends up there — defense in depth
+		// alongside connectionMenuSetHeaderCell's own SetClickedFunc
+		// guard, which is what actually stops selectedRow from landing
+		// there via a click in the first place.
+		if row != 0 && row == selectedRow && selectedColumn == connectionMenuColUser {
 			bg = r.theme.SelectionBackground
 			// theme.TextColor, not fg: the exact foreground
 			// connectionMenuTable's own SetSelectedStyle already gives
