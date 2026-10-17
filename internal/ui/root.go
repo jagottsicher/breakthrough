@@ -1068,9 +1068,10 @@ type Root struct {
 
 	// connectForm/connectButtons/connectLayout make up the "Connect"
 	// dialog (see connectdialog.go) — a fixed field set (Host/Port/
-	// User/Password/Identifier), so it's built once here rather than
-	// rebuilt fresh per open the way Sed Replace's own variable field
-	// set is (see newSedForm's own doc comment on that distinction).
+	// User/Password/Identifier/Tags), so it's built once here rather
+	// than rebuilt fresh per open the way Sed Replace's own variable
+	// field set is (see newSedForm's own doc comment on that
+	// distinction).
 	// connectStatus is the one-line area below the form showing either
 	// an in-progress "Connecting…" animation or the last attempt's own
 	// error, in place, without closing the dialog. connectCancelBtn/
@@ -1082,6 +1083,7 @@ type Root struct {
 	connectUserField       *tview.InputField
 	connectPasswordField   *tview.InputField
 	connectIdentifierField *tview.InputField
+	connectTagsField       *tview.InputField
 	connectStatus          *tview.TextView
 	connectCancelBtn       *tview.Button
 	connectConnectBtn      *tview.Button

@@ -712,23 +712,28 @@ terminal.
   string — `User` is the one keyboard stop for the whole label group
   (clicking anywhere across `@`/`Host/IP` still connects too). An
   optional "Identifier" field on the Connect dialog tells apart several
-  similarly-named connections that otherwise only differ by host; `<`/
-  `>` on the dropdown's own title bar adds it as a fourth column and
-  spans the whole terminal width instead of just the active panel,
-  remembered across restarts (`connection_menu_expanded`). Each column
-  has a label above it (`User`/`Host/IP`, `Identifier` too once
-  expanded) — click one, or `U`/`H`/`I` while the dropdown has focus,
-  to sort by it (a second click/press of the same one reverses it),
-  shown with an `↑`/`↓` suffix; the header itself is mouse-only, not
-  reachable by arrow keys, and sorting resets to "most recently used
-  first" the next time the dropdown opens. An always-present "Filter:"
-  field fills the rest of the top row — click it or press `/` while
-  the dropdown has focus, Escape or Enter returns to the list without
-  clearing what was typed (Escape again closes the dropdown). Narrows
-  the list live across User/Host-IP (and Identifier once expanded)
-  using the same AND/OR/NAND/NOR/NOT expression grammar as Log
-  Holepunch's own keyword field; resets empty the next time the
-  dropdown opens, same as sorting. Connecting dials in the background
+  similarly-named connections that otherwise only differ by host; a
+  second, optional "Tags" field (comma-separated, up to 10, each up to
+  32 characters) adds a set-valued way to group and filter connections
+  — normalized (trimmed, deduplicated, sorted) once the field loses
+  focus, never while still typing. `<`/`>` on the dropdown's own title
+  bar adds both as a fourth and fifth column and spans the whole
+  terminal width instead of just the active panel, remembered across
+  restarts (`connection_menu_expanded`). Each column has a label above
+  it (`User`/`Host/IP`, `Identifier` too once expanded) — click one, or
+  `U`/`H`/`I` while the dropdown has focus, to sort by it (a second
+  click/press of the same one reverses it), shown with an `↑`/`↓`
+  suffix; the header itself is mouse-only, not reachable by arrow keys,
+  and sorting resets to "most recently used first" the next time the
+  dropdown opens. `Tags` has no mnemonic and isn't sortable, only
+  filterable. An always-present "Filter:" field fills the rest of the
+  top row — click it or press `/` while the dropdown has focus, Escape
+  or Enter returns to the list without clearing what was typed (Escape
+  again closes the dropdown). Narrows the list live across User/Host-IP
+  (and Identifier/Tags once expanded) using the same AND/OR/NAND/NOR/NOT
+  expression grammar as Log Holepunch's own keyword field; resets empty
+  the next time the dropdown opens, same as sorting. Connecting dials
+  in the background
   with a live progress line;
   authentication tries an `ssh-agent` first, then the usual default key
   files (`~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`), then a typed

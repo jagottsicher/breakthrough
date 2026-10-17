@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -271,7 +272,7 @@ func TestConnectRemoteSwitchesToTheRemoteRootAndResetsHistory(t *testing.T) {
 	if p.remote != client {
 		t.Error("p.remote was not set to the connected client")
 	}
-	if p.remoteConn != conn {
+	if !reflect.DeepEqual(p.remoteConn, conn) {
 		t.Errorf("p.remoteConn = %+v, want %+v", p.remoteConn, conn)
 	}
 	if p.path != "/home/tester" {
@@ -327,7 +328,7 @@ func TestDisconnectRemoteClosesTheClientAndReturnsToLocalHome(t *testing.T) {
 	if p.remote != nil {
 		t.Error("p.remote is still set after disconnectRemote")
 	}
-	if p.remoteConn != (remotefs.Connection{}) {
+	if !reflect.DeepEqual(p.remoteConn, remotefs.Connection{}) {
 		t.Errorf("p.remoteConn = %+v, want the zero value after disconnecting", p.remoteConn)
 	}
 }

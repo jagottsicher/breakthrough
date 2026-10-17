@@ -24,6 +24,18 @@ import (
 // idea.
 const connectionMenuMaxHistoryRows = 10
 
+// connectionMenuTagsColumnWidth caps the Tags column's own rendered
+// width (truncateMiddle, internal/ui/columns.go — the same helper that
+// already shortens long filenames in the panel) at a glance-readable
+// size. Needed because SetExpansion is per-column, not per-cell (a
+// real width bug from an earlier phase — see connectionMenuSize's own
+// doc comment on the "+ New connection" row), so a single entry with
+// many or long tags would otherwise be free to stretch the whole
+// column, at everyone else's expense, even though the dropdown's own
+// expanded mode already spans the full terminal width regardless of
+// content.
+const connectionMenuTagsColumnWidth = 40
+
 // connectionMenuNewConnectionLabel is row 0's own label in both
 // collapsed and expanded mode — short deliberately, not the
 // "+  New connection" shape tabswitcher.go's own tabSwitcherNewRowLabel
@@ -70,18 +82,19 @@ const (
 	connectionMenuColAt
 	connectionMenuColHost
 	connectionMenuColIdentifier // present only when expanded
+	connectionMenuColTags       // present only when expanded, right after Identifier
 )
 
 // connectionMenuEjectColumn/connectionMenuRemoveColumn resolve the
 // eject/edit and remove columns' own index for the given expand state
 // — the one place activateConnectionMenuCell and renderConnectionMenu
 // both go through, so a click on either glyph is routed by the layout
-// actually on screen: expanded mode has one more label column
-// (Identifier) ahead of them than collapsed mode does, shifting both
-// one column to the right.
+// actually on screen: expanded mode has two more label columns
+// (Identifier, Tags) ahead of them than collapsed mode does, shifting
+// both two columns to the right.
 func connectionMenuEjectColumn(expanded bool) int {
 	if expanded {
-		return connectionMenuColIdentifier + 1
+		return connectionMenuColTags + 1
 	}
 	return connectionMenuColHost + 1
 }
@@ -165,20 +178,30 @@ func (r *Root) setConnectionMenuSortKey(key connectionMenuSortKey) {
 // string.
 func connectionMenuFilterPlaceholder(expanded bool) string {
 	if expanded {
-		return "user, host/ip, identifier"
+		return "user, host/ip, identifier, tags"
 	}
 	return "user, host/ip"
 }
 
 // connectionMenuFilterHistory returns the subset of history whose
-// currently visible fields (User+Host-IP always; Identifier too, but
-// only once expanded — collapsed has no Identifier column for a query
-// to plausibly mean) match query, reusing filterexpr.QueryFilter
+// currently visible fields (User+Host-IP always; Identifier and Tags
+// too, but only once expanded — collapsed has neither column for a
+// query to plausibly mean) match query, reusing filterexpr.QueryFilter
 // (internal/filterexpr/query.go) — the same AND/OR/NAND/NOR/NOT
 // boolean grammar Log Holepunch's own keyword field already uses, per
 // the user's own explicit request for the two to feel the same rather
 // than inventing a second parser for a dropdown with at most
 // historyMaxEntries (20) rows to search in the first place.
+//
+// Identifier and Tags both land in the same message argument —
+// QueryFilter.Match takes exactly two strings, source and message, and
+// Identifier already occupied the second one before Tags existed, so
+// there's no third slot to give Tags its own. A query term matches if
+// it's a substring of either field, same as always: searching "web"
+// matches a Tags value of "web server" too, the identical substring
+// behavior User/Host-IP already have (and that a real, investigated
+// user report confirmed is accepted, not surprising, in this
+// dropdown).
 //
 // An empty or unparseable query (query midway through being typed —
 // an unterminated "(" or trailing "AND", say) means "no filter yet",
@@ -200,7 +223,7 @@ func connectionMenuFilterHistory(history []remotefs.HistoryEntry, query string, 
 		source := entry.User + " " + entry.HostPort()
 		message := ""
 		if expanded {
-			message = entry.Identifier
+			message = entry.Identifier + " " + strings.Join(entry.Tags, " ")
 		}
 		if filter.Match(source, message) {
 			filtered = append(filtered, entry)
@@ -341,6 +364,12 @@ func (r *Root) renderConnectionMenu() {
 	r.connectionMenuSetHeaderCell(connectionMenuColHost, "Host/IP", connectionMenuSortHost)
 	if expanded {
 		r.connectionMenuSetHeaderCell(connectionMenuColIdentifier, "Identifier", connectionMenuSortIdentifier)
+		// connectionMenuSortNone deliberately: Tags is filterable (see
+		// connectionMenuFilterHistory), not sortable — the plan never
+		// asked for a fourth mnemonic/sort key alongside U/H/I, and a
+		// set-valued column has no single natural sort order the way a
+		// plain string column does anyway.
+		r.connectionMenuSetHeaderCell(connectionMenuColTags, "Tags", connectionMenuSortNone)
 	}
 	r.connectionMenuSetHeaderCell(ejectCol, "", connectionMenuSortNone)
 	r.connectionMenuSetHeaderCell(removeCol, "", connectionMenuSortNone)
@@ -390,6 +419,11 @@ func (r *Root) renderConnectionMenu() {
 					SetTextColor(color).
 					SetSelectable(false).
 					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColIdentifier)))
+			table.SetCell(thisRow, connectionMenuColTags,
+				tview.NewTableCell(truncateMiddle(strings.Join(entry.Tags, ", "), connectionMenuTagsColumnWidth)).
+					SetTextColor(color).
+					SetSelectable(false).
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColTags)))
 		}
 
 		if isActive {
@@ -444,6 +478,7 @@ func (r *Root) renderConnectionMenu() {
 	table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
 	if expanded {
 		table.SetCell(newRow, connectionMenuColIdentifier, blankConnectionMenuCell())
+		table.SetCell(newRow, connectionMenuColTags, blankConnectionMenuCell())
 	}
 	table.SetCell(newRow, ejectCol, blankConnectionMenuCell())
 	table.SetCell(newRow, removeCol, blankConnectionMenuCell())
@@ -1132,7 +1167,7 @@ func (r *Root) connectionMenuRepaintLabelGroups(selectedRow, selectedColumn int)
 	expanded := r.settings.ConnectionMenuExpanded
 	groupCols := []int{connectionMenuColAt, connectionMenuColHost}
 	if expanded {
-		groupCols = append(groupCols, connectionMenuColIdentifier)
+		groupCols = append(groupCols, connectionMenuColIdentifier, connectionMenuColTags)
 	}
 	rows := table.GetRowCount()
 	// row 0 is the header, skipped entirely — not just exempted from
