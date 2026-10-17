@@ -700,19 +700,32 @@ terminal.
   independently clickable cells rather than markup-colored text — bright
   green for the one active in this panel, a matte dimmer green for one
   that has connected successfully before but isn't active now, red for
-  one that used to work and just failed (a connection that has *never*
-  once succeeded isn't added to history at all — only ever going to show
-  up red is clutter, not a useful shortcut). The active row's own
-  trailing `⏏` (or the "e" key) disconnects, right next to the `✕` (or
-  "x"/Delete) every row already has to drop it out of history — every
-  other history row carries a `✎` in that same spot instead ("e" there
-  too), opening the Connect dialog prefilled from it without immediately
-  retrying, so a saved Host/Port/User can be fixed before reconnecting.
-  Every row is a real `User | @ | Host/IP` column table, not one merged
-  string — `User` is the one keyboard stop for the whole label group
-  (clicking anywhere across `@`/`Host/IP` still connects too). An
-  optional "Identifier" field on the Connect dialog tells apart several
-  similarly-named connections that otherwise only differ by host; a
+  one that used to work and just failed, plain/uncolored for one saved
+  but never actually dialed yet (see the Connect dialog's own "OK"
+  button below — a connection that failed its very first *real*
+  attempt isn't added to history at all, unlike one saved without ever
+  trying). The active row's own trailing `⏏` (or the "e" key)
+  disconnects, right next to the `✕` (or "x"/Delete) every row already
+  has to drop it out of history — every other history row carries a
+  `✎` in that same spot instead ("e" there too), opening the Connect
+  dialog prefilled from it without immediately retrying, so a saved
+  Host/Port/User can be fixed before reconnecting. Every row is a real
+  `User | @ | Host/IP` column table, not one merged string — `User` is
+  the one keyboard stop for the whole label group (clicking anywhere
+  across `@`/`Host/IP` still connects too). The Connect dialog itself
+  has three buttons — `Cancel`/`OK`/`Connect` — with `OK` as the
+  default (Enter in any field runs it): it only ever saves the typed
+  fields into history, never dials, so several connections can be
+  prepared ahead of the servers behind them actually existing. Opening
+  via "+ New" or `✎` shows `OK`; clicking a history row's own label
+  skips the buttons entirely and dials immediately, same as before.
+  Editing (`✎`) shows only `Cancel`/`OK` — no way to dial from there.
+  Saving edited Identifier/Tags through `OK` never moves the entry or
+  touches its real green/red status; saving under a changed
+  Host/Port/User creates a new, separate, plain-colored entry instead
+  of renaming the old one. An optional "Identifier" field on the
+  Connect dialog tells apart several similarly-named connections that
+  otherwise only differ by host; a
   second, optional "Tags" field (comma-separated, up to 10, each up to
   32 characters) adds a set-valued way to group and filter connections
   — normalized (trimmed, deduplicated, sorted) once the field loses

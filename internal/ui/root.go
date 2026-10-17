@@ -1086,12 +1086,19 @@ type Root struct {
 	connectTagsField       *tview.InputField
 	connectStatus          *tview.TextView
 	connectCancelBtn       *tview.Button
-	connectConnectBtn      *tview.Button
-	connectButtons         *tview.Flex
-	connectTitleBar        *tview.TextView
-	connectLayout          *tview.Flex
-	connectCancel          context.CancelFunc
-	connectAnimFrame       int
+	// connectOKBtn/connectConnectBtn and connectMode (see
+	// connectDialogMode) are the "Cancel/OK/Connect" buttons'
+	// own current-mode switch — see setConnectButtonsMode's own doc
+	// comment on why the Flex's own contents and wiring change per
+	// open rather than staying fixed.
+	connectOKBtn      *tview.Button
+	connectConnectBtn *tview.Button
+	connectMode       connectDialogMode
+	connectButtons    *tview.Flex
+	connectTitleBar   *tview.TextView
+	connectLayout     *tview.Flex
+	connectCancel     context.CancelFunc
+	connectAnimFrame  int
 	// connectPendingSkipHostKey/connectPendingSkipHostKeyConn back the
 	// "Connect anyway" retry after a HostKeyMismatchError (see
 	// connectdialog.go's own finishConnect/runConnect) — set only once

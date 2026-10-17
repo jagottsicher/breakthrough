@@ -272,19 +272,34 @@ var helpText = strings.TrimLeft(`
   pulse toward a lighter green and back (never darker than at rest)
   once connected. + New connection plus recent history in a table like
   the tab switcher (bright green = active here, matte dimmer green =
-  worked before, red = used to work and just failed — a connection
-  that has never once succeeded isn't added to history at all; "x"/
-  Delete or a row's own trailing "✕" cell drops one entry out of
-  history; the active row's own leading "⏏" cell, or "e", disconnects
-  — no separate "Disconnect" row anymore. Every other history row shows
-  "✎" there instead: opens the Connect dialog prefilled from that entry
-  without dialing it immediately, so a saved Host/Port/User can be
-  fixed before reconnecting, rather than only ever being retyped from
-  scratch or fired off as-is — "e" on that row does the same). Every
-  row is a real User/@/Host-IP column table, not one merged string —
-  User is the one keyboard stop for the whole label group (Left/Right
-  skips straight from it to "✎"/"✕"; clicking anywhere across @/
-  Host-IP still connects too). The Connect dialog's own optional
+  worked before, red = used to work and just failed, plain/uncolored =
+  saved but never actually dialed — see "OK" below — a connection that
+  failed its very first, real attempt isn't added to history at all,
+  unlike one saved without ever trying; "x"/Delete or a row's own
+  trailing "✕" cell drops one entry out of history; the active row's
+  own leading "⏏" cell, or "e", disconnects — no separate "Disconnect"
+  row anymore. Every other history row shows "✎" there instead: opens
+  the Connect dialog prefilled from that entry without dialing it
+  immediately, so a saved Host/Port/User can be fixed before
+  reconnecting, rather than only ever being retyped from scratch or
+  fired off as-is — "e" on that row does the same). Every row is a
+  real User/@/Host-IP column table, not one merged string — User is
+  the one keyboard stop for the whole label group (Left/Right skips
+  straight from it to "✎"/"✕"; clicking anywhere across @/Host-IP
+  still connects too). The Connect dialog itself has three buttons:
+  "Cancel", "OK" and "Connect" — OK is the default (Enter in any field
+  runs it) and only ever saves the typed Host/Port/User/Identifier/Tags
+  into history, never dials; "Connect" actually attempts the
+  connection. Opening the dialog via "+ New" or "✎" shows OK as the
+  one to use for just saving (several connections can be prepared this
+  way before the servers behind them even exist); clicking a history
+  row's own label instead skips the dialog's buttons entirely and
+  dials immediately, the same as before. Editing an existing entry
+  ("✎") shows only "Cancel"/"OK" — no way to dial from there at all.
+  Editing an entry's Identifier/Tags through OK never changes its
+  position in the list or its real green/red status; saving under a
+  changed Host/Port/User creates a separate, new, plain-colored entry
+  instead of renaming the old one. The Connect dialog's own optional
   "Identifier" field (letters/digits/_/-, 32 characters max) tells apart
   several similarly-named connections that otherwise only differ by
   host; an optional "Tags" field next to it (comma-separated, up to 10,

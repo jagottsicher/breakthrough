@@ -20,10 +20,20 @@ const historyMaxEntries = 20
 // attempt to reach it went, which is what lets the connection
 // dropdown color a previously-failed entry red before the user ever
 // retries it.
+//
+// Untested marks an entry SaveConnection created or last touched
+// without ever actually dialing it (the Connect dialog's own "OK"
+// button, see that function's own doc comment) — shown in the
+// dropdown as plain, uncolored text rather than LastFailed's red or a
+// real success's green, since neither of those has actually been
+// observed yet. Only ever cleared (implicitly, by never being set
+// again) once a real RecordAttempt — a genuine Dial, succeeding or
+// failing — replaces this entry with one that has a real outcome.
 type HistoryEntry struct {
 	Connection
 	LastUsed   time.Time
 	LastFailed bool
+	Untested   bool `json:",omitempty"`
 }
 
 // connectionsFile is where history.go persists HistoryEntry list —
@@ -120,37 +130,101 @@ func SaveHistory(entries []HistoryEntry) error {
 // reconnect through a history row's own label can never go through the
 // Tags field at all, so it must not silently clear it either.
 func RecordAttempt(conn Connection, failed bool) error {
+	return upsertHistory(conn, historyOutcome{tested: true, failed: failed})
+}
+
+// SaveConnection persists conn without ever dialing it — the Connect
+// dialog's own "OK" button (internal/ui's connectdialog.go), as
+// opposed to "Connect" which actually attempts a connection via
+// RecordAttempt. Lets a user prepare several named/tagged connections
+// ahead of time, before the servers behind them even exist yet,
+// without being forced through a real (and necessarily failing) dial
+// first — the user's own explicit request, which deliberately
+// overrides RecordAttempt's "never tried, never added" rule above:
+// that rule exists to keep clutter out of history after a real,
+// unprompted failure, not to forbid a connection the user knowingly
+// saved without testing.
+//
+// A brand-new entry (no existing match) is inserted at the front,
+// marked Untested — neither known to work (green) nor known to have
+// failed (red), shown instead in the dropdown's own plain, uncolored
+// "white" per the user's own explicit request, until a real Connect
+// decides which way it goes. An existing entry (same Host/User/Port —
+// see Connection's own Equal) is updated in place, at its own current
+// position, preserving whatever LastUsed/LastFailed/Untested it
+// already had: editing an entry's Identifier/Tags through this path
+// never actually tries the connection, so it must not silently
+// overwrite a real, previously-observed outcome, and must not jump the
+// entry to the front of "most recently used" either, since nothing
+// was actually used.
+func SaveConnection(conn Connection) error {
+	return upsertHistory(conn, historyOutcome{tested: false})
+}
+
+// historyOutcome tells upsertHistory what actually happened — a real
+// Dial attempt (RecordAttempt) or merely saving edited fields with no
+// attempt at all (SaveConnection) — see each one's own doc comment.
+type historyOutcome struct {
+	tested bool
+	failed bool
+}
+
+// upsertHistory is RecordAttempt and SaveConnection's shared
+// read-modify-write: load, find any existing entry matching conn (see
+// Connection.Equal), inherit Identifier/Tags the same way either
+// caller needs it, then either move the match to the front with a
+// fresh outcome (a real attempt always does, matching the dropdown's
+// own "most recently used first" order), update it in place without
+// moving it (a save with no attempt), or insert a brand-new entry at
+// the front — trim to historyMaxEntries and save.
+func upsertHistory(conn Connection, outcome historyOutcome) error {
 	entries, err := LoadHistory()
 	if err != nil {
 		return err
 	}
 
-	var existed bool
-	var previousIdentifier string
-	var previousTags []string
-	kept := entries[:0]
-	for _, e := range entries {
+	matchIndex := -1
+	for i, e := range entries {
 		if e.Equal(conn) {
-			existed = true
-			previousIdentifier = e.Identifier
-			previousTags = e.Tags
-			continue
+			matchIndex = i
+			break
 		}
-		kept = append(kept, e)
 	}
+	existed := matchIndex >= 0
 
-	if failed && !existed {
+	if outcome.tested && outcome.failed && !existed {
 		return nil
 	}
 
-	if conn.Identifier == "" {
-		conn.Identifier = previousIdentifier
-	}
-	if len(conn.Tags) == 0 {
-		conn.Tags = previousTags
+	if existed {
+		if conn.Identifier == "" {
+			conn.Identifier = entries[matchIndex].Identifier
+		}
+		if len(conn.Tags) == 0 {
+			conn.Tags = entries[matchIndex].Tags
+		}
 	}
 
-	updated := append([]HistoryEntry{{Connection: conn, LastUsed: time.Now(), LastFailed: failed}}, kept...)
+	var updated []HistoryEntry
+	switch {
+	case outcome.tested:
+		kept := make([]HistoryEntry, 0, len(entries))
+		for i, e := range entries {
+			if i != matchIndex {
+				kept = append(kept, e)
+			}
+		}
+		entry := HistoryEntry{Connection: conn, LastUsed: time.Now(), LastFailed: outcome.failed}
+		updated = append([]HistoryEntry{entry}, kept...)
+	case existed:
+		updated = append([]HistoryEntry(nil), entries...)
+		prev := updated[matchIndex]
+		updated[matchIndex] = HistoryEntry{Connection: conn, LastUsed: prev.LastUsed, LastFailed: prev.LastFailed, Untested: prev.Untested}
+	default:
+		entry := HistoryEntry{Connection: conn, LastUsed: time.Now(), LastFailed: false, Untested: true}
+		updated = append([]HistoryEntry{entry}, entries...)
+	}
+
 	if len(updated) > historyMaxEntries {
 		updated = updated[:historyMaxEntries]
 	}

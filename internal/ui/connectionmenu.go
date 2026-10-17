@@ -379,7 +379,7 @@ func (r *Root) renderConnectionMenu() {
 		entry := entry
 		thisRow := row
 		isActive := panel.remote != nil && panel.remoteConn.Equal(entry.Connection)
-		color := connectionHistoryColor(r.theme, isActive, entry.LastFailed)
+		color := connectionHistoryColor(r.theme, isActive, entry.LastFailed, entry.Untested)
 
 		// User is the label group's own one keyboard-selectable stop;
 		// @/Host-IP (and Identifier, expanded only) each still carry
@@ -720,7 +720,7 @@ func (r *Root) activateConnectionMenuCell(row, column int) {
 	conn, ok := r.connectionMenuHistoryRows[row]
 	if !ok {
 		r.hideOverlay()
-		r.openConnectDialog(remotefs.Connection{})
+		r.openConnectDialog(remotefs.Connection{}, connectDialogModeNew)
 		return
 	}
 	expanded := r.settings.ConnectionMenuExpanded
@@ -735,7 +735,7 @@ func (r *Root) activateConnectionMenuCell(row, column int) {
 		r.removeConnectionHistoryRow(row)
 	default:
 		r.hideOverlay()
-		r.openConnectDialog(conn)
+		r.openConnectDialog(conn, connectDialogModeNew)
 		r.runConnect()
 	}
 }
@@ -750,7 +750,7 @@ func (r *Root) activateConnectionMenuCell(row, column int) {
 // history already has.
 func (r *Root) editConnectionHistoryRow(conn remotefs.Connection) {
 	r.hideOverlay()
-	r.openConnectDialog(conn)
+	r.openConnectDialog(conn, connectDialogModeEdit)
 }
 
 // clickConnectionMenuCell is one cell's own mouse action — the same
@@ -1037,21 +1037,34 @@ const connectionHistoryEditGlyph = "✎"
 // green (theme.EntryExecutable, this app's established "healthy/
 // active" color — see bottombar.go/gitstatus.go) if it's the panel's
 // own currently active connection, red (theme.CriticalText) if the
-// last attempt to reach it failed, a dimmer green (see
-// connectionHistorySuccessBlend) otherwise — per the user's own
-// explicit request that the current connection, any failed one, and
-// any merely-inactive-but-working one all be visually distinguishable
-// from each other at a glance. A real tcell.Color set directly on the
-// cell (TableCell.SetTextColor), not a markup tag embedded in its own
-// text — the same "the widget's own API carries color, not the
-// string" shape tabSwitcherRowLabel's plain dim/undimmed split already
-// uses, now needed here for a three-way split instead of two.
-func connectionHistoryColor(theme config.ResolvedTheme, isActive, lastFailed bool) tcell.Color {
+// last attempt to reach it failed, theme.Text (plain, uncolored — the
+// same neutral color the "+ New" row itself already uses) if it was
+// only ever saved via the Connect dialog's own "OK" button and never
+// actually dialed (see remotefs.HistoryEntry.Untested's own doc
+// comment), a dimmer green (see connectionHistorySuccessBlend)
+// otherwise — per the user's own explicit request that the current
+// connection, any failed one, any never-tried one, and any
+// merely-inactive-but-working one all be visually distinguishable from
+// each other at a glance. isActive is checked first and wins outright:
+// a connection can be both Untested (saved, never dialed through this
+// exact history entry before) and the panel's own current one at the
+// very same time, if the user saved it with OK and the panel happened
+// to already be connected to that same endpoint by some other means —
+// "demonstrably connected right now" is a stronger, more useful signal
+// than "never tried," so bright green wins that combination, not
+// white. A real tcell.Color set directly on the cell
+// (TableCell.SetTextColor), not a markup tag embedded in its own text
+// — the same "the widget's own API carries color, not the string"
+// shape tabSwitcherRowLabel's plain dim/undimmed split already uses,
+// now needed here for a four-way split instead of two.
+func connectionHistoryColor(theme config.ResolvedTheme, isActive, lastFailed, untested bool) tcell.Color {
 	switch {
 	case isActive:
 		return theme.EntryExecutable
 	case lastFailed:
 		return theme.CriticalText
+	case untested:
+		return theme.Text
 	default:
 		return blendToward(theme.EntryExecutable, theme.MutedTextColor, connectionHistorySuccessBlend)
 	}
