@@ -590,7 +590,17 @@ func (r *Root) newRsyncButtons() *tview.Flex {
 	r.rsyncRunBackgroundBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.rsyncSourceField)
+			// Form.SetFocus(0), not a direct
+			// r.app.SetFocus(r.rsyncSourceField) — the identical real,
+			// user-reported bug connectdialog.go's own
+			// connectConnectBtn.SetExitFunc found and fixed first (see
+			// its own doc comment for the full tview.Form internals):
+			// naming the field directly here left rsyncForm's own
+			// focusedElement counter stale, so the next Backtab from
+			// Source landed on the wrong field instead of wrapping back
+			// to Extra flags.
+			r.rsyncForm.SetFocus(0)
+			r.app.SetFocus(r.rsyncForm)
 		case tcell.KeyBacktab:
 			r.app.SetFocus(r.rsyncRunBtn)
 		case tcell.KeyEscape:

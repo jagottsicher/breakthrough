@@ -457,3 +457,34 @@ func TestGSChordOpensSSHShellMenu(t *testing.T) {
 		t.Errorf("activePage = %q, want %q", r.activePage, sshShellMenuPage)
 	}
 }
+
+// TestBacktabFromHostAfterAFullTabRoundTripWrapsToX11 mirrors
+// connectdialog_test.go's own identical regression test — see its own
+// doc comment for the full tview.Form internals this pins:
+// sshShellOpenBtn's own Tab handler now goes through
+// sshShellForm.SetFocus(0) rather than naming the Host field directly,
+// which used to leave the form's own focusedElement counter stale and
+// sent the next Backtab to the wrong field instead of wrapping back to
+// X11 forwarding.
+func TestBacktabFromHostAfterAFullTabRoundTripWrapsToX11(t *testing.T) {
+	r := newTestRootForSSHShell(t)
+	noop := func(tview.Primitive) {}
+	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
+
+	for _, p := range []tview.Primitive{
+		r.sshShellHostField, r.sshShellPortField, r.sshShellUserField,
+		r.sshShellAgentCheckbox, r.sshShellCompressionCheckbox, r.sshShellVerboseCheckbox,
+		r.sshShellX11Checkbox, r.sshShellCancelBtn, r.sshShellOpenBtn,
+	} {
+		tab(p)
+	}
+	if !r.sshShellHostField.HasFocus() {
+		t.Fatal("full Tab loop did not wrap back to Host")
+	}
+
+	r.sshShellHostField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+
+	if !r.sshShellX11Checkbox.HasFocus() {
+		t.Error("Backtab from Host after a full loop did not wrap back to X11 forwarding")
+	}
+}

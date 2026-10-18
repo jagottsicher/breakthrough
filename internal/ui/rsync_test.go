@@ -1119,3 +1119,44 @@ func TestRunRsyncNeverPersistsOnAMissingDestination(t *testing.T) {
 		t.Errorf("persisted config should not mention rsync_delete at all; got:\n%s", data)
 	}
 }
+
+// TestBacktabFromSourceAfterAFullTabRoundTripWrapsToExtraFlags mirrors
+// connectdialog_test.go's own identical regression test — see its own
+// doc comment for the full tview.Form internals this pins:
+// rsyncRunBackgroundBtn's own Tab handler now goes through
+// rsyncForm.SetFocus(0) rather than naming the Source field directly,
+// which used to leave the form's own focusedElement counter stale and
+// sent the next Backtab to the wrong field instead of wrapping back to
+// Extra flags.
+func TestBacktabFromSourceAfterAFullTabRoundTripWrapsToExtraFlags(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.openRsync()
+	noop := func(tview.Primitive) {}
+	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
+
+	for _, p := range []tview.Primitive{
+		r.rsyncSourceField, r.rsyncDestinationField, r.rsyncExcludesField, r.rsyncExtraArgsField,
+	} {
+		tab(p)
+	}
+	// rsyncFlagsList is a real tview.List with its own internal item
+	// cursor, not a single stop — Tab from its own last row continues
+	// the chain into rsyncPickSourceBtn (see newRsyncFlagsList's own
+	// wiring), so it's skipped here rather than guessed at.
+	r.rsyncFlagsList.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	for _, p := range []tview.Primitive{
+		r.rsyncPickSourceBtn, r.rsyncPickDestinationBtn,
+		r.rsyncCancelBtn, r.rsyncRunBtn, r.rsyncRunBackgroundBtn,
+	} {
+		tab(p)
+	}
+	if !r.rsyncSourceField.HasFocus() {
+		t.Fatal("full Tab loop did not wrap back to Source")
+	}
+
+	r.rsyncSourceField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+
+	if !r.rsyncExtraArgsField.HasFocus() {
+		t.Error("Backtab from Source after a full loop did not wrap back to Extra flags")
+	}
+}
