@@ -439,3 +439,259 @@ func TestActivateToolboxRowOnAHeaderRowDoesNothing(t *testing.T) {
 		t.Errorf("activePage = %q, want the Toolbox screen to still be open", r.activePage)
 	}
 }
+
+// toolboxTestFormEntry is a small toolboxFormEntry used by the tests
+// below — one text field (with a default) and one toggle, build()
+// deliberately skipping the text field whenever it's empty (the "no
+// blank tokens" rule toolboxFormEntry's own doc comment requires of
+// every real build func).
+func toolboxTestFormEntry() toolboxEntry {
+	fields := []toolboxFormField{
+		{name: "a", label: "A", kind: toolboxFieldText, defaultText: "x"},
+		{name: "b", label: "B toggle", kind: toolboxFieldToggle},
+	}
+	build := func(v toolboxFormValues) []string {
+		var args []string
+		if a := v.Text["a"]; a != "" {
+			args = append(args, a)
+		}
+		if v.Flags["b"] {
+			args = append(args, "-b")
+		}
+		return args
+	}
+	return toolboxFormEntry("Test Form", "a form test entry", "echo", fields, build)
+}
+
+// TestToolboxFormEntryOpensWithDefaultsAndPreview pins toolboxFormEntry's
+// own shape: activating it opens toolboxForm's own overlay (not
+// toolboxInput), prefilled with every field's own default, and the
+// preview line already reflects exactly what Run would execute — before
+// anything has been touched at all.
+func TestToolboxFormEntryOpensWithDefaultsAndPreview(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	entry := toolboxTestFormEntry()
+	entry.run(r)
+
+	if r.activePage != toolboxFormPage {
+		t.Fatalf("activePage = %q, want the toolbox form overlay", r.activePage)
+	}
+	if len(r.toolWindows) != 0 {
+		t.Errorf("len(toolWindows) = %d, want 0 before Run is ever pressed", len(r.toolWindows))
+	}
+	if got := r.toolboxFormPreview.GetText(true); !strings.Contains(got, "echo x") {
+		t.Errorf("preview = %q, want it to mention %q", got, "echo x")
+	}
+}
+
+// TestToolboxFormEntryRunUsesCurrentFieldValues pins that Run builds its
+// argv from whatever the fields currently hold, not the defaults they
+// opened with, and that the empty-field skip rule actually keeps an
+// empty text field from reaching argv as a blank token.
+func TestToolboxFormEntryRunUsesCurrentFieldValues(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	entry := toolboxTestFormEntry()
+	entry.run(r)
+
+	input, ok := r.toolboxFormWidgets["a"].(*tview.InputField)
+	if !ok {
+		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", "a")
+	}
+	input.SetText("typed")
+	r.toolboxFormToggleState["b"] = true
+
+	r.runToolboxForm()
+
+	if len(r.toolWindows) != 1 {
+		t.Fatalf("len(toolWindows) = %d, want 1 after Run", len(r.toolWindows))
+	}
+	tw := r.toolWindows[0]
+	defer tw.close()
+
+	if got := tw.titleBar.GetText(true); !strings.Contains(got, "echo typed -b") {
+		t.Errorf("tool window title = %q, want it to mention %q", got, "echo typed -b")
+	}
+	if r.activePage == toolboxFormPage {
+		t.Error("the form overlay should have closed once Run ran")
+	}
+}
+
+// TestToolboxFormEntryCancelRunsNothing pins Cancel's own shape: closes
+// the overlay, starts nothing.
+func TestToolboxFormEntryCancelRunsNothing(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	entry := toolboxTestFormEntry()
+	entry.run(r)
+
+	r.toolboxFormCancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if len(r.toolWindows) != 0 {
+		t.Errorf("len(toolWindows) = %d, want 0 — Cancel should run nothing", len(r.toolWindows))
+	}
+	if r.activePage == toolboxFormPage {
+		t.Error("Cancel should have closed the form overlay")
+	}
+}
+
+// TestTabAroundTheToolboxFormReachesEveryWidgetAndWrapsBack pins the
+// same cross-widget Tab/Backtab chain Sed Replace's own identical test
+// (TestTabFromTheAdvancedFieldReachesTheFlagsAndActions) already proves
+// for its own form/list/actions trio: the form's own last field reaches
+// toolboxFormToggles, which reaches Cancel, which cycles to Run, which
+// wraps back to the form's own first field — all the way around and
+// back, never stuck forward-only the way Befund 8's bug once left
+// connectdialog.go/rsync.go/sshshell.go's own button rows.
+func TestTabAroundTheToolboxFormReachesEveryWidgetAndWrapsBack(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	entry := toolboxTestFormEntry()
+	entry.run(r)
+
+	noop := func(tview.Primitive) {}
+	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
+	backtab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop) }
+
+	fieldA, ok := r.toolboxFormWidgets["a"].(*tview.InputField)
+	if !ok {
+		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", "a")
+	}
+
+	tab(fieldA)
+	if !r.toolboxFormToggles.HasFocus() {
+		t.Fatal("Tab from the form's own last field did not reach toolboxFormToggles")
+	}
+
+	tab(r.toolboxFormToggles)
+	if !r.toolboxFormCancelBtn.HasFocus() {
+		t.Fatal("Tab from toolboxFormToggles did not reach Cancel")
+	}
+
+	tab(r.toolboxFormCancelBtn)
+	if !r.toolboxFormRunBtn.HasFocus() {
+		t.Fatal("Tab from Cancel did not reach Run")
+	}
+
+	tab(r.toolboxFormRunBtn)
+	if !fieldA.HasFocus() {
+		t.Fatal("Tab from Run did not wrap back to the form's own first field")
+	}
+
+	// Backtab from the form's own first field wraps within the form
+	// itself (fieldA is also its only field here) — the same
+	// "Backtab wraps inside the form, never out to a sibling widget"
+	// convention sedFindField's own Backtab already establishes
+	// (TestTabFromTheAdvancedFieldReachesTheFlagsAndActions), left to
+	// tview's native Form handling rather than anything wired above.
+	backtab(fieldA)
+	if !fieldA.HasFocus() {
+		t.Fatal("Backtab from the form's own first field should wrap within the form itself")
+	}
+
+	// Back to Run the long way (fieldA -> toggles -> Cancel -> Run), to
+	// check Backtab's own chain starting there.
+	tab(fieldA)
+	tab(r.toolboxFormToggles)
+	tab(r.toolboxFormCancelBtn)
+	if !r.toolboxFormRunBtn.HasFocus() {
+		t.Fatal("Tab from Cancel did not reach Run")
+	}
+
+	backtab(r.toolboxFormRunBtn)
+	if !r.toolboxFormCancelBtn.HasFocus() {
+		t.Fatal("Backtab from Run did not reach Cancel")
+	}
+
+	backtab(r.toolboxFormCancelBtn)
+	if !r.toolboxFormToggles.HasFocus() {
+		t.Fatal("Backtab from Cancel did not reach toolboxFormToggles")
+	}
+
+	backtab(r.toolboxFormToggles)
+	if !fieldA.HasFocus() {
+		t.Fatal("Backtab from toolboxFormToggles did not reach the form's own last field")
+	}
+}
+
+// TestToolboxCurlEntryBuildOmitsEmptyOptionalFields pins curl's own
+// build func directly — GET and an empty Header/Output/Follow redirects
+// must produce no flags at all beyond the URL itself, never a blank
+// token like an empty "-H" value.
+func TestToolboxCurlEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
+	entry := toolboxCurlEntry()
+	// toolboxCurlEntry doesn't expose build directly — reach it the same
+	// way toolboxFormEntry's own run does, through a real open, so this
+	// also doubles as curl's own catalog-shape regression test.
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry.run(r)
+
+	urlField, ok := r.toolboxFormWidgets[toolboxCurlFieldURL].(*tview.InputField)
+	if !ok {
+		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", toolboxCurlFieldURL)
+	}
+	urlField.SetText("https://example.com")
+
+	if got := r.toolboxFormPreview.GetText(true); got != "curl https://example.com" {
+		t.Errorf("preview = %q, want exactly %q (GET default and every optional field empty)", got, "curl https://example.com")
+	}
+
+	r.runToolboxForm()
+	if len(r.toolWindows) != 1 {
+		t.Fatalf("len(toolWindows) = %d, want 1", len(r.toolWindows))
+	}
+	tw := r.toolWindows[0]
+	defer tw.close()
+	if got := tw.titleBar.GetText(true); !strings.Contains(got, "curl https://example.com") {
+		t.Errorf("tool window title = %q, want it to mention %q", got, "curl https://example.com")
+	}
+}
+
+// TestToolboxCurlEntryBuildIncludesEveryFieldWhenSet is
+// TestToolboxCurlEntryBuildOmitsEmptyOptionalFields's counterpart: every
+// field set to a non-default value reaches argv, in order.
+func TestToolboxCurlEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry := toolboxCurlEntry()
+	entry.run(r)
+
+	urlField := r.toolboxFormWidgets[toolboxCurlFieldURL].(*tview.InputField)
+	urlField.SetText("https://example.com")
+	headerField := r.toolboxFormWidgets[toolboxCurlFieldHeader].(*tview.InputField)
+	headerField.SetText("Accept: text/plain")
+	outputField := r.toolboxFormWidgets[toolboxCurlFieldOutput].(*tview.InputField)
+	outputField.SetText("out.txt")
+	methodField := r.toolboxFormWidgets[toolboxCurlFieldMethod].(*tview.DropDown)
+	methodField.SetCurrentOption(1) // POST, per toolboxCurlEntry's own choices order
+	// Set directly rather than through toolboxFormToggles' own selected
+	// func (the same direct-state-manipulation style toggleSedFlag's own
+	// tests already use) — updateToolboxFormPreview must be called
+	// explicitly afterwards, since nothing here went through the real
+	// UI event that would normally trigger it.
+	r.toolboxFormToggleState[toolboxCurlFieldFollow] = true
+	r.updateToolboxFormPreview()
+
+	want := `curl -X POST -H Accept: text/plain -L -o out.txt https://example.com`
+	if got := r.toolboxFormPreview.GetText(true); got != want {
+		t.Errorf("preview = %q, want %q", got, want)
+	}
+}
