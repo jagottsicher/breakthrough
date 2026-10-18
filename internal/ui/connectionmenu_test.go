@@ -489,9 +489,10 @@ func TestRenderConnectionMenuAppliesTheSearchFieldsOwnText(t *testing.T) {
 	}
 }
 
-// TestPressingSlashFocusesTheSearchField pins the only (besides a
-// direct click) way into the field — see newConnectionMenuSearchField's
-// own doc comment on why "just start typing" isn't safe here.
+// TestPressingSlashFocusesTheSearchField pins one of the three
+// (alongside Tab/Backtab below and a direct click) ways into the
+// field — see newConnectionMenuSearchField's own doc comment on why
+// "just start typing" isn't safe here.
 func TestPressingSlashFocusesTheSearchField(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	r.openConnectionMenu()
@@ -502,6 +503,59 @@ func TestPressingSlashFocusesTheSearchField(t *testing.T) {
 	}
 	if !r.connectionMenuSearchField.HasFocus() {
 		t.Error("\"/\" did not move focus to the search field")
+	}
+}
+
+// TestTabFromTheTableFocusesTheSearchField pins the fix for a real gap
+// (feature_upgrades.txt Befund 6): tview.Table's own InputHandler
+// claims Tab/Backtab outright and calls t.done only if actually set —
+// connectionMenuTable never did, so either key was a silent no-op
+// before this. Backtab checked too: with only two real keyboard stops
+// in this dropdown (this table and the search field), both directions
+// lead to the same other stop.
+func TestTabFromTheTableFocusesTheSearchField(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	r.openConnectionMenu()
+
+	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+	if got != nil {
+		t.Error("captureConnectionMenuKey did not consume Tab")
+	}
+	if !r.connectionMenuSearchField.HasFocus() {
+		t.Error("Tab did not move focus to the search field")
+	}
+}
+
+func TestBacktabFromTheTableFocusesTheSearchField(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	r.openConnectionMenu()
+
+	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+	if got != nil {
+		t.Error("captureConnectionMenuKey did not consume Backtab")
+	}
+	if !r.connectionMenuSearchField.HasFocus() {
+		t.Error("Backtab did not move focus to the search field")
+	}
+}
+
+// TestTabAndBacktabFromTheSearchFieldReturnToTheTable is the round
+// trip's other half — already worked before this fix
+// (newConnectionMenuSearchField's own SetDoneFunc returns focus to the
+// table for any key), pinned here directly so the full cycle has its
+// own test rather than relying on it as an implicit side effect of
+// something else.
+func TestTabAndBacktabFromTheSearchFieldReturnToTheTable(t *testing.T) {
+	for _, key := range []tcell.Key{tcell.KeyTab, tcell.KeyBacktab} {
+		r := newTestRootForConnectionMenu(t)
+		r.openConnectionMenu()
+		r.app.SetFocus(r.connectionMenuSearchField)
+
+		r.connectionMenuSearchField.InputHandler()(tcell.NewEventKey(key, 0, tcell.ModNone), func(tview.Primitive) {})
+
+		if !r.connectionMenuTable.HasFocus() {
+			t.Errorf("key %v from the search field did not return focus to the table", key)
+		}
 	}
 }
 
