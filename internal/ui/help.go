@@ -320,10 +320,12 @@ var helpText = strings.TrimLeft(`
   has no header mnemonic and isn't sortable, only filterable (a tag set
   has no single natural order). Sorting resets to "most recently used
   first" the next time the dropdown opens. A "Filter:" field fills the
-  rest of the top row, always there — click it or press "/" while the
-  dropdown has focus to type directly, Escape or Enter returns focus to
-  the list without clearing what was typed (Escape again closes the
-  whole dropdown). The same AND/OR/NAND/NOR/NOT expression grammar Log
+  rest of the top row, always there — click it, press "/", or Tab/
+  Shift+Tab from the list to type directly (there are only these two
+  real keyboard stops, so either direction reaches it); Escape or
+  Enter, or Tab/Shift+Tab again, returns focus to the list without
+  clearing what was typed (Escape again closes the whole dropdown).
+  The same AND/OR/NAND/NOR/NOT expression grammar Log
   Holepunch's own keyword field uses (see below) narrows the list live,
   across User/Host-IP (and Identifier/Tags too once expanded) — an
   incomplete expression, mid-keystroke, is treated as no filter yet

@@ -543,10 +543,10 @@ func (r *Root) newConnectionMenuTable() *tview.Table {
 // against tview's own textarea.go that TextArea.Draw's label half goes
 // through the same tag-aware printWithStyle a Table cell's own text
 // does, so the markup renders identically). The field is never focused
-// by default (SetFocus) — "/" in captureConnectionMenuKey, or a direct
-// click, are the only ways in; typing without either first would
-// otherwise be ambiguous with the table's own single-letter shortcuts
-// (U/H/I/e/x/</>).
+// by default (SetFocus) — "/", Tab/Backtab, or a direct click (see
+// captureConnectionMenuKey) are the only ways in; typing without one of
+// these first would otherwise be ambiguous with the table's own
+// single-letter shortcuts (U/H/I/e/x/</>).
 // styleConnectionMenuSearchField applies styleInput (theme.go) — this
 // app's own shared InputBackground/InputFocusedBackground "look like a
 // real input" convention, the same one logAuditKeywordField already
@@ -791,6 +791,21 @@ func (r *Root) captureConnectionMenuKey(event *tcell.EventKey) *tcell.EventKey {
 	case event.Key() == tcell.KeyRune && event.Rune() == ' ':
 		r.activateConnectionMenuCell(row, column)
 		return nil
+	case event.Key() == tcell.KeyTab, event.Key() == tcell.KeyBacktab:
+		// tview.Table's own InputHandler claims both of these outright
+		// (table.go's own InputHandler checks key == KeyTab ||
+		// KeyBacktab and returns unconditionally, calling t.done only if
+		// actually set — verified directly against tview's own source,
+		// not guessed) and connectionMenuTable never sets a DoneFunc, so
+		// without this, either key was a silent no-op. The dropdown only
+		// has two real keyboard stops — this table and the search field
+		// (see newConnectionMenuSearchField) — so both directions lead
+		// to the same other stop; the search field's own SetDoneFunc
+		// already returns here for Tab, Backtab, Enter, and Escape
+		// alike, so the round trip works both ways without any further
+		// change there.
+		r.app.SetFocus(r.connectionMenuSearchField)
+		return nil
 	}
 
 	// "<"/">" are the keyboard equivalent of the title bar's own
@@ -807,10 +822,11 @@ func (r *Root) captureConnectionMenuKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
-	// "/" focuses the search field — the only way in besides a direct
-	// click (see newConnectionMenuSearchField's own doc comment on why
-	// "just start typing" would be ambiguous with every other
-	// single-letter shortcut this table already has).
+	// "/" focuses the search field — alongside Tab/Backtab above and a
+	// direct click, now three ways in (see newConnectionMenuSearchField's
+	// own doc comment on why "just start typing" would be ambiguous with
+	// every other single-letter shortcut this table already has, "/"
+	// included).
 	if event.Key() == tcell.KeyRune && event.Rune() == '/' {
 		r.app.SetFocus(r.connectionMenuSearchField)
 		return nil
