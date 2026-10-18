@@ -896,3 +896,38 @@ func TestContextMenuMnemonicMOpensDuplicate(t *testing.T) {
 		t.Errorf("'m' should have opened Multiply from the context menu, activePage = %q", r.activePage)
 	}
 }
+
+// TestTabFromTheCountFieldReachesTheButtons pins a real,
+// previously-unfixed gap (feature_upgrades.txt Befund 8's own
+// compress.go/duplicate.go follow-up): duplicateForm and its own
+// Cancel/Duplicate buttons are two independent widgets, and there used
+// to be no Tab path between them at all — reachable only by mouse.
+// duplicateCountField is always the form's own last field, regardless
+// of which strategy is selected (renderDuplicateForm adds it
+// unconditionally, right after the strategy-specific switch) — the
+// default "numbered" strategy is exercised here, not guessed to be
+// representative.
+func TestTabFromTheCountFieldReachesTheButtons(t *testing.T) {
+	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	r.openDuplicate() // default strategy: numbered
+	noop := func(tview.Primitive) {}
+	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
+
+	tab(r.duplicateStrategyField)
+	tab(r.duplicateSeparatorField)
+	tab(r.duplicateNumberPaddingField)
+	tab(r.duplicateCountField)
+	if !r.duplicateCancelBtn.HasFocus() {
+		t.Fatal("Tab from the Count field did not reach duplicateCancelBtn")
+	}
+
+	tab(r.duplicateCancelBtn)
+	if !r.duplicateApplyBtn.HasFocus() {
+		t.Fatal("Tab from Cancel did not reach Duplicate")
+	}
+
+	tab(r.duplicateApplyBtn)
+	if !r.duplicateStrategyField.HasFocus() {
+		t.Error("Tab from Duplicate did not wrap back to Strategy")
+	}
+}

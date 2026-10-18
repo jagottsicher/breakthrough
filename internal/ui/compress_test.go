@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
@@ -942,6 +943,34 @@ func TestRunCompressNeverPersistsOnAnEmptyOutputName(t *testing.T) {
 	}
 	if data, err := os.ReadFile(configPath); err == nil && strings.Contains(string(data), "compress_format") {
 		t.Errorf("persisted config should not mention compress_format at all; got:\n%s", data)
+	}
+}
+
+// TestTabFromTheOutputNameFieldReachesTheButtons pins a real,
+// previously-unfixed gap (feature_upgrades.txt Befund 8's own
+// compress.go/duplicate.go follow-up): compressForm and its own
+// Cancel/Compress buttons are two independent widgets, and there used
+// to be no Tab path between them at all — reachable only by mouse.
+func TestTabFromTheOutputNameFieldReachesTheButtons(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	r.openCompress()
+	noop := func(tview.Primitive) {}
+	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
+
+	tab(r.compressFormatField)
+	tab(r.compressOutputNameField)
+	if !r.compressCancelBtn.HasFocus() {
+		t.Fatal("Tab from Output name did not reach compressCancelBtn")
+	}
+
+	tab(r.compressCancelBtn)
+	if !r.compressApplyBtn.HasFocus() {
+		t.Fatal("Tab from Cancel did not reach Compress")
+	}
+
+	tab(r.compressApplyBtn)
+	if !r.compressFormatField.HasFocus() {
+		t.Error("Tab from Compress did not wrap back to Format")
 	}
 }
 

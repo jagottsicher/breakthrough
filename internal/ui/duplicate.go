@@ -265,6 +265,21 @@ func (r *Root) renderDuplicateForm() {
 		r.duplicateCountValue = v
 		r.renderDuplicatePreview()
 	})
+	// Tab on the form's own last field (always this one, regardless of
+	// strategy — added unconditionally after the switch above) would
+	// otherwise just wrap back to Strategy instead of ever reaching
+	// duplicateCancelBtn/duplicateApplyBtn — the identical, real,
+	// previously-unfixed gap newConnectForm's own doc comment already
+	// found and fixed for the Connect dialog: without this, the whole
+	// button row was reachable only by mouse (feature_upgrades.txt
+	// Befund 8's own "compress.go/duplicate.go" follow-up note).
+	r.duplicateCountField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab {
+			r.app.SetFocus(r.duplicateCancelBtn)
+			return nil
+		}
+		return event
+	})
 	r.duplicateForm.AddFormItem(r.duplicateCountField)
 }
 
@@ -402,13 +417,39 @@ func (r *Root) newDuplicateButtons() *tview.Flex {
 	r.duplicateCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
 	r.duplicateApplyBtn.SetInputCapture(spaceAlsoActivates(r.runDuplicate))
 
-	exitFunc := func(key tcell.Key) {
-		if key == tcell.KeyEscape {
+	// Tab/Backtab cycle between the two buttons and back into the form
+	// (duplicateCountField's own forward Tab is the other half of
+	// this — see renderDuplicateForm's own doc comment, right after
+	// the strategy-specific switch); Escape always cancels. Wrapping
+	// forward goes through
+	// duplicateForm.SetFocus(0) then r.app.SetFocus(r.duplicateForm),
+	// not a direct r.app.SetFocus(r.duplicateStrategyField) — naming
+	// the field directly would leave duplicateForm's own internal
+	// focusedElement counter stale, the same real bug
+	// connectdialog.go's own connectConnectBtn.SetExitFunc found and
+	// fixed first (see its own doc comment for the full tview.Form
+	// internals).
+	r.duplicateCancelBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.duplicateApplyBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.duplicateCountField)
+		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
-	}
-	r.duplicateCancelBtn.SetExitFunc(exitFunc)
-	r.duplicateApplyBtn.SetExitFunc(exitFunc)
+	})
+	r.duplicateApplyBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.duplicateForm.SetFocus(0)
+			r.app.SetFocus(r.duplicateForm)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.duplicateCancelBtn)
+		case tcell.KeyEscape:
+			r.hideOverlay()
+		}
+	})
 
 	// Equal proportion (0, 1) each, nothing else, so the two together
 	// fill the whole row edge to edge, split exactly in half — the same
