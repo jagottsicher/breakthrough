@@ -325,6 +325,37 @@ type Root struct {
 	toolboxScrollbar *verticalScrollbar
 	toolboxInput     *tview.InputField
 
+	// toolboxForm and friends are toolboxFormEntry's own overlay — a
+	// second way into Toolbox's own openToolCommand, next to
+	// toolboxInput's single free-text field, for an entry whose
+	// command genuinely needs more than one piece of input (curl's
+	// own Method/Header/Follow redirects/Output, say). See
+	// toolboxFormEntry's own doc comment in toolbox.go for the full
+	// design. toolboxFormToggles holds whichever of the entry's own
+	// fields are boolean — a real tview.List, not a Form checkbox, the
+	// same "Form re-applies one uniform FocusedBackground to every
+	// item it owns, a checkbox can never keep its own distinct look"
+	// reasoning newSedForm's own doc comment already establishes for
+	// Sed Replace's five flags — empty (and given zero rect height)
+	// for an entry with no boolean fields at all. toolboxFormFields/
+	// Build/Name/Widgets are the current open's own state, rebuilt
+	// fresh by renderToolboxForm on every openToolboxForm call, the
+	// same "independent widgets, state kept on Root, not the widgets
+	// themselves" shape resetSedForm already establishes.
+	toolboxFormLayout      *tview.Flex
+	toolboxFormTitleBar    *tview.TextView
+	toolboxForm            *tview.Form
+	toolboxFormToggles     *tview.List
+	toolboxFormPreview     *tview.TextView
+	toolboxFormCancelBtn   *tview.Button
+	toolboxFormRunBtn      *tview.Button
+	toolboxFormButtons     *tview.Flex
+	toolboxFormFields      []toolboxFormField
+	toolboxFormBuild       func(toolboxFormValues) []string
+	toolboxFormName        string
+	toolboxFormWidgets     map[string]tview.Primitive
+	toolboxFormToggleState map[string]bool
+
 	// toolboxRows is the currently open screen's own row list — one
 	// single category, for "jn" (openNetworkTools) or "jh"
 	// (openHardwareTools). One table/rendering implementation
@@ -2699,6 +2730,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// full-screen shape as Options, built once here and repopulated on
 	// every open.
 	r.newToolboxScreen()
+	r.newToolboxFormScreen()
 
 	// The Mounts screen (see mounts.go/openMounts) — a third full-screen
 	// catalog, same build-once/repopulate-on-open shape.
@@ -2916,6 +2948,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// just above gives.
 	r.AddPage(toolboxPage, r.toolboxLayout, true, false)
 	r.AddPage(toolboxInputPage, r.toolboxInput, false, false)
+	r.AddPage(toolboxFormPage, r.toolboxFormLayout, false, false)
 	// resize=true: the Mounts screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox screens' own
 	// comments above give.

@@ -534,7 +534,11 @@ var helpText = strings.TrimLeft(`
 
   Up / Down         Move between entries
   Enter             Run the selected tool — asks for one further
-                     argument first (a host, a URL, ...) if it needs one
+                     argument first (a host, a URL, ...) if it needs one,
+                     or, for curl, opens a small form with its own named
+                     fields (URL, Method, Header, Follow redirects,
+                     Output) and a live preview of the exact command
+                     line before Run actually starts it
   Escape            Close the Toolbox screen
 
   Every tool's output opens in its own tool window (see "Tool windows"

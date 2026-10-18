@@ -2133,8 +2133,8 @@
     },
     {
       "path": "internal/ui/root.go",
-      "size": 247643,
-      "sha256": "deff02ee7631aa51462eecb14d4977705065c8d20a9ae271da7d9324f5445b42"
+      "size": 249358,
+      "sha256": "429e25c44c72d9b96e129fca0d7af92e7b490015192cdf7e7682b329f164760e"
     },
     {
       "path": "internal/ui/root_test.go",
@@ -2333,13 +2333,13 @@
     },
     {
       "path": "internal/ui/toolbox.go",
-      "size": 20791,
-      "sha256": "724911eaf1ec4851fa1ba70d17c5b7a1940fe0b5baa86cb7d226d17486d2767f"
+      "size": 40131,
+      "sha256": "fb61d731e2067e4033ea1b299bf1aa0ad0cea1b2bb6d8a1beba909d7c1369e70"
     },
     {
       "path": "internal/ui/toolbox_test.go",
-      "size": 16463,
-      "sha256": "7c53be08386640ba0b0b6882d6e6dc4f3c09ccf941ebf7e5e83a73c59c3619dc"
+      "size": 25913,
+      "sha256": "454df32f1e0abfd7d0b486505e90982020b59f3d9061798358bb9ad7cb200073"
     },
     {
       "path": "internal/ui/toolwindow.go",
@@ -42459,7 +42459,7 @@
       "name": "Theme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2359
+      "line": 2390
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42467,14 +42467,14 @@
       "name": "App",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2360
+      "line": 2391
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "NewRoot",
       "kind": "function",
-      "line": 2362
+      "line": 2393
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42482,7 +42482,7 @@
       "name": "wirePanel",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3062
+      "line": 3095
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42490,14 +42490,14 @@
       "name": "captureMouseOnPanel",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3219
+      "line": 3252
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "activatesPaneOnClick",
       "kind": "function",
-      "line": 3258
+      "line": 3291
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42505,7 +42505,7 @@
       "name": "tabIndexOf",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3269
+      "line": 3302
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42513,7 +42513,7 @@
       "name": "SetVersionInfo",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3288
+      "line": 3321
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42521,7 +42521,7 @@
       "name": "showOverlay",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3306
+      "line": 3339
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42529,7 +42529,7 @@
       "name": "showOverlayWithRestore",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3313
+      "line": 3346
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42537,7 +42537,7 @@
       "name": "pushOverlay",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3333
+      "line": 3366
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42545,7 +42545,7 @@
       "name": "updateOverlayTitleBarColors",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3361
+      "line": 3394
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42553,7 +42553,7 @@
       "name": "pushOverlayReturningFocusTo",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3377
+      "line": 3410
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42561,7 +42561,7 @@
       "name": "hideOverlay",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3387
+      "line": 3420
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42569,7 +42569,7 @@
       "name": "closeAllOverlays",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3438
+      "line": 3471
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42577,14 +42577,14 @@
       "name": "captureOutsideClick",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3518
+      "line": 3551
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "primitiveContains",
       "kind": "function",
-      "line": 3593
+      "line": 3626
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42592,7 +42592,7 @@
       "name": "clampToPanel",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3602
+      "line": 3635
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42600,7 +42600,7 @@
       "name": "clampToScreen",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3641
+      "line": 3674
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42608,7 +42608,7 @@
       "name": "handleBeforeDraw",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3719
+      "line": 3752
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42616,7 +42616,7 @@
       "name": "RequestQuit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3744
+      "line": 3777
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42624,7 +42624,7 @@
       "name": "confirmQuitWhilePasting",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3801
+      "line": 3834
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42632,7 +42632,7 @@
       "name": "RequestCancel",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3846
+      "line": 3879
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42640,7 +42640,7 @@
       "name": "toggleMouseReporting",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3919
+      "line": 3952
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42648,7 +42648,7 @@
       "name": "setMouseEnabled",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3930
+      "line": 3963
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42656,7 +42656,7 @@
       "name": "confirmQuit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3947
+      "line": 3980
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42664,7 +42664,7 @@
       "name": "cancelQuit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3955
+      "line": 3988
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42672,7 +42672,7 @@
       "name": "advanceDrag",
       "kind": "method",
       "receiver": "*Root",
-      "line": 3970
+      "line": 4003
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42680,7 +42680,7 @@
       "name": "captureMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4007
+      "line": 4040
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42688,7 +42688,7 @@
       "name": "MenuShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4142
+      "line": 4175
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42696,7 +42696,7 @@
       "name": "menuAnchorForCurrentRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4163
+      "line": 4196
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42704,7 +42704,7 @@
       "name": "showMenu",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4177
+      "line": 4210
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42712,7 +42712,7 @@
       "name": "toggleHidden",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4192
+      "line": 4225
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42720,7 +42720,7 @@
       "name": "reloadCurrentTab",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4211
+      "line": 4244
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42728,7 +42728,7 @@
       "name": "setShowHidden",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4221
+      "line": 4254
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42736,7 +42736,7 @@
       "name": "toggleSizeBytes",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4235
+      "line": 4268
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42744,7 +42744,7 @@
       "name": "setSizeBytes",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4241
+      "line": 4274
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42752,7 +42752,7 @@
       "name": "toggleMtimeUnix",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4254
+      "line": 4287
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42760,7 +42760,7 @@
       "name": "setMtimeUnix",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4260
+      "line": 4293
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42768,7 +42768,7 @@
       "name": "toggleFileIcons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4275
+      "line": 4308
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42776,7 +42776,7 @@
       "name": "setFileIcons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4281
+      "line": 4314
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42784,84 +42784,84 @@
       "name": "setFilterPersistent",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4301
+      "line": 4334
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "listSize",
       "kind": "function",
-      "line": 4312
+      "line": 4345
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "newPlainTitleBar",
       "kind": "function",
-      "line": 4336
+      "line": 4369
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "reloadTitleBarButtonCol",
       "kind": "function",
-      "line": 4348
+      "line": 4381
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "renderReloadTitleBar",
       "kind": "function",
-      "line": 4368
+      "line": 4401
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "captureReloadTitleBarMouse",
       "kind": "function",
-      "line": 4389
+      "line": 4422
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "closeTitleBarButtonCol",
       "kind": "function",
-      "line": 4411
+      "line": 4444
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "renderCloseTitleBar",
       "kind": "function",
-      "line": 4423
+      "line": 4456
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "captureCloseTitleBarMouse",
       "kind": "function",
-      "line": 4439
+      "line": 4472
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "reloadCloseTitleBarButtonCol",
       "kind": "function",
-      "line": 4459
+      "line": 4492
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "renderReloadCloseTitleBar",
       "kind": "function",
-      "line": 4473
+      "line": 4506
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "captureReloadCloseTitleBarMouse",
       "kind": "function",
-      "line": 4485
+      "line": 4518
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42869,7 +42869,7 @@
       "name": "closeMenu",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4512
+      "line": 4545
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42877,7 +42877,7 @@
       "name": "openRename",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4536
+      "line": 4569
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42885,7 +42885,7 @@
       "name": "finishRename",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4559
+      "line": 4592
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42893,7 +42893,7 @@
       "name": "openPrompt",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4596
+      "line": 4629
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42901,7 +42901,7 @@
       "name": "finishPrompt",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4624
+      "line": 4657
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42909,7 +42909,7 @@
       "name": "openSelectPlus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4639
+      "line": 4672
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42917,7 +42917,7 @@
       "name": "openSelectMinus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4649
+      "line": 4682
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42925,7 +42925,7 @@
       "name": "clipboardTargets",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4661
+      "line": 4694
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42933,7 +42933,7 @@
       "name": "selectedOrCurrentPaths",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4679
+      "line": 4712
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42941,7 +42941,7 @@
       "name": "copyToClipboard",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4707
+      "line": 4740
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42949,7 +42949,7 @@
       "name": "cutToClipboard",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4720
+      "line": 4753
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42957,7 +42957,7 @@
       "name": "clipboardMatches",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4738
+      "line": 4771
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42965,7 +42965,7 @@
       "name": "setClipboard",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4763
+      "line": 4796
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42973,14 +42973,14 @@
       "name": "syncClipboardHighlight",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4785
+      "line": 4818
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "clipboardCounts",
       "kind": "function",
-      "line": 4801
+      "line": 4834
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42988,7 +42988,7 @@
       "name": "pasteClipboard",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4840
+      "line": 4873
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -42996,7 +42996,7 @@
       "name": "configuredFollowSymlinksDefault",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4858
+      "line": 4891
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43004,14 +43004,14 @@
       "name": "pasteClipboardFollowingSymlinks",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4899
+      "line": 4932
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/root.go",
       "name": "followSymlinksPasteConfirmText",
       "kind": "function",
-      "line": 4934
+      "line": 4967
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43019,7 +43019,7 @@
       "name": "pasteInto",
       "kind": "method",
       "receiver": "*Root",
-      "line": 4962
+      "line": 4995
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43027,7 +43027,7 @@
       "name": "openChown",
       "kind": "method",
       "receiver": "*Root",
-      "line": 5028
+      "line": 5061
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43035,7 +43035,7 @@
       "name": "applyChown",
       "kind": "method",
       "receiver": "*Root",
-      "line": 5061
+      "line": 5094
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43043,7 +43043,7 @@
       "name": "openChownTextFallback",
       "kind": "method",
       "receiver": "*Root",
-      "line": 5075
+      "line": 5108
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -44870,14 +44870,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 26
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 26
     },
@@ -49863,84 +49863,182 @@
       "file": "internal/ui/toolbox.go",
       "name": "toolboxPage",
       "kind": "const",
-      "line": 32
+      "line": 33
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxInputPage",
       "kind": "const",
-      "line": 33
+      "line": 34
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxFormPage",
+      "kind": "const",
+      "line": 35
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxColLabel",
       "kind": "const",
-      "line": 38
+      "line": 40
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxColHelp",
       "kind": "const",
-      "line": 39
+      "line": 41
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxLabelWidth",
       "kind": "const",
-      "line": 46
+      "line": 48
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxEntry",
       "kind": "type",
-      "line": 49
+      "line": 51
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxCategory",
       "kind": "type",
-      "line": 56
+      "line": 58
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxFixedEntry",
       "kind": "function",
-      "line": 63
+      "line": 65
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxArgEntry",
       "kind": "function",
-      "line": 84
+      "line": 86
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxFieldKind",
+      "kind": "type",
+      "line": 104
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxFieldText",
+      "kind": "const",
+      "line": 107
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxFieldChoice",
+      "kind": "const",
+      "line": 108
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxFieldToggle",
+      "kind": "const",
+      "line": 109
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxFormField",
+      "kind": "type",
+      "line": 118
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxFormValues",
+      "kind": "type",
+      "line": 133
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxFormEntry",
+      "kind": "function",
+      "line": 158
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxCurlFieldURL",
+      "kind": "const",
+      "line": 172
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxCurlFieldMethod",
+      "kind": "const",
+      "line": 173
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxCurlFieldHeader",
+      "kind": "const",
+      "line": 174
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxCurlFieldFollow",
+      "kind": "const",
+      "line": 175
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxCurlFieldOutput",
+      "kind": "const",
+      "line": 176
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxCurlEntry",
+      "kind": "function",
+      "line": 189
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxCategoriesNamed",
       "kind": "function",
-      "line": 103
+      "line": 234
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxCategories",
       "kind": "function",
-      "line": 128
+      "line": 259
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxDisplayRow",
       "kind": "type",
-      "line": 161
+      "line": 292
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49948,56 +50046,56 @@
       "name": "isEntry",
       "kind": "method",
       "receiver": "toolboxDisplayRow",
-      "line": 169
+      "line": 300
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxDisplayRowsFor",
       "kind": "function",
-      "line": 181
+      "line": 312
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxDisplayRows",
       "kind": "function",
-      "line": 200
+      "line": 331
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxEntryAtRowIn",
       "kind": "function",
-      "line": 207
+      "line": 338
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxEntryAtRow",
       "kind": "function",
-      "line": 215
+      "line": 346
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "firstSelectableToolboxRowIn",
       "kind": "function",
-      "line": 221
+      "line": 352
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "firstSelectableToolboxRow",
       "kind": "function",
-      "line": 232
+      "line": 363
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "toolboxHintEntries",
       "kind": "function",
-      "line": 239
+      "line": 370
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50005,7 +50103,7 @@
       "name": "newToolboxScreen",
       "kind": "method",
       "receiver": "*Root",
-      "line": 258
+      "line": 389
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50013,7 +50111,7 @@
       "name": "openToolboxScreen",
       "kind": "method",
       "receiver": "*Root",
-      "line": 309
+      "line": 440
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50021,7 +50119,7 @@
       "name": "openNetworkTools",
       "kind": "method",
       "receiver": "*Root",
-      "line": 317
+      "line": 448
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50029,7 +50127,7 @@
       "name": "openHardwareTools",
       "kind": "method",
       "receiver": "*Root",
-      "line": 323
+      "line": 454
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50037,7 +50135,7 @@
       "name": "closeToolbox",
       "kind": "method",
       "receiver": "*Root",
-      "line": 330
+      "line": 461
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50045,21 +50143,21 @@
       "name": "renderToolbox",
       "kind": "method",
       "receiver": "*Root",
-      "line": 344
+      "line": 475
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "isToolboxEntryRowIn",
       "kind": "function",
-      "line": 380
+      "line": 511
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox.go",
       "name": "isToolboxEntryRow",
       "kind": "function",
-      "line": 386
+      "line": 517
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50067,7 +50165,7 @@
       "name": "activateToolboxRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 391
+      "line": 522
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50075,7 +50173,7 @@
       "name": "captureToolboxKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 401
+      "line": 532
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50083,7 +50181,7 @@
       "name": "captureToolboxTableMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 412
+      "line": 543
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50091,7 +50189,77 @@
       "name": "toolboxPromptForArg",
       "kind": "method",
       "receiver": "*Root",
-      "line": 442
+      "line": 573
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "newToolboxFormScreen",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 600
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxFormRowCounts",
+      "kind": "function",
+      "line": 644
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "openToolboxForm",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 662
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "toolboxFormToggleItemText",
+      "kind": "function",
+      "line": 694
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "renderToolboxForm",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 704
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "renderToolboxFormToggleRow",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 855
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "buildToolboxFormValues",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 874
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "updateToolboxFormPreview",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 899
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox.go",
+      "name": "runToolboxForm",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 912
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50099,7 +50267,7 @@
       "name": "applyToolboxTheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 464
+      "line": 924
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -50219,6 +50387,55 @@
       "name": "TestActivateToolboxRowOnAHeaderRowDoesNothing",
       "kind": "function",
       "line": 420
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox_test.go",
+      "name": "toolboxTestFormEntry",
+      "kind": "function",
+      "line": 448
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox_test.go",
+      "name": "TestToolboxFormEntryOpensWithDefaultsAndPreview",
+      "kind": "function",
+      "line": 471
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox_test.go",
+      "name": "TestToolboxFormEntryRunUsesCurrentFieldValues",
+      "kind": "function",
+      "line": 495
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox_test.go",
+      "name": "TestToolboxFormEntryCancelRunsNothing",
+      "kind": "function",
+      "line": 529
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox_test.go",
+      "name": "TestTabAroundTheToolboxFormReachesEveryWidgetAndWrapsBack",
+      "kind": "function",
+      "line": 556
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox_test.go",
+      "name": "TestToolboxCurlEntryBuildOmitsEmptyOptionalFields",
+      "kind": "function",
+      "line": 634
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/toolbox_test.go",
+      "name": "TestToolboxCurlEntryBuildIncludesEveryFieldWhenSet",
+      "kind": "function",
+      "line": 669
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -52541,5 +52758,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "fae12a331b132a7e1dd6481e2c52ed7aa21a4da241a40ef6ae0e4830852aead1"
+  "merkle_root": "ed89f62aa6ce8b039ea36fd08749c064ec1f79f60c60a235eaf10f65e8c1cbb2"
 }
