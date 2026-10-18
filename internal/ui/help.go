@@ -389,7 +389,8 @@ var helpText = strings.TrimLeft(`
   k   Compute a directory's total size (du -hs), for whichever
       directory is currently selected — on demand, since it can take a
       real, visible amount of time on a large tree
-  M   Load an image's metadata (EXIF etc. — not implemented yet)
+  M   Load the selected file's own metadata: EXIF for images, plus PDF,
+      Office Open XML (docx/xlsx/pptx) and EPUB documents
 
   Click a path segment in the header to jump straight there; click the
   path itself to type a new one (Tab completes it, Enter goes); click

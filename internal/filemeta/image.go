@@ -1,8 +1,8 @@
 // Package filemeta extracts format-specific metadata for the Details
-// sidebar's "M" shortcut. Images today (EXIF, via
-// github.com/evanoberholster/imagemeta); PDF/Office Open XML/EPUB are
-// planned next — see feature_ideas.txt #26 for the decided approach for
-// each.
+// sidebar's "M" shortcut: EXIF for images (via
+// github.com/evanoberholster/imagemeta), plus PDF, Office Open XML
+// (docx/xlsx/pptx) and EPUB documents — see ForPath for how a path's
+// own extension picks the right one.
 package filemeta
 
 import (
