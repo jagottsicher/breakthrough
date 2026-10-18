@@ -740,9 +740,11 @@ terminal.
   and sorting resets to "most recently used first" the next time the
   dropdown opens. `Tags` has no mnemonic and isn't sortable, only
   filterable. An always-present "Filter:" field fills the rest of the
-  top row — click it or press `/` while the dropdown has focus, Escape
-  or Enter returns to the list without clearing what was typed (Escape
-  again closes the dropdown). Narrows the list live across User/Host-IP
+  top row — click it, press `/`, or Tab/Shift+Tab from the list (the
+  dropdown's only two real keyboard stops, so either direction reaches
+  it); Escape, Enter, or Tab/Shift+Tab again returns to the list
+  without clearing what was typed (Escape again closes the dropdown).
+  Narrows the list live across User/Host-IP
   (and Identifier/Tags once expanded) using the same AND/OR/NAND/NOR/NOT
   expression grammar as Log Holepunch's own keyword field; resets empty
   the next time the dropdown opens, same as sorting. Connecting dials
