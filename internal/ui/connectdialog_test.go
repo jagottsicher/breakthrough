@@ -480,3 +480,66 @@ func TestBlurringTheTagsFieldNormalizesItsOwnText(t *testing.T) {
 		t.Errorf("connectTagsField after blur = %q, want %q", got, want)
 	}
 }
+
+// TestBacktabFromHostAfterAFullTabRoundTripWrapsToTags pins a real,
+// user-reported bug: connectConnectBtn's own Tab handler used to call
+// r.app.SetFocus(r.connectHostField) directly, which gives Host real
+// keyboard focus but never tells connectForm's own internal
+// focusedElement counter (verified directly against tview's own
+// form.go, not guessed — Form.Focus/SetFinishedFunc are the only
+// things that ever update it) that this happened. A later Backtab on
+// Host then computed its target from that stale counter rather than
+// from Host's actual position, landing on some other field instead of
+// wrapping back to Tags. Tab all the way around the full loop, exactly
+// as a pure-keyboard user would, then Backtab once from Host — the
+// only way to reach the bug, which is why no test for an isolated
+// single Tab/Backtab pair ever caught it.
+func TestBacktabFromHostAfterAFullTabRoundTripWrapsToTags(t *testing.T) {
+	r := newTestRootForConnect(t)
+	noop := func(tview.Primitive) {}
+	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
+
+	for _, p := range []tview.Primitive{
+		r.connectHostField, r.connectPortField, r.connectUserField,
+		r.connectPasswordField, r.connectIdentifierField, r.connectTagsField,
+		r.connectCancelBtn, r.connectOKBtn, r.connectConnectBtn,
+	} {
+		tab(p)
+	}
+	if !r.connectHostField.HasFocus() {
+		t.Fatal("full Tab loop did not wrap back to Host")
+	}
+
+	r.connectHostField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+
+	if !r.connectTagsField.HasFocus() {
+		t.Error("Backtab from Host after a full loop did not wrap back to Tags")
+	}
+}
+
+// TestBacktabFromHostAfterAFullTabRoundTripInEditModeWrapsToTags mirrors
+// the above for connectDialogModeEdit's own shorter loop (OK instead of
+// OK+Connect).
+func TestBacktabFromHostAfterAFullTabRoundTripInEditModeWrapsToTags(t *testing.T) {
+	r := newTestRootForConnect(t)
+	r.openConnectDialog(remotefs.Connection{Host: "example.com"}, connectDialogModeEdit)
+	noop := func(tview.Primitive) {}
+	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
+
+	for _, p := range []tview.Primitive{
+		r.connectHostField, r.connectPortField, r.connectUserField,
+		r.connectPasswordField, r.connectIdentifierField, r.connectTagsField,
+		r.connectCancelBtn, r.connectOKBtn,
+	} {
+		tab(p)
+	}
+	if !r.connectHostField.HasFocus() {
+		t.Fatal("full Tab loop did not wrap back to Host")
+	}
+
+	r.connectHostField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+
+	if !r.connectTagsField.HasFocus() {
+		t.Error("Backtab from Host after a full loop did not wrap back to Tags")
+	}
+}
