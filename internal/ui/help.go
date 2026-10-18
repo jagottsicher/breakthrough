@@ -1116,6 +1116,46 @@ var helpText = strings.TrimLeft(`
   ~/.config/breakthrough/rename-presets/ (or $XDG_CONFIG_HOME) — easy
   to copy to another machine or keep in version control.
 
+[::b]Sed Replace ("S", or context menu's "sed")[::-]
+
+  Runs a real sed(1) substitution against the current selection, or the
+  current row if nothing is marked — never reimplemented (see
+  internal/replace). Not available in an archive view or on a remote
+  panel.
+
+  Three independent widgets stack top to bottom: the Find/Replace/
+  Advanced-script fields, the five flag toggles below them, and
+  Preview/Cancel at the bottom. Tab/Shift+Tab cycle only within the
+  fields themselves (Find → Replace with → Advanced script, wrapping
+  back); reaching the flags or Preview/Cancel is a click, the same way
+  moving from the fields to a different widget entirely always is in
+  this app. Escape closes from any of the three, typed text and all.
+
+  Enter / Space       In the fields: commit and move to the next one.
+                      On a flag: toggle it. On Preview/Cancel: run it
+
+  Typing anything into "Advanced sed script" overrides Find/Replace/
+  Regex/Case-insensitive/Replace all matches entirely — Extended regex
+  (-E) still applies even then, since it's a real sed invocation flag,
+  not just a guided-mode escaping choice. The other four flags: Regex
+  (Find is a pattern, not literal text), Case-insensitive, Replace all
+  matches per line, and Keep a .bak backup before overwriting — each
+  remembered as its own default for next time, the same self-adapting
+  behavior Rsync's own flags already have.
+
+  "Preview" runs the substitution read-only against every target, in
+  the background, with a live "Checking N of M" status — nothing is
+  written yet. The result lists Name/Line/Excerpt per changed line; a
+  script that shifts lines around (inserts or deletes a whole line)
+  shows one summary row instead of a misleading line-by-line diff,
+  since position no longer lines up 1:1 past that point; a target that
+  couldn't be processed at all shows "skipped: <reason>" in its place.
+  From here, "Apply" asks first (the same confirmation style Remove/
+  Empty Trash already use) before writing anything back — "Cancel"
+  discards the whole attempt and closes outright, "Back" (or Escape)
+  returns to the form with Find/Replace/flags still exactly as typed,
+  to fix a typo without starting over.
+
 [::b]Compare Faultline ("C")[::-]
 
   Also reachable as "jC" (see the "j" chord family above) — the exact
