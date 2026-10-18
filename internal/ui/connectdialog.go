@@ -320,7 +320,12 @@ func (r *Root) setConnectButtonsMode(mode connectDialogMode) {
 		r.connectOKBtn.SetExitFunc(func(key tcell.Key) {
 			switch key {
 			case tcell.KeyTab:
-				r.app.SetFocus(r.connectHostField)
+				// r.connectForm.SetFocus(0), not a direct
+				// r.app.SetFocus(r.connectHostField) — see
+				// connectConnectBtn's own identical fix below for the
+				// real, user-reported bug this works around.
+				r.connectForm.SetFocus(0)
+				r.app.SetFocus(r.connectForm)
 			case tcell.KeyBacktab:
 				r.app.SetFocus(r.connectCancelBtn)
 			case tcell.KeyEscape:
@@ -344,7 +349,24 @@ func (r *Root) setConnectButtonsMode(mode connectDialogMode) {
 	r.connectConnectBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.connectHostField)
+			// A real, user-reported bug: r.app.SetFocus(r.connectHostField)
+			// here used to give the Host field real keyboard focus
+			// correctly, but silently left connectForm's own internal
+			// focusedElement counter stale at whatever field was last
+			// focused *through the form's own native Tab/Backtab* (its
+			// own SetFinishedFunc machinery, verified directly against
+			// tview's own form.go — Form.Focus never learns about a
+			// focus change made by calling Application.SetFocus
+			// directly on one of its items from outside). The next
+			// Backtab the user pressed, from Host, then computed its
+			// target from that stale index rather than from Host's own
+			// position — landing on some other field entirely instead
+			// of wrapping back to Tags. Form.SetFocus(index) (a real
+			// tview.Form API, not guessed) updates that same counter
+			// unconditionally, so delegating through the form itself —
+			// rather than naming the field directly — keeps it correct.
+			r.connectForm.SetFocus(0)
+			r.app.SetFocus(r.connectForm)
 		case tcell.KeyBacktab:
 			r.app.SetFocus(r.connectOKBtn)
 		case tcell.KeyEscape:

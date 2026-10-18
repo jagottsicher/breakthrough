@@ -501,7 +501,17 @@ func (r *Root) newSSHShellButtons() *tview.Flex {
 	r.sshShellOpenBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sshShellHostField)
+			// Form.SetFocus(0), not a direct
+			// r.app.SetFocus(r.sshShellHostField) — the identical real,
+			// user-reported bug connectdialog.go's own
+			// connectConnectBtn.SetExitFunc found and fixed first (see
+			// its own doc comment for the full tview.Form internals):
+			// naming the field directly here left sshShellForm's own
+			// focusedElement counter stale, so the next Backtab from
+			// Host landed on the wrong field instead of wrapping back
+			// to X11 forwarding.
+			r.sshShellForm.SetFocus(0)
+			r.app.SetFocus(r.sshShellForm)
 		case tcell.KeyBacktab:
 			r.app.SetFocus(r.sshShellCancelBtn)
 		case tcell.KeyEscape:
