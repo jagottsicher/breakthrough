@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
+
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
@@ -465,5 +467,45 @@ func TestRunSedPreviewNeverPersistsOnABuildScriptError(t *testing.T) {
 	}
 	if data, err := os.ReadFile(configPath); err == nil && strings.Contains(string(data), "sed_backup") {
 		t.Errorf("persisted config should not mention sed_backup at all; got:\n%s", data)
+	}
+}
+
+// TestTabFromTheAdvancedFieldReachesTheFlagsAndActions pins a real,
+// previously-unfixed gap (feature_upgrades.txt Befund 7): sedForm,
+// sedFlagsList, and sedActions are three independent widgets, and Tab
+// off the form's own last field used to just wrap back to Find
+// instead of ever reaching the flags or Preview/Cancel — reachable
+// only by mouse. Tab the whole way around the loop and back.
+func TestTabFromTheAdvancedFieldReachesTheFlagsAndActions(t *testing.T) {
+	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
+	r.openSedReplace()
+	noop := func(tview.Primitive) {}
+	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
+
+	tab(r.sedFindField)
+	tab(r.sedReplaceField)
+	tab(r.sedAdvancedField)
+	if !r.sedFlagsList.HasFocus() {
+		t.Fatal("Tab from Advanced script did not reach sedFlagsList")
+	}
+
+	tab(r.sedFlagsList)
+	if !r.sedActions.HasFocus() {
+		t.Fatal("Tab from sedFlagsList did not reach sedActions")
+	}
+
+	tab(r.sedActions)
+	if !r.sedFindField.HasFocus() {
+		t.Fatal("Tab from sedActions did not wrap back to Find")
+	}
+
+	// Backtab from Find wraps within the form itself, to its own last
+	// field (Advanced script) — the same in-form wrap
+	// connectdialog.go's own Host/Tags pair already establishes, not
+	// a jump out to sedActions (which lives in a separate widget
+	// entirely).
+	r.sedFindField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	if !r.sedAdvancedField.HasFocus() {
+		t.Error("Backtab from Find did not wrap back to Advanced script")
 	}
 }

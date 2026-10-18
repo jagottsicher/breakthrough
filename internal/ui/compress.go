@@ -431,6 +431,22 @@ func (r *Root) renderCompressForm() {
 		r.compressOutputName = v
 		r.renderCompressPreview()
 	})
+	// Tab on the form's own last field would otherwise just wrap back
+	// to Format instead of ever reaching compressCancelBtn/
+	// compressApplyBtn — the identical, real, previously-unfixed gap
+	// newConnectForm's own doc comment already found and fixed for the
+	// Connect dialog: without this, the whole button row was reachable
+	// only by mouse (feature_upgrades.txt Befund 8's own "compress.go/
+	// duplicate.go" follow-up note). Set fresh here, in
+	// renderCompressForm, rather than once in newCompressForm: this
+	// field is itself rebuilt fresh on every open.
+	nameField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab {
+			r.app.SetFocus(r.compressCancelBtn)
+			return nil
+		}
+		return event
+	})
 	r.compressOutputNameField = nameField
 	r.compressForm.AddFormItem(nameField)
 }
@@ -473,13 +489,37 @@ func (r *Root) newCompressButtons() *tview.Flex {
 	r.compressCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
 	r.compressApplyBtn.SetInputCapture(spaceAlsoActivates(r.runCompress))
 
-	exitFunc := func(key tcell.Key) {
-		if key == tcell.KeyEscape {
+	// Tab/Backtab cycle between the two buttons and back into the form
+	// (nameField's own forward Tab is the other half of this — see
+	// renderCompressForm's own doc comment); Escape always cancels.
+	// Wrapping forward goes through compressForm.SetFocus(0) then
+	// r.app.SetFocus(r.compressForm), not a direct
+	// r.app.SetFocus(r.compressFormatField) — naming the field
+	// directly would leave compressForm's own internal focusedElement
+	// counter stale, the same real bug connectdialog.go's own
+	// connectConnectBtn.SetExitFunc found and fixed first (see its own
+	// doc comment for the full tview.Form internals).
+	r.compressCancelBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.compressApplyBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.compressOutputNameField)
+		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
-	}
-	r.compressCancelBtn.SetExitFunc(exitFunc)
-	r.compressApplyBtn.SetExitFunc(exitFunc)
+	})
+	r.compressApplyBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.compressForm.SetFocus(0)
+			r.app.SetFocus(r.compressForm)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.compressCancelBtn)
+		case tcell.KeyEscape:
+			r.hideOverlay()
+		}
+	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.compressCancelBtn, 0, 1, false).

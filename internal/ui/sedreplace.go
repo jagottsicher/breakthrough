@@ -128,6 +128,26 @@ func (r *Root) resetSedForm() {
 	r.sedForm.AddFormItem(r.sedReplaceField)
 
 	r.sedAdvancedField = tview.NewInputField().SetLabel("Advanced sed script (overrides Find/Replace above)")
+	// Tab/Enter on the form's own last field would otherwise just wrap
+	// back to Find instead of ever reaching sedFlagsList — the same
+	// "verified directly against tview's own Form.Focus, not guessed"
+	// gap newConnectForm's own doc comment already found and fixed for
+	// the Connect dialog (and rsyncExtraArgsField for Rsync): Form.Focus
+	// unconditionally overwrites any SetDoneFunc with its own
+	// SetFinishedFunc whenever the form gains focus, so SetInputCapture
+	// — which runs first — is the only place left to intercept it. Set
+	// fresh here, in resetSedForm, rather than once in newSedForm: this
+	// field is itself rebuilt fresh on every open (see resetSedForm's
+	// own doc comment), unlike connectTagsField/rsyncExtraArgsField,
+	// which are each built once and kept.
+	r.sedAdvancedField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyTab, tcell.KeyEnter:
+			r.app.SetFocus(r.sedFlagsList)
+			return nil
+		}
+		return event
+	})
 	r.sedForm.AddFormItem(r.sedAdvancedField)
 
 	// Seeded from settings rather than these fixed literals —
@@ -197,6 +217,27 @@ func (r *Root) newSedFlagsList() *tview.List {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetHighlightFullLine(true)
 	l.SetDoneFunc(r.hideOverlay) // Escape
+	// Tab/Backtab continue the chain sedAdvancedField's own
+	// SetInputCapture starts and sedActions' own SetInputCapture picks
+	// back up below — a List has no SetExitFunc the way Button does,
+	// so this is the only place to intercept them (the identical shape
+	// rsyncFlagsList's own doc comment already establishes for Rsync);
+	// Escape itself is deliberately left alone here (falls through via
+	// the final "return event"), reaching the List's own native
+	// handling and, through it, SetDoneFunc above. Previously missing
+	// entirely — this whole dropdown was keyboard-unreachable past the
+	// form's own three fields (feature_upgrades.txt Befund 7).
+	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.sedActions)
+			return nil
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.sedAdvancedField)
+			return nil
+		}
+		return event
+	})
 	return l
 }
 
@@ -212,6 +253,28 @@ func (r *Root) newSedActions() *tview.List {
 	l.AddItem("Preview", "", 0, r.runSedPreview)
 	l.AddItem("Cancel", "", 0, r.hideOverlay)
 	l.SetDoneFunc(r.hideOverlay) // Escape
+	// Tab wraps back to the form's own first field — through
+	// sedForm.SetFocus(0) then r.app.SetFocus(r.sedForm), not a direct
+	// r.app.SetFocus(r.sedFindField): naming the field directly here
+	// would leave sedForm's own internal focusedElement counter stale,
+	// the identical real, user-reported bug connectdialog.go's own
+	// connectConnectBtn.SetExitFunc found and fixed first (see its own
+	// doc comment for the full tview.Form internals) — the next
+	// Backtab from Find would then land on the wrong field instead of
+	// wrapping back to Advanced script. Backtab continues the chain
+	// sedFlagsList's own SetInputCapture starts.
+	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyTab:
+			r.sedForm.SetFocus(0)
+			r.app.SetFocus(r.sedForm)
+			return nil
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.sedFlagsList)
+			return nil
+		}
+		return event
+	})
 	return l
 }
 
