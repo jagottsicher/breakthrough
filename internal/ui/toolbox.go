@@ -301,6 +301,55 @@ func toolboxNmapEntry() toolboxEntry {
 	return toolboxFormEntry("Nmap scan", "Scan a host, range, or CIDR for open ports", "nmap", fields, build)
 }
 
+// toolboxDigField* are dig's own toolboxFormField names — stable keys
+// toolboxDigEntry's own build func reads back by name (see
+// toolboxFormField's own doc comment on why never by position).
+const (
+	toolboxDigFieldDomain = "domain"
+	toolboxDigFieldType   = "type"
+	toolboxDigFieldServer = "server"
+)
+
+// toolboxDigRecordTypeChoices is dig's own Record type choices —
+// "Default" meaning "no type argument at all", i.e. dig's own default
+// (an A record), the same "Default means no flag, nothing pinned" rule
+// toolboxNmapEntry's own Scan type/Timing template already establish.
+var toolboxDigRecordTypeChoices = []string{"Default", "A", "AAAA", "MX", "TXT", "NS", "CNAME", "SOA", "ANY"}
+
+// toolboxDigEntry is dig's own catalog entry — Phase 3 sub-step (d):
+// Domain (required), Record type (a choice among dig's own real record
+// types, see toolboxDigRecordTypeChoices), and Server (optional text,
+// prefixed with "@" and placed first, dig's own "@server name type"
+// order). Deliberately only these — the same curl/nmap precedent's own
+// explicit scope.
+func toolboxDigEntry() toolboxEntry {
+	fields := []toolboxFormField{
+		{name: toolboxDigFieldDomain, label: "Domain", kind: toolboxFieldText,
+			placeholder: "example.com"},
+		{name: toolboxDigFieldType, label: "Record type", kind: toolboxFieldChoice,
+			choices: toolboxDigRecordTypeChoices, defaultText: "Default"},
+		{name: toolboxDigFieldServer, label: "Server", kind: toolboxFieldText,
+			placeholder: "optional, e.g. 8.8.8.8 or 1.1.1.1"},
+	}
+	build := func(v toolboxFormValues) []string {
+		var args []string
+		// @server first, dig's own real "@server name type" order —
+		// omitted entirely while empty, the same "no blank/pinned
+		// tokens" rule every other field here already follows.
+		if server := v.Text[toolboxDigFieldServer]; server != "" {
+			args = append(args, "@"+server)
+		}
+		if domain := v.Text[toolboxDigFieldDomain]; domain != "" {
+			args = append(args, domain)
+		}
+		if recordType := v.Text[toolboxDigFieldType]; recordType != "" && recordType != "Default" {
+			args = append(args, recordType)
+		}
+		return args
+	}
+	return toolboxFormEntry("dig", "Resolve a hostname with full DNS record detail", "dig", fields, build)
+}
+
 // toolboxCategoriesNamed returns the catalog filtered down to the
 // categories in names, preserving toolboxCategories' own order — used by
 // the "jn"/"jh" screens (openNetworkTools/openHardwareTools) to show only
@@ -343,7 +392,7 @@ func toolboxCategories() []toolboxCategory {
 			toolboxArgEntry("getent", `Query a system database (e.g. "hosts example.com")`, `getent (database key, e.g. "hosts example.com"):`, "", "getent"),
 			toolboxArgEntry("wget", "Download a URL into the current directory", "wget URL:", "", "wget"),
 			toolboxArgEntry("nslookup", "Resolve a hostname the old-school way", "nslookup host:", "", "nslookup"),
-			toolboxArgEntry("dig", "Resolve a hostname with full DNS record detail", "dig domain:", "", "dig"),
+			toolboxDigEntry(),
 			toolboxArgEntry("netcat (nc)", `Test a TCP/UDP connection, or listen on a port`, `nc arguments (e.g. "-zv host 22"):`, "", "nc"),
 			toolboxCurlEntry(),
 			toolboxArgEntry("Logviewer (tail -f)", "Follow a growing log file live", "Log file to follow:", "/var/log/syslog", "tail", "-f"),
