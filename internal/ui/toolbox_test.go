@@ -718,6 +718,10 @@ func TestToolboxNmapFlagForParsesTheChoiceLabelsOwnSuffix(t *testing.T) {
 // TestToolboxNmapEntryBuildOmitsEmptyOptionalFields pins nmap's own
 // build func via a real open: Default scan type/timing and an empty
 // Ports field must produce no flags at all beyond the target itself.
+// Checked through the preview only, not a real Run — unlike curl, nmap
+// isn't guaranteed to be installed on every CI runner (see
+// TestToolboxCurlEntryBuildOmitsEmptyOptionalFields's own real-curl
+// execution, which stays safe since curl is universally preinstalled).
 func TestToolboxNmapEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
@@ -734,16 +738,6 @@ func TestToolboxNmapEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
 
 	if got := r.toolboxFormPreview.GetText(true); got != "nmap 192.168.1.0/24" {
 		t.Errorf("preview = %q, want exactly %q (Default scan/timing, empty Ports)", got, "nmap 192.168.1.0/24")
-	}
-
-	r.runToolboxForm()
-	if len(r.toolWindows) != 1 {
-		t.Fatalf("len(toolWindows) = %d, want 1", len(r.toolWindows))
-	}
-	tw := r.toolWindows[0]
-	defer tw.close()
-	if got := tw.titleBar.GetText(true); !strings.Contains(got, "nmap 192.168.1.0/24") {
-		t.Errorf("tool window title = %q, want it to mention %q", got, "nmap 192.168.1.0/24")
 	}
 }
 
