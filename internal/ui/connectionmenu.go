@@ -656,6 +656,10 @@ func (r *Root) renderConnectionMenu() {
 	}
 
 	newRow := row
+	// Remembered for openNewConnectionChooser's own positioning below
+	// — it opens well after this render call returns, so it can't just
+	// read the local newRow here.
+	r.connectionMenuNewRow = newRow
 	// Back to one short cell in User ("+  New") — the split across
 	// User/Host-IP ("+" / "New connection") was tried and reverted
 	// (the user's own explicit report: "sieht Mist aus"). Still short
@@ -990,9 +994,23 @@ func (r *Root) openNewConnectionChooser() {
 	})
 	r.picker.SetDoneFunc(func() { r.hideOverlay() })
 
-	right, top := r.connectionMenuAnchor()
+	// Anchored at the "+ New" row's own screen position, per the
+	// user's own explicit request — the column right after User (@'s
+	// own column; connectionMenuColAt exists at the same index in both
+	// collapsed and expanded mode, so no expanded-mode branch is
+	// needed here), the row connectionMenuNewRow itself. GetInnerRect
+	// already accounts for the table's own left/right border padding
+	// (SetBorderPadding(0, 0, 1, 1)); rowOffset is never anything but 0
+	// here in practice, since positionConnectionMenu always sizes the
+	// table's own height to fit every row at once (see
+	// connectionMenuSize), so row index already is screen row offset.
+	tableX, tableY, _, _ := r.connectionMenuTable.GetInnerRect()
+	columnWidths := connectionMenuColumnWidths(r.connectionMenuTable)
+	startX := tableX + connectionMenuColumnStartX(columnWidths, connectionMenuColAt)
+	startY := tableY + r.connectionMenuNewRow
+
 	width, height := listSize(r.picker)
-	x, y, width, height := r.clampToPanel(right-width, top, width, height)
+	x, y, width, height := r.clampToPanel(startX, startY, width, height)
 	r.picker.SetRect(x, y, width, height)
 	r.picker.SetCurrentItem(0)
 
@@ -1210,6 +1228,26 @@ func (r *Root) connectionMenuSize() (width, height int) {
 		return screenWidth, height
 	}
 
+	columnWidths := connectionMenuColumnWidths(table)
+	for i, w := range columnWidths {
+		width += w
+		if i > 0 {
+			width++ // the single column tview leaves between cells
+		}
+	}
+
+	// +2 for the table's own left/right border padding.
+	width += 2
+	return width, height
+}
+
+// connectionMenuColumnWidths measures table's own widest cell per
+// column, collapsed-mode columns only (connectionMenuRemoveColumn(
+// false)+1 of them) — split out of connectionMenuSize so
+// openNewConnectionChooser's own positioning below can reuse the exact
+// same measurement rather than a second, possibly-drifting copy of it.
+func connectionMenuColumnWidths(table *tview.Table) []int {
+	rows := table.GetRowCount()
 	columnWidths := make([]int, connectionMenuRemoveColumn(false)+1)
 	for row := 0; row < rows; row++ {
 		for column := range columnWidths {
@@ -1222,16 +1260,28 @@ func (r *Root) connectionMenuSize() (width, height int) {
 			}
 		}
 	}
-	for i, w := range columnWidths {
-		width += w
-		if i > 0 {
-			width++ // the single column tview leaves between cells
-		}
-	}
+	return columnWidths
+}
 
-	// +2 for the table's own left/right border padding.
-	width += 2
-	return width, height
+// connectionMenuColumnStartX sums columnWidths' own per-column widths
+// and inter-column gaps up to (not including) column — the same
+// "widest cell plus the single-column gap tview leaves between cells"
+// arithmetic connectionMenuSize already uses for the table's own total
+// width, just stopped partway through to answer "where does this
+// column's own cell actually start" instead of "how wide is the whole
+// table."
+func connectionMenuColumnStartX(columnWidths []int, column int) int {
+	x := 0
+	for i := 0; i < column && i < len(columnWidths); i++ {
+		if i > 0 {
+			x++ // the single column tview leaves between cells
+		}
+		x += columnWidths[i]
+	}
+	if column > 0 {
+		x++ // the gap between the last counted column and this one
+	}
+	return x
 }
 
 // connectionMenuIdentifierSuffix appends conn's own Identifier (see

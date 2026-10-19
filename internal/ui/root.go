@@ -1248,6 +1248,11 @@ type Root struct {
 	// are merged into this same table rather than a dropdown of their
 	// own).
 	connectionMenuCloudMountRows map[int]rclone.MountEntry
+	// connectionMenuNewRow is the "+ New" row's own index within
+	// connectionMenuTable, set fresh by every renderConnectionMenu —
+	// read back by openNewConnectionChooser to anchor the chooser at
+	// that row's own screen position (see its own doc comment).
+	connectionMenuNewRow int
 	// cloudMountPending maps a MountEntry's own Target to a transient
 	// "mounting…"/"unmounting…" label while toggleCloudMount's own
 	// background Mount/Unmount call is still running — see
