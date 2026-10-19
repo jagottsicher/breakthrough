@@ -125,6 +125,15 @@ type toolboxFormField struct {
 	defaultText string // text and choice
 	choices     []string
 	defaultBool bool // toggle only
+
+	// required marks a text field whose value Run refuses to proceed
+	// without (see runToolboxForm) — every toolboxFormEntry so far has
+	// exactly one (curl's URL, nmap's Target, dig's Domain, wget's
+	// URL), the one piece every one of these commands is meaningless
+	// without. Never meaningful on a choice field (always has a
+	// current option, even if that option is literally "Default") or a
+	// toggle (always has a value, true or false).
+	required bool
 }
 
 // toolboxFormValues is what a toolboxFormEntry's own build func reads:
@@ -189,7 +198,7 @@ const (
 func toolboxCurlEntry() toolboxEntry {
 	fields := []toolboxFormField{
 		{name: toolboxCurlFieldURL, label: "URL", kind: toolboxFieldText,
-			placeholder: "https://example.com"},
+			placeholder: "https://example.com", required: true},
 		{name: toolboxCurlFieldMethod, label: "Method", kind: toolboxFieldChoice,
 			choices: []string{"GET", "POST", "PUT", "DELETE", "HEAD"}, defaultText: "GET"},
 		{name: toolboxCurlFieldHeader, label: "Header", kind: toolboxFieldText,
@@ -271,7 +280,7 @@ func toolboxNmapFlagFor(choice string) string {
 func toolboxNmapEntry() toolboxEntry {
 	fields := []toolboxFormField{
 		{name: toolboxNmapFieldTarget, label: "Target", kind: toolboxFieldText,
-			placeholder: "a host, range, or CIDR"},
+			placeholder: "a host, range, or CIDR", required: true},
 		{name: toolboxNmapFieldScan, label: "Scan type", kind: toolboxFieldChoice,
 			choices: toolboxNmapScanChoices, defaultText: "Default"},
 		{name: toolboxNmapFieldPorts, label: "Ports", kind: toolboxFieldText,
@@ -325,7 +334,7 @@ var toolboxDigRecordTypeChoices = []string{"Default", "A", "AAAA", "MX", "TXT", 
 func toolboxDigEntry() toolboxEntry {
 	fields := []toolboxFormField{
 		{name: toolboxDigFieldDomain, label: "Domain", kind: toolboxFieldText,
-			placeholder: "example.com"},
+			placeholder: "example.com", required: true},
 		{name: toolboxDigFieldType, label: "Record type", kind: toolboxFieldChoice,
 			choices: toolboxDigRecordTypeChoices, defaultText: "Default"},
 		{name: toolboxDigFieldServer, label: "Server", kind: toolboxFieldText,
@@ -368,7 +377,7 @@ const (
 func toolboxWgetEntry() toolboxEntry {
 	fields := []toolboxFormField{
 		{name: toolboxWgetFieldURL, label: "URL", kind: toolboxFieldText,
-			placeholder: "https://example.com/file.tar.gz"},
+			placeholder: "https://example.com/file.tar.gz", required: true},
 		{name: toolboxWgetFieldOutput, label: "Output path", kind: toolboxFieldText,
 			placeholder: "optional, default is the URL's own filename"},
 		{name: toolboxWgetFieldResume, label: "Resume a partial download (-c)", kind: toolboxFieldToggle},
@@ -874,7 +883,16 @@ func (r *Root) renderToolboxForm() {
 	r.toolboxFormWidgets = make(map[string]tview.Primitive, len(r.toolboxFormFields))
 	r.toolboxFormToggleState = make(map[string]bool)
 
-	renderCloseTitleBar(r.toolboxFormTitleBar, " "+r.toolboxFormName+" ", r.lastScreenWidth)
+	// A plain title bar, no close glyph — the same style every other
+	// modal dialog overlay in this app uses (Sed Replace, Connect,
+	// Compress, Duplicate: all newPlainTitleBar, Escape-only). A close
+	// glyph needs a real column within THIS bar's own width to land on;
+	// renderCloseTitleBar's own column math takes a window width
+	// argument meant for toolWindow's own screen-relative placement
+	// (see its own doc comment) — passing r.lastScreenWidth here placed
+	// the glyph far outside this overlay's own much narrower rect,
+	// invisible and unclickable.
+	r.toolboxFormTitleBar.SetText(" " + r.toolboxFormName + " ")
 
 	var toggleFields []toolboxFormField
 	var lastField tview.Primitive
@@ -1077,13 +1095,37 @@ func (r *Root) updateToolboxFormPreview() {
 // openToolCommand, the same real-process, never-reimplemented path
 // every other Toolbox entry already uses.
 func (r *Root) runToolboxForm() {
-	args := r.toolboxFormBuild(r.buildToolboxFormValues())
+	values := r.buildToolboxFormValues()
+	if !r.toolboxFormRequiredFieldsFilled(values) {
+		// Closes without running anything — the same "nothing typed
+		// means nothing happens" contract toolboxPromptForArg's own
+		// SetDoneFunc already establishes for toolboxArgEntry (see
+		// TestToolboxArgEntryEmptySubmissionRunsNothing), which this
+		// form-based path had silently lost: Run used to proceed with
+		// a blank required field, actually starting e.g. a bare "curl"
+		// with no URL at all.
+		r.hideOverlay()
+		return
+	}
+	args := r.toolboxFormBuild(values)
 	title := r.toolboxFormName
 	if len(args) > 0 {
 		title = r.toolboxFormName + " " + strings.Join(args, " ")
 	}
 	r.hideOverlay()
 	r.openToolCommand(title, r.toolboxFormName, args)
+}
+
+// toolboxFormRequiredFieldsFilled reports whether every field marked
+// required (see toolboxFormField's own doc comment) actually has a
+// non-empty value in values — runToolboxForm's own guard.
+func (r *Root) toolboxFormRequiredFieldsFilled(values toolboxFormValues) bool {
+	for _, field := range r.toolboxFormFields {
+		if field.required && values.Text[field.name] == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // applyToolboxTheme themes the Toolbox screen — split out of applyTheme

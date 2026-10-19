@@ -447,7 +447,7 @@ func TestActivateToolboxRowOnAHeaderRowDoesNothing(t *testing.T) {
 // every real build func).
 func toolboxTestFormEntry() toolboxEntry {
 	fields := []toolboxFormField{
-		{name: "a", label: "A", kind: toolboxFieldText, defaultText: "x"},
+		{name: "a", label: "A", kind: toolboxFieldText, defaultText: "x", required: true},
 		{name: "b", label: "B toggle", kind: toolboxFieldToggle},
 	}
 	build := func(v toolboxFormValues) []string {
@@ -542,6 +542,35 @@ func TestToolboxFormEntryCancelRunsNothing(t *testing.T) {
 	}
 	if r.activePage == toolboxFormPage {
 		t.Error("Cancel should have closed the form overlay")
+	}
+}
+
+// TestToolboxFormEntryRunWithEmptyRequiredFieldRunsNothing pins a real,
+// previously-unguarded gap: Run used to proceed even with a required
+// field left blank, actually starting e.g. a bare "curl" with no URL at
+// all — the same "nothing typed means nothing happens" contract
+// TestToolboxArgEntryEmptySubmissionRunsNothing already pins for
+// toolboxArgEntry's own prompt, now restored for toolboxFormEntry too
+// (see runToolboxForm's own guard, toolboxFormRequiredFieldsFilled).
+func TestToolboxFormEntryRunWithEmptyRequiredFieldRunsNothing(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	entry := toolboxTestFormEntry()
+	entry.run(r)
+
+	fieldA := r.toolboxFormWidgets["a"].(*tview.InputField)
+	fieldA.SetText("") // required, started out as "x"
+
+	r.runToolboxForm()
+
+	if len(r.toolWindows) != 0 {
+		t.Errorf("len(toolWindows) = %d, want 0 — an empty required field should run nothing", len(r.toolWindows))
+	}
+	if r.activePage == toolboxFormPage {
+		t.Error("Run should still have closed the form overlay, even though it ran nothing")
 	}
 }
 
