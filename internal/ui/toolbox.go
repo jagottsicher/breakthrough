@@ -225,6 +225,82 @@ func toolboxCurlEntry() toolboxEntry {
 	return toolboxFormEntry("curl", "Fetch a URL and show the response", "curl", fields, build)
 }
 
+// toolboxNmapField* are nmap's own toolboxFormField names — stable keys
+// toolboxNmapEntry's own build func reads back by name (see
+// toolboxFormField's own doc comment on why never by position).
+const (
+	toolboxNmapFieldTarget = "target"
+	toolboxNmapFieldScan   = "scan"
+	toolboxNmapFieldPorts  = "ports"
+	toolboxNmapFieldTiming = "timing"
+)
+
+// toolboxNmapScanChoices/toolboxNmapTimingChoices are nmap's own Scan
+// type/Timing template choices, "Default" meaning "no flag at all" in
+// both — nmap's own default behavior (a plain SYN or Connect scan,
+// whichever the running user's privileges allow; Normal timing) applies
+// exactly as if this form didn't exist, rather than this entry silently
+// pinning one of nmap's own defaults as if it were a deliberate choice.
+var (
+	toolboxNmapScanChoices   = []string{"Default", "SYN scan (-sS)", "Connect scan (-sT)", "UDP scan (-sU)", "Version detection (-sV)", "Ping scan, no port scan (-sn)"}
+	toolboxNmapTimingChoices = []string{"Default", "Paranoid (-T0)", "Sneaky (-T1)", "Polite (-T2)", "Normal (-T3)", "Aggressive (-T4)", "Insane (-T5)"}
+)
+
+// toolboxNmapFlagFor pulls the real flag (e.g. "-sS", "-T4") out of a
+// toolboxNmapScanChoices/toolboxNmapTimingChoices label — the label's
+// own "(-flag)" suffix, parsed rather than kept as a second, separately
+// maintained list that could drift out of sync with the choices shown.
+// "Default" (or anything without the suffix) returns "", meaning no
+// flag at all — see toolboxNmapScanChoices' own doc comment.
+func toolboxNmapFlagFor(choice string) string {
+	open := strings.LastIndex(choice, "(")
+	shut := strings.LastIndex(choice, ")")
+	if open < 0 || shut < open {
+		return ""
+	}
+	return choice[open+1 : shut]
+}
+
+// toolboxNmapEntry is nmap's own catalog entry — Phase 3 sub-step (c):
+// Target (required), Scan type and Timing template (both choices among
+// nmap's own real flags, see toolboxNmapScanChoices/
+// toolboxNmapTimingChoices), and Ports (optional text, "-p <value>"
+// only if non-empty). Deliberately only these — not every nmap flag —
+// the same curl precedent's own explicit scope (toolboxCurlEntry's own
+// doc comment).
+func toolboxNmapEntry() toolboxEntry {
+	fields := []toolboxFormField{
+		{name: toolboxNmapFieldTarget, label: "Target", kind: toolboxFieldText,
+			placeholder: "a host, range, or CIDR"},
+		{name: toolboxNmapFieldScan, label: "Scan type", kind: toolboxFieldChoice,
+			choices: toolboxNmapScanChoices, defaultText: "Default"},
+		{name: toolboxNmapFieldPorts, label: "Ports", kind: toolboxFieldText,
+			placeholder: `optional, e.g. "22,80,443" or "1-1024"`},
+		{name: toolboxNmapFieldTiming, label: "Timing template", kind: toolboxFieldChoice,
+			choices: toolboxNmapTimingChoices, defaultText: "Default"},
+	}
+	build := func(v toolboxFormValues) []string {
+		var args []string
+		if flag := toolboxNmapFlagFor(v.Text[toolboxNmapFieldScan]); flag != "" {
+			args = append(args, flag)
+		}
+		if ports := v.Text[toolboxNmapFieldPorts]; ports != "" {
+			args = append(args, "-p", ports)
+		}
+		if flag := toolboxNmapFlagFor(v.Text[toolboxNmapFieldTiming]); flag != "" {
+			args = append(args, flag)
+		}
+		// Target last, unlabeled — the same "required field last,
+		// omitted entirely while empty rather than a blank trailing
+		// token" rule toolboxCurlEntry's own URL field already follows.
+		if target := v.Text[toolboxNmapFieldTarget]; target != "" {
+			args = append(args, target)
+		}
+		return args
+	}
+	return toolboxFormEntry("Nmap scan", "Scan a host, range, or CIDR for open ports", "nmap", fields, build)
+}
+
 // toolboxCategoriesNamed returns the catalog filtered down to the
 // categories in names, preserving toolboxCategories' own order — used by
 // the "jn"/"jh" screens (openNetworkTools/openHardwareTools) to show only
@@ -260,7 +336,7 @@ func toolboxCategories() []toolboxCategory {
 	return []toolboxCategory{
 		{name: "Networking", entries: []toolboxEntry{
 			toolboxArgEntry("Ping", "Send ICMP echo requests to a host, until stopped", "Ping host:", "", "ping"),
-			toolboxArgEntry("Nmap scan", "Scan a host, range, or CIDR for open ports", "Nmap target:", "", "nmap"),
+			toolboxNmapEntry(),
 			toolboxFixedEntry("IP addresses (ip)", "Show every network interface and its addresses", "ip", "addr"),
 			toolboxFixedEntry("Routing table (route)", "Show the kernel's own routing table", "route", "-n"),
 			toolboxFixedEntry("Sockets (ss)", "List open TCP/UDP sockets and the process on each", "ss", "-tulpn"),
