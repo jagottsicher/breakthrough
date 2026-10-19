@@ -52,15 +52,19 @@ const sshShellMenuNewConnectionLabel = " +  New connection"
 // real filesystem path next to other, much shorter columns.
 const connectionMenuCloudTargetMaxWidth = 40
 
-// Column indices within the connection menu table — the same in both
-// collapsed and expanded mode (see r.settings.ConnectionMenuExpanded):
-// User | @ | Host/IP | Type in both, expanded mode's only further
-// difference is Identifier/Tags inserted right after Type, shifting
-// Eject/Remove further right still (see connectionMenuEjectColumn/
-// connectionMenuRemoveColumn). Per the user's own explicit request,
-// collapsed is a real column table too now, not a single merged "user@
-// host" string — just missing the two columns (Identifier, Tags)
-// expanded mode adds.
+// Column indices within the connection menu table. User | @ | Host/IP
+// are fixed, in both collapsed and expanded mode
+// (r.settings.ConnectionMenuExpanded); Identifier is fixed too, but
+// only present at all once expanded. Type, Tags, Eject and Remove all
+// move depending on that flag — resolved through the functions below
+// rather than more iota constants, because Type's own position isn't
+// fixed the way the others are: per the user's own explicit request,
+// it sits right after Identifier when expanded, but right after
+// Host/IP when collapsed, since there's no Identifier column there
+// for it to sit behind. Per the user's own explicit request, collapsed
+// is a real column table too now, not a single merged "user@host"
+// string — just missing Identifier/Tags, the two columns expanded mode
+// adds.
 //
 // Type is always present, in both modes — unlike Identifier/Tags: it's
 // what tells an SFTP connection row and a cloud-mount row apart at a
@@ -74,8 +78,8 @@ const connectionMenuCloudTargetMaxWidth = 40
 // why User/Host-IP themselves don't try to mean anything for a cloud
 // row either.
 //
-// Only connectionMenuColUser is ever selectable — @/Host-IP/Type/
-// Identifier each still carry their own SetClickedFunc (see
+// Only connectionMenuColUser is ever selectable — @/Host-IP/Identifier/
+// Type/Tags each still carry their own SetClickedFunc (see
 // renderConnectionMenu), so clicking anywhere across the whole label
 // group still connects/toggles the mount (tview's own Table.
 // MouseHandler calls a cell's Clicked() regardless of its own
@@ -90,27 +94,37 @@ const (
 	connectionMenuColUser = iota
 	connectionMenuColAt
 	connectionMenuColHost
-	connectionMenuColType
 	connectionMenuColIdentifier // present only when expanded
-	connectionMenuColTags       // present only when expanded, right after Identifier
 )
+
+// connectionMenuTypeColumn resolves Type's own index for the given
+// expand state — right after Identifier when expanded, right after
+// Host/IP when collapsed (see the column constants' own doc comment
+// on why its position, unlike every other column here, actually
+// depends on expanded rather than Type simply being skipped).
+func connectionMenuTypeColumn(expanded bool) int {
+	if expanded {
+		return connectionMenuColIdentifier + 1
+	}
+	return connectionMenuColHost + 1
+}
+
+// connectionMenuTagsColumn resolves Tags' own index — present only
+// when expanded, right after Type.
+func connectionMenuTagsColumn(expanded bool) int {
+	return connectionMenuTypeColumn(expanded) + 1
+}
 
 // connectionMenuEjectColumn/connectionMenuRemoveColumn resolve the
 // eject/edit and remove columns' own index for the given expand state
 // — the one place activateConnectionMenuCell and renderConnectionMenu
 // both go through, so a click on either glyph is routed by the layout
-// actually on screen: expanded mode has two more label columns
-// (Identifier, Tags) ahead of them than collapsed mode does, shifting
-// both two columns to the right. Type itself never shifts this: it's
-// present (and already counted via connectionMenuColType) in both
-// modes, which is exactly why collapsed mode's own base case is
-// connectionMenuColType + 1, not connectionMenuColHost + 1 the way it
-// was before Type existed.
+// actually on screen.
 func connectionMenuEjectColumn(expanded bool) int {
 	if expanded {
-		return connectionMenuColTags + 1
+		return connectionMenuTagsColumn(expanded) + 1
 	}
-	return connectionMenuColType + 1
+	return connectionMenuTypeColumn(expanded) + 1
 }
 
 func connectionMenuRemoveColumn(expanded bool) int {
@@ -413,18 +427,22 @@ func (r *Root) renderConnectionMenu() {
 	r.connectionMenuSetHeaderCell(connectionMenuColUser, "User", connectionMenuSortUser)
 	r.connectionMenuSetHeaderCell(connectionMenuColAt, "", connectionMenuSortNone)
 	r.connectionMenuSetHeaderCell(connectionMenuColHost, "Host/IP", connectionMenuSortHost)
-	// connectionMenuSortNone deliberately, and outside the `if expanded`
-	// block deliberately — see the column constant's own doc comment:
-	// Type is always present, and never sortable, in either mode.
-	r.connectionMenuSetHeaderCell(connectionMenuColType, "Type", connectionMenuSortNone)
 	if expanded {
 		r.connectionMenuSetHeaderCell(connectionMenuColIdentifier, "Identifier", connectionMenuSortIdentifier)
+	}
+	// connectionMenuSortNone deliberately, and unconditionally (not
+	// inside `if expanded`) — see the column constants' own doc
+	// comment: Type is always present, and never sortable, in either
+	// mode, just at a different index depending on whether Identifier
+	// is there to sit behind.
+	r.connectionMenuSetHeaderCell(connectionMenuTypeColumn(expanded), "Type", connectionMenuSortNone)
+	if expanded {
 		// connectionMenuSortNone deliberately: Tags is filterable (see
 		// connectionMenuFilterHistory), not sortable — the plan never
 		// asked for a fourth mnemonic/sort key alongside U/H/I, and a
 		// set-valued column has no single natural sort order the way a
 		// plain string column does anyway.
-		r.connectionMenuSetHeaderCell(connectionMenuColTags, "Tags", connectionMenuSortNone)
+		r.connectionMenuSetHeaderCell(connectionMenuTagsColumn(expanded), "Tags", connectionMenuSortNone)
 	}
 	r.connectionMenuSetHeaderCell(ejectCol, "", connectionMenuSortNone)
 	r.connectionMenuSetHeaderCell(removeCol, "", connectionMenuSortNone)
@@ -468,11 +486,6 @@ func (r *Root) renderConnectionMenu() {
 				SetTextColor(color).
 				SetSelectable(false).
 				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColHost)))
-		table.SetCell(thisRow, connectionMenuColType,
-			tview.NewTableCell("SFTP").
-				SetTextColor(r.theme.MutedTextColor).
-				SetSelectable(false).
-				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColType)))
 		if expanded {
 			table.SetCell(thisRow, connectionMenuColIdentifier,
 				tview.NewTableCell(entry.Identifier).
@@ -492,12 +505,26 @@ func (r *Root) renderConnectionMenu() {
 			// space) — removed rather than tuned, since any fixed cap
 			// reintroduces the same problem the moment a terminal is
 			// wider than that guess.
-			table.SetCell(thisRow, connectionMenuColTags,
+			table.SetCell(thisRow, connectionMenuTagsColumn(expanded),
 				tview.NewTableCell(strings.Join(entry.Tags, ", ")).
 					SetTextColor(color).
 					SetSelectable(false).
-					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColTags)))
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuTagsColumn(expanded))))
 		}
+		// Same color as every other cell in this row's own label
+		// group (color, derived above from isActive/LastFailed/
+		// Untested) — never theme.MutedTextColor on its own: Type is
+		// part of that same "at a glance, is this reachable" signal,
+		// not a secondary, always-muted descriptor. Position depends
+		// on expanded (see connectionMenuTypeColumn's own doc
+		// comment), so this has to run after the Identifier block
+		// above, not alongside Host/IP the way it did before that
+		// position became conditional.
+		table.SetCell(thisRow, connectionMenuTypeColumn(expanded),
+			tview.NewTableCell("SFTP").
+				SetTextColor(color).
+				SetSelectable(false).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuTypeColumn(expanded))))
 
 		if isActive {
 			table.SetCell(thisRow, ejectCol,
@@ -576,23 +603,26 @@ func (r *Root) renderConnectionMenu() {
 				SetTextColor(color).
 				SetSelectable(false).
 				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColHost)))
-		table.SetCell(thisRow, connectionMenuColType,
-			tview.NewTableCell(typeByName[entry.RemoteName]).
-				SetTextColor(r.theme.MutedTextColor).
-				SetSelectable(false).
-				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColType)))
 		if expanded {
 			table.SetCell(thisRow, connectionMenuColIdentifier,
 				tview.NewTableCell(entry.Identifier).
 					SetTextColor(color).
 					SetSelectable(false).
 					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColIdentifier)))
-			table.SetCell(thisRow, connectionMenuColTags,
+			table.SetCell(thisRow, connectionMenuTagsColumn(expanded),
 				tview.NewTableCell(strings.Join(entry.Tags, ", ")).
 					SetTextColor(color).
 					SetSelectable(false).
-					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColTags)))
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuTagsColumn(expanded))))
 		}
+		// Same color as the rest of this row's own label group — see
+		// the matching comment on the SFTP loop above for why never
+		// theme.MutedTextColor on its own.
+		table.SetCell(thisRow, connectionMenuTypeColumn(expanded),
+			tview.NewTableCell(typeByName[entry.RemoteName]).
+				SetTextColor(color).
+				SetSelectable(false).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuTypeColumn(expanded))))
 
 		// Eject column carries Mount/Unmount here, per the user's own
 		// explicit decision — same column position SFTP's own Eject/
@@ -645,7 +675,19 @@ func (r *Root) renderConnectionMenu() {
 	table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
 	if expanded {
 		table.SetCell(newRow, connectionMenuColIdentifier, blankConnectionMenuCell())
-		table.SetCell(newRow, connectionMenuColTags, blankConnectionMenuCell())
+	}
+	// Every column gets an explicit blank cell, Type included — a
+	// cell tview never had SetCell called on for this row at all
+	// renders with its own un-themed default background (black),
+	// never the table's own SurfaceBackground, which is exactly the
+	// real, reported bug an earlier version of this row had: Type's
+	// own position depends on expanded (see
+	// connectionMenuTypeColumn's own doc comment), so it has to be
+	// blanked explicitly here too, the same as every other column in
+	// this row already is.
+	table.SetCell(newRow, connectionMenuTypeColumn(expanded), blankConnectionMenuCell())
+	if expanded {
+		table.SetCell(newRow, connectionMenuTagsColumn(expanded), blankConnectionMenuCell())
 	}
 	table.SetCell(newRow, ejectCol, blankConnectionMenuCell())
 	table.SetCell(newRow, removeCol, blankConnectionMenuCell())
@@ -1414,7 +1456,11 @@ func (r *Root) connectionMenuRepaintLabelGroups(selectedRow, selectedColumn int)
 	expanded := r.settings.ConnectionMenuExpanded
 	groupCols := []int{connectionMenuColAt, connectionMenuColHost}
 	if expanded {
-		groupCols = append(groupCols, connectionMenuColIdentifier, connectionMenuColTags)
+		groupCols = append(groupCols, connectionMenuColIdentifier)
+	}
+	groupCols = append(groupCols, connectionMenuTypeColumn(expanded))
+	if expanded {
+		groupCols = append(groupCols, connectionMenuTagsColumn(expanded))
 	}
 	rows := table.GetRowCount()
 	// row 0 is the header, skipped entirely — not just exempted from

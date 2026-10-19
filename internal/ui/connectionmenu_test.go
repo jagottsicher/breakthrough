@@ -136,7 +136,7 @@ func TestRenderConnectionMenuHeaderRowShowsColumnLabels(t *testing.T) {
 	// see renderConnectionMenu's own doc comment on why it's filterable,
 	// not sortable), so the plain header text equals its own cell text,
 	// nothing to strip.
-	if got, want := table.GetCell(0, connectionMenuColTags).Text, "Tags"; got != want {
+	if got, want := table.GetCell(0, connectionMenuTagsColumn(true)).Text, "Tags"; got != want {
 		t.Errorf("header Tags column (expanded) = %q, want %q", got, want)
 	}
 }
@@ -687,7 +687,7 @@ func TestRenderConnectionMenuExpandedShowsTheTagsColumn(t *testing.T) {
 
 	r.renderConnectionMenu()
 
-	if got, want := r.connectionMenuTable.GetCell(1, connectionMenuColTags).Text, "build, staging"; got != want {
+	if got, want := r.connectionMenuTable.GetCell(1, connectionMenuTagsColumn(true)).Text, "build, staging"; got != want {
 		t.Errorf("row 1 Tags cell = %q, want %q", got, want)
 	}
 	if got, want := r.connectionMenuTable.GetColumnCount(), connectionMenuRemoveColumn(true)+1; got != want {
@@ -719,7 +719,7 @@ func TestRenderConnectionMenuNeverTruncatesTheTagsCell(t *testing.T) {
 	r.renderConnectionMenu()
 
 	want := "aaaaaaaaaa, bbbbbbbbbb, cccccccccc, dddddddddd, eeeeeeeeee"
-	if got := r.connectionMenuTable.GetCell(1, connectionMenuColTags).Text; got != want {
+	if got := r.connectionMenuTable.GetCell(1, connectionMenuTagsColumn(true)).Text; got != want {
 		t.Errorf("Tags cell = %q, want the full, untruncated %q", got, want)
 	}
 }
@@ -742,7 +742,7 @@ func TestConnectionMenuSelectingTheLabelGroupHighlightsAllItsColumns(t *testing.
 	r.renderConnectionMenu()
 	r.connectionMenuTable.Select(1, connectionMenuColUser)
 
-	for _, col := range []int{connectionMenuColAt, connectionMenuColHost, connectionMenuColIdentifier, connectionMenuColTags} {
+	for _, col := range []int{connectionMenuColAt, connectionMenuColHost, connectionMenuColIdentifier, connectionMenuTypeColumn(true), connectionMenuTagsColumn(true)} {
 		cell := r.connectionMenuTable.GetCell(1, col)
 		if got, want := cellBackgroundColor(cell), r.theme.SelectionBackground; got != want {
 			t.Errorf("column %d background = %v, want SelectionBackground %v", col, got, want)
