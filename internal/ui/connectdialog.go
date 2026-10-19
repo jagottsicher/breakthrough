@@ -124,8 +124,14 @@ func (r *Root) newConnectForm() *tview.Form {
 	// the field has real width to show it in (same reasoning
 	// connectPasswordField's own doc comment gives for its label).
 	r.connectIdentifierField = tview.NewInputField().SetLabel("Identifier")
-	r.connectIdentifierField.SetPlaceholder("optional, a-z/0-9/_/- , max 32 chars")
+	r.connectIdentifierField.SetPlaceholder("optional, a-z/0-9/_/-/space, max 32 chars")
 	r.connectIdentifierField.SetAcceptanceFunc(connectIdentifierAcceptanceFunc)
+	// Collapses internal whitespace runs and trims the ends only once
+	// the field loses focus, never live — the same "don't move the text
+	// out from under a still-typing cursor" reasoning connectTagsField's
+	// own SetBlurFunc already documents, just for a single free-text
+	// value instead of a comma-split list.
+	r.connectIdentifierField.SetBlurFunc(func() { r.normalizeConnectIdentifierField() })
 	f.AddFormItem(r.connectIdentifierField)
 
 	r.connectTagsField = tview.NewInputField().SetLabel("Tags")
@@ -181,9 +187,30 @@ func (r *Root) normalizeConnectTagsField() {
 	r.connectTagsField.SetText(strings.Join(remotefs.ParseTags(r.connectTagsField.GetText()), ", "))
 }
 
+// normalizeConnectIdentifier collapses raw's internal whitespace runs
+// to a single space and trims its ends, via strings.Fields' own
+// "split on whitespace, drop empties" behavior — so "  web   server "
+// and "web server" persist and render identically, and anything that
+// was only whitespace (now that space is a valid Identifier rune, see
+// isConnectIdentifierRune) normalizes to "", the same "unset" value
+// connectionMenuIdentifierSuffix and upsertHistory's own inherit rule
+// already treat Identifier's zero value as.
+func normalizeConnectIdentifier(raw string) string {
+	return strings.Join(strings.Fields(raw), " ")
+}
+
+// normalizeConnectIdentifierField rewrites connectIdentifierField's own
+// text to normalizeConnectIdentifier's normalized form — see
+// connectIdentifierField's own SetBlurFunc for why this runs only once
+// the field loses focus, never live.
+func (r *Root) normalizeConnectIdentifierField() {
+	r.connectIdentifierField.SetText(normalizeConnectIdentifier(r.connectIdentifierField.GetText()))
+}
+
 // connectIdentifierAcceptanceFunc enforces the Identifier field's own
-// character set (letters, digits, underscore, hyphen — no spaces) and
-// 32-character cap live, as each keystroke (or paste) arrives — the
+// character set (letters, digits, underscore, hyphen, space — see
+// isConnectIdentifierRune) and 32-character cap live, as each
+// keystroke (or paste) arrives — the
 // same SetAcceptanceFunc-as-validator shape chmodEditField/
 // propertiesEditField already use elsewhere in this app. tview's own
 // InputField has no SetMaxLength in this version (verified directly
@@ -212,15 +239,21 @@ func connectIdentifierAcceptanceFunc(textToCheck string, lastChar rune) bool {
 const connectIdentifierMaxLength = 32
 
 // isConnectIdentifierRune reports whether r is allowed in an
-// Identifier: ASCII letters, digits, underscore, hyphen — no spaces,
-// so a rendered row's own "label, Identifier" shape (see
-// connectionMenuIdentifierSuffix) never needs to worry about an
-// Identifier itself containing the separator it's rendered with.
+// Identifier: exactly remotefs.IsValidTagRune's own character set
+// (ASCII letters, digits, underscore, hyphen, space) — Identifier used
+// to exclude space on the theory that a rendered row's own
+// "label, Identifier" shape needed to avoid containing its own
+// separator, but connectionMenuIdentifierSuffix actually renders it
+// parenthesized ("  (name)"), never comma-separated, so that reasoning
+// never applied to the actual rendering and a free-text name like
+// "build runner 1" has no real reason to be forced into
+// "build-runner-1". Deliberately the same set as Tags, not a superset
+// or subset of it: Identifier is a single free-text field rather than
+// Tags' own comma-split list, but the set of individually-allowed
+// characters is identical, so reusing IsValidTagRune here keeps the
+// two from silently drifting apart.
 func isConnectIdentifierRune(r rune) bool {
-	return r == '-' || r == '_' ||
-		(r >= 'a' && r <= 'z') ||
-		(r >= 'A' && r <= 'Z') ||
-		(r >= '0' && r <= '9')
+	return remotefs.IsValidTagRune(r)
 }
 
 // connectTagsFieldMaxLength is a generous live-typing cap on the Tags
@@ -465,11 +498,14 @@ func (r *Root) connectFormHostPortUser() (host string, port int, user string, ok
 // own fields — shared the same way connectFormHostPortUser is, between
 // runConnect and runConnectOK.
 func (r *Root) connectFormIdentifierAndTags() (identifier string, tags []string) {
-	// No TrimSpace needed: connectIdentifierAcceptanceFunc already
-	// rejects spaces outright, so GetText() is already exactly what
-	// gets persisted (see remotefs.RecordAttempt's own inherit rule for
-	// what happens when this is empty).
-	identifier = r.connectIdentifierField.GetText()
+	// connectIdentifierField's own text is already normalized by the
+	// time either button can even be reached (normalizeConnectIdentifierField
+	// fires on blur, same as Tags below), but normalizeConnectIdentifier
+	// is idempotent on already-normalized input, so running it again
+	// here is cheap insurance rather than trusting that invariant
+	// blindly — mirrors the identical reasoning Tags already gives
+	// just below.
+	identifier = normalizeConnectIdentifier(r.connectIdentifierField.GetText())
 	// connectTagsField's own text is already normalized by the time
 	// either button can even be reached (normalizeConnectTagsField
 	// fires on blur, and every exit from the field — Tab to Cancel, or
