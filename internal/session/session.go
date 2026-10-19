@@ -128,3 +128,24 @@ func TrashDir(persistent bool) (string, error) {
 	}
 	return filepath.Join(runtimeDir(), "breakthrough", "trash", u, ID()), nil
 }
+
+// MountsDir returns $XDG_DATA_HOME/breakthrough/mounts/<user>/ — the
+// base directory internal/rclone creates a cloud mount's own
+// per-remote subdirectory under. Mirrors TrashDir's own persistent
+// "<data home>/breakthrough/<purpose>/<user>/" shape exactly, on
+// purpose: a cloud mount's own mountpoint and trash's own files/ are
+// both a materialized holding area for real content, never
+// configuration (connections.json/cloudmounts.json, under
+// XDG_CONFIG_HOME) and never throwaway/transient state (a crash log, a
+// saved tab layout, under XDG_STATE_HOME) — the same "data" tier
+// trash already lives in. Always persistent, unlike TrashDir's own
+// opt-in session-scoped variant: there is no equivalent "forget this
+// on exit" concept for a cloud mount, nothing here would make sense
+// scoped to one session ID the way a session-only trash does.
+func MountsDir() (string, error) {
+	base, err := dataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "mounts", username()), nil
+}

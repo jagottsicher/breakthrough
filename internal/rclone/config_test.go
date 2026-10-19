@@ -120,7 +120,7 @@ func TestMountBasePrefersExplicitSetting(t *testing.T) {
 // TestMountBaseFallsBackToComputedDefault pins that a blank setting
 // falls back to DefaultMountBase, never to a literal empty path.
 func TestMountBaseFallsBackToComputedDefault(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	got := MountBase(config.Settings{CloudMountBaseDir: ""})
 	want := DefaultMountBase()
 	if got != want || got == "" {

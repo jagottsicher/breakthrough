@@ -418,8 +418,8 @@
     },
     {
       "path": "internal/config/schema.go",
-      "size": 26239,
-      "sha256": "b1382bdb53369b342bba74144dc8275751df057d046efd60c52e50e54a0ad924"
+      "size": 26261,
+      "sha256": "aa8aafaab3ca8ad624264c60c306705648121d652e7accf397f6bf577c615da1"
     },
     {
       "path": "internal/config/schema_test.go",
@@ -428,8 +428,8 @@
     },
     {
       "path": "internal/config/settings.go",
-      "size": 45352,
-      "sha256": "7a6f21f3f4ddb374acc3e520196d1ae526e22ffecc2f2ac2486370a62564dc52"
+      "size": 45455,
+      "sha256": "00fc3a5d7667d7d7143e05dd376e258bd5b4e37850e7428594259c8a53037303"
     },
     {
       "path": "internal/config/settings_test.go",
@@ -1153,13 +1153,13 @@
     },
     {
       "path": "internal/rclone/config.go",
-      "size": 6103,
-      "sha256": "17b25756afeb1002673bb7e0f7f0f45bafbc72218e0cce4a16d2102a665a8273"
+      "size": 6227,
+      "sha256": "16abf811f167f3c4bf16d37269bf9c35cb88543360cea70c850c1183585f78a5"
     },
     {
       "path": "internal/rclone/config_test.go",
-      "size": 9359,
-      "sha256": "07df4636d4d4fc6290140f0f3e8949823040c1086e8a9c206d9956def85e0137"
+      "size": 9358,
+      "sha256": "1644171dc41cce595b8e692bcea3ae65094482ecbebcc46ccfa49c7f41f0e23f"
     },
     {
       "path": "internal/rclone/rclone.go",
@@ -1398,8 +1398,8 @@
     },
     {
       "path": "internal/session/session.go",
-      "size": 4897,
-      "sha256": "c8bfdf7b9552ed1076e8d3d4eb4bfc3abfe58163dd1fc1c3650ef431959709c3"
+      "size": 5918,
+      "sha256": "b846da1ac4f00ec691b7a1474567f1aa3b711eedc8bfa027cd57b91e92477aa4"
     },
     {
       "path": "internal/session/session_test.go",
@@ -2033,8 +2033,8 @@
     },
     {
       "path": "internal/ui/optioncatalog.go",
-      "size": 72293,
-      "sha256": "ab72196f3d2f92deeec487a5690fe62f9929fe2d509dae7569743f9893a77c93"
+      "size": 72414,
+      "sha256": "083d664c8ac3caa9a4c8030288f71f02447bf4c78948b7eabe8df137948b51c1"
     },
     {
       "path": "internal/ui/options.go",
@@ -7009,14 +7009,14 @@
       "name": "LabelName",
       "kind": "method",
       "receiver": "Settings",
-      "line": 539
+      "line": 541
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "DefaultSettings",
       "kind": "function",
-      "line": 569
+      "line": 571
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -7024,56 +7024,56 @@
       "name": "apply",
       "kind": "method",
       "receiver": "*Settings",
-      "line": 679
+      "line": 681
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "Load",
       "kind": "function",
-      "line": 891
+      "line": 893
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "sortedKeys",
       "kind": "function",
-      "line": 899
+      "line": 901
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "SetKey",
       "kind": "function",
-      "line": 916
+      "line": 918
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "UnsetKey",
       "kind": "function",
-      "line": 964
+      "line": 966
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "EnsureUserFile",
       "kind": "function",
-      "line": 998
+      "line": 1000
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "readConfigLines",
       "kind": "function",
-      "line": 1013
+      "line": 1015
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "writeConfigLines",
       "kind": "function",
-      "line": 1035
+      "line": 1037
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -15629,28 +15629,28 @@
       "file": "internal/rclone/config.go",
       "name": "DefaultMountBase",
       "kind": "function",
-      "line": 126
+      "line": 128
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/rclone",
       "file": "internal/rclone/config.go",
       "name": "MountBase",
       "kind": "function",
-      "line": 136
+      "line": 138
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/rclone",
       "file": "internal/rclone/config.go",
       "name": "MountDir",
       "kind": "function",
-      "line": 148
+      "line": 150
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/rclone",
       "file": "internal/rclone/config.go",
       "name": "EnsureMountDir",
       "kind": "function",
-      "line": 164
+      "line": 166
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/rclone",
@@ -18819,6 +18819,13 @@
       "name": "TrashDir",
       "kind": "function",
       "line": 117
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/session",
+      "file": "internal/session/session.go",
+      "name": "MountsDir",
+      "kind": "function",
+      "line": 145
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/session",
@@ -35959,28 +35966,28 @@
       "file": "internal/ui/optioncatalog.go",
       "name": "labelNameOptions",
       "kind": "function",
-      "line": 1280
+      "line": 1282
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "activityLogCategoryOption",
       "kind": "function",
-      "line": 1325
+      "line": 1327
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "optionSpecByKey",
       "kind": "function",
-      "line": 1344
+      "line": 1346
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "settingValueByKey",
       "kind": "function",
-      "line": 1362
+      "line": 1364
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -53645,5 +53652,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "9acbce955d1686277864b10bf8a6ddde526d88d3776e4df7018bd125ae77a9a8"
+  "merkle_root": "72c21e11e0889517dd3f097b90486c9bb4a1a1bfca09b06f9f5a07ebedbcd372"
 }

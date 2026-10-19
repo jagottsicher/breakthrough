@@ -1074,10 +1074,12 @@ func optionCategories() []optionCategory {
 						"(one subdirectory per remote, named after it) — see internal/rclone's own "+
 						"package doc comment for why this is a plain user-owned directory by "+
 						"default, never /mnt or /media automatically.\n\n"+
-						"Leave empty to use the built-in default: $XDG_STATE_HOME/breakthrough/"+
-						"mounts, or ~/.local/state/breakthrough/mounts if that variable isn't set. "+
-						"Only point this at /mnt or /media if the exact target directory already "+
-						"exists and is writable — this never creates one there itself.",
+						"Leave empty to use the built-in default: $XDG_DATA_HOME/breakthrough/"+
+						"mounts/<user>, or ~/.local/share/breakthrough/mounts/<user> if that "+
+						"variable isn't set — the same directory trash's own deleted files live "+
+						"under, just a different subfolder. Only point this at /mnt or /media if "+
+						"the exact target directory already exists and is writable — this never "+
+						"creates one there itself.",
 					func(r *Root) string { return r.settings.CloudMountBaseDir },
 					func(r *Root, v string) {
 						r.settings.CloudMountBaseDir = v

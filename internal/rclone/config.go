@@ -115,20 +115,22 @@ func RemoveMountEntry(target string) error {
 
 // DefaultMountBase is the computed base directory a cloud mount's own
 // per-remote subdirectory is created under when
-// config.Settings.CloudMountBaseDir is left blank: session.StateDir()
-// (XDG_STATE_HOME or ~/.local/state/breakthrough) plus "mounts" — a
-// plain user-owned directory, never /mnt or /media, so creating it
+// config.Settings.CloudMountBaseDir is left blank: session.MountsDir()
+// (XDG_DATA_HOME/breakthrough/mounts/<user>, mirroring where
+// internal/fsops's own trash lives — see MountsDir's own doc comment
+// on why "data," not "state" or "config," is the right tier for this)
+// — a plain user-owned directory, never /mnt or /media, so creating it
 // never needs root (see this package's own doc comment, and the
 // user's own explicit decision that /mnt/media only get used when
-// already writable, never force-created). Returns "" when StateDir
+// already writable, never force-created). Returns "" when MountsDir
 // does (no home directory at all) — same "" sentinel contract
 // StateDir/UserDir already follow.
 func DefaultMountBase() string {
-	dir := session.StateDir()
-	if dir == "" {
+	dir, err := session.MountsDir()
+	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "mounts")
+	return dir
 }
 
 // MountBase resolves the actual base directory to use: settings' own

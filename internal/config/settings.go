@@ -384,11 +384,13 @@ type Settings struct {
 	RemoteArchiveConfirmSize int64
 
 	// CloudMountBaseDir overrides internal/rclone's own computed default
-	// (XDG_STATE_HOME or ~/.local/state/breakthrough, plus "mounts") for
-	// where a cloud mount's own per-remote subdirectory is created.
-	// Empty (the default) means "use that computed default" — the same
-	// "blank means fall back to the real default" contract UserDir's own
-	// "" already follows, not a literal empty path.
+	// (session.MountsDir: XDG_DATA_HOME or ~/.local/share/breakthrough,
+	// plus "mounts/<user>" — the same base trash already uses, see
+	// MountsDir's own doc comment) for where a cloud mount's own
+	// per-remote subdirectory is created. Empty (the default) means
+	// "use that computed default" — the same "blank means fall back to
+	// the real default" contract UserDir's own "" already follows, not
+	// a literal empty path.
 	CloudMountBaseDir string
 
 	CompressFormat string
