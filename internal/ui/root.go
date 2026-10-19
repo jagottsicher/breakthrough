@@ -1131,6 +1131,28 @@ type Root struct {
 	connectLayout     *tview.Flex
 	connectCancel     context.CancelFunc
 	connectAnimFrame  int
+
+	// cloudMountDialog* is the "New cloud mount" dialog (see
+	// cloudmountdialog.go), reached via the "+ New" chooser
+	// (openNewConnectionChooser) rather than its own key, same shape as
+	// connectLayout above just with a remote picker instead of Host/
+	// Port/User/Password.
+	cloudMountDialogForm            *tview.Form
+	cloudMountDialogRemoteField     *tview.DropDown
+	cloudMountDialogTargetField     *tview.InputField
+	cloudMountDialogIdentifierField *tview.InputField
+	cloudMountDialogTagsField       *tview.InputField
+	cloudMountDialogCancelBtn       *tview.Button
+	cloudMountDialogAddBtn          *tview.Button
+	cloudMountDialogButtons         *tview.Flex
+	cloudMountDialogTitleBar        *tview.TextView
+	cloudMountDialogLayout          *tview.Flex
+	// cloudMountDialogRemotes is the dropdown's own current option
+	// list (remote names), captured at open time — read back by
+	// cloudMountDialogSyncTargetToSelection to tell "Target still holds
+	// some remote's own unmodified default" apart from "the user typed
+	// something real."
+	cloudMountDialogRemotes []string
 	// connectPendingSkipHostKey/connectPendingSkipHostKeyConn back the
 	// "Connect anyway" retry after a HostKeyMismatchError (see
 	// connectdialog.go's own finishConnect/runConnect) — set only once
@@ -1217,29 +1239,15 @@ type Root struct {
 	// already established rather than a dedicated row of its own.
 	connectionMenuActiveRow int
 
-	// connectionMenuCloudRow is the row within connectionMenuTable that
-	// renders the trailing "☁ Cloud mounts" action (see
-	// renderConnectionMenu) — the one other kind of row this table has
-	// besides a real history row and "+ New connection", so
-	// activateConnectionMenuCell has to tell all three apart: without
-	// this field, "not a history row" alone (connectionMenuHistoryRows'
-	// own "ok" check) can't distinguish this row from "+ New connection"
-	// either, since both are absent from that map.
-	connectionMenuCloudRow int
-
-	// cloudMountTable/TitleBar/Layout is the cloud-mounts dropdown (see
-	// cloudmountmenu.go) — reached from this same connect menu's own
-	// trailing "☁ Cloud mounts" row, deliberately its own small Table
-	// rather than a second section threaded through connectionMenuTable
-	// above (see cloudmountmenu.go's own package doc comment for why).
-	cloudMountTable    *tview.Table
-	cloudMountTitleBar *tview.TextView
-	cloudMountLayout   *tview.Flex
-	// cloudMountRows maps a row index in cloudMountTable to the
-	// rclone.MountEntry that row represents — populated fresh by
-	// renderCloudMountMenu on every open/re-render, mirroring
-	// connectionMenuHistoryRows' own contract exactly.
-	cloudMountRows map[int]rclone.MountEntry
+	// connectionMenuCloudMountRows maps a row index in
+	// connectionMenuTable to the rclone.MountEntry that row represents —
+	// populated fresh by renderConnectionMenu on every open/re-render,
+	// mirroring connectionMenuHistoryRows' own contract exactly, just
+	// for the other kind of row this table now carries (see
+	// cloudmountmenu.go's own package doc comment for why cloud mounts
+	// are merged into this same table rather than a dropdown of their
+	// own).
+	connectionMenuCloudMountRows map[int]rclone.MountEntry
 	// cloudMountPending maps a MountEntry's own Target to a transient
 	// "mounting…"/"unmounting…" label while toggleCloudMount's own
 	// background Mount/Unmount call is still running — see
@@ -2708,6 +2716,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.hostKeyConfirmDialog = r.newHostKeyConfirmDialog()
 	r.hostKeyConfirmLayout = r.newHostKeyConfirmLayout()
 
+	// The "New cloud mount" dialog (see cloudmountdialog.go) — same
+	// "fixed field set, built once" shape as the Connect dialog just
+	// above.
+	r.cloudMountDialogForm = r.newCloudMountDialogForm()
+	r.cloudMountDialogButtons = r.newCloudMountDialogButtons()
+	r.cloudMountDialogLayout = r.newCloudMountDialogLayout()
+
 	// The connection dropdown (see connectionmenu.go) — rebuilt fresh
 	// on every open (see renderConnectionMenu), the same as the filter
 	// menu's own dropdown.
@@ -2717,16 +2732,6 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.connectionMenuSearchField = r.newConnectionMenuSearchField()
 	r.connectionMenuTitleRow = r.newConnectionMenuTitleRow()
 	r.connectionMenuLayout = r.newConnectionMenuLayout()
-
-	// The cloud-mounts dropdown (see cloudmountmenu.go) — same
-	// "rebuilt fresh on every open" shape as the connection dropdown
-	// just above, just a plain Table+TitleBar Flex with no search
-	// field or expand/collapse state of its own.
-	r.cloudMountTable = r.newCloudMountTable()
-	r.cloudMountTitleBar = r.newCloudMountTitleBar()
-	r.cloudMountLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.cloudMountTitleBar, 1, 0, false).
-		AddItem(r.cloudMountTable, 0, 1, true)
 
 	// The "gs" SSH shell dropdown ("Open shell to") and its own "Add
 	// new ssh connection" dialog (see sshshell.go) — the same
@@ -3048,9 +3053,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
 	r.AddPage(connectDialogPage, r.connectLayout, false, false)
+	r.AddPage(cloudMountDialogPage, r.cloudMountDialogLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
-	r.AddPage(cloudMountMenuPage, r.cloudMountLayout, false, false)
 	r.AddPage(sshShellDialogPage, r.sshShellLayout, false, false)
 	r.AddPage(sshShellMenuPage, r.sshShellMenuLayout, false, false)
 	r.newNotifyBar()

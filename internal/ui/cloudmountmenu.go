@@ -3,77 +3,33 @@ package ui
 import (
 	"fmt"
 
-	"github.com/rivo/tview"
+	"github.com/gdamore/tcell/v2"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/rclone"
 )
 
-// The cloud-mounts dropdown: a plain list of every configured cloud
-// mount (internal/rclone.MountEntry), reached from the "c" connect
-// menu's own trailing "☁ Cloud mounts" row (see connectionmenu.go's
-// own renderConnectionMenu/activateConnectionMenuCell) rather than
-// folded into connectionMenuTable itself.
-//
-// Deliberately a separate dropdown, not a second section inside the
-// existing one: a cloud mount is a different kind of entity with a
-// different status axis (mounted/not-mounted, not connected/failed/
-// untested) and a different row action (mount/unmount, not connect) —
-// threading that through connectionMenuTable's own sort/filter/column
-// machinery (sized for remotefs.Connection specifically) would have
-// turned that machinery generic for no real benefit, where a second,
-// much smaller Table costs far less. Same per-cell Table shape
-// tabswitcher.go/connectionmenu.go already establish for their own
-// dropdowns regardless.
-//
-// No "+ New" row yet: creating a brand-new rclone remote (provider
-// selection, per-backend fields, calling rclone.CreateStaticRemote) is
-// its own, separately scoped follow-up — this first slice only
-// manages mounts for remotes already configured in rclone, by hand or
-// by a later dialog.
-
-// Column indices within cloudMountTable.
-const (
-	cloudMountColRemote = iota
-	cloudMountColStatus
-	cloudMountColRemove
-)
-
-const cloudMountMenuPage = "cloud-mount-menu"
+// Cloud-mount business logic for the connect menu's own merged table
+// (see connectionmenu.go): a cloud mount is listed as a row in the
+// exact same connectionMenuTable an SFTP connection is, told apart by
+// the always-present Type column, rather than a separate dropdown of
+// its own — per the user's own explicit request that both read as one
+// list, not two things reached through two different menus with two
+// different navigation paths. This file only holds the business logic
+// (status text, mount/unmount, remove); the actual row rendering and
+// per-cell dispatch live in connectionmenu.go, right alongside the
+// SFTP rows they're merged with.
 
 // cloudMountRemoveGlyph mirrors connectionHistoryRemoveGlyph — the
 // same "✕" every per-row remove action in this app already uses.
 const cloudMountRemoveGlyph = connectionHistoryRemoveGlyph
 
-// newCloudMountTable builds the dropdown's own Table — no border, one
-// column of side padding, cell selection so the remove glyph is its
-// own navigable target, the same shape newTabSwitcher/
-// newConnectionMenuTable already establish.
-func (r *Root) newCloudMountTable() *tview.Table {
-	table := tview.NewTable()
-	table.SetBorders(false)
-	table.SetBorderPadding(0, 0, 1, 1)
-	table.SetSelectable(true, true)
-	table.SetSelectedFunc(func(row, column int) { r.activateCloudMountCell(row, column) })
-	return table
-}
-
-// newCloudMountTitleBar mirrors newTabSwitcherTitleBar — a single
-// static label, no expand/collapse glyph (this dropdown has no
-// expanded mode of its own, there's nothing wide enough to need one).
-func (r *Root) newCloudMountTitleBar() *tview.TextView {
-	bar := tview.NewTextView()
-	bar.SetDynamicColors(false)
-	bar.SetText(" Cloud mounts ")
-	return bar
-}
-
-// cloudMountStatusText reports target's own live status, by shelling
-// out through internal/rclone.IsMounted — or, while pending is true
-// for this target (a Mount/Unmount call is still running in the
-// background, see toggleCloudMount), a transient "Mounting…"/
-// "Unmounting…" label instead of a stale "mounted"/"not mounted" that
-// would otherwise sit there, unexplained, for however long the real
-// subprocess takes.
+// cloudMountStatusText reports entry's own live status, by shelling
+// out through internal/rclone.IsMounted — or, while a Mount/Unmount
+// call for its Target is still running in the background (see
+// toggleCloudMount), a transient "mounting…"/"unmounting…" label
+// instead of a stale "mounted"/"not mounted" that would otherwise sit
+// there, unexplained, for however long that subprocess takes.
 func (r *Root) cloudMountStatusText(entry rclone.MountEntry) string {
 	if pending, ok := r.cloudMountPending[entry.Target]; ok {
 		return pending
@@ -88,147 +44,32 @@ func (r *Root) cloudMountStatusText(entry rclone.MountEntry) string {
 	return "not mounted"
 }
 
-// openCloudMountMenu shows the dropdown — reached from the connect
-// menu's own trailing row (see connectionmenu.go's own
-// activateConnectionMenuCell), which has already called hideOverlay on
-// itself first, the same "close the one you came from, then open the
-// next" sequence editConnectionHistoryRow already establishes.
-func (r *Root) openCloudMountMenu() {
-	r.renderCloudMountMenu()
-	r.positionCloudMountMenu()
-	r.showOverlay(cloudMountMenuPage, r.cloudMountLayout)
-}
-
-// positionCloudMountMenu anchors the dropdown at the exact same screen
-// position connectionMenuAnchor already computes for the "@" button —
-// this dropdown is reached from that same button's own menu, so
-// opening in its place reads as "the next layer of the same menu," not
-// as a dropdown that jumped somewhere unrelated.
-func (r *Root) positionCloudMountMenu() {
-	right, top := r.connectionMenuAnchor()
-	width, height := r.cloudMountMenuSize()
-	x, y, width, height := r.clampToPanel(right-width, top, width, height)
-	r.cloudMountLayout.SetRect(x, y, width, height)
-}
-
-// cloudMountMenuSize mirrors connectionMenuSize's own non-expanded
-// branch: height is the row count plus the title bar's own row, width
-// is the widest real column content plus the single-column gaps tview
-// leaves between cells plus the table's own left/right border padding.
-func (r *Root) cloudMountMenuSize() (width, height int) {
-	table := r.cloudMountTable
-	rows := table.GetRowCount()
-	height = rows + 1
-
-	const columnCount = cloudMountColRemove + 1
-	columnWidths := make([]int, columnCount)
-	for row := 0; row < rows; row++ {
-		for column := range columnWidths {
-			cell := table.GetCell(row, column)
-			if cell == nil {
-				continue
-			}
-			if w := tview.TaggedStringWidth(cell.Text); w > columnWidths[column] {
-				columnWidths[column] = w
-			}
-		}
-	}
-	for i, w := range columnWidths {
-		width += w
-		if i > 0 {
-			width++
-		}
-	}
-	width += 2
-
-	const minWidth = 24 // "No cloud mounts configured" plus padding
-	if width < minWidth {
-		width = minWidth
-	}
-	return width, height
-}
-
-// renderCloudMountMenu (re)builds cloudMountTable fresh — the same
-// "rebuilt every open, not kept in sync" shape every other dropdown in
-// this app already follows (see renderConnectionMenu's own doc
-// comment). A read failure from LoadMountEntries is treated as "no
-// mounts configured" rather than surfaced here, the same "absence
-// isn't an error" contract its own doc comment promises.
-func (r *Root) renderCloudMountMenu() {
-	table := r.cloudMountTable
-	table.Clear()
-	r.cloudMountRows = map[int]rclone.MountEntry{}
-
-	entries, _ := rclone.LoadMountEntries()
-	if len(entries) == 0 {
-		table.SetCell(0, cloudMountColRemote,
-			tview.NewTableCell("No cloud mounts configured").
-				SetTextColor(r.theme.MutedTextColor).
-				SetSelectable(false))
-		table.SetCell(0, cloudMountColStatus, blankConnectionMenuCell())
-		table.SetCell(0, cloudMountColRemove, blankConnectionMenuCell())
-		return
-	}
-
-	for i, entry := range entries {
-		entry := entry
-		row := i
-		label := entry.RemoteName
-		if entry.Identifier != "" {
-			label += "  (" + entry.Identifier + ")"
-		}
-		table.SetCell(row, cloudMountColRemote,
-			tview.NewTableCell(label).
-				SetTextColor(r.theme.Text).
-				SetSelectable(true).
-				SetClickedFunc(r.clickCloudMountCell(row, cloudMountColRemote)))
-		table.SetCell(row, cloudMountColStatus,
-			tview.NewTableCell(" "+r.cloudMountStatusText(entry)+" ").
-				SetTextColor(r.theme.MutedTextColor).
-				SetSelectable(false))
-		table.SetCell(row, cloudMountColRemove,
-			tview.NewTableCell(" "+cloudMountRemoveGlyph+" ").
-				SetTextColor(r.theme.MutedTextColor).
-				SetSelectable(true).
-				SetClickedFunc(r.clickCloudMountCell(row, cloudMountColRemove)))
-
-		r.cloudMountRows[row] = entry
-	}
-	table.Select(0, cloudMountColRemote)
-}
-
-// activateCloudMountCell is Enter, Space, or a click on one cell — the
-// same per-column dispatch shape activateConnectionMenuCell/
-// activateTabSwitcherCell already establish.
-func (r *Root) activateCloudMountCell(row, column int) {
-	entry, ok := r.cloudMountRows[row]
-	if !ok {
-		return // the "No cloud mounts configured" placeholder row
-	}
-	switch column {
-	case cloudMountColRemove:
-		r.removeCloudMount(entry)
+// cloudMountRowColor mirrors connectionHistoryColor's own shape for
+// the other kind of row connectionMenuTable now carries: green
+// (theme.EntryExecutable) while actually mounted — the same color
+// isActive already gets — red (theme.CriticalText) if the IsMounted
+// check itself errored (a real, surfaced problem, not just "not
+// mounted"), plain theme.Text otherwise. Deliberately no third,
+// blended "used to work" shade the way connectionHistoryColor's own
+// default case has: a cloud mount's mounted/not-mounted state is a
+// live fact checked fresh on every render, never a remembered past
+// outcome the way LastFailed/Untested are for SFTP history.
+func cloudMountRowColor(theme config.ResolvedTheme, mounted, errored bool) tcell.Color {
+	switch {
+	case errored:
+		return theme.CriticalText
+	case mounted:
+		return theme.EntryExecutable
 	default:
-		r.toggleCloudMount(entry)
-	}
-}
-
-// clickCloudMountCell mirrors clickConnectionMenuCell/
-// clickTabSwitcherCell exactly — tview's own Table does not run a
-// row's selected function on a click at all, only moves the selection
-// there, so every actionable cell needs its own ClickedFunc too.
-func (r *Root) clickCloudMountCell(row, column int) func() bool {
-	return func() bool {
-		r.activateCloudMountCell(row, column)
-		return true
+		return theme.Text
 	}
 }
 
 // toggleCloudMount mounts entry if it isn't currently mounted, or
 // unmounts it if it is — run via safeGo so a slow network backend's
 // own real Mount/Unmount latency (unlike the local, near-instant case
-// this package's own integration test exercises) never blocks the UI
-// thread, the same non-blocking-background-work rule this project
+// internal/rclone's own integration test exercises) never blocks the
+// UI thread, the same non-blocking-background-work rule this project
 // applies to every other potentially slow external-tool call (see
 // runConnect's own identical reasoning for SFTP). Deliberately no
 // cancellation yet, unlike runConnect's own animated, cancelable
@@ -251,11 +92,11 @@ func (r *Root) toggleCloudMount(entry rclone.MountEntry) {
 	} else {
 		r.cloudMountPending[entry.Target] = "mounting…"
 	}
-	r.renderCloudMountMenu()
+	r.renderConnectionMenu()
 
 	onPanic := func() {
 		delete(r.cloudMountPending, entry.Target)
-		r.renderCloudMountMenu()
+		r.renderConnectionMenu()
 	}
 	r.safeGo("cloud mount toggle", onPanic, func() {
 		var opErr error
@@ -272,7 +113,7 @@ func (r *Root) toggleCloudMount(entry rclone.MountEntry) {
 		}
 		r.app.QueueUpdateDraw(func() {
 			delete(r.cloudMountPending, entry.Target)
-			r.renderCloudMountMenu()
+			r.renderConnectionMenu()
 			if opErr != nil {
 				r.showError(fmt.Errorf("cloud mount %q: %w", entry.RemoteName, opErr))
 			}
@@ -300,5 +141,5 @@ func (r *Root) removeCloudMount(entry rclone.MountEntry) {
 		r.showError(err)
 		return
 	}
-	r.renderCloudMountMenu()
+	r.renderConnectionMenu()
 }
