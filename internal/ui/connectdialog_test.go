@@ -402,7 +402,8 @@ func TestOpenConnectDialogClearsTheIdentifierFieldForABlankPrefill(t *testing.T)
 
 // TestConnectIdentifierAcceptanceFuncAllowsTheDocumentedCharacterSet
 // pins the field's own live-typed constraint (see its doc comment):
-// letters, digits, underscore, hyphen — nothing else, no spaces.
+// letters, digits, underscore, hyphen, space — the same set
+// IsValidTagRune already establishes for Tags — nothing else.
 func TestConnectIdentifierAcceptanceFuncAllowsTheDocumentedCharacterSet(t *testing.T) {
 	cases := []struct {
 		text string
@@ -411,15 +412,43 @@ func TestConnectIdentifierAcceptanceFuncAllowsTheDocumentedCharacterSet(t *testi
 		{"", true},
 		{"build-1", true},
 		{"Build_Runner-02", true},
-		{"has space", false},
+		{"has space", true},
+		{"  leading and trailing  ", true},
 		{"slash/not-allowed", false},
 		{"dot.not-allowed", false},
+		{"comma,not-allowed", false},
 		{strings.Repeat("a", connectIdentifierMaxLength), true},
 		{strings.Repeat("a", connectIdentifierMaxLength+1), false},
+		{strings.Repeat(" ", connectIdentifierMaxLength), true},
 	}
 	for _, c := range cases {
 		if got := connectIdentifierAcceptanceFunc(c.text, 0); got != c.want {
 			t.Errorf("connectIdentifierAcceptanceFunc(%q, _) = %v, want %v", c.text, got, c.want)
+		}
+	}
+}
+
+// TestNormalizeConnectIdentifierCollapsesWhitespace pins
+// normalizeConnectIdentifier's own contract: trim the ends, collapse
+// internal whitespace runs to a single space, and a whitespace-only
+// input normalizes to "" — the same "unset" value Identifier's zero
+// value already means everywhere else (connectionMenuIdentifierSuffix,
+// upsertHistory's own inherit rule).
+func TestNormalizeConnectIdentifierCollapsesWhitespace(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{"", ""},
+		{"build-1", "build-1"},
+		{"  build runner  ", "build runner"},
+		{"build   runner", "build runner"},
+		{"   ", ""},
+		{"  multiple   internal   spaces  ", "multiple internal spaces"},
+	}
+	for _, c := range cases {
+		if got := normalizeConnectIdentifier(c.raw); got != c.want {
+			t.Errorf("normalizeConnectIdentifier(%q) = %q, want %q", c.raw, got, c.want)
 		}
 	}
 }

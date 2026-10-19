@@ -1613,13 +1613,13 @@
     },
     {
       "path": "internal/ui/connectdialog.go",
-      "size": 27980,
-      "sha256": "a388e10206d69a458b558d0e515d538d5a41263fa902e8d6db4e8613a9147e17"
+      "size": 30178,
+      "sha256": "ad384067138b84b39223d7cb0a5ce51edb8485e44c568692bb24326742f39372"
     },
     {
       "path": "internal/ui/connectdialog_test.go",
-      "size": 21277,
-      "sha256": "fbb1219d20b3a2dcdc2aa219195adcfc20538a8fa43b1ff70ab62b39343fc5bd"
+      "size": 22349,
+      "sha256": "7af5d811e352b903aae0796c93cb26a32deeae2d894a1ce15f4cb68b6b3c0246"
     },
     {
       "path": "internal/ui/connectionglow_test.go",
@@ -24969,42 +24969,57 @@
       "name": "normalizeConnectTagsField",
       "kind": "method",
       "receiver": "*Root",
-      "line": 180
+      "line": 186
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/connectdialog.go",
+      "name": "normalizeConnectIdentifier",
+      "kind": "function",
+      "line": 198
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/connectdialog.go",
+      "name": "normalizeConnectIdentifierField",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 206
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/connectdialog.go",
       "name": "connectIdentifierAcceptanceFunc",
       "kind": "function",
-      "line": 196
+      "line": 223
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/connectdialog.go",
       "name": "connectIdentifierMaxLength",
       "kind": "const",
-      "line": 212
+      "line": 239
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/connectdialog.go",
       "name": "isConnectIdentifierRune",
       "kind": "function",
-      "line": 219
+      "line": 255
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/connectdialog.go",
       "name": "connectTagsFieldMaxLength",
       "kind": "const",
-      "line": 232
+      "line": 265
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/connectdialog.go",
       "name": "connectTagsAcceptanceFunc",
       "kind": "function",
-      "line": 244
+      "line": 277
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25012,7 +25027,7 @@
       "name": "newConnectButtons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 267
+      "line": 300
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25020,7 +25035,7 @@
       "name": "setConnectButtonsMode",
       "kind": "method",
       "receiver": "*Root",
-      "line": 295
+      "line": 328
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25028,7 +25043,7 @@
       "name": "newConnectLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 383
+      "line": 416
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25036,7 +25051,7 @@
       "name": "resetConnectAnywayState",
       "kind": "method",
       "receiver": "*Root",
-      "line": 409
+      "line": 442
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25044,7 +25059,7 @@
       "name": "setConnectStatus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 415
+      "line": 448
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25052,7 +25067,7 @@
       "name": "cancelConnect",
       "kind": "method",
       "receiver": "*Root",
-      "line": 420
+      "line": 453
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25060,7 +25075,7 @@
       "name": "cancelConnectAttempt",
       "kind": "method",
       "receiver": "*Root",
-      "line": 429
+      "line": 462
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25068,7 +25083,7 @@
       "name": "connectFormHostPortUser",
       "kind": "method",
       "receiver": "*Root",
-      "line": 443
+      "line": 476
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25076,7 +25091,7 @@
       "name": "connectFormIdentifierAndTags",
       "kind": "method",
       "receiver": "*Root",
-      "line": 467
+      "line": 500
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25084,7 +25099,7 @@
       "name": "runConnectOK",
       "kind": "method",
       "receiver": "*Root",
-      "line": 493
+      "line": 529
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25092,7 +25107,7 @@
       "name": "runConnect",
       "kind": "method",
       "receiver": "*Root",
-      "line": 519
+      "line": 555
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25100,7 +25115,7 @@
       "name": "animateConnectProgress",
       "kind": "method",
       "receiver": "*Root",
-      "line": 574
+      "line": 610
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25108,7 +25123,7 @@
       "name": "finishConnect",
       "kind": "method",
       "receiver": "*Root",
-      "line": 607
+      "line": 643
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25116,7 +25131,7 @@
       "name": "hasTab",
       "kind": "method",
       "receiver": "*Root",
-      "line": 655
+      "line": 691
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25285,42 +25300,49 @@
       "file": "internal/ui/connectdialog_test.go",
       "name": "TestConnectIdentifierAcceptanceFuncAllowsTheDocumentedCharacterSet",
       "kind": "function",
-      "line": 406
+      "line": 407
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/connectdialog_test.go",
+      "name": "TestNormalizeConnectIdentifierCollapsesWhitespace",
+      "kind": "function",
+      "line": 437
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/connectdialog_test.go",
       "name": "TestConnectTagsAcceptanceFuncAllowsTheDocumentedCharacterSet",
       "kind": "function",
-      "line": 432
+      "line": 461
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/connectdialog_test.go",
       "name": "TestOpenConnectDialogClearsTheTagsFieldForABlankPrefill",
       "kind": "function",
-      "line": 454
+      "line": 483
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/connectdialog_test.go",
       "name": "TestBlurringTheTagsFieldNormalizesItsOwnText",
       "kind": "function",
-      "line": 473
+      "line": 502
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/connectdialog_test.go",
       "name": "TestBacktabFromHostAfterAFullTabRoundTripWrapsToTags",
       "kind": "function",
-      "line": 497
+      "line": 526
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/connectdialog_test.go",
       "name": "TestBacktabFromHostAfterAFullTabRoundTripInEditModeWrapsToTags",
       "kind": "function",
-      "line": 523
+      "line": 552
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31659,14 +31681,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
@@ -44870,14 +44892,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 26
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 26
     },
@@ -53018,5 +53040,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "d9ed5206fca3d8b3421d423da17ab4de8062623fd4388b8ba9be89c21eb249a8"
+  "merkle_root": "f2ce4e8869aa2782ae658ce5eb439978f19ed21f9d538e6ff9006dd27492f124"
 }
