@@ -1435,6 +1435,50 @@ func historyRowFor(t *testing.T, r *Root, conn remotefs.Connection) int {
 	return -1
 }
 
+// TestConnectionMenuUpDownWrapAround pins the wraparound a real,
+// reported complaint asked for: Up at the first real row goes to the
+// last, Down at the last goes back to the first — the same behavior
+// filtermenu.go's own moveFocus already gives its own dropdown.
+// Ordinary navigation in between is untouched (tview's own native
+// Table.InputHandler), only the two boundary cases are overridden.
+func TestConnectionMenuUpDownWrapAround(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	for _, u := range []string{"a", "b"} {
+		if err := remotefs.RecordAttempt(remotefs.Connection{Host: u + ".example.com", User: u}, false); err != nil {
+			t.Fatalf("RecordAttempt: %v", err)
+		}
+	}
+	r.openConnectionMenu()
+
+	table := r.connectionMenuTable
+	lastRow := table.GetRowCount() - 1
+
+	row, col := table.GetSelection()
+	if row != 1 {
+		t.Fatalf("initial selection row = %d, want 1", row)
+	}
+
+	if event := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)); event != nil {
+		t.Errorf("Up at the first row should be consumed (nil), got %v", event)
+	}
+	if row, _ := table.GetSelection(); row != lastRow {
+		t.Errorf("Up at the first row: selection = %d, want %d (wrap to last)", row, lastRow)
+	}
+
+	if event := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)); event != nil {
+		t.Errorf("Down at the last row should be consumed (nil), got %v", event)
+	}
+	if row, _ := table.GetSelection(); row != 1 {
+		t.Errorf("Down at the last row: selection = %d, want 1 (wrap to first)", row)
+	}
+
+	// Sanity: col is still whatever labelCol was — never touched by
+	// either wrap, only the row.
+	if _, c := table.GetSelection(); c != col {
+		t.Errorf("column changed from %d to %d — wrap should only ever touch the row", col, c)
+	}
+}
+
 // TestShortenPathLastSegmentsAlignsToSeparators pins
 // shortenPathLastSegments' own contract: cuts only at "/" boundaries,
 // never mid-segment the way shortenPathLeft's own character-count

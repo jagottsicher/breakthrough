@@ -1089,7 +1089,25 @@ func (r *Root) clickConnectionMenuCell(row, column int) func() bool {
 func (r *Root) captureConnectionMenuKey(event *tcell.EventKey) *tcell.EventKey {
 	row, column := r.connectionMenuTable.GetSelection()
 
+	// Up at the first real row (1 — row 0 is the inert header) wraps to
+	// the last; Down at the last wraps to the first — the same
+	// wraparound filtermenu.go's own moveFocus already gives its own
+	// dropdown ((i + delta + len(order)) % len(order)), per a real,
+	// reported complaint that this table was the one dropdown in the
+	// app that didn't. tview's own Table.InputHandler clamps instead of
+	// wrapping for every other Up/Down press, which is exactly right
+	// there — this only overrides the two boundary cases, never
+	// touching ordinary navigation in between (no case matches, so
+	// execution falls through to this function's own final "return
+	// event" below, the same as today).
+	lastRow := r.connectionMenuTable.GetRowCount() - 1
 	switch {
+	case event.Key() == tcell.KeyUp && row <= 1:
+		r.connectionMenuTable.Select(lastRow, column)
+		return nil
+	case event.Key() == tcell.KeyDown && row >= lastRow:
+		r.connectionMenuTable.Select(1, column)
+		return nil
 	case event.Key() == tcell.KeyEscape:
 		r.hideOverlay()
 		return nil
