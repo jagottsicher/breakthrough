@@ -2,7 +2,9 @@ package rclone
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 )
@@ -209,4 +211,95 @@ func TestIsMountedDetectsARealRcloneFUSEMount(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Error("IsMounted never reported the real mount as mounted")
+}
+
+// TestQuoteRemoteParamsEscapesEveryValue pins quoteRemoteParams' own
+// contract: every value is single-quoted unconditionally, and an
+// embedded single quote is doubled, not escaped some other way —
+// confirmed against a real run, not guessed.
+func TestQuoteRemoteParamsEscapesEveryValue(t *testing.T) {
+	got := quoteRemoteParams([]string{
+		"url=https://example.com/remote.php/webdav/",
+		"description=it's a test",
+		"noequalssign",
+	})
+	want := []string{
+		"url='https://example.com/remote.php/webdav/'",
+		"description='it''s a test'",
+		"noequalssign",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("quoteRemoteParams()[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+// TestObscurePasswordRealRoundTrip pins ObscurePassword against a
+// real rclone binary, skipped where it isn't installed — confirmed by
+// actually reversing it with `rclone reveal`, not just asserting it
+// returns some string.
+func TestObscurePasswordRealRoundTrip(t *testing.T) {
+	requireCommand(t, "rclone")
+
+	obscured, err := ObscurePassword("my-test-password")
+	if err != nil {
+		t.Fatalf("ObscurePassword: %v", err)
+	}
+	if obscured == "" || obscured == "my-test-password" {
+		t.Fatalf("ObscurePassword returned %q, want a real obscured value", obscured)
+	}
+
+	revealed, err := exec.Command("rclone", "reveal", obscured).Output()
+	if err != nil {
+		t.Fatalf("rclone reveal: %v", err)
+	}
+	if got := strings.TrimSpace(string(revealed)); got != "my-test-password" {
+		t.Errorf("rclone reveal(ObscurePassword(x)) = %q, want %q", got, "my-test-password")
+	}
+}
+
+// TestTestRemoteRealRoundTrip exercises TestRemote against a real
+// rclone binary: a "local" backend (no credentials needed at all)
+// must succeed, and never creates a config file — confirmed the same
+// way TestCreateStaticRemoteRealRcloneRoundTrip already confirms
+// CreateStaticRemote's own side effects, here confirming the absence
+// of one. A bogus FTP host must fail, and fail within the bounded
+// timeout this function itself enforces, not hang.
+func TestTestRemoteRealRoundTrip(t *testing.T) {
+	requireCommand(t, "rclone")
+
+	confPath := t.TempDir() + "/rclone.conf"
+	t.Setenv("RCLONE_CONFIG", confPath)
+
+	if err := TestRemote("local", nil, 5*time.Second); err != nil {
+		t.Errorf("TestRemote(local) = %v, want success", err)
+	}
+	if _, err := os.Stat(confPath); err == nil {
+		t.Error("TestRemote should never create a config file")
+	}
+
+	start := time.Now()
+	err := TestRemote("ftp", []string{"host=203.0.113.1", "user=nobody", "pass=" + mustObscure(t, "nobody")}, 3*time.Second)
+	if err == nil {
+		t.Error("TestRemote against an unreachable host should fail")
+	}
+	if elapsed := time.Since(start); elapsed > 15*time.Second {
+		t.Errorf("TestRemote took %v, want it bounded by its own timeout, not rclone's default retry/backoff", elapsed)
+	}
+}
+
+// mustObscure is TestTestRemoteRealRoundTrip's own small helper —
+// requireCommand(t, "rclone") is already guaranteed by its only
+// caller, so no need to repeat that guard here.
+func mustObscure(t *testing.T, plaintext string) string {
+	t.Helper()
+	obscured, err := ObscurePassword(plaintext)
+	if err != nil {
+		t.Fatalf("ObscurePassword: %v", err)
+	}
+	return obscured
 }

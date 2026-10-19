@@ -33,6 +33,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/jagottsicher/breakthrough/internal/mounts"
 )
@@ -90,6 +91,18 @@ var (
 	runConfigCreate = func(args []string) error {
 		_, err := exec.Command("rclone", args...).Output()
 		return wrapExitError(err)
+	}
+	runConfigDelete = func(name string) error {
+		_, err := exec.Command("rclone", "config", "delete", name).Output()
+		return wrapExitError(err)
+	}
+	runTestRemote = func(args []string) error {
+		_, err := exec.Command("rclone", args...).Output()
+		return wrapExitError(err)
+	}
+	runObscure = func(plaintext string) (string, error) {
+		out, err := exec.Command("rclone", "obscure", plaintext).Output()
+		return strings.TrimSpace(string(out)), wrapExitError(err)
 	}
 	lookPath = exec.LookPath
 )
@@ -247,6 +260,21 @@ func CreateStaticRemote(name, backendType string, params []string) error {
 	return runConfigCreate(args)
 }
 
+// DeleteRemote removes name from rclone's own config file entirely —
+// `rclone config delete <name>`, confirmed to be a no-op, not an
+// error, for a name that was never there in the first place (the same
+// "absence isn't an error" contract RemoveMountEntry already follows
+// for breakthrough's own side). This is a real, permanent loss of
+// whatever credentials that remote held — callers (see internal/ui's
+// own removeCloudMount) must only ever call this once they're certain
+// nothing else still depends on the remote existing.
+func DeleteRemote(name string) error {
+	if !Available() {
+		return ErrNotAvailable
+	}
+	return runConfigDelete(name)
+}
+
 // IsMounted reports whether target is currently a live mountpoint, by
 // reusing internal/mounts.Read rather than re-implementing its own
 // findmnt handling — confirmed by a real test mount that rclone's own
@@ -265,4 +293,93 @@ func IsMounted(target string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// ObscurePassword runs `rclone obscure` on plaintext and returns the
+// obscured result — needed only for TestRemote's own on-the-fly
+// connection string (see its own doc comment on why): unlike `rclone
+// config create`, confirmed via a real round trip through `rclone
+// reveal` to auto-obscure a password-type field for you,
+// rclone's own ":type,key=value:" on-the-fly syntax expects an
+// already-obscured value and fails ("couldn't decrypt password")
+// against a plain one — confirmed the same way, against a real
+// WebDAV connection string.
+func ObscurePassword(plaintext string) (string, error) {
+	if !Available() {
+		return "", ErrNotAvailable
+	}
+	return runObscure(plaintext)
+}
+
+// quoteRemoteParam wraps value in single quotes, doubling any
+// embedded single quote — rclone's own on-the-fly connection-string
+// escaping, confirmed against a real run (an unescaped value
+// containing a literal "'" otherwise breaks parsing the same way an
+// unquoted colon does, see quoteRemoteParams' own doc comment).
+func quoteRemoteParam(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+
+// quoteRemoteParams quotes every "key=value" pair's own value half
+// for safe use inside an on-the-fly connection string
+// (":type,key='value',...:") — never the key half, which rclone's own
+// syntax never allows quoting at all. Every value is quoted
+// unconditionally, not just ones that look like they need it: a
+// WebDAV URL's "https://" colon is exactly the case that silently
+// breaks unquoted (misparsed as the backend/path separator,
+// confirmed against a real run), so guessing which values are "safe"
+// to leave bare is itself the bug.
+func quoteRemoteParams(params []string) []string {
+	quoted := make([]string, len(params))
+	for i, p := range params {
+		key, value, ok := strings.Cut(p, "=")
+		if !ok {
+			quoted[i] = p
+			continue
+		}
+		quoted[i] = key + "=" + quoteRemoteParam(value)
+	}
+	return quoted
+}
+
+// TestRemote checks whether backendType can actually be reached with
+// params — rclone's own on-the-fly ":type,key=value,...:" remote
+// syntax, confirmed empirically to never touch rclone's config file
+// at all (no RCLONE_CONFIG file gets created even when it doesn't
+// exist yet): a real connectivity check without ever persisting
+// anything, for the "Test" button alongside OK/Create (see
+// internal/ui's own cloud-remote dialog). Any value that needs
+// obscuring per rclone's own backend definition (a true password
+// field, not a plain credential like S3's secret_access_key — see
+// ObscurePassword's own doc comment) must already be obscured by the
+// caller before it ever reaches params; this function has no way to
+// know which of an arbitrary backend's own keys that applies to.
+//
+// Bounded to a single retry, a connect timeout, and an I/O timeout
+// (--low-level-retries 1 --retries 1 --contimeout --timeout) — this is
+// a correctness check, not a real transfer: a slow or unreachable
+// endpoint should fail fast, not hang for as long as rclone's own
+// defaults would. Both timeout flags are set, deliberately: a real run
+// against an unreachable host confirmed --timeout alone (rclone's own
+// post-connect I/O stall timeout) does nothing for a host that never
+// even finishes the TCP handshake in the first place — that case hung
+// for rclone's own --contimeout default of a full minute until this
+// was added.
+func TestRemote(backendType string, params []string, timeout time.Duration) error {
+	if !Available() {
+		return ErrNotAvailable
+	}
+	connStr := ":" + backendType
+	if len(params) > 0 {
+		connStr += "," + strings.Join(quoteRemoteParams(params), ",")
+	}
+	connStr += ":"
+	args := []string{
+		"lsd", connStr,
+		"--low-level-retries", "1",
+		"--retries", "1",
+		"--contimeout", timeout.String(),
+		"--timeout", timeout.String(),
+	}
+	return runTestRemote(args)
 }

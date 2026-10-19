@@ -5,6 +5,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/rclone"
 )
@@ -137,9 +138,43 @@ func (r *Root) removeCloudMount(entry rclone.MountEntry) {
 		r.showError(fmt.Errorf("unmount %q before removing it", entry.RemoteName))
 		return
 	}
+	r.openConfirm(
+		fmt.Sprintf("Remove %q and delete its cloud credentials permanently?", entry.RemoteName),
+		"Yes, delete permanently",
+		func() { r.deleteCloudMount(entry) },
+	)
+}
+
+// deleteCloudMount is removeCloudMount's own confirmed action —
+// drops the MountEntry (breakthrough's own bookkeeping) and then the
+// underlying rclone remote itself (its real credentials, via
+// DeleteRemote), logging either outcome the same way
+// connectdialog.go's own "saved"/"connected to" actions already do
+// (activitylog.CategoryRemote) — a real, reported gap: there was no
+// way to remove a cloud remote's own credentials from rclone's config
+// at all before this, only breakthrough's own MountEntry for it.
+//
+// Order matters: RemoveMountEntry first, DeleteRemote second. If
+// DeleteRemote were to fail after RemoveMountEntry already succeeded,
+// the remote would be an "orphan" (still in rclone's config, no
+// longer reachable as a configured mount) — annoying, but recoverable
+// through "+ Create new remote…"'s own dropdown, which lists every
+// real ListRemotes entry regardless of MountEntry status. The reverse
+// order would risk the opposite: a MountEntry left pointing at a
+// remote that no longer exists at all, which every other read of it
+// (ListRemotes-backed Type lookups, toggleCloudMount's own Mount call)
+// would then have to treat as a dangling reference instead.
+func (r *Root) deleteCloudMount(entry rclone.MountEntry) {
 	if err := rclone.RemoveMountEntry(entry.Target); err != nil {
 		r.showError(err)
 		return
 	}
+	if err := rclone.DeleteRemote(entry.RemoteName); err != nil {
+		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("removed cloud mount %q but failed to delete its remote: %v", entry.RemoteName, err))
+		r.showError(err)
+		r.renderConnectionMenu()
+		return
+	}
+	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("deleted cloud remote %q", entry.RemoteName))
 	r.renderConnectionMenu()
 }

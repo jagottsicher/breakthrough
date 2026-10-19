@@ -595,7 +595,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.styleCloudRemoteDialogFields()
 	}
 	styleButton(r.cloudRemoteDialogCancelBtn, theme)
+	styleButton(r.cloudRemoteDialogTestBtn, theme)
+	styleButton(r.cloudRemoteDialogOKBtn, theme)
 	styleButton(r.cloudRemoteDialogCreateBtn, theme)
+	r.cloudRemoteDialogStatus.SetBackgroundColor(theme.SurfaceBackground)
 	r.cloudRemoteDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.cloudRemoteDialogTitleBar.SetTextColor(theme.TextColor)
 

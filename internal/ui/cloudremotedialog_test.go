@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/jagottsicher/breakthrough/internal/rclone"
 )
 
 func cloudRemoteBackendByType(t *testing.T, backendType string) cloudRemoteBackend {
@@ -166,5 +169,103 @@ func TestCloudRemoteDialogFormHeightAccountsForEveryRow(t *testing.T) {
 	azure := cloudRemoteBackendByType(t, "azureblob") // backend type + name + 2 fields = 4 rows, no sub-option
 	if got, want := cloudRemoteDialogFormHeight(azure), 2+4+3; got != want {
 		t.Errorf("cloudRemoteDialogFormHeight(azureblob) = %d, want %d", got, want)
+	}
+}
+
+// TestObscureTestParamsObscuresOnlyFlaggedFields pins that only a
+// field flagged obscure:true (WebDAV/FTP's own "pass") gets re-
+// obscured for TestRemote's own on-the-fly syntax — S3's
+// secret_access_key must stay exactly as typed, confirmed separately
+// that rclone itself never obscures that one either.
+func TestObscureTestParamsObscuresOnlyFlaggedFields(t *testing.T) {
+	requireRclone(t)
+
+	webdav := cloudRemoteBackendByType(t, "webdav")
+	got, err := obscureTestParams(webdav, []string{"url=https://example.com/dav", "user=jens", "pass=secret123"})
+	if err != nil {
+		t.Fatalf("obscureTestParams: %v", err)
+	}
+	if got[0] != "url=https://example.com/dav" || got[1] != "user=jens" {
+		t.Errorf("non-obscure fields changed: %v", got)
+	}
+	if got[2] == "pass=secret123" {
+		t.Error("pass should have been obscured, was left as plain text")
+	}
+	revealed, err := exec.Command("rclone", "reveal", strings.TrimPrefix(got[2], "pass=")).Output()
+	if err != nil {
+		t.Fatalf("rclone reveal: %v", err)
+	}
+	if got := strings.TrimSpace(string(revealed)); got != "secret123" {
+		t.Errorf("rclone reveal(obscured pass) = %q, want %q", got, "secret123")
+	}
+
+	s3 := cloudRemoteBackendByType(t, "s3")
+	got, err = obscureTestParams(s3, []string{"access_key_id=AKIA", "secret_access_key=plainsecret"})
+	if err != nil {
+		t.Fatalf("obscureTestParams: %v", err)
+	}
+	if got[1] != "secret_access_key=plainsecret" {
+		t.Errorf("secret_access_key should be left exactly as typed, got %v", got)
+	}
+}
+
+// TestRunTestCloudRemoteShowsTestingImmediately pins
+// runTestCloudRemote's own synchronous half: it sets the "Testing…"
+// status and returns right away, the real rclone.TestRemote call
+// happening on its own background goroutine (see safeGo) — never
+// blocking the UI thread, the same non-blocking-background-work rule
+// toggleCloudMount already follows for its own real Mount/Unmount
+// calls.
+//
+// Deliberately doesn't wait for or assert the final "✓ Connection OK"/
+// "✕ ..." status QueueUpdateDraw hands back: that hop never fires in
+// a test lacking a live Application.Run() event loop to drain it (see
+// pasteconflict_test.go's own identical, already-documented
+// limitation) — rclone.TestRemote's own real round trip is already
+// covered directly, without any of this UI wrapping, by
+// TestTestRemoteRealRoundTrip one package down.
+func TestRunTestCloudRemoteShowsTestingImmediately(t *testing.T) {
+	requireRclone(t)
+	r := newTestRootForCloudMount(t)
+	r.openCloudRemoteDialog()
+
+	r.runTestCloudRemote()
+
+	if got := r.cloudRemoteDialogStatus.GetText(true); got != "Testing…" {
+		t.Errorf("status right after calling runTestCloudRemote = %q, want %q", got, "Testing…")
+	}
+}
+
+// TestRunSaveCloudRemoteLenientPersistsIncompleteRemote pins OK's own
+// deliberate leniency: a remote missing its own required fields still
+// gets created — the explicit "I know it's incomplete" action the
+// user asked for, as opposed to Create's own strict refusal (see
+// runCreateCloudRemote's own test coverage in cloudmountdialog_test.go
+// — no direct equivalent test for Create's own refusal exists in this
+// file, since that behavior is already pinned by
+// TestCreateStaticRemoteRefusesAnExistingName one package down; this
+// test is about the new OK path specifically).
+func TestRunSaveCloudRemoteLenientPersistsIncompleteRemote(t *testing.T) {
+	requireRclone(t)
+	r := newTestRootForCloudMount(t)
+	r.openCloudRemoteDialog()
+	r.cloudRemoteDialogNameField.SetText("incomplete-s3")
+	// Leave every field empty — S3's own access_key_id/secret_access_key
+	// are both required, per cloudRemoteBackends' own table.
+
+	r.runSaveCloudRemoteLenient()
+
+	remotes, err := rclone.ListRemotes()
+	if err != nil {
+		t.Fatalf("ListRemotes: %v", err)
+	}
+	found := false
+	for _, rem := range remotes {
+		if rem.Name == "incomplete-s3" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("OK should have persisted the remote despite missing required fields")
 	}
 }

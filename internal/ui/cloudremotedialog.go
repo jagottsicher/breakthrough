@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -74,18 +75,30 @@ func validCloudRemoteName(name string) bool {
 // cloudRemoteFieldSpec describes one plain text form field for a
 // given backend — its rclone Config name, its form label, a
 // placeholder, whether it masks input (a real secret, not just
-// something sensitive-looking), and whether CreateStaticRemote is
-// refused outright when it's left empty. Declared as data rather than
-// one branch of code per backend (see cloudRemoteBackends' own doc
-// comment) — the four backends in scope here differ only in which
-// fields they need and whether each one is required, nothing about
-// how a field itself behaves.
+// something sensitive-looking), whether CreateStaticRemote is refused
+// outright when it's left empty, and whether rclone.TestRemote's own
+// on-the-fly connection string needs it pre-obscured. Declared as data
+// rather than one branch of code per backend (see cloudRemoteBackends'
+// own doc comment) — the four backends in scope here differ only in
+// which fields they need and whether each one is required/obscure-
+// needing, nothing about how a field itself behaves.
+//
+// obscure is deliberately its own flag, not just "masked" reused:
+// masked is a display concern (every one of these happens to also be
+// masked), obscure is about what rclone's own backend definition
+// expects on the wire. S3's secret_access_key and Azure's key are
+// masked but never obscured — confirmed empirically that
+// `rclone config create` leaves them in plain text — while WebDAV/
+// FTP's pass fields are both masked and must be obscured, confirmed
+// the same way (`rclone reveal` round-trip, and TestRemote's own
+// on-the-fly syntax outright failing to "decrypt" a plain one).
 type cloudRemoteFieldSpec struct {
 	key         string
 	label       string
 	placeholder string
 	masked      bool
 	required    bool
+	obscure     bool
 }
 
 // cloudRemoteOption is one choice in a backend's own sub-option
@@ -140,10 +153,10 @@ var cloudRemoteBackends = []cloudRemoteBackend{
 			{"Other", "Other S3-compatible"},
 		},
 		fields: []cloudRemoteFieldSpec{
-			{"access_key_id", "Access Key ID", "", false, true},
-			{"secret_access_key", "Secret Access Key", "", true, true},
-			{"endpoint", "Endpoint", "required for every provider except AWS", false, false},
-			{"region", "Region", "optional", false, false},
+			{"access_key_id", "Access Key ID", "", false, true, false},
+			{"secret_access_key", "Secret Access Key", "", true, true, false},
+			{"endpoint", "Endpoint", "required for every provider except AWS", false, false, false},
+			{"region", "Region", "optional", false, false, false},
 		},
 	},
 	{
@@ -159,27 +172,32 @@ var cloudRemoteBackends = []cloudRemoteBackend{
 			{"fastmail", "Fastmail Files"},
 		},
 		fields: []cloudRemoteFieldSpec{
-			{"url", "URL", "https://example.com/remote.php/webdav/", false, true},
-			{"user", "User", "optional", false, false},
-			{"pass", "Password", "optional", true, false},
+			{"url", "URL", "https://example.com/remote.php/webdav/", false, true, false},
+			{"user", "User", "optional", false, false, false},
+			// obscure: true — confirmed by a real `rclone reveal`
+			// round trip (config create) and a real failed on-the-fly
+			// test against a plain value (TestRemote) alike: this is
+			// a true rclone password field, not a plain credential
+			// like S3's secret_access_key.
+			{"pass", "Password", "optional", true, false, true},
 		},
 	},
 	{
 		backendType: "ftp",
 		label:       "FTP",
 		fields: []cloudRemoteFieldSpec{
-			{"host", "Host", "", false, true},
-			{"port", "Port", "default 21", false, false},
-			{"user", "User", "optional", false, false},
-			{"pass", "Password", "optional", true, false},
+			{"host", "Host", "", false, true, false},
+			{"port", "Port", "default 21", false, false, false},
+			{"user", "User", "optional", false, false, false},
+			{"pass", "Password", "optional", true, false, true}, // obscure: true — see WebDAV's own identical field above
 		},
 	},
 	{
 		backendType: "azureblob",
 		label:       "Azure Blob Storage",
 		fields: []cloudRemoteFieldSpec{
-			{"account", "Account", "", false, true},
-			{"key", "Key", "", true, true},
+			{"account", "Account", "", false, true, false},
+			{"key", "Key", "", true, true, false},
 		},
 	},
 }
@@ -215,32 +233,80 @@ func (r *Root) styleCloudRemoteDialogForm() {
 }
 
 // newCloudRemoteDialogButtons mirrors newCloudMountDialogButtons'
-// own Cancel/Create shape exactly.
+// own Cancel/OK/Mount three-button shape, with one more: Cancel/Test/
+// OK/Create, per the user's own explicit request.
+//
+//   - Test runs rclone.TestRemote against whatever the form currently
+//     holds — real connectivity, nothing persisted — and reports the
+//     result in cloudRemoteDialogStatus. Never blocks on missing
+//     required fields itself: a real connection failure ("host
+//     required") is more honest feedback than a pre-check duplicating
+//     what the attempt itself will say anyway.
+//   - OK persists the remote leniently: whatever's filled in, missing
+//     required fields and all — the deliberate "I know it's
+//     incomplete, save it anyway" action, per the user's own explicit
+//     request after being told Create refuses outright (see
+//     runSaveCloudRemoteLenient's own doc comment on why this is safe
+//     now that it's an explicit choice rather than silent, unlike
+//     plain `rclone config create` on its own).
+//   - Create keeps the original, strict behavior: refuses if anything
+//     required is missing.
 func (r *Root) newCloudRemoteDialogButtons() *tview.Flex {
 	r.cloudRemoteDialogCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
+	r.cloudRemoteDialogTestBtn = tview.NewButton("Test").SetSelectedFunc(r.runTestCloudRemote)
+	r.cloudRemoteDialogOKBtn = tview.NewButton("OK").SetSelectedFunc(r.runSaveCloudRemoteLenient)
 	r.cloudRemoteDialogCreateBtn = tview.NewButton("Create").SetSelectedFunc(r.runCreateCloudRemote)
 	r.cloudRemoteDialogCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
+	r.cloudRemoteDialogTestBtn.SetInputCapture(spaceAlsoActivates(r.runTestCloudRemote))
+	r.cloudRemoteDialogOKBtn.SetInputCapture(spaceAlsoActivates(r.runSaveCloudRemoteLenient))
 	r.cloudRemoteDialogCreateBtn.SetInputCapture(spaceAlsoActivates(r.runCreateCloudRemote))
 
 	r.cloudRemoteDialogCancelBtn.SetExitFunc(func(key tcell.Key) {
-		if key == tcell.KeyBacktab {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.cloudRemoteDialogTestBtn)
+		case tcell.KeyBacktab:
 			r.app.SetFocus(r.cloudRemoteDialogCreateBtn)
-		} else {
-			r.cloudRemoteDialogForm.SetFocus(0)
-			r.app.SetFocus(r.cloudRemoteDialogForm)
+		case tcell.KeyEscape:
+			r.hideOverlay()
+		}
+	})
+	r.cloudRemoteDialogTestBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.cloudRemoteDialogOKBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.cloudRemoteDialogCancelBtn)
+		case tcell.KeyEscape:
+			r.hideOverlay()
+		}
+	})
+	r.cloudRemoteDialogOKBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.cloudRemoteDialogCreateBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.cloudRemoteDialogTestBtn)
+		case tcell.KeyEscape:
+			r.hideOverlay()
 		}
 	})
 	r.cloudRemoteDialogCreateBtn.SetExitFunc(func(key tcell.Key) {
-		if key == tcell.KeyBacktab {
+		switch key {
+		case tcell.KeyTab:
 			r.cloudRemoteDialogForm.SetFocus(0)
 			r.app.SetFocus(r.cloudRemoteDialogForm)
-		} else {
-			r.app.SetFocus(r.cloudRemoteDialogCancelBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.cloudRemoteDialogOKBtn)
+		case tcell.KeyEscape:
+			r.hideOverlay()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.cloudRemoteDialogCancelBtn, 0, 1, false).
+		AddItem(r.cloudRemoteDialogTestBtn, 0, 1, false).
+		AddItem(r.cloudRemoteDialogOKBtn, 0, 1, false).
 		AddItem(r.cloudRemoteDialogCreateBtn, 0, 1, false)
 }
 
@@ -250,8 +316,10 @@ func (r *Root) newCloudRemoteDialogButtons() *tview.Flex {
 // fixed here, since it genuinely changes per backend.
 func (r *Root) newCloudRemoteDialogLayout() *tview.Flex {
 	r.cloudRemoteDialogTitleBar = newPlainTitleBar("New cloud remote")
+	r.cloudRemoteDialogStatus = tview.NewTextView().SetDynamicColors(true)
 	r.cloudRemoteDialogContent = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.cloudRemoteDialogForm, 9, 0, true).
+		AddItem(r.cloudRemoteDialogStatus, 1, 0, false).
 		AddItem(r.cloudRemoteDialogButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.cloudRemoteDialogTitleBar, 1, 0, false).
@@ -353,7 +421,10 @@ func (r *Root) rebuildCloudRemoteDialogFields(backendIndex int) {
 				r.app.SetFocus(r.cloudRemoteDialogCancelBtn)
 				return nil
 			case tcell.KeyEnter:
-				r.runCreateCloudRemote()
+				// OK, not Create — the same "OK is the default,
+				// Enter in any field runs it" contract the Connect/
+				// cloud-mount dialogs' own last field already follow.
+				r.runSaveCloudRemoteLenient()
 				return nil
 			}
 			return event
@@ -391,7 +462,14 @@ func (r *Root) styleCloudRemoteDialogFields() {
 // window whose size depends on what's actually in it right now.
 func (r *Root) resizeCloudRemoteDialog() {
 	formHeight := cloudRemoteDialogFormHeight(cloudRemoteBackends[r.cloudRemoteDialogBackendIndex])
-	width, height := 70, formHeight+1 // +1 for the button row
+	// 90, not the Connect dialog's own 64 — this form's own longest
+	// label ("Secret Access Key", 18 chars) is almost twice
+	// Connect's own longest ("Identifier", 10), and tview.Form sizes
+	// every field's input area to whatever's left after its one
+	// shared label column — the same fixed 64 budget that works fine
+	// for Connect's short labels left noticeably less room for an
+	// actual value here, a real, reported complaint.
+	width, height := 90, formHeight+2 // +1 status row, +1 button row
 	_, _, screenWidth, screenHeight := r.GetRect()
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -469,15 +547,7 @@ func (r *Root) runCreateCloudRemote() {
 		return
 	}
 
-	backend := cloudRemoteBackends[r.cloudRemoteDialogBackendIndex]
-	subIndex := -1
-	if backend.subOptionKey != "" && r.cloudRemoteDialogSubField != nil {
-		subIndex, _ = r.cloudRemoteDialogSubField.GetCurrentOption()
-	}
-	fieldValues := make([]string, len(r.cloudRemoteDialogFields))
-	for i, f := range r.cloudRemoteDialogFields {
-		fieldValues[i] = f.GetText()
-	}
+	backend, subIndex, fieldValues := r.currentCloudRemoteFields()
 	params, missing := cloudRemoteParams(backend, subIndex, fieldValues)
 	if len(missing) > 0 {
 		r.showError(fmt.Errorf("%s: missing required field(s): %s", backend.label, strings.Join(missing, ", ")))
@@ -490,4 +560,126 @@ func (r *Root) runCreateCloudRemote() {
 	}
 	r.hideOverlay()
 	r.openCloudMountCreateDialog(name)
+}
+
+// currentCloudRemoteFields reads the currently selected backend, its
+// own sub-option index (-1 if it has none), and every plain field's
+// own current text — shared by runCreateCloudRemote/
+// runSaveCloudRemoteLenient/runTestCloudRemote so the three can never
+// drift apart in how they read the form.
+func (r *Root) currentCloudRemoteFields() (backend cloudRemoteBackend, subIndex int, fieldValues []string) {
+	backend = cloudRemoteBackends[r.cloudRemoteDialogBackendIndex]
+	subIndex = -1
+	if backend.subOptionKey != "" && r.cloudRemoteDialogSubField != nil {
+		subIndex, _ = r.cloudRemoteDialogSubField.GetCurrentOption()
+	}
+	fieldValues = make([]string, len(r.cloudRemoteDialogFields))
+	for i, f := range r.cloudRemoteDialogFields {
+		fieldValues[i] = f.GetText()
+	}
+	return backend, subIndex, fieldValues
+}
+
+// runSaveCloudRemoteLenient is the "OK" button's own action: persists
+// the remote exactly like Create does, except it never refuses for a
+// missing required field — whatever's filled in gets saved, via
+// CreateStaticRemote, just like Create. This writes a remote to
+// rclone's own config that may not actually work yet, same as plain
+// `rclone config create` with a required field left out does on its
+// own (see cloudRemoteFieldSpec's own doc comment on that confirmed
+// behavior) — the difference is this is now an explicit, informed
+// choice the user made by pressing a button named "OK" right next to
+// "Create", not a silent side effect of a tool that never warned
+// about it.
+func (r *Root) runSaveCloudRemoteLenient() {
+	name := strings.TrimSpace(r.cloudRemoteDialogNameField.GetText())
+	if !validCloudRemoteName(name) {
+		r.showError(fmt.Errorf("%q is not a valid remote name", name))
+		return
+	}
+
+	backend, subIndex, fieldValues := r.currentCloudRemoteFields()
+	params, _ := cloudRemoteParams(backend, subIndex, fieldValues)
+
+	if err := rclone.CreateStaticRemote(name, backend.backendType, params); err != nil {
+		r.showError(err)
+		return
+	}
+	r.hideOverlay()
+	r.openCloudMountCreateDialog(name)
+}
+
+// cloudRemoteTestTimeout bounds both TestRemote's own connect and I/O
+// timeouts — long enough for a real, reachable endpoint to answer,
+// short enough that a genuinely unreachable one fails fast rather
+// than leaving the dialog's own "Testing…" status sitting there for
+// however long rclone's own defaults would otherwise take (confirmed:
+// a full minute, via --contimeout's own default, before TestRemote's
+// own timeout parameter existed to override it).
+const cloudRemoteTestTimeout = 10 * time.Second
+
+// setCloudRemoteDialogStatus mirrors setConnectStatus's own shape
+// exactly, for this dialog's own status line.
+func (r *Root) setCloudRemoteDialogStatus(text string, color tcell.Color) {
+	r.cloudRemoteDialogStatus.SetTextColor(color)
+	r.cloudRemoteDialogStatus.SetText(text)
+}
+
+// obscureTestParams re-obscures the value of every "key=value" entry
+// in params whose key is flagged obscure:true in backend's own field
+// table — see ObscurePassword's own doc comment on why TestRemote's
+// on-the-fly connection string needs this despite CreateStaticRemote
+// (plain `rclone config create`) needing no such step itself.
+func obscureTestParams(backend cloudRemoteBackend, params []string) ([]string, error) {
+	needsObscure := make(map[string]bool)
+	for _, spec := range backend.fields {
+		if spec.obscure {
+			needsObscure[spec.key] = true
+		}
+	}
+	out := make([]string, len(params))
+	for i, p := range params {
+		key, value, ok := strings.Cut(p, "=")
+		if !ok || !needsObscure[key] {
+			out[i] = p
+			continue
+		}
+		obscured, err := rclone.ObscurePassword(value)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = key + "=" + obscured
+	}
+	return out, nil
+}
+
+// runTestCloudRemote is the "Test" button's own action: a real
+// connectivity check against whatever the form currently holds, via
+// rclone.TestRemote's own on-the-fly connection string — nothing ever
+// persisted, regardless of whether required fields are filled in (a
+// real connection failure naming what's actually wrong is more useful
+// feedback than a pre-check here duplicating it). Runs via safeGo:
+// TestRemote shells out to a real rclone process and can take up to
+// cloudRemoteTestTimeout to fail, which must never block the UI
+// thread, the same non-blocking-background-work rule toggleCloudMount
+// already applies to its own real Mount/Unmount calls.
+func (r *Root) runTestCloudRemote() {
+	backend, subIndex, fieldValues := r.currentCloudRemoteFields()
+	params, _ := cloudRemoteParams(backend, subIndex, fieldValues)
+
+	r.setCloudRemoteDialogStatus("Testing…", r.theme.Text)
+	onPanic := func() { r.setCloudRemoteDialogStatus("", r.theme.Text) }
+	r.safeGo("cloud remote test", onPanic, func() {
+		testParams, err := obscureTestParams(backend, params)
+		if err == nil {
+			err = rclone.TestRemote(backend.backendType, testParams, cloudRemoteTestTimeout)
+		}
+		r.app.QueueUpdateDraw(func() {
+			if err != nil {
+				r.setCloudRemoteDialogStatus("✕ "+err.Error(), r.theme.CriticalText)
+			} else {
+				r.setCloudRemoteDialogStatus("✓ Connection OK", r.theme.EntryExecutable)
+			}
+		})
+	})
 }

@@ -1170,7 +1170,10 @@ type Root struct {
 	cloudRemoteDialogSubField     *tview.DropDown
 	cloudRemoteDialogFields       []*tview.InputField
 	cloudRemoteDialogCancelBtn    *tview.Button
+	cloudRemoteDialogTestBtn      *tview.Button
+	cloudRemoteDialogOKBtn        *tview.Button
 	cloudRemoteDialogCreateBtn    *tview.Button
+	cloudRemoteDialogStatus       *tview.TextView
 	cloudRemoteDialogButtons      *tview.Flex
 	cloudRemoteDialogTitleBar     *tview.TextView
 	cloudRemoteDialogContent      *tview.Flex
