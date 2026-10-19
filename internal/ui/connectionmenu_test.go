@@ -1434,3 +1434,27 @@ func historyRowFor(t *testing.T, r *Root, conn remotefs.Connection) int {
 	t.Fatalf("connection %+v is not a history row right now", conn)
 	return -1
 }
+
+// TestShortenPathLastSegmentsAlignsToSeparators pins
+// shortenPathLastSegments' own contract: cuts only at "/" boundaries,
+// never mid-segment the way shortenPathLeft's own character-count
+// truncation can — the real, reported complaint
+// ("…hare/breakthrough/mounts/jens/mydropbox") this replaced it for.
+func TestShortenPathLastSegmentsAlignsToSeparators(t *testing.T) {
+	cases := []struct {
+		path string
+		n    int
+		want string
+	}{
+		{"/home/jens/.local/share/breakthrough/mounts/jens/mydropbox", 3, "…/mounts/jens/mydropbox"},
+		{"/a/b", 3, "/a/b"},     // fewer segments than n: unchanged
+		{"/a/b/c", 3, "/a/b/c"}, // exactly n segments: unchanged
+		{"/a/b/c/d", 3, "…/b/c/d"},
+		{"/mounts/jens/mydropbox", 3, "/mounts/jens/mydropbox"}, // exactly 3, unchanged
+	}
+	for _, c := range cases {
+		if got := shortenPathLastSegments(c.path, c.n); got != c.want {
+			t.Errorf("shortenPathLastSegments(%q, %d) = %q, want %q", c.path, c.n, got, c.want)
+		}
+	}
+}

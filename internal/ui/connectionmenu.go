@@ -45,12 +45,40 @@ const connectionMenuNewConnectionLabel = " +  New"
 // full phrase never risked distorting anything and stays as one cell.
 const sshShellMenuNewConnectionLabel = " +  New connection"
 
-// connectionMenuCloudTargetMaxWidth caps how much of a cloud mount's
-// own local target path a row shows before it's shortened from the
-// left (see shortenPathLeft) — the same reasoning
-// tabSwitcherMaxPathWidth already gives for a dropdown row showing a
-// real filesystem path next to other, much shorter columns.
-const connectionMenuCloudTargetMaxWidth = 40
+// connectionMenuCloudTargetSegments is how many trailing path
+// segments of a cloud mount's own Target a row shows (see
+// shortenPathLastSegments) — aligned to path separators, never
+// truncated mid-segment the way shortenPathLeft's own character-count
+// truncation can, per the user's own explicit request after a real
+// example ("…hare/breakthrough/mounts/jens/mydropbox") cut off
+// mid-word. 3 covers the default MountsDir()-derived path's own last
+// three segments exactly ("mounts", "<user>", "<remote name>") — by
+// the user's own math, that leaves roughly 25 of
+// connectionMenuColumnWidths' own available room for the remote
+// name itself even at the default base path's own length, comfortably
+// enough for a real-world remote name.
+const connectionMenuCloudTargetSegments = 3
+
+// shortenPathLastSegments returns path's own last n slash-separated
+// segments, joined back with "/" and prefixed with "…/" if any
+// earlier segments were cut off — unlike shortenPathLeft, this never
+// lands mid-segment, since it only ever cuts at a "/" boundary.
+// Returns path unchanged if it has n or fewer segments to begin with
+// (nothing to cut).
+func shortenPathLastSegments(path string, n int) string {
+	segments := strings.Split(path, "/")
+	// A leading "/" (every cloud mount's own Target is absolute)
+	// produces a leading "" element from Split — drop it so "/a/b/c"
+	// counts as 3 segments, not 4, the same way a human reading the
+	// path would count them.
+	if len(segments) > 0 && segments[0] == "" {
+		segments = segments[1:]
+	}
+	if len(segments) <= n {
+		return path
+	}
+	return "…/" + strings.Join(segments[len(segments)-n:], "/")
+}
 
 // Column indices within the connection menu table. User | @ | Host/IP
 // are fixed, in both collapsed and expanded mode
@@ -599,7 +627,7 @@ func (r *Root) renderConnectionMenu() {
 				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColUser)))
 		table.SetCell(thisRow, connectionMenuColAt, blankConnectionMenuCell())
 		table.SetCell(thisRow, connectionMenuColHost,
-			tview.NewTableCell(shortenPathLeft(entry.Target, connectionMenuCloudTargetMaxWidth)).
+			tview.NewTableCell(shortenPathLastSegments(entry.Target, connectionMenuCloudTargetSegments)).
 				SetTextColor(color).
 				SetSelectable(false).
 				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColHost)))
