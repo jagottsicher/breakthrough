@@ -484,6 +484,31 @@ func (r *Root) renderConnectionMenu() {
 	table.SetCell(newRow, ejectCol, blankConnectionMenuCell())
 	table.SetCell(newRow, removeCol, blankConnectionMenuCell())
 
+	// "☁ Cloud mounts" is a second trailing row, after "+ New
+	// connection" — the entry point into cloudmountmenu.go's own
+	// dropdown (see openCloudMountMenu). Deliberately its own row
+	// rather than folded into this table's own history rows: a cloud
+	// mount is a different kind of entity entirely (see
+	// cloudmountmenu.go's own package doc comment), this is just the
+	// one doorway into it from the menu the user already thinks of as
+	// "where connections live."
+	cloudRow := newRow + 1
+	r.connectionMenuCloudRow = cloudRow
+	table.SetCell(cloudRow, connectionMenuColUser,
+		tview.NewTableCell(" ☁  Cloud mounts").
+			SetTextColor(r.theme.Text).
+			SetSelectable(true).
+			SetClickedFunc(r.clickConnectionMenuCell(cloudRow, labelCol)))
+	r.connectionMenuRowColors[cloudRow] = r.theme.Text
+	table.SetCell(cloudRow, connectionMenuColAt, blankConnectionMenuCell())
+	table.SetCell(cloudRow, connectionMenuColHost, blankConnectionMenuCell())
+	if expanded {
+		table.SetCell(cloudRow, connectionMenuColIdentifier, blankConnectionMenuCell())
+		table.SetCell(cloudRow, connectionMenuColTags, blankConnectionMenuCell())
+	}
+	table.SetCell(cloudRow, ejectCol, blankConnectionMenuCell())
+	table.SetCell(cloudRow, removeCol, blankConnectionMenuCell())
+
 	// Default selection mirrors openTabSwitcher's own
 	// r.openTabSwitcher(r.activeTab): the active connection's own row
 	// if this panel has one, row 1 (the first real row, after the
@@ -717,6 +742,11 @@ func (r *Root) connectionMenuSetHeaderCell(col int, label string, key connection
 // absolute column index shifts (see connectionMenuEjectColumn's own
 // doc comment on the bug this would otherwise be).
 func (r *Root) activateConnectionMenuCell(row, column int) {
+	if row == r.connectionMenuCloudRow {
+		r.hideOverlay()
+		r.openCloudMountMenu()
+		return
+	}
 	conn, ok := r.connectionMenuHistoryRows[row]
 	if !ok {
 		r.hideOverlay()

@@ -27,6 +27,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/operations"
+	"github.com/jagottsicher/breakthrough/internal/rclone"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/sshkeys"
@@ -1215,6 +1216,37 @@ type Root struct {
 	// in its place, the same "✕" pattern connectionHistoryRemoveGlyph
 	// already established rather than a dedicated row of its own.
 	connectionMenuActiveRow int
+
+	// connectionMenuCloudRow is the row within connectionMenuTable that
+	// renders the trailing "☁ Cloud mounts" action (see
+	// renderConnectionMenu) — the one other kind of row this table has
+	// besides a real history row and "+ New connection", so
+	// activateConnectionMenuCell has to tell all three apart: without
+	// this field, "not a history row" alone (connectionMenuHistoryRows'
+	// own "ok" check) can't distinguish this row from "+ New connection"
+	// either, since both are absent from that map.
+	connectionMenuCloudRow int
+
+	// cloudMountTable/TitleBar/Layout is the cloud-mounts dropdown (see
+	// cloudmountmenu.go) — reached from this same connect menu's own
+	// trailing "☁ Cloud mounts" row, deliberately its own small Table
+	// rather than a second section threaded through connectionMenuTable
+	// above (see cloudmountmenu.go's own package doc comment for why).
+	cloudMountTable    *tview.Table
+	cloudMountTitleBar *tview.TextView
+	cloudMountLayout   *tview.Flex
+	// cloudMountRows maps a row index in cloudMountTable to the
+	// rclone.MountEntry that row represents — populated fresh by
+	// renderCloudMountMenu on every open/re-render, mirroring
+	// connectionMenuHistoryRows' own contract exactly.
+	cloudMountRows map[int]rclone.MountEntry
+	// cloudMountPending maps a MountEntry's own Target to a transient
+	// "mounting…"/"unmounting…" label while toggleCloudMount's own
+	// background Mount/Unmount call is still running — see
+	// cloudMountStatusText's own doc comment for why a stale real
+	// status would otherwise sit there unexplained for however long
+	// that subprocess takes.
+	cloudMountPending map[string]string
 
 	// sshShellMenuTable/TitleBar/Layout is the "gs" chord's own dropdown
 	// (see sshshell.go) — the same per-cell Table shape
@@ -2686,6 +2718,16 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.connectionMenuTitleRow = r.newConnectionMenuTitleRow()
 	r.connectionMenuLayout = r.newConnectionMenuLayout()
 
+	// The cloud-mounts dropdown (see cloudmountmenu.go) — same
+	// "rebuilt fresh on every open" shape as the connection dropdown
+	// just above, just a plain Table+TitleBar Flex with no search
+	// field or expand/collapse state of its own.
+	r.cloudMountTable = r.newCloudMountTable()
+	r.cloudMountTitleBar = r.newCloudMountTitleBar()
+	r.cloudMountLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.cloudMountTitleBar, 1, 0, false).
+		AddItem(r.cloudMountTable, 0, 1, true)
+
 	// The "gs" SSH shell dropdown ("Open shell to") and its own "Add
 	// new ssh connection" dialog (see sshshell.go) — the same
 	// two-pieces shape the Connect dialog/
@@ -3008,6 +3050,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(connectDialogPage, r.connectLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
+	r.AddPage(cloudMountMenuPage, r.cloudMountLayout, false, false)
 	r.AddPage(sshShellDialogPage, r.sshShellLayout, false, false)
 	r.AddPage(sshShellMenuPage, r.sshShellMenuLayout, false, false)
 	r.newNotifyBar()

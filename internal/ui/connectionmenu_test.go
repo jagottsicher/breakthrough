@@ -476,16 +476,16 @@ func TestRenderConnectionMenuAppliesTheSearchFieldsOwnText(t *testing.T) {
 		}
 	}
 	r.renderConnectionMenu()
-	if len(connectionMenuLabelTexts(r.connectionMenuTable)) != 3 { // 2 history rows + "+ New"
-		t.Fatalf("unfiltered rows = %v, want 3", connectionMenuLabelTexts(r.connectionMenuTable))
+	if len(connectionMenuLabelTexts(r.connectionMenuTable)) != 4 { // 2 history rows + "+ New" + "Cloud mounts"
+		t.Fatalf("unfiltered rows = %v, want 4", connectionMenuLabelTexts(r.connectionMenuTable))
 	}
 
 	r.connectionMenuSearchField.SetText("web128")
 	r.renderConnectionMenu()
 
 	texts := connectionMenuLabelTexts(r.connectionMenuTable)
-	if len(texts) != 2 || !strings.Contains(texts[0], "web128") { // 1 history row + "+ New"
-		t.Errorf("filtered rows = %v, want only web128 plus \"+ New\"", texts)
+	if len(texts) != 3 || !strings.Contains(texts[0], "web128") { // 1 history row + "+ New" + "Cloud mounts"
+		t.Errorf("filtered rows = %v, want only web128 plus \"+ New\"/\"Cloud mounts\"", texts)
 	}
 }
 
@@ -578,10 +578,9 @@ func TestOpenConnectionMenuResetsAnyPreviousSearch(t *testing.T) {
 func TestRenderConnectionMenuOnALocalPanelOffersOnlyNewConnection(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	r.renderConnectionMenu()
-
 	texts := connectionMenuLabelTexts(r.connectionMenuTable)
-	if len(texts) != 1 || !strings.Contains(texts[0], "New") {
-		t.Errorf("rows = %v, want exactly one \"New\" row for a local panel", texts)
+	if len(texts) != 2 || !strings.Contains(texts[0], "New") || !strings.Contains(texts[1], "Cloud") {
+		t.Fatalf("rows = %v, want exactly \"New\" then \"Cloud mounts\" for a local panel", texts)
 	}
 }
 
@@ -606,8 +605,8 @@ func TestRenderConnectionMenuOnAConnectedPanelListsTheActiveEntryThenNewConnecti
 	r.renderConnectionMenu()
 
 	texts := connectionMenuLabelTexts(r.connectionMenuTable)
-	if len(texts) != 2 {
-		t.Fatalf("rows = %v, want exactly one history row for the active connection plus \"New connection…\"", texts)
+	if len(texts) != 3 {
+		t.Fatalf("rows = %v, want exactly one history row for the active connection plus \"New connection…\" plus \"Cloud mounts\"", texts)
 	}
 	if !strings.Contains(texts[0], conn.Label()) {
 		t.Errorf("row 0 label = %q, want the active connection's own history row first", texts[0])
