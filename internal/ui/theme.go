@@ -557,6 +557,33 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.connectTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.connectTitleBar.SetTextColor(theme.TextColor)
 
+	// The "New cloud mount" dialog (see cloudmountdialog.go) — same
+	// shape as connectForm/connectTitleBar/connect*Btn just above,
+	// this dialog's own equivalents. A real, reported gap: these were
+	// never added here at all, so every one of them still showed
+	// tview's own unthemed black background/default colors regardless
+	// of the active color scheme.
+	r.cloudMountDialogForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.cloudMountDialogForm.SetLabelColor(theme.TextColor)
+	r.cloudMountDialogForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.cloudMountDialogForm.SetFieldTextColor(theme.TextColor)
+	styleButton(r.cloudMountDialogCancelBtn, theme)
+	styleButton(r.cloudMountDialogOKBtn, theme)
+	styleButton(r.cloudMountDialogMountBtn, theme)
+	r.cloudMountDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.cloudMountDialogTitleBar.SetTextColor(theme.TextColor)
+
+	// The "New cloud remote" dialog (see cloudremotedialog.go) — same
+	// gap, same fix. cloudRemoteDialogForm is rebuilt from scratch on
+	// every backend-type change (see rebuildCloudRemoteDialogFields),
+	// so this also has to run again there, not just here on a live
+	// theme switch — see that function's own call to styleCloudRemoteDialogForm.
+	r.styleCloudRemoteDialogForm()
+	styleButton(r.cloudRemoteDialogCancelBtn, theme)
+	styleButton(r.cloudRemoteDialogCreateBtn, theme)
+	r.cloudRemoteDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.cloudRemoteDialogTitleBar.SetTextColor(theme.TextColor)
+
 	styleList(r.hostKeyConfirmDialog, theme)
 	r.hostKeyConfirmTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.hostKeyConfirmTitleBar.SetTextColor(theme.TextColor)

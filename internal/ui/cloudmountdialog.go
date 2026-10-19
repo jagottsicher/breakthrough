@@ -260,7 +260,12 @@ func (r *Root) openCloudMountCreateDialog(preselect string) {
 	options := append([]string{cloudMountDialogCreateNewOption}, names...)
 	r.cloudMountDialogRemoteField.SetOptions(options, func(text string, index int) {
 		if index == 0 {
-			r.hideOverlay()
+			// Deliberately no hideOverlay here — openCloudRemoteDialog
+			// itself uses pushOverlay, stacking on top of this dialog
+			// rather than replacing it, precisely so Escape/Cancel in
+			// that dialog pops back to this one instead of closing
+			// everything (a real, reported dead end this used to be:
+			// hideOverlay-then-showOverlay left nothing underneath).
 			r.openCloudRemoteDialog()
 			return
 		}

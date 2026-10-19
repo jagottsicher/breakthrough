@@ -201,6 +201,19 @@ func (r *Root) newCloudRemoteDialogForm() *tview.Form {
 	return f
 }
 
+// styleCloudRemoteDialogForm applies the current theme's own Form-
+// level colors to cloudRemoteDialogForm — called from applyTheme (a
+// live color-scheme switch) and from rebuildCloudRemoteDialogFields
+// (which rebuilds the form from scratch on every backend-type change,
+// via Form.Clear(true), wiping out whatever this already set), so the
+// two can never drift out of sync with each other.
+func (r *Root) styleCloudRemoteDialogForm() {
+	r.cloudRemoteDialogForm.SetBackgroundColor(r.theme.SurfaceBackground)
+	r.cloudRemoteDialogForm.SetLabelColor(r.theme.TextColor)
+	r.cloudRemoteDialogForm.SetFieldBackgroundColor(r.theme.InputFocusedBackground)
+	r.cloudRemoteDialogForm.SetFieldTextColor(r.theme.TextColor)
+}
+
 // newCloudRemoteDialogButtons mirrors newCloudMountDialogButtons'
 // own Cancel/Create shape exactly.
 func (r *Root) newCloudRemoteDialogButtons() *tview.Flex {
@@ -272,6 +285,12 @@ func (r *Root) rebuildCloudRemoteDialogFields(backendIndex int) {
 	backend := cloudRemoteBackends[backendIndex]
 
 	r.cloudRemoteDialogForm.Clear(true)
+	// Clear(true) wipes any Form-level color Set*Color call already
+	// made (background/label/field colors are themselves just Form
+	// state, the same as its items) — re-applied every rebuild, not
+	// just once from applyTheme, so a backend-type change never
+	// silently reverts to tview's own unthemed default colors.
+	r.styleCloudRemoteDialogForm()
 
 	r.cloudRemoteDialogBackendField = tview.NewDropDown().SetLabel("Type")
 	labels := make([]string, len(cloudRemoteBackends))
@@ -368,11 +387,21 @@ func (r *Root) resizeCloudRemoteDialog() {
 // the first entry (S3) and every field cleared, the same "never
 // leaks a previous open's own typed values" contract openConnectDialog
 // already keeps for the Connect dialog.
+//
+// pushOverlay, deliberately not showOverlay: this stacks on top of
+// the "New cloud mount" dialog that opened it (see its own Remote
+// dropdown handler) rather than replacing it — per a real, reported
+// dead end, Escape/Cancel here now pops back to that dialog instead
+// of closing everything. runCreateCloudRemote's own success path still
+// calls openCloudMountCreateDialog afterwards, which does use
+// showOverlay and so still fully refreshes/replaces the stack at that
+// point — this only changes what happens on the way in, and on
+// Cancel.
 func (r *Root) openCloudRemoteDialog() {
 	r.rebuildCloudRemoteDialogFields(0)
 	r.cloudRemoteDialogNameField.SetText("")
 	r.resizeCloudRemoteDialog()
-	r.showOverlay(cloudRemoteDialogPage, r.cloudRemoteDialogLayout)
+	r.pushOverlay(cloudRemoteDialogPage, r.cloudRemoteDialogLayout, nil)
 }
 
 // cloudRemoteParams builds the "key=value" params
