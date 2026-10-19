@@ -695,3 +695,81 @@ func TestToolboxCurlEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
+
+// TestToolboxNmapFlagForParsesTheChoiceLabelsOwnSuffix pins
+// toolboxNmapFlagFor directly: "Default" (and anything else without a
+// "(-flag)" suffix) means no flag at all, every other choice yields
+// exactly the flag inside its own parentheses.
+func TestToolboxNmapFlagForParsesTheChoiceLabelsOwnSuffix(t *testing.T) {
+	cases := map[string]string{
+		"Default":                       "",
+		"SYN scan (-sS)":                "-sS",
+		"UDP scan (-sU)":                "-sU",
+		"Ping scan, no port scan (-sn)": "-sn",
+		"Aggressive (-T4)":              "-T4",
+	}
+	for choice, want := range cases {
+		if got := toolboxNmapFlagFor(choice); got != want {
+			t.Errorf("toolboxNmapFlagFor(%q) = %q, want %q", choice, got, want)
+		}
+	}
+}
+
+// TestToolboxNmapEntryBuildOmitsEmptyOptionalFields pins nmap's own
+// build func via a real open: Default scan type/timing and an empty
+// Ports field must produce no flags at all beyond the target itself.
+func TestToolboxNmapEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry := toolboxNmapEntry()
+	entry.run(r)
+
+	targetField, ok := r.toolboxFormWidgets[toolboxNmapFieldTarget].(*tview.InputField)
+	if !ok {
+		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", toolboxNmapFieldTarget)
+	}
+	targetField.SetText("192.168.1.0/24")
+
+	if got := r.toolboxFormPreview.GetText(true); got != "nmap 192.168.1.0/24" {
+		t.Errorf("preview = %q, want exactly %q (Default scan/timing, empty Ports)", got, "nmap 192.168.1.0/24")
+	}
+
+	r.runToolboxForm()
+	if len(r.toolWindows) != 1 {
+		t.Fatalf("len(toolWindows) = %d, want 1", len(r.toolWindows))
+	}
+	tw := r.toolWindows[0]
+	defer tw.close()
+	if got := tw.titleBar.GetText(true); !strings.Contains(got, "nmap 192.168.1.0/24") {
+		t.Errorf("tool window title = %q, want it to mention %q", got, "nmap 192.168.1.0/24")
+	}
+}
+
+// TestToolboxNmapEntryBuildIncludesEveryFieldWhenSet is
+// TestToolboxNmapEntryBuildOmitsEmptyOptionalFields's counterpart: every
+// field set to a non-default value reaches argv, in the Scan type/Ports/
+// Timing template/Target order toolboxNmapEntry's own build func uses.
+func TestToolboxNmapEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry := toolboxNmapEntry()
+	entry.run(r)
+
+	targetField := r.toolboxFormWidgets[toolboxNmapFieldTarget].(*tview.InputField)
+	targetField.SetText("example.com")
+	portsField := r.toolboxFormWidgets[toolboxNmapFieldPorts].(*tview.InputField)
+	portsField.SetText("22,80,443")
+	scanField := r.toolboxFormWidgets[toolboxNmapFieldScan].(*tview.DropDown)
+	scanField.SetCurrentOption(1) // SYN scan (-sS), per toolboxNmapScanChoices' own order
+	timingField := r.toolboxFormWidgets[toolboxNmapFieldTiming].(*tview.DropDown)
+	timingField.SetCurrentOption(5) // Aggressive (-T4), per toolboxNmapTimingChoices' own order
+
+	want := "nmap -sS -p 22,80,443 -T4 example.com"
+	if got := r.toolboxFormPreview.GetText(true); got != want {
+		t.Errorf("preview = %q, want %q", got, want)
+	}
+}
