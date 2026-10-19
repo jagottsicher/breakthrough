@@ -87,6 +87,10 @@ var (
 		_, err := exec.Command(unmountCommand(), "-u", target).Output()
 		return wrapExitError(err)
 	}
+	runConfigCreate = func(args []string) error {
+		_, err := exec.Command("rclone", args...).Output()
+		return wrapExitError(err)
+	}
 	lookPath = exec.LookPath
 )
 
@@ -203,6 +207,44 @@ func Unmount(target string) error {
 		return ErrNotAvailable
 	}
 	return runUnmount(target)
+}
+
+// CreateStaticRemote configures a brand-new rclone remote with static
+// credentials — S3 and its clones, Azure Blob, Aliyun OSS, FTP, WebDAV
+// (Nextcloud, MagentaCloud) — by shelling out to `rclone config create
+// name type key=value ... --non-interactive`. Each entry of params is
+// one already-formed "key=value" pair, exactly rclone's own CLI
+// syntax, rather than a map: argument order then stays deterministic,
+// which matters for testing this without a real rclone, and building
+// those pairs (which keys a given backend type needs) is the Connect
+// dialog's own job, not this package's.
+//
+// OAuth backends (OneDrive, Dropbox, Google Drive) deliberately go
+// through a different path, not this function — see internal/ui's own
+// cloud-mount dialog for the narrower "configure elsewhere, then pick
+// it here" scope OAuth gets in this slice.
+//
+// Refuses outright if name already names a configured remote, rather
+// than overwriting it: this writes to rclone's own config file, state
+// breakthrough doesn't own, and a caller could easily not realize
+// already has a remote by that name — the same "no silent overwrite"
+// reasoning AddMountEntry already applies to breakthrough's own
+// config.
+func CreateStaticRemote(name, backendType string, params []string) error {
+	if !Available() {
+		return ErrNotAvailable
+	}
+	existing, err := ListRemotes()
+	if err != nil {
+		return err
+	}
+	for _, r := range existing {
+		if r.Name == name {
+			return fmt.Errorf("rclone: a remote named %q already exists", name)
+		}
+	}
+	args := append([]string{"config", "create", name, backendType, "--non-interactive"}, params...)
+	return runConfigCreate(args)
 }
 
 // IsMounted reports whether target is currently a live mountpoint, by
