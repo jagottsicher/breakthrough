@@ -56,6 +56,16 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 	})
 
 	r.cloudMountDialogRemoteField = tview.NewDropDown().SetLabel("Remote")
+	// A real, reported gap: widening the dialog itself (64 -> 100) did
+	// nothing for this field specifically — confirmed directly against
+	// tview's own dropdown.go, not guessed: unlike InputField,
+	// DropDown.SetFormAttributes never receives a fieldWidth from the
+	// Form at all, and its own default (GetFieldWidth, width 0) sizes
+	// the closed box to its widest *option* string, never to whatever
+	// room the Form actually has. SetFieldWidth is the only way to
+	// make it wider than that — 50, generous enough for a real-world
+	// remote name without being as wide as Target's own full path.
+	r.cloudMountDialogRemoteField.SetFieldWidth(50)
 	r.cloudMountDialogRemoteField.SetSelectedFunc(func(text string, index int) {
 		// Prefills Target from the newly selected remote's own name,
 		// but only if Target still holds some *other* remote's own
@@ -64,6 +74,13 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 		// cloudMountDialogDefaultTarget's own doc comment for the
 		// exact rule this follows).
 		r.cloudMountDialogSyncTargetToSelection(text)
+		// Delete makes no sense for the "+ Create new remote…"
+		// sentinel (nothing real to delete yet) — rebuild the button
+		// row to match, the same "which buttons are in the Flex
+		// changes per state" shape setConnectButtonsMode already
+		// establishes for the Connect dialog's own two-vs-three button
+		// modes.
+		r.setCloudMountDialogButtonsMode(index != 0)
 	})
 	f.AddFormItem(r.cloudMountDialogRemoteField)
 
@@ -124,28 +141,75 @@ func (r *Root) styleCloudMountDialogFields() {
 	styleInput(r.cloudMountDialogTagsField, r.theme, false)
 }
 
-// newCloudMountDialogButtons mirrors newConnectButtons' own
-// Cancel/OK/Connect three-button shape exactly, per the user's own
-// explicit request that this dialog behave like the Connect dialog it
-// sits beside: OK only ever saves the MountEntry — never mounts it —
-// so several cloud mounts can be prepared ahead of actually needing
-// them, the same reason SaveConnection exists independently of
-// RecordAttempt for SFTP (see SaveConnection's own doc comment). Mount
-// saves and then actually mounts it, immediately.
+// newCloudMountDialogButtons mirrors newConnectButtons' own shape:
+// build all four button widgets once, here, and let
+// setCloudMountDialogButtonsMode decide which of them are actually in
+// the Flex (and therefore where Tab/Backtab lead) per mode — never
+// rewired again from here. OK only ever saves the MountEntry — never
+// mounts it — so several cloud mounts can be prepared ahead of
+// actually needing them, the same reason SaveConnection exists
+// independently of RecordAttempt for SFTP (see SaveConnection's own
+// doc comment). Mount saves and then actually mounts it, immediately.
+//
+// Delete is the one new button, per a real, reported gap: the merged
+// list's own "✕" (removeCloudMount, see cloudmountmenu.go) can only
+// ever remove a remote that already has a MountEntry — a remote just
+// created (via "+ Create new remote…", see
+// cloudMountDialogCreateNewOption) but never actually turned into one
+// yet has no row there to act on at all, and Cancel alone leaves it
+// sitting in rclone's own config forever with no way back to delete
+// it from this app. Delete operates on whichever remote the dropdown
+// currently has selected, whether or not it has a MountEntry yet (see
+// runDeleteSelectedCloudRemote) — but makes no sense at all for the
+// synthetic cloudMountDialogCreateNewOption entry, so
+// setCloudMountDialogButtonsMode leaves it out of the Flex entirely
+// while that's selected, rather than just disabling it (a real,
+// reported complaint: it used to always be there, even then).
 func (r *Root) newCloudMountDialogButtons() *tview.Flex {
 	r.cloudMountDialogCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
 	r.cloudMountDialogOKBtn = tview.NewButton("OK").SetSelectedFunc(r.runSaveCloudMount)
 	r.cloudMountDialogMountBtn = tview.NewButton("Mount").SetSelectedFunc(r.runSaveAndMountCloudMount)
+	r.cloudMountDialogDeleteBtn = tview.NewButton("Delete").SetSelectedFunc(r.runDeleteSelectedCloudRemote)
 	r.cloudMountDialogCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
 	r.cloudMountDialogOKBtn.SetInputCapture(spaceAlsoActivates(r.runSaveCloudMount))
 	r.cloudMountDialogMountBtn.SetInputCapture(spaceAlsoActivates(r.runSaveAndMountCloudMount))
+	r.cloudMountDialogDeleteBtn.SetInputCapture(spaceAlsoActivates(r.runDeleteSelectedCloudRemote))
 
+	r.cloudMountDialogButtons = tview.NewFlex().SetDirection(tview.FlexColumn)
+	r.setCloudMountDialogButtonsMode(false)
+	return r.cloudMountDialogButtons
+}
+
+// setCloudMountDialogButtonsMode rebuilds cloudMountDialogButtons' own
+// contents and Tab/Backtab wiring for showDelete — called from
+// openCloudMountCreateDialog on every open and from the Remote
+// dropdown's own SetSelectedFunc on every selection change, not just
+// once from newCloudMountDialogButtons: the same four button widgets
+// are shared across every open, so both which of them are actually in
+// the Flex *and* where their own Tab/Backtab lead have to be set
+// together here, every time — the exact shape setConnectButtonsMode
+// already establishes in connectdialog.go for the same reason.
+//
+// Equal proportion (0, 1) each, nothing else, so however many buttons
+// are present this time fill the whole row edge to edge, split evenly.
+func (r *Root) setCloudMountDialogButtonsMode(showDelete bool) {
+	r.cloudMountDialogButtons.Clear()
+	r.cloudMountDialogButtons.AddItem(r.cloudMountDialogCancelBtn, 0, 1, false)
+	r.cloudMountDialogButtons.AddItem(r.cloudMountDialogOKBtn, 0, 1, false)
+	r.cloudMountDialogButtons.AddItem(r.cloudMountDialogMountBtn, 0, 1, false)
+
+	// Escape always cancels, the same as everywhere else in this
+	// dialog, regardless of mode.
 	r.cloudMountDialogCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
 			r.app.SetFocus(r.cloudMountDialogOKBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.cloudMountDialogTagsField)
+			if showDelete {
+				r.app.SetFocus(r.cloudMountDialogDeleteBtn)
+			} else {
+				r.app.SetFocus(r.cloudMountDialogMountBtn)
+			}
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
@@ -160,7 +224,39 @@ func (r *Root) newCloudMountDialogButtons() *tview.Flex {
 			r.hideOverlay()
 		}
 	})
+
+	if !showDelete {
+		// No Delete button at all — nothing real to delete yet for the
+		// synthetic cloudMountDialogCreateNewOption entry. Mount's own
+		// Tab wraps straight back to the form, the same "last real
+		// stop, wrap to the first field" shape the showDelete case
+		// below gives Delete instead.
+		r.cloudMountDialogMountBtn.SetExitFunc(func(key tcell.Key) {
+			switch key {
+			case tcell.KeyTab:
+				r.cloudMountDialogForm.SetFocus(0)
+				r.app.SetFocus(r.cloudMountDialogForm)
+			case tcell.KeyBacktab:
+				r.app.SetFocus(r.cloudMountDialogOKBtn)
+			case tcell.KeyEscape:
+				r.hideOverlay()
+			}
+		})
+		return
+	}
+
+	r.cloudMountDialogButtons.AddItem(r.cloudMountDialogDeleteBtn, 0, 1, false)
 	r.cloudMountDialogMountBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.cloudMountDialogDeleteBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.cloudMountDialogOKBtn)
+		case tcell.KeyEscape:
+			r.hideOverlay()
+		}
+	})
+	r.cloudMountDialogDeleteBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
 			// r.cloudMountDialogForm.SetFocus(0), not
@@ -173,16 +269,11 @@ func (r *Root) newCloudMountDialogButtons() *tview.Flex {
 			r.cloudMountDialogForm.SetFocus(0)
 			r.app.SetFocus(r.cloudMountDialogForm)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.cloudMountDialogOKBtn)
+			r.app.SetFocus(r.cloudMountDialogMountBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-
-	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.cloudMountDialogCancelBtn, 0, 1, false).
-		AddItem(r.cloudMountDialogOKBtn, 0, 1, false).
-		AddItem(r.cloudMountDialogMountBtn, 0, 1, false)
 }
 
 // newCloudMountDialogLayout mirrors newConnectLayout's own shape:
@@ -313,8 +404,16 @@ func (r *Root) openCloudMountCreateDialog(preselect string) {
 	}
 	r.cloudMountDialogIdentifierField.SetText("")
 	r.cloudMountDialogTagsField.SetText("")
+	r.setCloudMountDialogButtonsMode(selectedIndex != 0)
 
-	width, height := 64, 12
+	// 100, not 64 — Target's own value is a real local filesystem
+	// path (the default alone, ~/.local/share/breakthrough/mounts/
+	// <user>/<remote>, already runs well past 64 columns once Target's
+	// own label and Form's padding are counted), a real, reported
+	// complaint. Same reasoning as the "New cloud remote" dialog's own
+	// 90 (see resizeCloudRemoteDialog's doc comment) — this one's
+	// longest value, not longest label, is what was actually cramped.
+	width, height := 100, 12
 	_, _, screenWidth, screenHeight := r.GetRect()
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -387,4 +486,70 @@ func (r *Root) runSaveAndMountCloudMount() {
 	}
 	r.hideOverlay()
 	r.toggleCloudMount(entry)
+}
+
+// runDeleteSelectedCloudRemote is the "Delete" button's own action —
+// permanently removes whichever remote the Remote dropdown currently
+// has selected. A no-op for the synthetic
+// cloudMountDialogCreateNewOption entry — there is no real remote
+// there to delete.
+//
+// This exists specifically for the remote that has no MountEntry yet:
+// one just created via "+ Create new remote…" (or saved leniently via
+// that dialog's own OK, missing required fields and all — see
+// runSaveCloudRemoteLenient) that the user now wants to undo without
+// first having to give it a Target and save a MountEntry just to then
+// remove that too. The mountEntry lookup/mounted-check below is
+// defensive, not reachable through this dialog's own normal
+// navigation: openCloudMountCreateDialog already excludes any remote
+// that already has a MountEntry from the Remote dropdown entirely
+// (see its own doc comment on why), so by the time this runs, the
+// selected remote in practice never has one — that case is already
+// handled by removeCloudMount's own "✕" in the merged list.
+func (r *Root) runDeleteSelectedCloudRemote() {
+	_, remoteName := r.cloudMountDialogRemoteField.GetCurrentOption()
+	if remoteName == "" || remoteName == cloudMountDialogCreateNewOption {
+		return
+	}
+
+	entries, err := rclone.LoadMountEntries()
+	if err != nil {
+		r.showError(err)
+		return
+	}
+	var mountEntry *rclone.MountEntry
+	for i := range entries {
+		if entries[i].RemoteName == remoteName {
+			mountEntry = &entries[i]
+			break
+		}
+	}
+	if mountEntry != nil {
+		mounted, err := rclone.IsMounted(mountEntry.Target)
+		if err != nil {
+			r.showError(err)
+			return
+		}
+		if mounted {
+			r.showError(fmt.Errorf("unmount %q before removing it", remoteName))
+			return
+		}
+	}
+
+	r.openConfirm(
+		fmt.Sprintf("Remove %q and delete its cloud credentials permanently?", remoteName),
+		"Yes, delete permanently",
+		func() {
+			r.deleteCloudRemoteByName(remoteName, mountEntry)
+			// Not hideOverlay — acceptConfirm itself already closed the
+			// confirm overlay before running this closure (see its own
+			// doc comment in trash.go); calling it again here closed this
+			// dialog too, a real, reported bug. Refresh the dropdown
+			// instead, so the just-deleted remote disappears from it
+			// while this dialog stays open — the same "stay open, just
+			// update" shape removeCloudMount's own confirm has for the
+			// merged list it acts on instead.
+			r.openCloudMountCreateDialog("")
+		},
+	)
 }

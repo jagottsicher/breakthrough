@@ -1145,6 +1145,7 @@ type Root struct {
 	cloudMountDialogCancelBtn       *tview.Button
 	cloudMountDialogOKBtn           *tview.Button
 	cloudMountDialogMountBtn        *tview.Button
+	cloudMountDialogDeleteBtn       *tview.Button
 	cloudMountDialogButtons         *tview.Flex
 	cloudMountDialogTitleBar        *tview.TextView
 	cloudMountDialogLayout          *tview.Flex

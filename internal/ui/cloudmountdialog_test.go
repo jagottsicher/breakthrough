@@ -77,6 +77,44 @@ func TestOpenCloudMountCreateDialogAlwaysOffersCreateNewRemote(t *testing.T) {
 	}
 }
 
+// TestCloudMountDialogButtonsHideDeleteForCreateNewSentinel pins the
+// real, reported complaint that Delete used to always be in the
+// button row, even while cloudMountDialogCreateNewOption — nothing
+// real to delete yet — was the selected option. Opening with zero
+// remotes configured leaves that sentinel selected, so Delete must not
+// be among the buttons the Flex actually holds; selecting a real
+// remote afterwards must bring it back.
+func TestCloudMountDialogButtonsHideDeleteForCreateNewSentinel(t *testing.T) {
+	requireRclone(t)
+	r := newTestRootForCloudMount(t)
+
+	r.openCloudMountCreateDialog("")
+	if hasFlexItem(r.cloudMountDialogButtons, r.cloudMountDialogDeleteBtn) {
+		t.Error("Delete should not be in the button row while the \"+ Create new remote…\" sentinel is selected")
+	}
+
+	if err := rclone.CreateStaticRemote("real", "local", nil); err != nil {
+		t.Fatalf("CreateStaticRemote: %v", err)
+	}
+	r.openCloudMountCreateDialog("real")
+	if !hasFlexItem(r.cloudMountDialogButtons, r.cloudMountDialogDeleteBtn) {
+		t.Error("Delete should be in the button row once a real remote is selected")
+	}
+}
+
+// hasFlexItem reports whether item is one of flex's own direct
+// children right now — tview.Flex exposes no public lookup for this,
+// so GetItem/GetItemCount (both real tview.Flex methods) are walked by
+// hand.
+func hasFlexItem(flex *tview.Flex, item tview.Primitive) bool {
+	for i := 0; i < flex.GetItemCount(); i++ {
+		if flex.GetItem(i) == item {
+			return true
+		}
+	}
+	return false
+}
+
 // TestOpenCloudMountCreateDialogPreselectsByName pins
 // runCreateCloudRemote's own hand-off contract: reopening with a real
 // remote name selects that remote, not whatever would otherwise be
@@ -256,4 +294,71 @@ func TestRunSaveAndMountCloudMountActuallyMounts(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Error("Mount should have actually mounted the entry, not just saved it")
+}
+
+// TestRunDeleteSelectedCloudRemoteWithoutMountEntry pins the real,
+// reported gap this button closes: a remote that was created (or
+// saved leniently via OK) but never turned into a MountEntry — the
+// merged list's own "✕" has no row for it at all, so Delete is the
+// only way to remove it. Confirmed to ask first, same as
+// removeCloudMount's own "✕" does.
+func TestRunDeleteSelectedCloudRemoteWithoutMountEntry(t *testing.T) {
+	requireRclone(t)
+	r := newTestRootForCloudMount(t)
+	if err := rclone.CreateStaticRemote("orphan", "local", nil); err != nil {
+		t.Fatalf("CreateStaticRemote: %v", err)
+	}
+	r.openCloudMountCreateDialog("orphan")
+
+	r.runDeleteSelectedCloudRemote()
+	if r.pendingConfirm == nil {
+		t.Fatal("runDeleteSelectedCloudRemote should have opened a confirmation, none is pending")
+	}
+	remotes, err := rclone.ListRemotes()
+	if err != nil {
+		t.Fatalf("ListRemotes: %v", err)
+	}
+	found := false
+	for _, rem := range remotes {
+		if rem.Name == "orphan" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the remote should still exist before confirming")
+	}
+
+	r.acceptConfirm()
+
+	// A real, reported bug: the confirm closure used to call hideOverlay
+	// itself on top of acceptConfirm's own hideOverlay, closing this
+	// dialog too instead of just the confirm — pin that it stays open.
+	if r.activePage != cloudMountDialogPage {
+		t.Errorf("activePage = %q, want %q (deleting a remote should not close the mount dialog itself)", r.activePage, cloudMountDialogPage)
+	}
+
+	remotes, err = rclone.ListRemotes()
+	if err != nil {
+		t.Fatalf("ListRemotes: %v", err)
+	}
+	for _, rem := range remotes {
+		if rem.Name == "orphan" {
+			t.Error("the remote should be gone after confirming")
+		}
+	}
+}
+
+// TestRunDeleteSelectedCloudRemoteIgnoresTheCreateNewSentinel pins
+// that Delete is a no-op while cloudMountDialogCreateNewOption is
+// still the selected option — there's no real remote there to delete.
+func TestRunDeleteSelectedCloudRemoteIgnoresTheCreateNewSentinel(t *testing.T) {
+	requireRclone(t)
+	r := newTestRootForCloudMount(t)
+	r.openCloudMountCreateDialog("")
+
+	r.runDeleteSelectedCloudRemote()
+
+	if r.pendingConfirm != nil {
+		t.Error("Delete should be a no-op for the \"+ Create new remote…\" sentinel")
+	}
 }

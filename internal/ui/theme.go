@@ -575,6 +575,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	styleButton(r.cloudMountDialogCancelBtn, theme)
 	styleButton(r.cloudMountDialogOKBtn, theme)
 	styleButton(r.cloudMountDialogMountBtn, theme)
+	styleButton(r.cloudMountDialogDeleteBtn, theme)
 	r.cloudMountDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.cloudMountDialogTitleBar.SetTextColor(theme.TextColor)
 

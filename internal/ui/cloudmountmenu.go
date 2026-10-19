@@ -145,14 +145,26 @@ func (r *Root) removeCloudMount(entry rclone.MountEntry) {
 	)
 }
 
-// deleteCloudMount is removeCloudMount's own confirmed action —
-// drops the MountEntry (breakthrough's own bookkeeping) and then the
-// underlying rclone remote itself (its real credentials, via
-// DeleteRemote), logging either outcome the same way
-// connectdialog.go's own "saved"/"connected to" actions already do
-// (activitylog.CategoryRemote) — a real, reported gap: there was no
-// way to remove a cloud remote's own credentials from rclone's config
-// at all before this, only breakthrough's own MountEntry for it.
+// deleteCloudMount is removeCloudMount's own confirmed action — see
+// deleteCloudRemoteByName's own doc comment for what it actually does
+// and why that order matters; this just supplies the MountEntry it
+// always has (removeCloudMount is only ever reached for a row that
+// already has one) and re-renders the merged list afterwards.
+func (r *Root) deleteCloudMount(entry rclone.MountEntry) {
+	r.deleteCloudRemoteByName(entry.RemoteName, &entry)
+	r.renderConnectionMenu()
+}
+
+// deleteCloudRemoteByName drops remoteName's own MountEntry, if
+// mountEntry is non-nil (nil means there isn't one — see
+// runDeleteSelectedCloudRemote's own doc comment for the case that
+// actually needs this), and then the underlying rclone remote itself
+// (its real credentials, via DeleteRemote), logging either outcome
+// the same way connectdialog.go's own "saved"/"connected to" actions
+// already do (activitylog.CategoryRemote) — a real, reported gap:
+// there was no way to remove a cloud remote's own credentials from
+// rclone's config at all before this, only breakthrough's own
+// MountEntry for it.
 //
 // Order matters: RemoveMountEntry first, DeleteRemote second. If
 // DeleteRemote were to fail after RemoveMountEntry already succeeded,
@@ -164,17 +176,17 @@ func (r *Root) removeCloudMount(entry rclone.MountEntry) {
 // remote that no longer exists at all, which every other read of it
 // (ListRemotes-backed Type lookups, toggleCloudMount's own Mount call)
 // would then have to treat as a dangling reference instead.
-func (r *Root) deleteCloudMount(entry rclone.MountEntry) {
-	if err := rclone.RemoveMountEntry(entry.Target); err != nil {
+func (r *Root) deleteCloudRemoteByName(remoteName string, mountEntry *rclone.MountEntry) {
+	if mountEntry != nil {
+		if err := rclone.RemoveMountEntry(mountEntry.Target); err != nil {
+			r.showError(err)
+			return
+		}
+	}
+	if err := rclone.DeleteRemote(remoteName); err != nil {
+		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("removed cloud mount %q but failed to delete its remote: %v", remoteName, err))
 		r.showError(err)
 		return
 	}
-	if err := rclone.DeleteRemote(entry.RemoteName); err != nil {
-		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("removed cloud mount %q but failed to delete its remote: %v", entry.RemoteName, err))
-		r.showError(err)
-		r.renderConnectionMenu()
-		return
-	}
-	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("deleted cloud remote %q", entry.RemoteName))
-	r.renderConnectionMenu()
+	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("deleted cloud remote %q", remoteName))
 }
