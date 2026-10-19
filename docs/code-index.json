@@ -2338,8 +2338,8 @@
     },
     {
       "path": "internal/ui/toolbox_test.go",
-      "size": 29056,
-      "sha256": "600e9fd1b4b29449ef8dfac1ac44dcd1909e1de1d265f7c859a84a62b35970e8"
+      "size": 28994,
+      "sha256": "d53c9186b8c0ab33e1562c8d7fdd29f3b907771abf530836f83995f54a601af4"
     },
     {
       "path": "internal/ui/toolwindow.go",
@@ -50505,14 +50505,14 @@
       "file": "internal/ui/toolbox_test.go",
       "name": "TestToolboxNmapEntryBuildOmitsEmptyOptionalFields",
       "kind": "function",
-      "line": 721
+      "line": 725
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/toolbox_test.go",
       "name": "TestToolboxNmapEntryBuildIncludesEveryFieldWhenSet",
       "kind": "function",
-      "line": 754
+      "line": 748
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -52835,5 +52835,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "4bf5a5922f115e257230b7dbdfe83ca2c85980eac8fe73b9f4ee92bafe6831a0"
+  "merkle_root": "f25719f28b86aceee938056c288659c014feb86f5ea2d7a9671cf99aa8a5daee"
 }
