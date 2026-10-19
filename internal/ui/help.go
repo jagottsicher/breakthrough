@@ -533,21 +533,33 @@ var helpText = strings.TrimLeft(`
   the real tool" approach Rsync and Sed Replace already take.
 
   Up / Down         Move between entries
-  Enter             Run the selected tool — asks for one further
-                     argument first (a host, a URL, ...) if it needs one,
-                     or, for curl/Nmap scan/dig/wget, opens a small form
-                     with their own named fields (curl: URL, Method,
-                     Header, Follow redirects, Output; Nmap: Target,
-                     Scan type, Ports, Timing template; dig: Domain,
-                     Record type, Server; wget: URL, Output path,
-                     Resume) and a live preview of the exact command
-                     line before Run actually starts it
+  Enter             Run the selected tool — most ask for one further
+                     argument first (a host, a URL, ...); five open a
+                     small multi-field form instead, see below
   Escape            Close the Toolbox screen
 
   Every tool's output opens in its own tool window (see "Tool windows"
   below), floating on top of this screen rather than replacing it — pick
   another tool, or press Escape to get back to browsing, without losing
   anything already running.
+
+  Five entries — curl, Nmap scan, dig, wget, netcat (nc) — open a small
+  form of their own named fields instead of one free-text prompt, with
+  a live preview of the exact command line, updated as each field
+  changes, right above Cancel/Run:
+
+    curl        URL, Method, Header, Follow redirects, Output
+    Nmap scan   Target, Scan type, Ports, Timing template
+    dig         Domain, Record type, Server
+    wget        URL, Output path, Resume
+    netcat (nc) Host, Port, Mode, UDP
+
+  Tab/Shift+Tab cycle through every field, any toggle, and Cancel/Run in
+  order, wrapping back around at either end — the same full keyboard
+  reachability every other dialog in this app already has. Run refuses
+  to start anything while a required field (marked in its own
+  placeholder text) is still empty, closing the form without running a
+  bare, argument-less command instead.
 
 [::b]Undertow screen ("jt")[::-]
 

@@ -905,3 +905,85 @@ func TestToolboxWgetEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
+
+// TestToolboxNetcatEntryBuildOmitsEmptyOptionalFields pins netcat's own
+// build func via a real open: default Mode (Connect) and an unchecked
+// UDP toggle must produce no extra tokens at all beyond Host and Port
+// themselves. Checked through the preview only, not a real Run — nc
+// isn't guaranteed to be installed on every CI runner, the same
+// reasoning TestToolboxNmapEntryBuildOmitsEmptyOptionalFields's own
+// doc comment gives.
+func TestToolboxNetcatEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry := toolboxNetcatEntry()
+	entry.run(r)
+
+	hostField, ok := r.toolboxFormWidgets[toolboxNetcatFieldHost].(*tview.InputField)
+	if !ok {
+		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", toolboxNetcatFieldHost)
+	}
+	hostField.SetText("example.com")
+	portField := r.toolboxFormWidgets[toolboxNetcatFieldPort].(*tview.InputField)
+	portField.SetText("22")
+
+	want := "nc example.com 22"
+	if got := r.toolboxFormPreview.GetText(true); got != want {
+		t.Errorf("preview = %q, want exactly %q (default Connect mode, UDP unchecked)", got, want)
+	}
+}
+
+// TestToolboxNetcatEntryBuildIncludesEveryFieldWhenSet is
+// TestToolboxNetcatEntryBuildOmitsEmptyOptionalFields's counterpart:
+// Scan mode and a checked UDP toggle both reach argv, in the Mode/UDP/
+// Host/Port order toolboxNetcatEntry's own build func uses.
+func TestToolboxNetcatEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry := toolboxNetcatEntry()
+	entry.run(r)
+
+	hostField := r.toolboxFormWidgets[toolboxNetcatFieldHost].(*tview.InputField)
+	hostField.SetText("example.com")
+	portField := r.toolboxFormWidgets[toolboxNetcatFieldPort].(*tview.InputField)
+	portField.SetText("22")
+	modeField := r.toolboxFormWidgets[toolboxNetcatFieldMode].(*tview.DropDown)
+	modeField.SetCurrentOption(2) // Scan (-zv), per toolboxNetcatEntry's own choices order
+	r.toolboxFormToggleState[toolboxNetcatFieldUDP] = true
+	r.updateToolboxFormPreview()
+
+	want := "nc -zv -u example.com 22"
+	if got := r.toolboxFormPreview.GetText(true); got != want {
+		t.Errorf("preview = %q, want %q", got, want)
+	}
+}
+
+// TestToolboxNetcatEntryListenModeOmitsHost pins a real, nc-specific
+// rule beyond the generic "empty field means no token" one: Listen mode
+// never takes a host at all ("nc -l port", not "nc -l host port"),
+// so a non-empty Host field is still dropped once Mode switches to
+// Listen.
+func TestToolboxNetcatEntryListenModeOmitsHost(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry := toolboxNetcatEntry()
+	entry.run(r)
+
+	hostField := r.toolboxFormWidgets[toolboxNetcatFieldHost].(*tview.InputField)
+	hostField.SetText("example.com")
+	portField := r.toolboxFormWidgets[toolboxNetcatFieldPort].(*tview.InputField)
+	portField.SetText("1234")
+	modeField := r.toolboxFormWidgets[toolboxNetcatFieldMode].(*tview.DropDown)
+	modeField.SetCurrentOption(1) // Listen (-l), per toolboxNetcatEntry's own choices order
+
+	want := "nc -l 1234"
+	if got := r.toolboxFormPreview.GetText(true); got != want {
+		t.Errorf("preview = %q, want %q (Host dropped in Listen mode)", got, want)
+	}
+}
