@@ -105,6 +105,25 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 	return f
 }
 
+// styleCloudMountDialogFields applies the current theme to every
+// field individually — styleInput/styleDropDown, not just the Form-
+// level SetFieldBackgroundColor applyTheme's own cloudMountDialogForm
+// block already sets. A real, reported gap: Form-level colors only
+// ever reach a field without its own placeholder text (tview's own
+// InputField renders a placeholder with a separate placeholderStyle,
+// defaulting to tview's own global Styles.ContrastBackgroundColor,
+// confirmed directly against inputfield.go, not guessed) — every
+// field here has one, so without this they looked unstyled even
+// though the Form itself was. Called from openCloudMountCreateDialog
+// (every open) and applyTheme (a live color-scheme switch while
+// already open).
+func (r *Root) styleCloudMountDialogFields() {
+	styleDropDown(r.cloudMountDialogRemoteField, r.theme)
+	styleInput(r.cloudMountDialogTargetField, r.theme, false)
+	styleInput(r.cloudMountDialogIdentifierField, r.theme, false)
+	styleInput(r.cloudMountDialogTagsField, r.theme, false)
+}
+
 // newCloudMountDialogButtons mirrors newConnectButtons' own
 // Cancel/OK/Connect three-button shape exactly, per the user's own
 // explicit request that this dialog behave like the Connect dialog it
@@ -306,6 +325,7 @@ func (r *Root) openCloudMountCreateDialog(preselect string) {
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
 	r.cloudMountDialogLayout.SetRect(x, y, width, height)
+	r.styleCloudMountDialogFields()
 	r.showOverlay(cloudMountDialogPage, r.cloudMountDialogLayout)
 }
 

@@ -567,6 +567,11 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.cloudMountDialogForm.SetLabelColor(theme.TextColor)
 	r.cloudMountDialogForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
 	r.cloudMountDialogForm.SetFieldTextColor(theme.TextColor)
+	// Per-field styleInput/styleDropDown on top of the Form-level
+	// colors just above — see styleCloudMountDialogFields' own doc
+	// comment for why the Form-level ones alone aren't enough (every
+	// field here has a placeholder, which ignores them).
+	r.styleCloudMountDialogFields()
 	styleButton(r.cloudMountDialogCancelBtn, theme)
 	styleButton(r.cloudMountDialogOKBtn, theme)
 	styleButton(r.cloudMountDialogMountBtn, theme)
@@ -579,6 +584,16 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// so this also has to run again there, not just here on a live
 	// theme switch — see that function's own call to styleCloudRemoteDialogForm.
 	r.styleCloudRemoteDialogForm()
+	// Guarded: unlike cloudMountDialogForm's own fields (created
+	// unconditionally in newCloudMountDialogForm, during NewRoot),
+	// cloudRemoteDialogBackendField and the rest only exist once
+	// rebuildCloudRemoteDialogFields has actually run at least once
+	// (openCloudRemoteDialog, on first open) — applyTheme itself runs
+	// during NewRoot's own startup, before that, so calling this
+	// unconditionally would dereference a nil DropDown.
+	if r.cloudRemoteDialogBackendField != nil {
+		r.styleCloudRemoteDialogFields()
+	}
 	styleButton(r.cloudRemoteDialogCancelBtn, theme)
 	styleButton(r.cloudRemoteDialogCreateBtn, theme)
 	r.cloudRemoteDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)

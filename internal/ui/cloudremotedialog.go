@@ -359,6 +359,28 @@ func (r *Root) rebuildCloudRemoteDialogFields(backendIndex int) {
 			return event
 		})
 	}
+
+	r.styleCloudRemoteDialogFields()
+}
+
+// styleCloudRemoteDialogFields applies the current theme to every
+// field individually — see styleCloudMountDialogFields' own doc
+// comment for why the Form-level colors styleCloudRemoteDialogForm
+// already sets aren't enough on their own (every field with a
+// placeholder ignores them; tview.DropDown's own closed-box style
+// isn't Form-driven at all). Called at the end of
+// rebuildCloudRemoteDialogFields (every backend-type change rebuilds
+// every field from scratch) and from applyTheme (a live color-scheme
+// switch while already open).
+func (r *Root) styleCloudRemoteDialogFields() {
+	styleDropDown(r.cloudRemoteDialogBackendField, r.theme)
+	styleInput(r.cloudRemoteDialogNameField, r.theme, false)
+	if r.cloudRemoteDialogSubField != nil {
+		styleDropDown(r.cloudRemoteDialogSubField, r.theme)
+	}
+	for _, field := range r.cloudRemoteDialogFields {
+		styleInput(field, r.theme, false)
+	}
 }
 
 // resizeCloudRemoteDialog recomputes the dialog's own rect and the

@@ -1568,8 +1568,8 @@
     },
     {
       "path": "internal/ui/cloudmountdialog.go",
-      "size": 15055,
-      "sha256": "a573089d80b2bd1af6806ba1fd65eaab37008d4b9a52b8c165df4bfa4b093391"
+      "size": 16140,
+      "sha256": "4d1027ce739477bd88077724d187804a4c95915f1c88d292c3e39b40e00ef51f"
     },
     {
       "path": "internal/ui/cloudmountdialog_test.go",
@@ -1583,8 +1583,8 @@
     },
     {
       "path": "internal/ui/cloudremotedialog.go",
-      "size": 19032,
-      "sha256": "8e5cf4f8dbe6d6757e8e94c9692ca9c235b4bf56510010d0ba8538a2e1f0dbd3"
+      "size": 19975,
+      "sha256": "6c86bc954aafc80e85a71179a649febb7c07287adbcb8413d88022e86204c30b"
     },
     {
       "path": "internal/ui/cloudremotedialog_test.go",
@@ -2368,8 +2368,8 @@
     },
     {
       "path": "internal/ui/theme.go",
-      "size": 44795,
-      "sha256": "60bc986ace8069e600322f1b3b38e256b64a6b4ed5a5d40ee37468e140a31684"
+      "size": 45608,
+      "sha256": "d1658b6adc2da7dd9a8513197e6718f1d1c7b7dfeb213d35735756c22e8ba9de"
     },
     {
       "path": "internal/ui/theme_test.go",
@@ -23617,10 +23617,18 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog.go",
+      "name": "styleCloudMountDialogFields",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 120
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/cloudmountdialog.go",
       "name": "newCloudMountDialogButtons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 116
+      "line": 135
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23628,7 +23636,7 @@
       "name": "newCloudMountDialogLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 173
+      "line": 192
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23636,7 +23644,7 @@
       "name": "cloudMountDialogDefaultTarget",
       "kind": "method",
       "receiver": "*Root",
-      "line": 187
+      "line": 206
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23644,7 +23652,7 @@
       "name": "cloudMountDialogSyncTargetToSelection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 199
+      "line": 218
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23652,7 +23660,7 @@
       "name": "openCloudMountCreateDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 232
+      "line": 251
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23660,7 +23668,7 @@
       "name": "saveCloudMountEntry",
       "kind": "method",
       "receiver": "*Root",
-      "line": 322
+      "line": 342
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23668,7 +23676,7 @@
       "name": "runSaveCloudMount",
       "kind": "method",
       "receiver": "*Root",
-      "line": 351
+      "line": 371
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23676,7 +23684,7 @@
       "name": "runSaveAndMountCloudMount",
       "kind": "method",
       "receiver": "*Root",
-      "line": 363
+      "line": 383
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23899,10 +23907,18 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudremotedialog.go",
+      "name": "styleCloudRemoteDialogFields",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 375
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/cloudremotedialog.go",
       "name": "resizeCloudRemoteDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 370
+      "line": 392
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23910,14 +23926,14 @@
       "name": "openCloudRemoteDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 400
+      "line": 422
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudremotedialog.go",
       "name": "cloudRemoteParams",
       "kind": "function",
-      "line": 418
+      "line": 440
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23925,7 +23941,7 @@
       "name": "runCreateCloudRemote",
       "kind": "method",
       "receiver": "*Root",
-      "line": 443
+      "line": 465
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28776,14 +28792,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
@@ -45840,14 +45856,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 26
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 26
     },
@@ -50777,35 +50793,35 @@
       "file": "internal/ui/theme.go",
       "name": "styleButton",
       "kind": "function",
-      "line": 801
+      "line": 816
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleList",
       "kind": "function",
-      "line": 816
+      "line": 831
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleInput",
       "kind": "function",
-      "line": 860
+      "line": 875
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleDisabledInput",
       "kind": "function",
-      "line": 874
+      "line": 889
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleDropDown",
       "kind": "function",
-      "line": 883
+      "line": 898
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -53988,5 +54004,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "79285f5b900abdeb0db37571b603427bcd4a58e7da06f12a0b1da0a907bea371"
+  "merkle_root": "2ff2c9ce5d6e5e24175ec92002217fec02e5600821a5f76b7d44b15460dd9131"
 }
