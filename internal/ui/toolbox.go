@@ -401,6 +401,73 @@ func toolboxWgetEntry() toolboxEntry {
 	return toolboxFormEntry("wget", "Download a URL into the current directory", "wget", fields, build)
 }
 
+// toolboxNetcatField* are netcat's own toolboxFormField names — stable
+// keys toolboxNetcatEntry's own build func reads back by name (see
+// toolboxFormField's own doc comment on why never by position).
+const (
+	toolboxNetcatFieldHost = "host"
+	toolboxNetcatFieldPort = "port"
+	toolboxNetcatFieldMode = "mode"
+	toolboxNetcatFieldUDP  = "udp"
+)
+
+// toolboxNetcatModeConnect/Listen/Scan are nc's own three real usage
+// shapes this entry covers — Connect's own "nc host port", Listen's own
+// "nc -l port" (no host at all — see toolboxNetcatEntry's own build
+// func), Scan's own "nc -zv host port" (the exact example the old
+// free-text prompt's own placeholder used to show).
+const (
+	toolboxNetcatModeConnect = "Connect"
+	toolboxNetcatModeListen  = "Listen (-l)"
+	toolboxNetcatModeScan    = "Scan (-zv)"
+)
+
+// toolboxNetcatEntry is netcat's own catalog entry — Phase 3 sub-step
+// (f)'s one real candidate for toolboxFormEntry among the catalog's
+// remaining single-argument entries (see feature_upgrades.txt's own
+// review: Ping/getent/nslookup/Tail -f each genuinely need only the one
+// argument they already have, so they stay toolboxArgEntry). Host, Port,
+// Mode, and UDP as named fields — Host is skipped entirely in Listen
+// mode, which never takes one.
+func toolboxNetcatEntry() toolboxEntry {
+	fields := []toolboxFormField{
+		{name: toolboxNetcatFieldHost, label: "Host", kind: toolboxFieldText,
+			placeholder: "required unless Listen mode"},
+		{name: toolboxNetcatFieldPort, label: "Port", kind: toolboxFieldText,
+			placeholder: "e.g. 22", required: true},
+		{name: toolboxNetcatFieldMode, label: "Mode", kind: toolboxFieldChoice,
+			choices: []string{toolboxNetcatModeConnect, toolboxNetcatModeListen, toolboxNetcatModeScan}, defaultText: toolboxNetcatModeConnect},
+		{name: toolboxNetcatFieldUDP, label: "UDP (-u)", kind: toolboxFieldToggle},
+	}
+	build := func(v toolboxFormValues) []string {
+		var args []string
+		mode := v.Text[toolboxNetcatFieldMode]
+		switch mode {
+		case toolboxNetcatModeListen:
+			args = append(args, "-l")
+		case toolboxNetcatModeScan:
+			args = append(args, "-zv")
+		}
+		if v.Flags[toolboxNetcatFieldUDP] {
+			args = append(args, "-u")
+		}
+		// Listen never takes a host at all ("nc -l port", not
+		// "nc -l host port") — omitted here even if the field has
+		// something typed into it, rather than passing it through and
+		// letting nc itself reject the extra argument.
+		if mode != toolboxNetcatModeListen {
+			if host := v.Text[toolboxNetcatFieldHost]; host != "" {
+				args = append(args, host)
+			}
+		}
+		if port := v.Text[toolboxNetcatFieldPort]; port != "" {
+			args = append(args, port)
+		}
+		return args
+	}
+	return toolboxFormEntry("netcat (nc)", "Test a TCP/UDP connection, or listen on a port", "nc", fields, build)
+}
+
 // toolboxCategoriesNamed returns the catalog filtered down to the
 // categories in names, preserving toolboxCategories' own order — used by
 // the "jn"/"jh" screens (openNetworkTools/openHardwareTools) to show only
@@ -444,7 +511,7 @@ func toolboxCategories() []toolboxCategory {
 			toolboxWgetEntry(),
 			toolboxArgEntry("nslookup", "Resolve a hostname the old-school way", "nslookup host:", "", "nslookup"),
 			toolboxDigEntry(),
-			toolboxArgEntry("netcat (nc)", `Test a TCP/UDP connection, or listen on a port`, `nc arguments (e.g. "-zv host 22"):`, "", "nc"),
+			toolboxNetcatEntry(),
 			toolboxCurlEntry(),
 			toolboxArgEntry("Logviewer (tail -f)", "Follow a growing log file live", "Log file to follow:", "/var/log/syslog", "tail", "-f"),
 		}},
