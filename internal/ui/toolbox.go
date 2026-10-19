@@ -350,6 +350,48 @@ func toolboxDigEntry() toolboxEntry {
 	return toolboxFormEntry("dig", "Resolve a hostname with full DNS record detail", "dig", fields, build)
 }
 
+// toolboxWgetField* are wget's own toolboxFormField names — stable keys
+// toolboxWgetEntry's own build func reads back by name (see
+// toolboxFormField's own doc comment on why never by position).
+const (
+	toolboxWgetFieldURL    = "url"
+	toolboxWgetFieldOutput = "output"
+	toolboxWgetFieldResume = "resume"
+)
+
+// toolboxWgetEntry is wget's own catalog entry — Phase 3 sub-step (e):
+// URL (required), Output path (optional text, "-O <value>" only if
+// non-empty, otherwise wget's own default of saving under the URL's own
+// filename in the current directory), Resume (a toggle, "-c" only if
+// checked). Deliberately only these — the same curl/nmap/dig
+// precedent's own explicit scope.
+func toolboxWgetEntry() toolboxEntry {
+	fields := []toolboxFormField{
+		{name: toolboxWgetFieldURL, label: "URL", kind: toolboxFieldText,
+			placeholder: "https://example.com/file.tar.gz"},
+		{name: toolboxWgetFieldOutput, label: "Output path", kind: toolboxFieldText,
+			placeholder: "optional, default is the URL's own filename"},
+		{name: toolboxWgetFieldResume, label: "Resume a partial download (-c)", kind: toolboxFieldToggle},
+	}
+	build := func(v toolboxFormValues) []string {
+		var args []string
+		if v.Flags[toolboxWgetFieldResume] {
+			args = append(args, "-c")
+		}
+		if output := v.Text[toolboxWgetFieldOutput]; output != "" {
+			args = append(args, "-O", output)
+		}
+		// URL last, unlabeled — the same "required field last, omitted
+		// entirely while empty" rule toolboxCurlEntry's own URL field
+		// already follows.
+		if url := v.Text[toolboxWgetFieldURL]; url != "" {
+			args = append(args, url)
+		}
+		return args
+	}
+	return toolboxFormEntry("wget", "Download a URL into the current directory", "wget", fields, build)
+}
+
 // toolboxCategoriesNamed returns the catalog filtered down to the
 // categories in names, preserving toolboxCategories' own order — used by
 // the "jn"/"jh" screens (openNetworkTools/openHardwareTools) to show only
@@ -390,7 +432,7 @@ func toolboxCategories() []toolboxCategory {
 			toolboxFixedEntry("Routing table (route)", "Show the kernel's own routing table", "route", "-n"),
 			toolboxFixedEntry("Sockets (ss)", "List open TCP/UDP sockets and the process on each", "ss", "-tulpn"),
 			toolboxArgEntry("getent", `Query a system database (e.g. "hosts example.com")`, `getent (database key, e.g. "hosts example.com"):`, "", "getent"),
-			toolboxArgEntry("wget", "Download a URL into the current directory", "wget URL:", "", "wget"),
+			toolboxWgetEntry(),
 			toolboxArgEntry("nslookup", "Resolve a hostname the old-school way", "nslookup host:", "", "nslookup"),
 			toolboxDigEntry(),
 			toolboxArgEntry("netcat (nc)", `Test a TCP/UDP connection, or listen on a port`, `nc arguments (e.g. "-zv host 22"):`, "", "nc"),
