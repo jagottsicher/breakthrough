@@ -767,3 +767,54 @@ func TestToolboxNmapEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
+
+// TestToolboxDigEntryBuildOmitsEmptyOptionalFields pins dig's own build
+// func via a real open: Default record type and an empty Server field
+// must produce no extra tokens at all beyond the domain itself. Checked
+// through the preview only, not a real Run — dig isn't guaranteed to be
+// installed on every CI runner, the same reasoning
+// TestToolboxNmapEntryBuildOmitsEmptyOptionalFields's own doc comment
+// gives.
+func TestToolboxDigEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry := toolboxDigEntry()
+	entry.run(r)
+
+	domainField, ok := r.toolboxFormWidgets[toolboxDigFieldDomain].(*tview.InputField)
+	if !ok {
+		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", toolboxDigFieldDomain)
+	}
+	domainField.SetText("example.com")
+
+	if got := r.toolboxFormPreview.GetText(true); got != "dig example.com" {
+		t.Errorf("preview = %q, want exactly %q (Default record type, empty Server)", got, "dig example.com")
+	}
+}
+
+// TestToolboxDigEntryBuildIncludesEveryFieldWhenSet is
+// TestToolboxDigEntryBuildOmitsEmptyOptionalFields's counterpart: every
+// field set to a non-default value reaches argv, in dig's own real
+// "@server name type" order.
+func TestToolboxDigEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry := toolboxDigEntry()
+	entry.run(r)
+
+	domainField := r.toolboxFormWidgets[toolboxDigFieldDomain].(*tview.InputField)
+	domainField.SetText("example.com")
+	serverField := r.toolboxFormWidgets[toolboxDigFieldServer].(*tview.InputField)
+	serverField.SetText("8.8.8.8")
+	typeField := r.toolboxFormWidgets[toolboxDigFieldType].(*tview.DropDown)
+	typeField.SetCurrentOption(3) // MX, per toolboxDigRecordTypeChoices' own order
+
+	want := "dig @8.8.8.8 example.com MX"
+	if got := r.toolboxFormPreview.GetText(true); got != want {
+		t.Errorf("preview = %q, want %q", got, want)
+	}
+}

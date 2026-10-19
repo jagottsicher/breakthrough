@@ -535,11 +535,12 @@ var helpText = strings.TrimLeft(`
   Up / Down         Move between entries
   Enter             Run the selected tool — asks for one further
                      argument first (a host, a URL, ...) if it needs one,
-                     or, for curl/Nmap scan, opens a small form with
+                     or, for curl/Nmap scan/dig, opens a small form with
                      their own named fields (curl: URL, Method, Header,
                      Follow redirects, Output; Nmap: Target, Scan type,
-                     Ports, Timing template) and a live preview of the
-                     exact command line before Run actually starts it
+                     Ports, Timing template; dig: Domain, Record type,
+                     Server) and a live preview of the exact command
+                     line before Run actually starts it
   Escape            Close the Toolbox screen
 
   Every tool's output opens in its own tool window (see "Tool windows"
