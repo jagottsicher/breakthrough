@@ -1143,7 +1143,8 @@ type Root struct {
 	cloudMountDialogIdentifierField *tview.InputField
 	cloudMountDialogTagsField       *tview.InputField
 	cloudMountDialogCancelBtn       *tview.Button
-	cloudMountDialogAddBtn          *tview.Button
+	cloudMountDialogOKBtn           *tview.Button
+	cloudMountDialogMountBtn        *tview.Button
 	cloudMountDialogButtons         *tview.Flex
 	cloudMountDialogTitleBar        *tview.TextView
 	cloudMountDialogLayout          *tview.Flex
@@ -1153,6 +1154,28 @@ type Root struct {
 	// some remote's own unmodified default" apart from "the user typed
 	// something real."
 	cloudMountDialogRemotes []string
+
+	// cloudRemoteDialog* is the "New cloud remote" dialog (see
+	// cloudremotedialog.go), reached by picking
+	// cloudMountDialogCreateNewOption from the "New cloud mount"
+	// dialog's own Remote dropdown. cloudRemoteDialogForm is rebuilt
+	// from scratch on every backend-type change (see
+	// rebuildCloudRemoteDialogFields) — Fields/BackendField/SubField
+	// are themselves part of what gets rebuilt, so these hold whatever
+	// the current rebuild last created, not a fixed set.
+	cloudRemoteDialogForm         *tview.Form
+	cloudRemoteDialogBackendField *tview.DropDown
+	cloudRemoteDialogBackendIndex int
+	cloudRemoteDialogNameField    *tview.InputField
+	cloudRemoteDialogSubField     *tview.DropDown
+	cloudRemoteDialogFields       []*tview.InputField
+	cloudRemoteDialogCancelBtn    *tview.Button
+	cloudRemoteDialogCreateBtn    *tview.Button
+	cloudRemoteDialogButtons      *tview.Flex
+	cloudRemoteDialogTitleBar     *tview.TextView
+	cloudRemoteDialogContent      *tview.Flex
+	cloudRemoteDialogLayout       *tview.Flex
+
 	// connectPendingSkipHostKey/connectPendingSkipHostKeyConn back the
 	// "Connect anyway" retry after a HostKeyMismatchError (see
 	// connectdialog.go's own finishConnect/runConnect) — set only once
@@ -2728,6 +2751,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.cloudMountDialogButtons = r.newCloudMountDialogButtons()
 	r.cloudMountDialogLayout = r.newCloudMountDialogLayout()
 
+	// The "New cloud remote" dialog (see cloudremotedialog.go) — the
+	// form itself starts empty; rebuildCloudRemoteDialogFields fills
+	// it in on first open and every backend-type change after that
+	// (its own field set genuinely depends on that choice, the same
+	// reason resetSedForm rebuilds Sed Replace's own form fresh).
+	r.cloudRemoteDialogForm = r.newCloudRemoteDialogForm()
+	r.cloudRemoteDialogButtons = r.newCloudRemoteDialogButtons()
+	r.cloudRemoteDialogLayout = r.newCloudRemoteDialogLayout()
+
 	// The connection dropdown (see connectionmenu.go) — rebuilt fresh
 	// on every open (see renderConnectionMenu), the same as the filter
 	// menu's own dropdown.
@@ -3059,6 +3091,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
 	r.AddPage(connectDialogPage, r.connectLayout, false, false)
 	r.AddPage(cloudMountDialogPage, r.cloudMountDialogLayout, false, false)
+	r.AddPage(cloudRemoteDialogPage, r.cloudRemoteDialogLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
 	r.AddPage(sshShellDialogPage, r.sshShellLayout, false, false)

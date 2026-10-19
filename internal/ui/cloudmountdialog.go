@@ -11,26 +11,32 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
-// errRcloneNotAvailable/errNoEligibleCloudRemotes are
-// openCloudMountCreateDialog's own two "refuse to open at all" cases —
-// see its own doc comment for why each one is a clear error instead
-// of an unusable empty dialog.
-var (
-	errRcloneNotAvailable     = fmt.Errorf("rclone is not installed — cloud mounts need the rclone binary on PATH")
-	errNoEligibleCloudRemotes = fmt.Errorf("no eligible cloud remotes: configure one with rclone first, or every configured remote is already a cloud mount")
-)
+// errRcloneNotAvailable is openCloudMountCreateDialog's own "refuse to
+// open at all" case when rclone itself isn't on PATH — nothing this
+// dialog could do would ever succeed without it.
+var errRcloneNotAvailable = fmt.Errorf("rclone is not installed — cloud mounts need the rclone binary on PATH")
+
+// cloudMountDialogCreateNewOption is a synthetic first entry in the
+// Remote dropdown, never a real rclone remote — selecting it opens
+// cloudremotedialog.go's own "New cloud remote" dialog instead of
+// syncing Target the way a real remote's own selection does (see
+// cloudMountDialogSyncTargetToSelection). This is what makes "no
+// remotes configured yet" no longer a dead end (see this dialog's own
+// doc comment on why it used to refuse to open at all in that case).
+const cloudMountDialogCreateNewOption = "+  Create new remote…"
 
 // The "New cloud mount" dialog — reached via the "+ New" chooser (see
 // openNewConnectionChooser) rather than its own key, same as the
-// Connect dialog it sits beside. Deliberately narrower than that one:
-// this only ever picks an rclone remote that already exists (by name,
-// from ListRemotes) and a local target directory — it never drives
-// `rclone config create` itself. Configuring a brand-new rclone remote
-// with its own provider-specific fields (S3 keys, WebDAV URL, ...) is
-// a separately scoped follow-up (see feature_ideas.txt section 12b);
-// until then, a remote has to already exist in rclone's own config
-// (by hand, or via `rclone config create`/`rclone authorize` run
-// outside breakthrough) before it can be picked here.
+// Connect dialog it sits beside. Picks an rclone remote (by name, from
+// ListRemotes) and a local target directory; a synthetic first entry
+// in the Remote dropdown (cloudMountDialogCreateNewOption) opens
+// cloudremotedialog.go's own "New cloud remote" dialog for the four
+// static-credential backends it supports, returning here with the new
+// remote preselected on success. An OAuth remote (OneDrive, Dropbox,
+// Google Drive) still has to be configured outside breakthrough first
+// (`rclone config`/`rclone authorize`) — see cloudremotedialog.go's
+// own doc comment on why that's out of scope for a non-interactive
+// form.
 
 const cloudMountDialogPage = "cloud-mount-dialog"
 
@@ -85,7 +91,11 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 			r.app.SetFocus(r.cloudMountDialogCancelBtn)
 			return nil
 		case tcell.KeyEnter:
-			r.runAddCloudMount()
+			// OK, not Mount — the same "OK is the default, Enter in any
+			// field runs it" contract the Connect dialog's own README
+			// entry already documents: OK only ever saves, same as
+			// there, never dials/mounts on its own.
+			r.runSaveCloudMount()
 			return nil
 		}
 		return event
@@ -95,34 +105,65 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 	return f
 }
 
-// newCloudMountDialogButtons mirrors newDuplicateButtons' own
-// two-button Cancel/Add shape exactly.
+// newCloudMountDialogButtons mirrors newConnectButtons' own
+// Cancel/OK/Connect three-button shape exactly, per the user's own
+// explicit request that this dialog behave like the Connect dialog it
+// sits beside: OK only ever saves the MountEntry — never mounts it —
+// so several cloud mounts can be prepared ahead of actually needing
+// them, the same reason SaveConnection exists independently of
+// RecordAttempt for SFTP (see SaveConnection's own doc comment). Mount
+// saves and then actually mounts it, immediately.
 func (r *Root) newCloudMountDialogButtons() *tview.Flex {
 	r.cloudMountDialogCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
-	r.cloudMountDialogAddBtn = tview.NewButton("Add").SetSelectedFunc(r.runAddCloudMount)
+	r.cloudMountDialogOKBtn = tview.NewButton("OK").SetSelectedFunc(r.runSaveCloudMount)
+	r.cloudMountDialogMountBtn = tview.NewButton("Mount").SetSelectedFunc(r.runSaveAndMountCloudMount)
 	r.cloudMountDialogCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
-	r.cloudMountDialogAddBtn.SetInputCapture(spaceAlsoActivates(r.runAddCloudMount))
+	r.cloudMountDialogOKBtn.SetInputCapture(spaceAlsoActivates(r.runSaveCloudMount))
+	r.cloudMountDialogMountBtn.SetInputCapture(spaceAlsoActivates(r.runSaveAndMountCloudMount))
 
 	r.cloudMountDialogCancelBtn.SetExitFunc(func(key tcell.Key) {
-		if key == tcell.KeyBacktab {
-			r.app.SetFocus(r.cloudMountDialogAddBtn)
-		} else {
-			r.cloudMountDialogForm.SetFocus(0)
-			r.app.SetFocus(r.cloudMountDialogForm)
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.cloudMountDialogOKBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.cloudMountDialogTagsField)
+		case tcell.KeyEscape:
+			r.hideOverlay()
 		}
 	})
-	r.cloudMountDialogAddBtn.SetExitFunc(func(key tcell.Key) {
-		if key == tcell.KeyBacktab {
+	r.cloudMountDialogOKBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.cloudMountDialogMountBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.cloudMountDialogCancelBtn)
+		case tcell.KeyEscape:
+			r.hideOverlay()
+		}
+	})
+	r.cloudMountDialogMountBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			// r.cloudMountDialogForm.SetFocus(0), not
+			// r.app.SetFocus(r.cloudMountDialogRemoteField) — see
+			// connectConnectBtn's own identical wrap in connectdialog.go
+			// for the real, user-reported bug (Form.Focus overwrites
+			// SetDoneFunc, so naming a field directly here would leave
+			// the form's own internal focusedElement counter stale)
+			// this works around.
 			r.cloudMountDialogForm.SetFocus(0)
 			r.app.SetFocus(r.cloudMountDialogForm)
-		} else {
-			r.app.SetFocus(r.cloudMountDialogCancelBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.cloudMountDialogOKBtn)
+		case tcell.KeyEscape:
+			r.hideOverlay()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.cloudMountDialogCancelBtn, 0, 1, false).
-		AddItem(r.cloudMountDialogAddBtn, 0, 1, false)
+		AddItem(r.cloudMountDialogOKBtn, 0, 1, false).
+		AddItem(r.cloudMountDialogMountBtn, 0, 1, false)
 }
 
 // newCloudMountDialogLayout mirrors newConnectLayout's own shape:
@@ -168,21 +209,27 @@ func (r *Root) cloudMountDialogSyncTargetToSelection(selectedRemote string) {
 	}
 }
 
-// openCloudMountCreateDialog shows the dialog, populated with every
-// remote ListRemotes reports that isn't already a configured
-// MountEntry's own RemoteName — picking a remote already in use here
-// would otherwise let a second MountEntry silently alias the first
-// one's own remote, onto a different Target, which is confusing
-// (which one actually gets written to?) without being outright
-// invalid the way AddMountEntry's own duplicate-Target refusal is.
+// openCloudMountCreateDialog shows the dialog, populated with
+// cloudMountDialogCreateNewOption first, then every remote ListRemotes
+// reports that isn't already a configured MountEntry's own
+// RemoteName — picking a remote already in use here would otherwise
+// let a second MountEntry silently alias the first one's own remote,
+// onto a different Target, which is confusing (which one actually
+// gets written to?) without being outright invalid the way
+// AddMountEntry's own duplicate-Target refusal is.
 //
-// Refuses to open at all — a clear error instead — when rclone isn't
-// available, or when there is nothing eligible to pick: an empty
-// dropdown would be a dead end, not a usable dialog, and a caller is
-// in a far better position to understand "no remotes" / "already all
-// in use" from one sentence than from guessing why a form showing
-// nothing won't let them type a selection.
-func (r *Root) openCloudMountCreateDialog() {
+// preselect, if non-empty, selects that remote by name instead of the
+// first real one — used when returning here straight from a
+// successful runCreateCloudRemote, so the remote just created is
+// already the one about to be mounted rather than making the user
+// find it again in the dropdown themselves.
+//
+// Refuses to open at all — a clear error instead — only when rclone
+// itself isn't available: nothing here could ever succeed without it,
+// including the "create new remote" entry. An empty real-remote list
+// is no longer that kind of dead end (see cloudMountDialogCreateNewOption's
+// own doc comment on why).
+func (r *Root) openCloudMountCreateDialog(preselect string) {
 	if !rclone.Available() {
 		r.showError(errRcloneNotAvailable)
 		return
@@ -208,20 +255,38 @@ func (r *Root) openCloudMountCreateDialog() {
 			names = append(names, rem.Name)
 		}
 	}
-	if len(names) == 0 {
-		r.showError(errNoEligibleCloudRemotes)
-		return
-	}
-
 	r.cloudMountDialogRemotes = names
-	r.cloudMountDialogRemoteField.SetOptions(names, func(text string, index int) {
-		if index < 0 || index >= len(names) {
+
+	options := append([]string{cloudMountDialogCreateNewOption}, names...)
+	r.cloudMountDialogRemoteField.SetOptions(options, func(text string, index int) {
+		if index == 0 {
+			r.hideOverlay()
+			r.openCloudRemoteDialog()
 			return
 		}
-		r.cloudMountDialogSyncTargetToSelection(names[index])
+		if index < 1 || index-1 >= len(names) {
+			return
+		}
+		r.cloudMountDialogSyncTargetToSelection(names[index-1])
 	})
-	r.cloudMountDialogRemoteField.SetCurrentOption(0)
-	r.cloudMountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(names[0]))
+
+	selectedIndex := 0
+	if preselect != "" {
+		for i, name := range names {
+			if name == preselect {
+				selectedIndex = i + 1
+				break
+			}
+		}
+	} else if len(names) > 0 {
+		selectedIndex = 1
+	}
+	r.cloudMountDialogRemoteField.SetCurrentOption(selectedIndex)
+	if selectedIndex > 0 {
+		r.cloudMountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(names[selectedIndex-1]))
+	} else {
+		r.cloudMountDialogTargetField.SetText("")
+	}
 	r.cloudMountDialogIdentifierField.SetText("")
 	r.cloudMountDialogTagsField.SetText("")
 
@@ -249,26 +314,52 @@ func (r *Root) openCloudMountCreateDialog() {
 // RecordAttempt already keep for SFTP (see SaveConnection's own doc
 // comment on why), and toggleCloudMount is right there in the merged
 // list the moment this dialog closes.
-func (r *Root) runAddCloudMount() {
+func (r *Root) saveCloudMountEntry() (rclone.MountEntry, bool) {
 	_, remoteName := r.cloudMountDialogRemoteField.GetCurrentOption()
-	if remoteName == "" {
-		return
+	if remoteName == "" || remoteName == cloudMountDialogCreateNewOption {
+		return rclone.MountEntry{}, false
 	}
 	target := strings.TrimSpace(r.cloudMountDialogTargetField.GetText())
 	if target == "" {
-		return
+		return rclone.MountEntry{}, false
 	}
 	identifier := normalizeConnectIdentifier(r.cloudMountDialogIdentifierField.GetText())
 	tags := remotefs.ParseTags(r.cloudMountDialogTagsField.GetText())
 
 	if err := rclone.EnsureMountDir(target); err != nil {
 		r.showError(err)
-		return
+		return rclone.MountEntry{}, false
 	}
 	entry := rclone.MountEntry{RemoteName: remoteName, Target: target, Identifier: identifier, Tags: tags}
 	if err := rclone.AddMountEntry(entry); err != nil {
 		r.showError(err)
+		return rclone.MountEntry{}, false
+	}
+	return entry, true
+}
+
+// runSaveCloudMount is the "OK" button's own action — saves the
+// MountEntry without mounting it, the Connect dialog's own OK for
+// this entity instead of remotefs.Connection (see SaveConnection's own
+// doc comment on why "prepared, not yet attempted" is a real,
+// deliberate state worth having).
+func (r *Root) runSaveCloudMount() {
+	if _, ok := r.saveCloudMountEntry(); ok {
+		r.hideOverlay()
+	}
+}
+
+// runSaveAndMountCloudMount is the "Mount" button's own action —
+// saves the MountEntry exactly like OK does, then immediately mounts
+// it. The dialog closes right away, same as clicking a history row's
+// own label dials immediately for SFTP; toggleCloudMount itself
+// already runs the real Mount call via safeGo, so this never blocks
+// the UI thread either.
+func (r *Root) runSaveAndMountCloudMount() {
+	entry, ok := r.saveCloudMountEntry()
+	if !ok {
 		return
 	}
 	r.hideOverlay()
+	r.toggleCloudMount(entry)
 }

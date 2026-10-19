@@ -256,3 +256,47 @@ func TestCreateStaticRemotePassesArgsInOrder(t *testing.T) {
 		}
 	}
 }
+
+// TestCreateStaticRemoteRealRcloneRoundTrip exercises CreateStaticRemote
+// end to end against a real rclone binary, skipped where it isn't
+// installed — not simulated, same reasoning
+// TestIsMountedDetectsARealRcloneFUSEMount already gives for its own
+// real mount. The "local" backend needs no credentials at all, so this
+// stays fast and fully offline while still confirming the real
+// subprocess, the real config file write, and ListRemotes' own
+// round-trip all actually work together.
+func TestCreateStaticRemoteRealRcloneRoundTrip(t *testing.T) {
+	requireCommand(t, "rclone")
+
+	confDir := t.TempDir()
+	t.Setenv("RCLONE_CONFIG", confDir+"/rclone.conf")
+
+	if err := CreateStaticRemote("breakthrough-test-local", "local", nil); err != nil {
+		t.Fatalf("CreateStaticRemote: %v", err)
+	}
+
+	remotes, err := ListRemotes()
+	if err != nil {
+		t.Fatalf("ListRemotes: %v", err)
+	}
+	found := false
+	for _, r := range remotes {
+		if r.Name == "breakthrough-test-local" {
+			found = true
+			if r.Type != "local" {
+				t.Errorf("remote type = %q, want %q", r.Type, "local")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("ListRemotes = %+v, want it to include the just-created remote", remotes)
+	}
+
+	// A second CreateStaticRemote for the same name must refuse, not
+	// overwrite — the exact behavior TestCreateStaticRemoteRefusesAnExistingName
+	// already pins with a mocked ListRemotes; this confirms the same
+	// contract holds against the real one too.
+	if err := CreateStaticRemote("breakthrough-test-local", "local", nil); err == nil {
+		t.Error("CreateStaticRemote should refuse a name that already exists, even against the real rclone config")
+	}
+}

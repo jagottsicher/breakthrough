@@ -1018,7 +1018,7 @@ func (r *Root) openNewConnectionChooser() {
 		r.openConnectDialog(remotefs.Connection{}, connectDialogModeNew)
 	})
 	r.picker.AddItem("Cloud mount", "", 0, func() {
-		r.openCloudMountCreateDialog()
+		r.openCloudMountCreateDialog("")
 	})
 	r.picker.SetDoneFunc(func() { r.hideOverlay() })
 
