@@ -818,3 +818,61 @@ func TestToolboxDigEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
+
+// TestToolboxWgetEntryBuildOmitsEmptyOptionalFields pins wget's own
+// build func via a real open: an unchecked Resume and an empty Output
+// path must produce no extra tokens at all beyond the URL itself.
+// Checked through the preview only, not a real Run — wget isn't
+// preinstalled on every platform (notably macOS), the same reasoning
+// TestToolboxNmapEntryBuildOmitsEmptyOptionalFields's own doc comment
+// gives for nmap/dig.
+func TestToolboxWgetEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry := toolboxWgetEntry()
+	entry.run(r)
+
+	urlField, ok := r.toolboxFormWidgets[toolboxWgetFieldURL].(*tview.InputField)
+	if !ok {
+		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", toolboxWgetFieldURL)
+	}
+	urlField.SetText("https://example.com/file.tar.gz")
+
+	want := "wget https://example.com/file.tar.gz"
+	if got := r.toolboxFormPreview.GetText(true); got != want {
+		t.Errorf("preview = %q, want exactly %q (unchecked Resume, empty Output path)", got, want)
+	}
+}
+
+// TestToolboxWgetEntryBuildIncludesEveryFieldWhenSet is
+// TestToolboxWgetEntryBuildOmitsEmptyOptionalFields's counterpart: every
+// field set to a non-default value reaches argv, in the Resume/Output/
+// URL order toolboxWgetEntry's own build func uses.
+func TestToolboxWgetEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	entry := toolboxWgetEntry()
+	entry.run(r)
+
+	urlField := r.toolboxFormWidgets[toolboxWgetFieldURL].(*tview.InputField)
+	urlField.SetText("https://example.com/file.tar.gz")
+	outputField := r.toolboxFormWidgets[toolboxWgetFieldOutput].(*tview.InputField)
+	outputField.SetText("out.tar.gz")
+	// Set directly rather than through toolboxFormToggles' own selected
+	// func (the same direct-state-manipulation style
+	// TestToolboxCurlEntryBuildIncludesEveryFieldWhenSet's own comment
+	// explains) — updateToolboxFormPreview must be called explicitly
+	// afterwards, since nothing here went through the real UI event
+	// that would normally trigger it.
+	r.toolboxFormToggleState[toolboxWgetFieldResume] = true
+	r.updateToolboxFormPreview()
+
+	want := "wget -c -O out.tar.gz https://example.com/file.tar.gz"
+	if got := r.toolboxFormPreview.GetText(true); got != want {
+		t.Errorf("preview = %q, want %q", got, want)
+	}
+}
