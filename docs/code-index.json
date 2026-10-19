@@ -1152,6 +1152,16 @@
       "sha256": "10138430fc05f8df5dfc6cdc99908254fc86176b0ad7853da492fec028fd0802"
     },
     {
+      "path": "internal/rclone/rclone.go",
+      "size": 9027,
+      "sha256": "cf24ff2d7c5f8b9fd7c3d8a1d5a0930e6930bd41e92178f9f6959c0c15d35ffa"
+    },
+    {
+      "path": "internal/rclone/rclone_test.go",
+      "size": 7515,
+      "sha256": "ead499c97fb5733a40cf344bcdc6e61e23962cc3477c65fc6e45b62486f5e14d"
+    },
+    {
       "path": "internal/remotefs/auth.go",
       "size": 5695,
       "sha256": "967d7e87aec3a55ee686851ae602f97569fe39273d2fe2b8b89c18c921fafbfb"
@@ -3144,6 +3154,26 @@
         "reflect",
         "strings",
         "sync",
+        "testing",
+        "time"
+      ]
+    },
+    {
+      "import_path": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "directory": "internal/rclone",
+      "name": "rclone",
+      "files": [
+        "internal/rclone/rclone.go",
+        "internal/rclone/rclone_test.go"
+      ],
+      "imports": [
+        "encoding/json",
+        "errors",
+        "fmt",
+        "github.com/jagottsicher/breakthrough/internal/mounts",
+        "os/exec",
+        "runtime",
+        "strings",
         "testing",
         "time"
       ]
@@ -15521,6 +15551,181 @@
       "name": "TestStateStringAndOutcomeString",
       "kind": "function",
       "line": 174
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "ErrNotAvailable",
+      "kind": "var",
+      "line": 45
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "Remote",
+      "kind": "type",
+      "line": 52
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "MountOptions",
+      "kind": "type",
+      "line": 59
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "runListRemotes",
+      "kind": "var",
+      "line": 78
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "runMount",
+      "kind": "var",
+      "line": 82
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "runUnmount",
+      "kind": "var",
+      "line": 86
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "lookPath",
+      "kind": "var",
+      "line": 90
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "unmountCommand",
+      "kind": "function",
+      "line": 101
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "wrapExitError",
+      "kind": "function",
+      "line": 112
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "Available",
+      "kind": "function",
+      "line": 126
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "listRemotesEntry",
+      "kind": "type",
+      "line": 136
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "ListRemotes",
+      "kind": "function",
+      "line": 145
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "parseListRemotesJSON",
+      "kind": "function",
+      "line": 159
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "Mount",
+      "kind": "function",
+      "line": 187
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "Unmount",
+      "kind": "function",
+      "line": 201
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone.go",
+      "name": "IsMounted",
+      "kind": "function",
+      "line": 215
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone_test.go",
+      "name": "requireCommand",
+      "kind": "function",
+      "line": 13
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone_test.go",
+      "name": "TestParseListRemotesJSONReadsNameAndType",
+      "kind": "function",
+      "line": 25
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone_test.go",
+      "name": "TestParseListRemotesJSONEmptyConfig",
+      "kind": "function",
+      "line": 51
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone_test.go",
+      "name": "TestParseListRemotesJSONInvalidReturnsError",
+      "kind": "function",
+      "line": 64
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone_test.go",
+      "name": "TestAvailableFalseWhenRcloneMissing",
+      "kind": "function",
+      "line": 73
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone_test.go",
+      "name": "TestListRemotesReturnsErrNotAvailableWithoutRclone",
+      "kind": "function",
+      "line": 87
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone_test.go",
+      "name": "TestMountPassesVFSCacheModeFullAndCacheDir",
+      "kind": "function",
+      "line": 108
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone_test.go",
+      "name": "TestMountExtraArgsAppendedAfterFixedFlags",
+      "kind": "function",
+      "line": 136
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rclone",
+      "file": "internal/rclone/rclone_test.go",
+      "name": "TestIsMountedDetectsARealRcloneFUSEMount",
+      "kind": "function",
+      "line": 169
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -53040,5 +53245,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "f2ce4e8869aa2782ae658ce5eb439978f19ed21f9d538e6ff9006dd27492f124"
+  "merkle_root": "f2515cf789e8f4f41a656ce7c0b0e4418e258ad4289b00eb4d3d1503522c2dc0"
 }
