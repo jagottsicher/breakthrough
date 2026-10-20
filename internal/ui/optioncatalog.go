@@ -1069,6 +1069,23 @@ func optionCategories() []optionCategory {
 						r.persistSetting("remote_archive_confirm_size", config.FormatByteSize(n))
 					},
 				),
+				stringOption("cloud_mount_base_dir", "Cloud mount base directory",
+					"Base directory a cloud-storage mount's own subdirectory is created under "+
+						"(one subdirectory per remote, named after it) — see internal/rclone's own "+
+						"package doc comment for why this is a plain user-owned directory by "+
+						"default, never /mnt or /media automatically.\n\n"+
+						"Leave empty to use the built-in default: $XDG_DATA_HOME/breakthrough/"+
+						"mounts/<user>, or ~/.local/share/breakthrough/mounts/<user> if that "+
+						"variable isn't set — the same directory trash's own deleted files live "+
+						"under, just a different subfolder. Only point this at /mnt or /media if "+
+						"the exact target directory already exists and is writable — this never "+
+						"creates one there itself.",
+					func(r *Root) string { return r.settings.CloudMountBaseDir },
+					func(r *Root, v string) {
+						r.settings.CloudMountBaseDir = v
+						r.persistSetting("cloud_mount_base_dir", v)
+					},
+				),
 			},
 		},
 		{
@@ -1434,6 +1451,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.MoveStableSymlinks), true
 	case "remote_archive_confirm_size":
 		return config.FormatByteSize(s.RemoteArchiveConfirmSize), true
+	case "cloud_mount_base_dir":
+		return s.CloudMountBaseDir, true
 	case "compress_format":
 		return s.CompressFormat, true
 	case "open_with_command":

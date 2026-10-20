@@ -12,6 +12,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/filterexpr"
+	"github.com/jagottsicher/breakthrough/internal/rclone"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
@@ -44,47 +45,113 @@ const connectionMenuNewConnectionLabel = " +  New"
 // full phrase never risked distorting anything and stays as one cell.
 const sshShellMenuNewConnectionLabel = " +  New connection"
 
-// Column indices within the connection menu table — the same in both
-// collapsed and expanded mode (see r.settings.ConnectionMenuExpanded):
-// User | @ | Host/IP in both, expanded mode's only difference is
-// Identifier inserted right after Host/IP, shifting Eject/Remove one
-// column further right (see connectionMenuEjectColumn/
-// connectionMenuRemoveColumn). Per the user's own explicit request,
-// collapsed is a real column table too now, not single merged "user@
-// host" string — just missing the one column (Identifier) expanded
-// mode adds.
+// connectionMenuCloudTargetSegments is how many trailing path
+// segments of a cloud mount's own Target a row shows (see
+// shortenPathLastSegments) — aligned to path separators, never
+// truncated mid-segment the way shortenPathLeft's own character-count
+// truncation can, per the user's own explicit request after a real
+// example ("…hare/breakthrough/mounts/jens/mydropbox") cut off
+// mid-word. 3 covers the default MountsDir()-derived path's own last
+// three segments exactly ("mounts", "<user>", "<remote name>") — by
+// the user's own math, that leaves roughly 25 of
+// connectionMenuColumnWidths' own available room for the remote
+// name itself even at the default base path's own length, comfortably
+// enough for a real-world remote name.
+const connectionMenuCloudTargetSegments = 3
+
+// shortenPathLastSegments returns path's own last n slash-separated
+// segments, joined back with "/" and prefixed with "…/" if any
+// earlier segments were cut off — unlike shortenPathLeft, this never
+// lands mid-segment, since it only ever cuts at a "/" boundary.
+// Returns path unchanged if it has n or fewer segments to begin with
+// (nothing to cut).
+func shortenPathLastSegments(path string, n int) string {
+	segments := strings.Split(path, "/")
+	// A leading "/" (every cloud mount's own Target is absolute)
+	// produces a leading "" element from Split — drop it so "/a/b/c"
+	// counts as 3 segments, not 4, the same way a human reading the
+	// path would count them.
+	if len(segments) > 0 && segments[0] == "" {
+		segments = segments[1:]
+	}
+	if len(segments) <= n {
+		return path
+	}
+	return "…/" + strings.Join(segments[len(segments)-n:], "/")
+}
+
+// Column indices within the connection menu table. User | @ | Host/IP
+// are fixed, in both collapsed and expanded mode
+// (r.settings.ConnectionMenuExpanded); Identifier is fixed too, but
+// only present at all once expanded. Type, Tags, Eject and Remove all
+// move depending on that flag — resolved through the functions below
+// rather than more iota constants, because Type's own position isn't
+// fixed the way the others are: per the user's own explicit request,
+// it sits right after Identifier when expanded, but right after
+// Host/IP when collapsed, since there's no Identifier column there
+// for it to sit behind. Per the user's own explicit request, collapsed
+// is a real column table too now, not a single merged "user@host"
+// string — just missing Identifier/Tags, the two columns expanded mode
+// adds.
 //
-// Only connectionMenuColUser is ever selectable — @/Host-IP/Identifier
-// each still carry their own SetClickedFunc (see renderConnectionMenu),
-// so clicking anywhere across the whole label group still connects
-// (tview's own Table.MouseHandler calls a cell's Clicked() regardless
-// of its own Selectable flag, verified against table.go, not guessed),
-// but Left/Right keyboard navigation skips straight over them to the
-// row's other two real stops, ✎ and ✕ — exactly the "the whole label
-// group is one stop, I don't need to navigate its own pieces
-// separately" behavior the user asked for, since every one of those
-// cells does the exact same thing (connect) regardless of which one
-// was actually activated.
+// Type is always present, in both modes — unlike Identifier/Tags: it's
+// what tells an SFTP connection row and a cloud-mount row apart at a
+// glance ("SFTP" vs "S3"/"WebDAV"/...), which has to work whether or
+// not the dropdown happens to be expanded right now, the same reason
+// User/@/Host-IP themselves are never hidden either. Deliberately
+// never sortable (connectionMenuSortNone, same as Tags) — see
+// connectionMenuSortHistory's own doc comment for why a sort key only
+// makes sense for a column every row can meaningfully compare on; the
+// same reason User/Host-IP themselves don't try to mean anything for a
+// cloud row either.
+//
+// Only connectionMenuColUser is ever selectable — @/Host-IP/Identifier/
+// Type/Tags each still carry their own SetClickedFunc (see
+// renderConnectionMenu), so clicking anywhere across the whole label
+// group still connects/toggles the mount (tview's own Table.
+// MouseHandler calls a cell's Clicked() regardless of its own
+// Selectable flag, verified against table.go, not guessed), but
+// Left/Right keyboard navigation skips straight over them to the
+// row's other two real stops, ✎/⏏/mount-unmount and ✕ — exactly the
+// "the whole label group is one stop, I don't need to navigate its own
+// pieces separately" behavior the user asked for, since every one of
+// those cells does the exact same thing regardless of which one was
+// actually activated.
 const (
 	connectionMenuColUser = iota
 	connectionMenuColAt
 	connectionMenuColHost
 	connectionMenuColIdentifier // present only when expanded
-	connectionMenuColTags       // present only when expanded, right after Identifier
 )
+
+// connectionMenuTypeColumn resolves Type's own index for the given
+// expand state — right after Identifier when expanded, right after
+// Host/IP when collapsed (see the column constants' own doc comment
+// on why its position, unlike every other column here, actually
+// depends on expanded rather than Type simply being skipped).
+func connectionMenuTypeColumn(expanded bool) int {
+	if expanded {
+		return connectionMenuColIdentifier + 1
+	}
+	return connectionMenuColHost + 1
+}
+
+// connectionMenuTagsColumn resolves Tags' own index — present only
+// when expanded, right after Type.
+func connectionMenuTagsColumn(expanded bool) int {
+	return connectionMenuTypeColumn(expanded) + 1
+}
 
 // connectionMenuEjectColumn/connectionMenuRemoveColumn resolve the
 // eject/edit and remove columns' own index for the given expand state
 // — the one place activateConnectionMenuCell and renderConnectionMenu
 // both go through, so a click on either glyph is routed by the layout
-// actually on screen: expanded mode has two more label columns
-// (Identifier, Tags) ahead of them than collapsed mode does, shifting
-// both two columns to the right.
+// actually on screen.
 func connectionMenuEjectColumn(expanded bool) int {
 	if expanded {
-		return connectionMenuColTags + 1
+		return connectionMenuTagsColumn(expanded) + 1
 	}
-	return connectionMenuColHost + 1
+	return connectionMenuTypeColumn(expanded) + 1
 }
 
 func connectionMenuRemoveColumn(expanded bool) int {
@@ -166,9 +233,9 @@ func (r *Root) setConnectionMenuSortKey(key connectionMenuSortKey) {
 // string.
 func connectionMenuFilterPlaceholder(expanded bool) string {
 	if expanded {
-		return "user, host/ip, identifier, tags"
+		return "user, host/ip, type, identifier, tags"
 	}
-	return "user, host/ip"
+	return "user, host/ip, type"
 }
 
 // connectionMenuFilterHistory returns the subset of history whose
@@ -208,7 +275,44 @@ func connectionMenuFilterHistory(history []remotefs.HistoryEntry, query string, 
 	}
 	filtered := make([]remotefs.HistoryEntry, 0, len(history))
 	for _, entry := range history {
-		source := entry.User + " " + entry.HostPort()
+		// "SFTP" is always appended — Type is always present, in both
+		// modes (see the column constant's own doc comment), so it has
+		// to always be searchable too, not only once expanded the way
+		// Identifier/Tags below are.
+		source := entry.User + " " + entry.HostPort() + " SFTP"
+		message := ""
+		if expanded {
+			message = entry.Identifier + " " + strings.Join(entry.Tags, " ")
+		}
+		if filter.Match(source, message) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+// connectionMenuFilterCloudMounts mirrors connectionMenuFilterHistory
+// exactly, for the other kind of row connectionMenuTable now carries
+// (see this file's own package doc comment on why both live in one
+// table): the same query, against the same two always-vs-expanded-only
+// halves, just with RemoteName/Target/the resolved backend type (see
+// renderConnectionMenu's own typeByName) standing in for
+// User/HostPort/"SFTP". typeByName's own absence for a given entry
+// (ListRemotes itself failed, or rclone no longer knows that name) is
+// not an error here — it just searches as "", the same "degrade, don't
+// crash" contract renderConnectionMenu's own caller already accepts.
+func connectionMenuFilterCloudMounts(entries []rclone.MountEntry, typeByName map[string]string, query string, expanded bool) []rclone.MountEntry {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return entries
+	}
+	filter, err := filterexpr.ParseQuery(query)
+	if err != nil {
+		return entries
+	}
+	filtered := make([]rclone.MountEntry, 0, len(entries))
+	for _, entry := range entries {
+		source := entry.RemoteName + " " + entry.Target + " " + typeByName[entry.RemoteName]
 		message := ""
 		if expanded {
 			message = entry.Identifier + " " + strings.Join(entry.Tags, " ")
@@ -352,12 +456,20 @@ func (r *Root) renderConnectionMenu() {
 	r.connectionMenuSetHeaderCell(connectionMenuColHost, "Host/IP", connectionMenuSortHost)
 	if expanded {
 		r.connectionMenuSetHeaderCell(connectionMenuColIdentifier, "Identifier", connectionMenuSortIdentifier)
+	}
+	// connectionMenuSortNone deliberately, and unconditionally (not
+	// inside `if expanded`) — see the column constants' own doc
+	// comment: Type is always present, and never sortable, in either
+	// mode, just at a different index depending on whether Identifier
+	// is there to sit behind.
+	r.connectionMenuSetHeaderCell(connectionMenuTypeColumn(expanded), "Type", connectionMenuSortNone)
+	if expanded {
 		// connectionMenuSortNone deliberately: Tags is filterable (see
 		// connectionMenuFilterHistory), not sortable — the plan never
 		// asked for a fourth mnemonic/sort key alongside U/H/I, and a
 		// set-valued column has no single natural sort order the way a
 		// plain string column does anyway.
-		r.connectionMenuSetHeaderCell(connectionMenuColTags, "Tags", connectionMenuSortNone)
+		r.connectionMenuSetHeaderCell(connectionMenuTagsColumn(expanded), "Tags", connectionMenuSortNone)
 	}
 	r.connectionMenuSetHeaderCell(ejectCol, "", connectionMenuSortNone)
 	r.connectionMenuSetHeaderCell(removeCol, "", connectionMenuSortNone)
@@ -420,12 +532,26 @@ func (r *Root) renderConnectionMenu() {
 			// space) — removed rather than tuned, since any fixed cap
 			// reintroduces the same problem the moment a terminal is
 			// wider than that guess.
-			table.SetCell(thisRow, connectionMenuColTags,
+			table.SetCell(thisRow, connectionMenuTagsColumn(expanded),
 				tview.NewTableCell(strings.Join(entry.Tags, ", ")).
 					SetTextColor(color).
 					SetSelectable(false).
-					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColTags)))
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuTagsColumn(expanded))))
 		}
+		// Same color as every other cell in this row's own label
+		// group (color, derived above from isActive/LastFailed/
+		// Untested) — never theme.MutedTextColor on its own: Type is
+		// part of that same "at a glance, is this reachable" signal,
+		// not a secondary, always-muted descriptor. Position depends
+		// on expanded (see connectionMenuTypeColumn's own doc
+		// comment), so this has to run after the Identifier block
+		// above, not alongside Host/IP the way it did before that
+		// position became conditional.
+		table.SetCell(thisRow, connectionMenuTypeColumn(expanded),
+			tview.NewTableCell("SFTP").
+				SetTextColor(color).
+				SetSelectable(false).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuTypeColumn(expanded))))
 
 		if isActive {
 			table.SetCell(thisRow, ejectCol,
@@ -459,7 +585,108 @@ func (r *Root) renderConnectionMenu() {
 		row++
 	}
 
+	// Cloud-mount rows come next, after every SFTP history row and
+	// before "+ New" — per the user's own explicit request that both
+	// read as one list (SFTP first, since it's the one actually used
+	// most often, same reasoning renderConnectionMenu's own doc comment
+	// already gives for history-before-"+ New"), not two separate menus
+	// reached through two different doorways. typeByName is resolved
+	// once per render (one ListRemotes call), not per row — this
+	// dropdown has at most historyMaxEntries-ish rows total, so a
+	// second subprocess call per open is already the expensive part;
+	// a third call per row would make opening this dropdown
+	// perceptibly slower for no reason. A ListRemotes failure (rclone
+	// missing, or erroring) just means every cloud row's own Type cell
+	// reads "" — degrade, don't crash, the same contract LoadHistory's
+	// own failure already gets a few lines up.
+	typeByName := map[string]string{}
+	if remotes, err := rclone.ListRemotes(); err == nil {
+		for _, rem := range remotes {
+			typeByName[rem.Name] = rem.Type
+		}
+	}
+	cloudEntries, _ := rclone.LoadMountEntries()
+	cloudEntries = connectionMenuFilterCloudMounts(cloudEntries, typeByName, r.connectionMenuSearchField.GetText(), expanded)
+	r.connectionMenuCloudMountRows = map[int]rclone.MountEntry{}
+	for _, entry := range cloudEntries {
+		entry := entry
+		thisRow := row
+		mounted, mountErr := rclone.IsMounted(entry.Target)
+		_, pending := r.cloudMountPending[entry.Target]
+		color := cloudMountRowColor(r.theme, mounted, mountErr != nil)
+
+		label := entry.RemoteName
+		if entry.Identifier != "" {
+			label += "  (" + entry.Identifier + ")"
+		}
+		table.SetCell(thisRow, connectionMenuColUser,
+			tview.NewTableCell(label).
+				SetTextColor(color).
+				SetSelectable(true).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColUser)))
+		table.SetCell(thisRow, connectionMenuColAt, blankConnectionMenuCell())
+		table.SetCell(thisRow, connectionMenuColHost,
+			tview.NewTableCell(shortenPathLastSegments(entry.Target, connectionMenuCloudTargetSegments)).
+				SetTextColor(color).
+				SetSelectable(false).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColHost)))
+		if expanded {
+			table.SetCell(thisRow, connectionMenuColIdentifier,
+				tview.NewTableCell(entry.Identifier).
+					SetTextColor(color).
+					SetSelectable(false).
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColIdentifier)))
+			table.SetCell(thisRow, connectionMenuTagsColumn(expanded),
+				tview.NewTableCell(strings.Join(entry.Tags, ", ")).
+					SetTextColor(color).
+					SetSelectable(false).
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuTagsColumn(expanded))))
+		}
+		// Same color as the rest of this row's own label group — see
+		// the matching comment on the SFTP loop above for why never
+		// theme.MutedTextColor on its own.
+		table.SetCell(thisRow, connectionMenuTypeColumn(expanded),
+			tview.NewTableCell(typeByName[entry.RemoteName]).
+				SetTextColor(color).
+				SetSelectable(false).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuTypeColumn(expanded))))
+
+		// Eject column carries Mount/Unmount here, per the user's own
+		// explicit decision — same column position SFTP's own Eject/
+		// Edit occupies, different meaning for this row kind, exactly
+		// the way connectionHistoryEditGlyph's own doc comment already
+		// establishes that one column can mean two different things
+		// depending on the row. Plain words, not a glyph: the ☁ symbol
+		// this replaced was itself a real, reported point of confusion
+		// — "mount"/"unmount" needs no legend.
+		actionText := "mount"
+		if mounted {
+			actionText = "unmount"
+		}
+		if pending {
+			actionText = r.cloudMountPending[entry.Target]
+		}
+		table.SetCell(thisRow, ejectCol,
+			tview.NewTableCell("   "+actionText+" ").
+				SetTextColor(r.theme.MutedTextColor).
+				SetSelectable(true).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, ejectCol)))
+		table.SetCell(thisRow, removeCol,
+			tview.NewTableCell(" "+cloudMountRemoveGlyph+" ").
+				SetTextColor(r.theme.MutedTextColor).
+				SetSelectable(true).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, removeCol)))
+
+		r.connectionMenuCloudMountRows[thisRow] = entry
+		r.connectionMenuRowColors[thisRow] = color
+		row++
+	}
+
 	newRow := row
+	// Remembered for openNewConnectionChooser's own positioning below
+	// — it opens well after this render call returns, so it can't just
+	// read the local newRow here.
+	r.connectionMenuNewRow = newRow
 	// Back to one short cell in User ("+  New") — the split across
 	// User/Host-IP ("+" / "New connection") was tried and reverted
 	// (the user's own explicit report: "sieht Mist aus"). Still short
@@ -479,7 +706,19 @@ func (r *Root) renderConnectionMenu() {
 	table.SetCell(newRow, connectionMenuColHost, blankConnectionMenuCell())
 	if expanded {
 		table.SetCell(newRow, connectionMenuColIdentifier, blankConnectionMenuCell())
-		table.SetCell(newRow, connectionMenuColTags, blankConnectionMenuCell())
+	}
+	// Every column gets an explicit blank cell, Type included — a
+	// cell tview never had SetCell called on for this row at all
+	// renders with its own un-themed default background (black),
+	// never the table's own SurfaceBackground, which is exactly the
+	// real, reported bug an earlier version of this row had: Type's
+	// own position depends on expanded (see
+	// connectionMenuTypeColumn's own doc comment), so it has to be
+	// blanked explicitly here too, the same as every other column in
+	// this row already is.
+	table.SetCell(newRow, connectionMenuTypeColumn(expanded), blankConnectionMenuCell())
+	if expanded {
+		table.SetCell(newRow, connectionMenuTagsColumn(expanded), blankConnectionMenuCell())
 	}
 	table.SetCell(newRow, ejectCol, blankConnectionMenuCell())
 	table.SetCell(newRow, removeCol, blankConnectionMenuCell())
@@ -717,13 +956,26 @@ func (r *Root) connectionMenuSetHeaderCell(col int, label string, key connection
 // absolute column index shifts (see connectionMenuEjectColumn's own
 // doc comment on the bug this would otherwise be).
 func (r *Root) activateConnectionMenuCell(row, column int) {
-	conn, ok := r.connectionMenuHistoryRows[row]
-	if !ok {
-		r.hideOverlay()
-		r.openConnectDialog(remotefs.Connection{}, connectDialogModeNew)
+	expanded := r.settings.ConnectionMenuExpanded
+	if entry, ok := r.connectionMenuCloudMountRows[row]; ok {
+		if column == connectionMenuRemoveColumn(expanded) {
+			r.removeCloudMount(entry)
+		} else {
+			r.toggleCloudMount(entry)
+		}
 		return
 	}
-	expanded := r.settings.ConnectionMenuExpanded
+	conn, ok := r.connectionMenuHistoryRows[row]
+	if !ok {
+		// Neither a history row nor a cloud-mount row: the one other
+		// kind this table has, "+ New" — see openNewConnectionChooser's
+		// own doc comment for why this opens a small chooser now
+		// rather than going straight to openConnectDialog the way it
+		// used to, back when there was only ever one kind of thing to
+		// create.
+		r.openNewConnectionChooser()
+		return
+	}
 	switch column {
 	case connectionMenuEjectColumn(expanded):
 		if row == r.connectionMenuActiveRow {
@@ -738,6 +990,58 @@ func (r *Root) activateConnectionMenuCell(row, column int) {
 		r.openConnectDialog(conn, connectDialogModeNew)
 		r.runConnect()
 	}
+}
+
+// openNewConnectionChooser is the trailing "+ New" row's own action —
+// a small two-item picker (reusing r.picker, the same shared generic
+// chooser the owner/group picker, label menu, rsync presets, and the
+// ssh-key-copy target already use), not a direct jump to the Connect
+// dialog: SFTP connections and cloud mounts need two genuinely
+// different creation dialogs (see cloudmountdialog.go's own package
+// doc comment on why one of them can't just be another field set on
+// the same form), and "+ New" now has to mean "pick which kind" first.
+//
+// Deliberately pushOverlay, not showOverlay: this chooser sits ON TOP
+// of the still-open connection menu rather than replacing it, so
+// Escape (the picker's own SetDoneFunc below) pops back to the menu
+// instead of closing everything — the exact back-navigation dead end
+// an earlier, now-reverted design (a second, separate dropdown opened
+// via showOverlay) had, per a real, reported complaint. Picking either
+// item still ends up closing both layers anyway, because
+// openConnectDialog/openCloudMountCreateDialog each call showOverlay
+// themselves, which clears the whole stack — the same "a dialog
+// replaces whatever menu led to it" behavior "+ New" already had.
+func (r *Root) openNewConnectionChooser() {
+	r.picker.Clear()
+	r.picker.AddItem("SFTP connection", "", 0, func() {
+		r.openConnectDialog(remotefs.Connection{}, connectDialogModeNew)
+	})
+	r.picker.AddItem("Cloud mount", "", 0, func() {
+		r.openCloudMountCreateDialog("")
+	})
+	r.picker.SetDoneFunc(func() { r.hideOverlay() })
+
+	// Anchored at the "+ New" row's own screen position, per the
+	// user's own explicit request — the column right after User (@'s
+	// own column; connectionMenuColAt exists at the same index in both
+	// collapsed and expanded mode, so no expanded-mode branch is
+	// needed here), the row connectionMenuNewRow itself. GetInnerRect
+	// already accounts for the table's own left/right border padding
+	// (SetBorderPadding(0, 0, 1, 1)); rowOffset is never anything but 0
+	// here in practice, since positionConnectionMenu always sizes the
+	// table's own height to fit every row at once (see
+	// connectionMenuSize), so row index already is screen row offset.
+	tableX, tableY, _, _ := r.connectionMenuTable.GetInnerRect()
+	columnWidths := connectionMenuColumnWidths(r.connectionMenuTable)
+	startX := tableX + connectionMenuColumnStartX(columnWidths, connectionMenuColAt)
+	startY := tableY + r.connectionMenuNewRow
+
+	width, height := listSize(r.picker)
+	x, y, width, height := r.clampToPanel(startX, startY, width, height)
+	r.picker.SetRect(x, y, width, height)
+	r.picker.SetCurrentItem(0)
+
+	r.pushOverlay(pickerPage, r.picker, nil)
 }
 
 // editConnectionHistoryRow opens the Connect dialog prefilled from
@@ -784,7 +1088,25 @@ func (r *Root) clickConnectionMenuCell(row, column int) func() bool {
 func (r *Root) captureConnectionMenuKey(event *tcell.EventKey) *tcell.EventKey {
 	row, column := r.connectionMenuTable.GetSelection()
 
+	// Up at the first real row (1 — row 0 is the inert header) wraps to
+	// the last; Down at the last wraps to the first — the same
+	// wraparound filtermenu.go's own moveFocus already gives its own
+	// dropdown ((i + delta + len(order)) % len(order)), per a real,
+	// reported complaint that this table was the one dropdown in the
+	// app that didn't. tview's own Table.InputHandler clamps instead of
+	// wrapping for every other Up/Down press, which is exactly right
+	// there — this only overrides the two boundary cases, never
+	// touching ordinary navigation in between (no case matches, so
+	// execution falls through to this function's own final "return
+	// event" below, the same as today).
+	lastRow := r.connectionMenuTable.GetRowCount() - 1
 	switch {
+	case event.Key() == tcell.KeyUp && row <= 1:
+		r.connectionMenuTable.Select(lastRow, column)
+		return nil
+	case event.Key() == tcell.KeyDown && row >= lastRow:
+		r.connectionMenuTable.Select(1, column)
+		return nil
 	case event.Key() == tcell.KeyEscape:
 		r.hideOverlay()
 		return nil
@@ -951,6 +1273,26 @@ func (r *Root) connectionMenuSize() (width, height int) {
 		return screenWidth, height
 	}
 
+	columnWidths := connectionMenuColumnWidths(table)
+	for i, w := range columnWidths {
+		width += w
+		if i > 0 {
+			width++ // the single column tview leaves between cells
+		}
+	}
+
+	// +2 for the table's own left/right border padding.
+	width += 2
+	return width, height
+}
+
+// connectionMenuColumnWidths measures table's own widest cell per
+// column, collapsed-mode columns only (connectionMenuRemoveColumn(
+// false)+1 of them) — split out of connectionMenuSize so
+// openNewConnectionChooser's own positioning below can reuse the exact
+// same measurement rather than a second, possibly-drifting copy of it.
+func connectionMenuColumnWidths(table *tview.Table) []int {
+	rows := table.GetRowCount()
 	columnWidths := make([]int, connectionMenuRemoveColumn(false)+1)
 	for row := 0; row < rows; row++ {
 		for column := range columnWidths {
@@ -963,16 +1305,28 @@ func (r *Root) connectionMenuSize() (width, height int) {
 			}
 		}
 	}
-	for i, w := range columnWidths {
-		width += w
-		if i > 0 {
-			width++ // the single column tview leaves between cells
-		}
-	}
+	return columnWidths
+}
 
-	// +2 for the table's own left/right border padding.
-	width += 2
-	return width, height
+// connectionMenuColumnStartX sums columnWidths' own per-column widths
+// and inter-column gaps up to (not including) column — the same
+// "widest cell plus the single-column gap tview leaves between cells"
+// arithmetic connectionMenuSize already uses for the table's own total
+// width, just stopped partway through to answer "where does this
+// column's own cell actually start" instead of "how wide is the whole
+// table."
+func connectionMenuColumnStartX(columnWidths []int, column int) int {
+	x := 0
+	for i := 0; i < column && i < len(columnWidths); i++ {
+		if i > 0 {
+			x++ // the single column tview leaves between cells
+		}
+		x += columnWidths[i]
+	}
+	if column > 0 {
+		x++ // the gap between the last counted column and this one
+	}
+	return x
 }
 
 // connectionMenuIdentifierSuffix appends conn's own Identifier (see
@@ -1197,7 +1551,11 @@ func (r *Root) connectionMenuRepaintLabelGroups(selectedRow, selectedColumn int)
 	expanded := r.settings.ConnectionMenuExpanded
 	groupCols := []int{connectionMenuColAt, connectionMenuColHost}
 	if expanded {
-		groupCols = append(groupCols, connectionMenuColIdentifier, connectionMenuColTags)
+		groupCols = append(groupCols, connectionMenuColIdentifier)
+	}
+	groupCols = append(groupCols, connectionMenuTypeColumn(expanded))
+	if expanded {
+		groupCols = append(groupCols, connectionMenuTagsColumn(expanded))
 	}
 	rows := table.GetRowCount()
 	// row 0 is the header, skipped entirely — not just exempted from

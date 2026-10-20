@@ -376,6 +376,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "cloud_mount_base_dir",
+			Default:     d.CloudMountBaseDir,
+			Kind:        KindString,
+			Summary:     `Base directory for cloud-storage mounts, one subdirectory per remote. Empty uses the built-in default: (XDG_DATA_HOME or ~/.local/share)/breakthrough/mounts/<user>, same as trash.`,
+			Implemented: true,
+		},
+		{
 			Key:         "compress_format",
 			Default:     d.CompressFormat,
 			Kind:        KindEnum,
