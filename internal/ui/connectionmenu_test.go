@@ -136,7 +136,7 @@ func TestRenderConnectionMenuHeaderRowShowsColumnLabels(t *testing.T) {
 	// see renderConnectionMenu's own doc comment on why it's filterable,
 	// not sortable), so the plain header text equals its own cell text,
 	// nothing to strip.
-	if got, want := table.GetCell(0, connectionMenuColTags).Text, "Tags"; got != want {
+	if got, want := table.GetCell(0, connectionMenuTagsColumn(true)).Text, "Tags"; got != want {
 		t.Errorf("header Tags column (expanded) = %q, want %q", got, want)
 	}
 }
@@ -578,10 +578,9 @@ func TestOpenConnectionMenuResetsAnyPreviousSearch(t *testing.T) {
 func TestRenderConnectionMenuOnALocalPanelOffersOnlyNewConnection(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	r.renderConnectionMenu()
-
 	texts := connectionMenuLabelTexts(r.connectionMenuTable)
 	if len(texts) != 1 || !strings.Contains(texts[0], "New") {
-		t.Errorf("rows = %v, want exactly one \"New\" row for a local panel", texts)
+		t.Fatalf("rows = %v, want exactly one \"New\" row for a local panel", texts)
 	}
 }
 
@@ -688,7 +687,7 @@ func TestRenderConnectionMenuExpandedShowsTheTagsColumn(t *testing.T) {
 
 	r.renderConnectionMenu()
 
-	if got, want := r.connectionMenuTable.GetCell(1, connectionMenuColTags).Text, "build, staging"; got != want {
+	if got, want := r.connectionMenuTable.GetCell(1, connectionMenuTagsColumn(true)).Text, "build, staging"; got != want {
 		t.Errorf("row 1 Tags cell = %q, want %q", got, want)
 	}
 	if got, want := r.connectionMenuTable.GetColumnCount(), connectionMenuRemoveColumn(true)+1; got != want {
@@ -720,7 +719,7 @@ func TestRenderConnectionMenuNeverTruncatesTheTagsCell(t *testing.T) {
 	r.renderConnectionMenu()
 
 	want := "aaaaaaaaaa, bbbbbbbbbb, cccccccccc, dddddddddd, eeeeeeeeee"
-	if got := r.connectionMenuTable.GetCell(1, connectionMenuColTags).Text; got != want {
+	if got := r.connectionMenuTable.GetCell(1, connectionMenuTagsColumn(true)).Text; got != want {
 		t.Errorf("Tags cell = %q, want the full, untruncated %q", got, want)
 	}
 }
@@ -743,7 +742,7 @@ func TestConnectionMenuSelectingTheLabelGroupHighlightsAllItsColumns(t *testing.
 	r.renderConnectionMenu()
 	r.connectionMenuTable.Select(1, connectionMenuColUser)
 
-	for _, col := range []int{connectionMenuColAt, connectionMenuColHost, connectionMenuColIdentifier, connectionMenuColTags} {
+	for _, col := range []int{connectionMenuColAt, connectionMenuColHost, connectionMenuColIdentifier, connectionMenuTypeColumn(true), connectionMenuTagsColumn(true)} {
 		cell := r.connectionMenuTable.GetCell(1, col)
 		if got, want := cellBackgroundColor(cell), r.theme.SelectionBackground; got != want {
 			t.Errorf("column %d background = %v, want SelectionBackground %v", col, got, want)
@@ -1434,4 +1433,72 @@ func historyRowFor(t *testing.T, r *Root, conn remotefs.Connection) int {
 	}
 	t.Fatalf("connection %+v is not a history row right now", conn)
 	return -1
+}
+
+// TestConnectionMenuUpDownWrapAround pins the wraparound a real,
+// reported complaint asked for: Up at the first real row goes to the
+// last, Down at the last goes back to the first — the same behavior
+// filtermenu.go's own moveFocus already gives its own dropdown.
+// Ordinary navigation in between is untouched (tview's own native
+// Table.InputHandler), only the two boundary cases are overridden.
+func TestConnectionMenuUpDownWrapAround(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	for _, u := range []string{"a", "b"} {
+		if err := remotefs.RecordAttempt(remotefs.Connection{Host: u + ".example.com", User: u}, false); err != nil {
+			t.Fatalf("RecordAttempt: %v", err)
+		}
+	}
+	r.openConnectionMenu()
+
+	table := r.connectionMenuTable
+	lastRow := table.GetRowCount() - 1
+
+	row, col := table.GetSelection()
+	if row != 1 {
+		t.Fatalf("initial selection row = %d, want 1", row)
+	}
+
+	if event := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)); event != nil {
+		t.Errorf("Up at the first row should be consumed (nil), got %v", event)
+	}
+	if row, _ := table.GetSelection(); row != lastRow {
+		t.Errorf("Up at the first row: selection = %d, want %d (wrap to last)", row, lastRow)
+	}
+
+	if event := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)); event != nil {
+		t.Errorf("Down at the last row should be consumed (nil), got %v", event)
+	}
+	if row, _ := table.GetSelection(); row != 1 {
+		t.Errorf("Down at the last row: selection = %d, want 1 (wrap to first)", row)
+	}
+
+	// Sanity: col is still whatever labelCol was — never touched by
+	// either wrap, only the row.
+	if _, c := table.GetSelection(); c != col {
+		t.Errorf("column changed from %d to %d — wrap should only ever touch the row", col, c)
+	}
+}
+
+// TestShortenPathLastSegmentsAlignsToSeparators pins
+// shortenPathLastSegments' own contract: cuts only at "/" boundaries,
+// never mid-segment the way shortenPathLeft's own character-count
+// truncation can — the real, reported complaint
+// ("…hare/breakthrough/mounts/jens/mydropbox") this replaced it for.
+func TestShortenPathLastSegmentsAlignsToSeparators(t *testing.T) {
+	cases := []struct {
+		path string
+		n    int
+		want string
+	}{
+		{"/home/jens/.local/share/breakthrough/mounts/jens/mydropbox", 3, "…/mounts/jens/mydropbox"},
+		{"/a/b", 3, "/a/b"},     // fewer segments than n: unchanged
+		{"/a/b/c", 3, "/a/b/c"}, // exactly n segments: unchanged
+		{"/a/b/c/d", 3, "…/b/c/d"},
+		{"/mounts/jens/mydropbox", 3, "/mounts/jens/mydropbox"}, // exactly 3, unchanged
+	}
+	for _, c := range cases {
+		if got := shortenPathLastSegments(c.path, c.n); got != c.want {
+			t.Errorf("shortenPathLastSegments(%q, %d) = %q, want %q", c.path, c.n, got, c.want)
+		}
+	}
 }

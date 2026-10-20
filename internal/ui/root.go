@@ -27,6 +27,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/operations"
+	"github.com/jagottsicher/breakthrough/internal/rclone"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/sshkeys"
@@ -1130,6 +1131,55 @@ type Root struct {
 	connectLayout     *tview.Flex
 	connectCancel     context.CancelFunc
 	connectAnimFrame  int
+
+	// cloudMountDialog* is the "New cloud mount" dialog (see
+	// cloudmountdialog.go), reached via the "+ New" chooser
+	// (openNewConnectionChooser) rather than its own key, same shape as
+	// connectLayout above just with a remote picker instead of Host/
+	// Port/User/Password.
+	cloudMountDialogForm            *tview.Form
+	cloudMountDialogRemoteField     *tview.DropDown
+	cloudMountDialogTargetField     *tview.InputField
+	cloudMountDialogIdentifierField *tview.InputField
+	cloudMountDialogTagsField       *tview.InputField
+	cloudMountDialogCancelBtn       *tview.Button
+	cloudMountDialogOKBtn           *tview.Button
+	cloudMountDialogMountBtn        *tview.Button
+	cloudMountDialogDeleteBtn       *tview.Button
+	cloudMountDialogButtons         *tview.Flex
+	cloudMountDialogTitleBar        *tview.TextView
+	cloudMountDialogLayout          *tview.Flex
+	// cloudMountDialogRemotes is the dropdown's own current option
+	// list (remote names), captured at open time — read back by
+	// cloudMountDialogSyncTargetToSelection to tell "Target still holds
+	// some remote's own unmodified default" apart from "the user typed
+	// something real."
+	cloudMountDialogRemotes []string
+
+	// cloudRemoteDialog* is the "New cloud remote" dialog (see
+	// cloudremotedialog.go), reached by picking
+	// cloudMountDialogCreateNewOption from the "New cloud mount"
+	// dialog's own Remote dropdown. cloudRemoteDialogForm is rebuilt
+	// from scratch on every backend-type change (see
+	// rebuildCloudRemoteDialogFields) — Fields/BackendField/SubField
+	// are themselves part of what gets rebuilt, so these hold whatever
+	// the current rebuild last created, not a fixed set.
+	cloudRemoteDialogForm         *tview.Form
+	cloudRemoteDialogBackendField *tview.DropDown
+	cloudRemoteDialogBackendIndex int
+	cloudRemoteDialogNameField    *tview.InputField
+	cloudRemoteDialogSubField     *tview.DropDown
+	cloudRemoteDialogFields       []*tview.InputField
+	cloudRemoteDialogCancelBtn    *tview.Button
+	cloudRemoteDialogTestBtn      *tview.Button
+	cloudRemoteDialogOKBtn        *tview.Button
+	cloudRemoteDialogCreateBtn    *tview.Button
+	cloudRemoteDialogStatus       *tview.TextView
+	cloudRemoteDialogButtons      *tview.Flex
+	cloudRemoteDialogTitleBar     *tview.TextView
+	cloudRemoteDialogContent      *tview.Flex
+	cloudRemoteDialogLayout       *tview.Flex
+
 	// connectPendingSkipHostKey/connectPendingSkipHostKeyConn back the
 	// "Connect anyway" retry after a HostKeyMismatchError (see
 	// connectdialog.go's own finishConnect/runConnect) — set only once
@@ -1215,6 +1265,27 @@ type Root struct {
 	// in its place, the same "✕" pattern connectionHistoryRemoveGlyph
 	// already established rather than a dedicated row of its own.
 	connectionMenuActiveRow int
+
+	// connectionMenuCloudMountRows maps a row index in
+	// connectionMenuTable to the rclone.MountEntry that row represents —
+	// populated fresh by renderConnectionMenu on every open/re-render,
+	// mirroring connectionMenuHistoryRows' own contract exactly, just
+	// for the other kind of row this table now carries (see
+	// cloudmountmenu.go's own package doc comment for why cloud mounts
+	// are merged into this same table rather than a dropdown of their
+	// own).
+	connectionMenuCloudMountRows map[int]rclone.MountEntry
+	// connectionMenuNewRow is the "+ New" row's own index within
+	// connectionMenuTable, set fresh by every renderConnectionMenu —
+	// read back by openNewConnectionChooser to anchor the chooser at
+	// that row's own screen position (see its own doc comment).
+	connectionMenuNewRow int
+	// cloudMountPending maps a MountEntry's own Target to a transient
+	// "mounting…"/"unmounting…" label while toggleCloudMount's own
+	// background Mount/Unmount call is still running — read by
+	// renderConnectionMenu, so a stale "mount"/"unmount" never sits
+	// there unexplained for however long that subprocess takes.
+	cloudMountPending map[string]string
 
 	// sshShellMenuTable/TitleBar/Layout is the "gs" chord's own dropdown
 	// (see sshshell.go) — the same per-cell Table shape
@@ -2676,6 +2747,22 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.hostKeyConfirmDialog = r.newHostKeyConfirmDialog()
 	r.hostKeyConfirmLayout = r.newHostKeyConfirmLayout()
 
+	// The "New cloud mount" dialog (see cloudmountdialog.go) — same
+	// "fixed field set, built once" shape as the Connect dialog just
+	// above.
+	r.cloudMountDialogForm = r.newCloudMountDialogForm()
+	r.cloudMountDialogButtons = r.newCloudMountDialogButtons()
+	r.cloudMountDialogLayout = r.newCloudMountDialogLayout()
+
+	// The "New cloud remote" dialog (see cloudremotedialog.go) — the
+	// form itself starts empty; rebuildCloudRemoteDialogFields fills
+	// it in on first open and every backend-type change after that
+	// (its own field set genuinely depends on that choice, the same
+	// reason resetSedForm rebuilds Sed Replace's own form fresh).
+	r.cloudRemoteDialogForm = r.newCloudRemoteDialogForm()
+	r.cloudRemoteDialogButtons = r.newCloudRemoteDialogButtons()
+	r.cloudRemoteDialogLayout = r.newCloudRemoteDialogLayout()
+
 	// The connection dropdown (see connectionmenu.go) — rebuilt fresh
 	// on every open (see renderConnectionMenu), the same as the filter
 	// menu's own dropdown.
@@ -3006,6 +3093,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
 	r.AddPage(connectDialogPage, r.connectLayout, false, false)
+	r.AddPage(cloudMountDialogPage, r.cloudMountDialogLayout, false, false)
+	r.AddPage(cloudRemoteDialogPage, r.cloudRemoteDialogLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
 	r.AddPage(sshShellDialogPage, r.sshShellLayout, false, false)

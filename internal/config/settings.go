@@ -383,6 +383,16 @@ type Settings struct {
 
 	RemoteArchiveConfirmSize int64
 
+	// CloudMountBaseDir overrides internal/rclone's own computed default
+	// (session.MountsDir: XDG_DATA_HOME or ~/.local/share/breakthrough,
+	// plus "mounts/<user>" — the same base trash already uses, see
+	// MountsDir's own doc comment) for where a cloud mount's own
+	// per-remote subdirectory is created. Empty (the default) means
+	// "use that computed default" — the same "blank means fall back to
+	// the real default" contract UserDir's own "" already follows, not
+	// a literal empty path.
+	CloudMountBaseDir string
+
 	CompressFormat string
 
 	OpenWithCommand string
@@ -609,6 +619,8 @@ func DefaultSettings() Settings {
 
 		RemoteArchiveConfirmSize: 10 << 20, // 10MB
 
+		CloudMountBaseDir: "",
+
 		CompressFormat: "zip",
 
 		OpenWithCommand: "",
@@ -776,6 +788,8 @@ func (s *Settings) apply(key, value string) error {
 			return fmt.Errorf("invalid size for %q: %w", key, err)
 		}
 		s.RemoteArchiveConfirmSize = n
+	case "cloud_mount_base_dir":
+		s.CloudMountBaseDir = value
 	case "compress_format":
 		s.CompressFormat = value
 	case "open_with_command":

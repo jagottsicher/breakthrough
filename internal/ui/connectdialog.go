@@ -85,7 +85,43 @@ func (r *Root) openConnectDialog(prefill remotefs.Connection, mode connectDialog
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
 	r.connectLayout.SetRect(x, y, width, height)
+	r.renderConnectTitleBar(width)
 	r.showOverlay(connectDialogPage, r.connectLayout)
+}
+
+// renderConnectTitleBar sets connectTitleBar's own text to "New SFTP
+// Connection", padded out to width columns, with a close glyph
+// (toolWindowCloseGlyph, the same one toolWindow's/Properties'/Help's
+// own title bars already use) in its own top-right corner — the exact
+// same "mouse-clickable close button that behaves exactly like
+// Cancel" shape renderPropertiesTitleBar already establishes, per the
+// user's own explicit request.
+func (r *Root) renderConnectTitleBar(width int) {
+	const label = " New SFTP Connection "
+	closeCol := toolWindowCloseButtonCol(0, width)
+	padding := closeCol - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	r.connectTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
+}
+
+// captureConnectTitleBarMouse detects a click on the close glyph
+// renderConnectTitleBar's own text embeds — the dialog itself is
+// never dragged (unlike Properties'/toolWindow's own title bars), so
+// this is just the close-click check on its own, with no drag-start
+// branch needed alongside it.
+func (r *Root) captureConnectTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftDown {
+		return action, event
+	}
+	x, y := event.Position()
+	wx, wy, width, _ := r.connectLayout.GetRect()
+	if y == wy && x == wx+toolWindowCloseButtonCol(0, width) {
+		r.cancelConnect()
+		return tview.MouseConsumed, nil
+	}
+	return action, event
 }
 
 // newConnectForm builds the (initially empty) "Connect" form once,
@@ -414,7 +450,12 @@ func (r *Root) setConnectButtonsMode(mode connectDialogMode) {
 // the same title-bar-over-content shape newSedLayout already
 // establishes.
 func (r *Root) newConnectLayout() *tview.Flex {
-	r.connectTitleBar = newPlainTitleBar("Connect")
+	// Text/close glyph are actually set by renderConnectTitleBar, once
+	// width is known (openConnectDialog) — this initial text is
+	// never actually seen, only newPlainTitleBar's own SetWrap(false)
+	// matters here.
+	r.connectTitleBar = newPlainTitleBar("New SFTP Connection")
+	r.connectTitleBar.SetMouseCapture(r.captureConnectTitleBarMouse)
 	r.connectStatus = tview.NewTextView().SetDynamicColors(true)
 	// 13 rows for connectForm: tview.NewForm() reserves a 1-row border
 	// padding top and bottom of its own (SetBorderPadding(1,1,1,1),
