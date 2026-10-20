@@ -10,6 +10,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/rclone"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
@@ -98,6 +99,43 @@ func connectionMenuStripMnemonicMarkup(text string) string {
 func connectionMenuHeaderText(text string) string {
 	text = connectionMenuStripMnemonicMarkup(text)
 	return strings.NewReplacer(" ↑", "", " ↓", "").Replace(text)
+}
+
+// TestRenderConnectionMenuCloudRowLabelOmitsIdentifier pins the real,
+// reported duplication this removed: a cloud row's own User-column
+// label used to append "  (Identifier)" to RemoteName, even though
+// Identifier already gets its own column (connectionMenuColIdentifier,
+// expanded only) — the SFTP branch right above it in
+// renderConnectionMenu never did this for its own User cell (just
+// entry.User, nothing appended), so cloud rows were the one
+// inconsistent case.
+func TestRenderConnectionMenuCloudRowLabelOmitsIdentifier(t *testing.T) {
+	requireRclone(t)
+	r := newTestRootForConnectionMenu(t)
+	withTestRcloneConfig(t)
+	if err := rclone.CreateStaticRemote("myremote", "local", nil); err != nil {
+		t.Fatalf("CreateStaticRemote: %v", err)
+	}
+	entry := rclone.MountEntry{RemoteName: "myremote", Target: t.TempDir(), Identifier: "my-id"}
+	if err := rclone.AddMountEntry(entry); err != nil {
+		t.Fatalf("AddMountEntry: %v", err)
+	}
+
+	r.renderConnectionMenu()
+
+	found := false
+	for row, e := range r.connectionMenuCloudMountRows {
+		if e.RemoteName != "myremote" {
+			continue
+		}
+		found = true
+		if got := r.connectionMenuTable.GetCell(row, connectionMenuColUser).Text; got != "myremote" {
+			t.Errorf("User column = %q, want %q (no appended Identifier)", got, "myremote")
+		}
+	}
+	if !found {
+		t.Fatal("expected the cloud mount row to be rendered")
+	}
 }
 
 // TestRenderConnectionMenuHeaderRowShowsColumnLabels pins Phase 3's

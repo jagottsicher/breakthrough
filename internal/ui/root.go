@@ -1155,6 +1155,15 @@ type Root struct {
 	// some remote's own unmodified default" apart from "the user typed
 	// something real."
 	cloudMountDialogRemotes []string
+	// cloudMountDialogEditTarget is "" in "new mount" mode; set by
+	// editCloudMountRow to the MountEntry's own (old) Target before
+	// opening the dialog in edit mode — saveCloudMountEntry removes
+	// whatever MountEntry currently has this Target first, which is
+	// what actually lets Target/Identifier/Tags/Remote all be changed,
+	// not just appended as a second entry. Reset on every single
+	// openCloudMountCreateDialog call (both "new" and "edit" set it
+	// explicitly, every time), never left stale from a previous open.
+	cloudMountDialogEditTarget string
 
 	// cloudRemoteDialog* is the "New cloud remote" dialog (see
 	// cloudremotedialog.go), reached by picking

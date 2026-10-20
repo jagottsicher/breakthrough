@@ -615,12 +615,13 @@ func (r *Root) renderConnectionMenu() {
 		_, pending := r.cloudMountPending[entry.Target]
 		color := cloudMountRowColor(r.theme, mounted, mountErr != nil)
 
-		label := entry.RemoteName
-		if entry.Identifier != "" {
-			label += "  (" + entry.Identifier + ")"
-		}
+		// RemoteName alone, never "RemoteName (Identifier)" — a real,
+		// reported duplication: Identifier already gets its own column
+		// (connectionMenuColIdentifier, expanded only), the same plain
+		// "just entry.User" shape the SFTP branch just above already
+		// uses for its own label cell.
 		table.SetCell(thisRow, connectionMenuColUser,
-			tview.NewTableCell(label).
+			tview.NewTableCell(entry.RemoteName).
 				SetTextColor(color).
 				SetSelectable(true).
 				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColUser)))
@@ -651,17 +652,26 @@ func (r *Root) renderConnectionMenu() {
 				SetSelectable(false).
 				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuTypeColumn(expanded))))
 
-		// Eject column carries Mount/Unmount here, per the user's own
-		// explicit decision — same column position SFTP's own Eject/
-		// Edit occupies, different meaning for this row kind, exactly
-		// the way connectionHistoryEditGlyph's own doc comment already
-		// establishes that one column can mean two different things
-		// depending on the row. Plain words, not a glyph: the ☁ symbol
-		// this replaced was itself a real, reported point of confusion
-		// — "mount"/"unmount" needs no legend.
-		actionText := "mount"
+		// Eject column mirrors SFTP's own Eject/Edit shape exactly now
+		// — per the user's own explicit, later report that the earlier
+		// "mount"/"unmount" words were themselves superfluous: mounting
+		// already happens from the label group (see
+		// activateConnectionMenuCell's own cloud-mount branch,
+		// toggleCloudMount goes both directions), so this column only
+		// ever needs to offer whichever action the label group doesn't
+		// already cover for the *other* state — eject to unmount while
+		// mounted (the label group still also unmounts, per the user's
+		// own explicit "the name itself is a toggle too"), edit while
+		// not mounted (editCloudMountRow — mounting from here would
+		// just duplicate the label group, a real way in to actually
+		// change an entry didn't exist at all before this). pending's
+		// own transient "mounting…"/"unmounting…" label still wins over
+		// either glyph — toggleCloudMount's whole reason for setting it
+		// is so a slow attempt never looks like a stale, clickable
+		// action instead.
+		actionText := connectionHistoryEditGlyph
 		if mounted {
-			actionText = "unmount"
+			actionText = connectionHistoryEjectGlyph
 		}
 		if pending {
 			actionText = r.cloudMountPending[entry.Target]
@@ -958,9 +968,29 @@ func (r *Root) connectionMenuSetHeaderCell(col int, label string, key connection
 func (r *Root) activateConnectionMenuCell(row, column int) {
 	expanded := r.settings.ConnectionMenuExpanded
 	if entry, ok := r.connectionMenuCloudMountRows[row]; ok {
-		if column == connectionMenuRemoveColumn(expanded) {
+		switch {
+		case column == connectionMenuRemoveColumn(expanded):
 			r.removeCloudMount(entry)
-		} else {
+		case column == connectionMenuEjectColumn(expanded):
+			// Mirrors the SFTP branch just below: eject (unmount) while
+			// mounted, edit while not — see renderConnectionMenu's own
+			// comment on this column's cloud-mount shape for why only
+			// the "other" action belongs here.
+			mounted, err := rclone.IsMounted(entry.Target)
+			if err != nil {
+				r.showError(err)
+				return
+			}
+			if mounted {
+				r.toggleCloudMount(entry)
+			} else {
+				r.editCloudMountRow(entry)
+			}
+		default:
+			// The label group (User/Host/Identifier/Tags/Type) — mounts
+			// if not mounted, unmounts if already mounted, same as
+			// clicking an SFTP row's own label dials it. toggleCloudMount
+			// itself decides which direction via its own IsMounted check.
 			r.toggleCloudMount(entry)
 		}
 		return
@@ -1017,7 +1047,7 @@ func (r *Root) openNewConnectionChooser() {
 		r.openConnectDialog(remotefs.Connection{}, connectDialogModeNew)
 	})
 	r.picker.AddItem("Cloud mount", "", 0, func() {
-		r.openCloudMountCreateDialog("")
+		r.openCloudMountCreateDialog("", nil)
 	})
 	r.picker.SetDoneFunc(func() { r.hideOverlay() })
 

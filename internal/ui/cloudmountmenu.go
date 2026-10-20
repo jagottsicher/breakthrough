@@ -102,6 +102,18 @@ func (r *Root) toggleCloudMount(entry rclone.MountEntry) {
 	})
 }
 
+// editCloudMountRow is the merged list's own "✎" for a cloud-mount
+// row (see renderConnectionMenu's own doc comment on the eject
+// column's shape) — mirrors editConnectionHistoryRow exactly: close
+// the menu, then open the same dialog a new mount uses, prefilled from
+// entry and in edit mode (openCloudMountCreateDialog's own editing
+// parameter), so OK/Mount replace it in place instead of adding a
+// second entry alongside it.
+func (r *Root) editCloudMountRow(entry rclone.MountEntry) {
+	r.hideOverlay()
+	r.openCloudMountCreateDialog(entry.RemoteName, &entry)
+}
+
 // removeCloudMount drops entry from the persisted list — refuses
 // outright while it's still mounted (unmount first, the same
 // "disconnect before removing" shape disconnectConnectionRow/
