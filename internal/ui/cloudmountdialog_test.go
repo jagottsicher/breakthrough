@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,8 +73,11 @@ func TestOpenCloudMountCreateDialogAlwaysOffersCreateNewRemote(t *testing.T) {
 	if r.activePage != cloudMountDialogPage {
 		t.Fatalf("activePage = %q, want %q (dialog should have opened)", r.activePage, cloudMountDialogPage)
 	}
-	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); text != cloudMountDialogCreateNewOption {
-		t.Errorf("selected option = %q, want %q (the only choice with zero real remotes)", text, cloudMountDialogCreateNewOption)
+	// TrimSpace — the dropdown's own options are right-padded to the
+	// field's own width now (see openCloudMountCreateDialog's own doc
+	// comment on why), so the raw text carries trailing spaces.
+	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != cloudMountDialogCreateNewOption {
+		t.Errorf("selected option = %q, want %q (the only choice with zero real remotes)", strings.TrimRight(text, " "), cloudMountDialogCreateNewOption)
 	}
 }
 
@@ -131,8 +135,8 @@ func TestOpenCloudMountCreateDialogPreselectsByName(t *testing.T) {
 
 	r.openCloudMountCreateDialog("beta")
 
-	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); text != "beta" {
-		t.Errorf("selected option = %q, want %q", text, "beta")
+	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != "beta" {
+		t.Errorf("selected option = %q, want %q", strings.TrimRight(text, " "), "beta")
 	}
 }
 

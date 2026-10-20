@@ -1568,13 +1568,13 @@
     },
     {
       "path": "internal/ui/cloudmountdialog.go",
-      "size": 24309,
-      "sha256": "3487c88d51e26a4302844494020f4bb4948a97c40a85bdd26f908da8deb1a163"
+      "size": 27276,
+      "sha256": "96b31d588bd3f002a538cb9049892f6731ba741df715f39eca820a91f092e26f"
     },
     {
       "path": "internal/ui/cloudmountdialog_test.go",
-      "size": 13310,
-      "sha256": "62baf3ec0a69905b432e6d60f369df58430f69f506f97bcb33562ae77de84a28"
+      "size": 13616,
+      "sha256": "305dc10711e6a96a01f150ff006822ecf16d897a17c8c2090efa3913ae695da9"
     },
     {
       "path": "internal/ui/cloudmountmenu.go",
@@ -23710,7 +23710,7 @@
       "name": "styleCloudMountDialogFields",
       "kind": "method",
       "receiver": "*Root",
-      "line": 137
+      "line": 128
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23718,7 +23718,7 @@
       "name": "newCloudMountDialogButtons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 179
+      "line": 170
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23726,7 +23726,7 @@
       "name": "setCloudMountDialogButtonsMode",
       "kind": "method",
       "receiver": "*Root",
-      "line": 206
+      "line": 197
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23734,7 +23734,7 @@
       "name": "newCloudMountDialogLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 294
+      "line": 285
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23742,7 +23742,7 @@
       "name": "cloudMountDialogDefaultTarget",
       "kind": "method",
       "receiver": "*Root",
-      "line": 308
+      "line": 299
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23750,7 +23750,7 @@
       "name": "cloudMountDialogSyncTargetToSelection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 320
+      "line": 311
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23758,7 +23758,7 @@
       "name": "openCloudMountCreateDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 353
+      "line": 344
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23766,7 +23766,7 @@
       "name": "saveCloudMountEntry",
       "kind": "method",
       "receiver": "*Root",
-      "line": 452
+      "line": 503
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23774,7 +23774,7 @@
       "name": "runSaveCloudMount",
       "kind": "method",
       "receiver": "*Root",
-      "line": 481
+      "line": 539
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23782,7 +23782,7 @@
       "name": "runSaveAndMountCloudMount",
       "kind": "method",
       "receiver": "*Root",
-      "line": 493
+      "line": 551
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23790,105 +23790,105 @@
       "name": "runDeleteSelectedCloudRemote",
       "kind": "method",
       "receiver": "*Root",
-      "line": 520
+      "line": 578
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "withTestRcloneConfig",
       "kind": "function",
-      "line": 18
+      "line": 19
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "newTestRootForCloudMount",
       "kind": "function",
-      "line": 30
+      "line": 31
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "requireRclone",
       "kind": "function",
-      "line": 54
+      "line": 55
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "TestOpenCloudMountCreateDialogAlwaysOffersCreateNewRemote",
       "kind": "function",
-      "line": 66
+      "line": 67
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "TestCloudMountDialogButtonsHideDeleteForCreateNewSentinel",
       "kind": "function",
-      "line": 87
+      "line": 91
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "hasFlexItem",
       "kind": "function",
-      "line": 109
+      "line": 113
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "TestOpenCloudMountCreateDialogPreselectsByName",
       "kind": "function",
-      "line": 122
+      "line": 126
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "TestRunAddCloudMountIgnoresTheCreateNewSentinel",
       "kind": "function",
-      "line": 143
+      "line": 147
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "TestRunAddCloudMountPersistsEntryAndCloses",
       "kind": "function",
-      "line": 163
+      "line": 167
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "TestRunAddCloudMountRefusesDuplicateTarget",
       "kind": "function",
-      "line": 190
+      "line": 194
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "TestCloudMountDialogSyncTargetToSelectionOnlyWhileStillDefault",
       "kind": "function",
-      "line": 227
+      "line": 231
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "TestRunSaveAndMountCloudMountActuallyMounts",
       "kind": "function",
-      "line": 262
+      "line": 266
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "TestRunDeleteSelectedCloudRemoteWithoutMountEntry",
       "kind": "function",
-      "line": 305
+      "line": 309
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog_test.go",
       "name": "TestRunDeleteSelectedCloudRemoteIgnoresTheCreateNewSentinel",
       "kind": "function",
-      "line": 354
+      "line": 358
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54234,5 +54234,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "7f6389f0bed60f2bea5c892a12b11d0624bf8eb39944c50ccd350cf4f1805e00"
+  "merkle_root": "4ee39b4053b58136d7d4a26daab139f7896db02860957044434fc35a23a93f1d"
 }
