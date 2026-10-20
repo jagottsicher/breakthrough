@@ -136,16 +136,20 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 // already open).
 func (r *Root) styleCloudMountDialogFields() {
 	styleDropDown(r.cloudMountDialogRemoteField, r.theme)
-	// true, not false — the same always-"focused"-looking background
-	// every other static, single-purpose dialog in this app already
-	// uses (Rename, Properties, chmod, batch rename, the Find dialog's
-	// own searchEditField, see theme.go's own calls), rather than
-	// InputBackground's own petrol/teal, which was never meant to be a
-	// filled-field's own resting color — a real, reported mismatch once
-	// this dialog actually had fields with text already in them.
-	styleInput(r.cloudMountDialogTargetField, r.theme, true)
-	styleInput(r.cloudMountDialogIdentifierField, r.theme, true)
-	styleInput(r.cloudMountDialogTagsField, r.theme, true)
+	// Per-field focused/unfocused coloring is not reachable here:
+	// tview.Form.Draw calls every FormItem's own SetFormAttributes with
+	// the Form's single fieldStyle on every single frame (confirmed
+	// directly against form.go/inputfield.go/dropdown.go, not guessed),
+	// which stomps whatever SetFieldBackgroundColor this call makes the
+	// very next redraw — true for every Form-based dialog in this app
+	// (Connect included, see theme.go's own identical
+	// connectForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	// call), not something specific to this dialog. false still matters
+	// for the parts Form.Draw doesn't touch — placeholder style, and
+	// the label's own background (see styleInput's own doc comment).
+	styleInput(r.cloudMountDialogTargetField, r.theme, false)
+	styleInput(r.cloudMountDialogIdentifierField, r.theme, false)
+	styleInput(r.cloudMountDialogTagsField, r.theme, false)
 }
 
 // newCloudMountDialogButtons mirrors newConnectButtons' own shape:

@@ -445,16 +445,21 @@ func (r *Root) rebuildCloudRemoteDialogFields(backendIndex int) {
 // switch while already open).
 func (r *Root) styleCloudRemoteDialogFields() {
 	styleDropDown(r.cloudRemoteDialogBackendField, r.theme)
-	// true, not false — see styleCloudMountDialogFields' own identical
-	// comment: the same always-"focused"-looking background every
-	// other static, single-purpose dialog in this app already uses,
-	// not InputBackground's own petrol/teal.
-	styleInput(r.cloudRemoteDialogNameField, r.theme, true)
 	if r.cloudRemoteDialogSubField != nil {
 		styleDropDown(r.cloudRemoteDialogSubField, r.theme)
 	}
+	// false, not a per-field focused state — see
+	// styleCloudMountDialogFields' own doc comment in
+	// cloudmountdialog.go: tview.Form.Draw re-applies its own single
+	// fieldStyle to every FormItem on every frame (confirmed directly
+	// against form.go/inputfield.go/dropdown.go), so no per-field
+	// focused/unfocused value-area color is reachable here at all —
+	// true for every Form-based dialog in this app, not specific to
+	// this one. false still matters for the parts Form.Draw doesn't
+	// touch: placeholder style and the label's own background.
+	styleInput(r.cloudRemoteDialogNameField, r.theme, false)
 	for _, field := range r.cloudRemoteDialogFields {
-		styleInput(field, r.theme, true)
+		styleInput(field, r.theme, false)
 	}
 }
 
