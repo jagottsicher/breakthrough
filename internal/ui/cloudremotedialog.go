@@ -445,12 +445,16 @@ func (r *Root) rebuildCloudRemoteDialogFields(backendIndex int) {
 // switch while already open).
 func (r *Root) styleCloudRemoteDialogFields() {
 	styleDropDown(r.cloudRemoteDialogBackendField, r.theme)
-	styleInput(r.cloudRemoteDialogNameField, r.theme, false)
+	// true, not false — see styleCloudMountDialogFields' own identical
+	// comment: the same always-"focused"-looking background every
+	// other static, single-purpose dialog in this app already uses,
+	// not InputBackground's own petrol/teal.
+	styleInput(r.cloudRemoteDialogNameField, r.theme, true)
 	if r.cloudRemoteDialogSubField != nil {
 		styleDropDown(r.cloudRemoteDialogSubField, r.theme)
 	}
 	for _, field := range r.cloudRemoteDialogFields {
-		styleInput(field, r.theme, false)
+		styleInput(field, r.theme, true)
 	}
 }
 

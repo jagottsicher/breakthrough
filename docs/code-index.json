@@ -1568,8 +1568,8 @@
     },
     {
       "path": "internal/ui/cloudmountdialog.go",
-      "size": 23571,
-      "sha256": "14a32965e46a627b9f285501fef6b84d48c4d5a21ee32f539798bec9e85d0a84"
+      "size": 24040,
+      "sha256": "d2af41649039009a24758241e2cb9f9855dc713896dcd97114c753404f355ac0"
     },
     {
       "path": "internal/ui/cloudmountdialog_test.go",
@@ -1588,8 +1588,8 @@
     },
     {
       "path": "internal/ui/cloudremotedialog.go",
-      "size": 28838,
-      "sha256": "aa0daa7eb8261dfad8779220ffdb217d99248c571c4dc4dcf42fd8ee2d661afa"
+      "size": 29080,
+      "sha256": "b6d230512227404de3e8a4fb3203e41a958fad73b545b5c4449de332a67c317d"
     },
     {
       "path": "internal/ui/cloudremotedialog_test.go",
@@ -23718,7 +23718,7 @@
       "name": "newCloudMountDialogButtons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 168
+      "line": 175
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23726,7 +23726,7 @@
       "name": "setCloudMountDialogButtonsMode",
       "kind": "method",
       "receiver": "*Root",
-      "line": 195
+      "line": 202
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23734,7 +23734,7 @@
       "name": "newCloudMountDialogLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 283
+      "line": 290
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23742,7 +23742,7 @@
       "name": "cloudMountDialogDefaultTarget",
       "kind": "method",
       "receiver": "*Root",
-      "line": 297
+      "line": 304
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23750,7 +23750,7 @@
       "name": "cloudMountDialogSyncTargetToSelection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 309
+      "line": 316
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23758,7 +23758,7 @@
       "name": "openCloudMountCreateDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 342
+      "line": 349
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23766,7 +23766,7 @@
       "name": "saveCloudMountEntry",
       "kind": "method",
       "receiver": "*Root",
-      "line": 441
+      "line": 448
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23774,7 +23774,7 @@
       "name": "runSaveCloudMount",
       "kind": "method",
       "receiver": "*Root",
-      "line": 470
+      "line": 477
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23782,7 +23782,7 @@
       "name": "runSaveAndMountCloudMount",
       "kind": "method",
       "receiver": "*Root",
-      "line": 482
+      "line": 489
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23790,7 +23790,7 @@
       "name": "runDeleteSelectedCloudRemote",
       "kind": "method",
       "receiver": "*Root",
-      "line": 509
+      "line": 516
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24089,7 +24089,7 @@
       "name": "resizeCloudRemoteDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 463
+      "line": 467
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24097,14 +24097,14 @@
       "name": "openCloudRemoteDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 500
+      "line": 504
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudremotedialog.go",
       "name": "cloudRemoteParams",
       "kind": "function",
-      "line": 518
+      "line": 522
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24112,7 +24112,7 @@
       "name": "runCreateCloudRemote",
       "kind": "method",
       "receiver": "*Root",
-      "line": 543
+      "line": 547
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24120,7 +24120,7 @@
       "name": "currentCloudRemoteFields",
       "kind": "method",
       "receiver": "*Root",
-      "line": 570
+      "line": 574
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24128,14 +24128,14 @@
       "name": "runSaveCloudRemoteLenient",
       "kind": "method",
       "receiver": "*Root",
-      "line": 594
+      "line": 598
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudremotedialog.go",
       "name": "cloudRemoteTestTimeout",
       "kind": "const",
-      "line": 619
+      "line": 623
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24143,14 +24143,14 @@
       "name": "setCloudRemoteDialogStatus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 623
+      "line": 627
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudremotedialog.go",
       "name": "obscureTestParams",
       "kind": "function",
-      "line": 633
+      "line": 637
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24158,7 +24158,7 @@
       "name": "runTestCloudRemote",
       "kind": "method",
       "receiver": "*Root",
-      "line": 666
+      "line": 670
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54242,5 +54242,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "f519657e183d75b2e5c3eaba0cee533b64c043443e398de644ea7c18b7dca1d3"
+  "merkle_root": "c0f8ecbd03ec74f7808cee00eec4096b18591a4bcaf29587dee5833a990f6787"
 }
