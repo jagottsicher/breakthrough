@@ -1568,8 +1568,8 @@
     },
     {
       "path": "internal/ui/cloudmountdialog.go",
-      "size": 32571,
-      "sha256": "0d39382c4bb1a5ff3052a75abb4a3e98a78ff008a4375e2417f1b321d54a43d5"
+      "size": 32790,
+      "sha256": "256655667bcb7d1a3eeafdaf52ffda4b817f17f6c299f3e57784b0045c50a99c"
     },
     {
       "path": "internal/ui/cloudmountdialog_test.go",
@@ -23694,14 +23694,14 @@
       "file": "internal/ui/cloudmountdialog.go",
       "name": "cloudMountDialogUnconfiguredRemoteName",
       "kind": "const",
-      "line": 46
+      "line": 49
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/cloudmountdialog.go",
       "name": "cloudMountDialogPage",
       "kind": "const",
-      "line": 61
+      "line": 64
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23709,7 +23709,7 @@
       "name": "newCloudMountDialogForm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 68
+      "line": 71
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23717,7 +23717,7 @@
       "name": "styleCloudMountDialogFields",
       "kind": "method",
       "receiver": "*Root",
-      "line": 148
+      "line": 151
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23725,7 +23725,7 @@
       "name": "newCloudMountDialogButtons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 190
+      "line": 193
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23733,7 +23733,7 @@
       "name": "setCloudMountDialogButtonsMode",
       "kind": "method",
       "receiver": "*Root",
-      "line": 217
+      "line": 220
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23741,7 +23741,7 @@
       "name": "newCloudMountDialogLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 305
+      "line": 308
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23749,7 +23749,7 @@
       "name": "cloudMountDialogDefaultTarget",
       "kind": "method",
       "receiver": "*Root",
-      "line": 319
+      "line": 322
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23757,7 +23757,7 @@
       "name": "cloudMountDialogUniqueUnconfiguredTarget",
       "kind": "method",
       "receiver": "*Root",
-      "line": 335
+      "line": 338
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23765,7 +23765,7 @@
       "name": "cloudMountDialogSyncTargetToSelection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 364
+      "line": 367
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23773,7 +23773,7 @@
       "name": "openCloudMountCreateDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 397
+      "line": 400
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23781,7 +23781,7 @@
       "name": "saveCloudMountEntry",
       "kind": "method",
       "receiver": "*Root",
-      "line": 593
+      "line": 596
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23789,7 +23789,7 @@
       "name": "runSaveCloudMount",
       "kind": "method",
       "receiver": "*Root",
-      "line": 651
+      "line": 654
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23797,7 +23797,7 @@
       "name": "runSaveAndMountCloudMount",
       "kind": "method",
       "receiver": "*Root",
-      "line": 663
+      "line": 666
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23805,7 +23805,7 @@
       "name": "runDeleteSelectedCloudRemote",
       "kind": "method",
       "receiver": "*Root",
-      "line": 690
+      "line": 693
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54313,5 +54313,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "0ce400f6c28f4fceb97f8985ecd7ad672fccd6b88bb82009bc2d82bb5398b3de"
+  "merkle_root": "bec80c00046ba3183864ceb56c84e5c04ea14b69e97280cd6c0c17e9ed9a6c38"
 }

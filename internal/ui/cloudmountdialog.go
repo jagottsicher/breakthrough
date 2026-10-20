@@ -42,8 +42,11 @@ const cloudMountDialogCreateNewOption = " + Create new remote cloud location"
 // A short, valid directory-name slug on purpose, not the sentinel's
 // own long label — this becomes an actual rclone.Mount argument and a
 // MountDir path component (filepath.Join(base, name)), not just
-// display text.
-const cloudMountDialogUnconfiguredRemoteName = "unconfigured"
+// display text. "N/A" (the user's own first choice) doesn't work here
+// for exactly that reason — filepath.Join would read its "/" as a
+// path separator, nesting an "N" directory with an "A" inside instead
+// of a single "N/A"-named one.
+const cloudMountDialogUnconfiguredRemoteName = "uncfg"
 
 // The "New cloud mount" dialog — reached via the "+ New" chooser (see
 // openNewConnectionChooser) rather than its own key, same as the
