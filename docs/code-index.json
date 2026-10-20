@@ -1568,8 +1568,8 @@
     },
     {
       "path": "internal/ui/cloudmountdialog.go",
-      "size": 24309,
-      "sha256": "3487c88d51e26a4302844494020f4bb4948a97c40a85bdd26f908da8deb1a163"
+      "size": 24321,
+      "sha256": "9674b70880cbd58c3b78ee9659cf3ea19cd51e66e434a66ad5d270dc084478ea"
     },
     {
       "path": "internal/ui/cloudmountdialog_test.go",
@@ -54234,5 +54234,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "7f6389f0bed60f2bea5c892a12b11d0624bf8eb39944c50ccd350cf4f1805e00"
+  "merkle_root": "f7f98ccfa4d9f13bf6f2a78d05df3a13dc0f7f3321827567cd68af1c809f10da"
 }

@@ -23,7 +23,7 @@ var errRcloneNotAvailable = fmt.Errorf("rclone is not installed — cloud mounts
 // cloudMountDialogSyncTargetToSelection). This is what makes "no
 // remotes configured yet" no longer a dead end (see this dialog's own
 // doc comment on why it used to refuse to open at all in that case).
-const cloudMountDialogCreateNewOption = "+  Create new remote…"
+const cloudMountDialogCreateNewOption = " + Create new remote cloud location"
 
 // The "New cloud mount" dialog — reached via the "+ New" chooser (see
 // openNewConnectionChooser) rather than its own key, same as the
