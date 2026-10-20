@@ -56,32 +56,23 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 	})
 
 	r.cloudMountDialogRemoteField = tview.NewDropDown().SetLabel("Remote")
-	// A real, reported gap: widening the dialog itself (64 -> 100) did
-	// nothing for this field specifically — confirmed directly against
-	// tview's own dropdown.go, not guessed: unlike InputField,
-	// DropDown.SetFormAttributes never receives a fieldWidth from the
-	// Form at all, and its own default (GetFieldWidth, width 0) sizes
-	// the closed box to its widest *option* string, never to whatever
-	// room the Form actually has. SetFieldWidth is the only way to
-	// make it wider than that — 50, generous enough for a real-world
-	// remote name without being as wide as Target's own full path.
-	r.cloudMountDialogRemoteField.SetFieldWidth(50)
-	r.cloudMountDialogRemoteField.SetSelectedFunc(func(text string, index int) {
-		// Prefills Target from the newly selected remote's own name,
-		// but only if Target still holds some *other* remote's own
-		// default — an explicitly typed path must never be silently
-		// overwritten just because the dropdown selection moved (see
-		// cloudMountDialogDefaultTarget's own doc comment for the
-		// exact rule this follows).
-		r.cloudMountDialogSyncTargetToSelection(text)
-		// Delete makes no sense for the "+ Create new remote…"
-		// sentinel (nothing real to delete yet) — rebuild the button
-		// row to match, the same "which buttons are in the Flex
-		// changes per state" shape setConnectButtonsMode already
-		// establishes for the Connect dialog's own two-vs-three button
-		// modes.
-		r.setCloudMountDialogButtonsMode(index != 0)
-	})
+	// No SetFieldWidth call here — unlike InputField, DropDown.
+	// SetFormAttributes never receives a fieldWidth from the Form at
+	// all (confirmed directly against tview's own dropdown.go, not
+	// guessed), and its own default (GetFieldWidth, width 0) sizes the
+	// closed box to its widest *option* string rather than to whatever
+	// room the Form actually gives Target/Identifier/Tags. The actual
+	// fix needs the dialog's own rect, which doesn't exist yet here —
+	// openCloudMountCreateDialog sets it, every open (see its own doc
+	// comment for the exact formula, which has to mirror Form.Draw's
+	// own vertical-layout math to end at the same column).
+	//
+	// The real SetSelectedFunc/SetOptions callback is wired by
+	// openCloudMountCreateDialog instead, every open — tview's own
+	// SetOptions(texts, selected) *replaces* whatever SetSelectedFunc
+	// already set (both write the same internal field, confirmed
+	// against dropdown.go), so a callback set here would never survive
+	// that first call anyway.
 	f.AddFormItem(r.cloudMountDialogRemoteField)
 
 	r.cloudMountDialogTargetField = tview.NewInputField().SetLabel("Target")
@@ -378,8 +369,86 @@ func (r *Root) openCloudMountCreateDialog(preselect string) {
 	}
 	r.cloudMountDialogRemotes = names
 
-	options := append([]string{cloudMountDialogCreateNewOption}, names...)
+	// 100, not 64 — Target's own value is a real local filesystem
+	// path (the default alone, ~/.local/share/breakthrough/mounts/
+	// <user>/<remote>, already runs well past 64 columns once Target's
+	// own label and Form's padding are counted), a real, reported
+	// complaint. Same reasoning as the "New cloud remote" dialog's own
+	// 90 (see resizeCloudRemoteDialog's doc comment) — this one's
+	// longest value, not longest label, is what was actually cramped.
+	//
+	// Computed before the Remote dropdown is touched below — its own
+	// field width needs this dialog's final, clamped width to land on
+	// the same column Target/Identifier/Tags do.
+	width, height := 100, 12
+	_, _, screenWidth, screenHeight := r.GetRect()
+	if width > screenWidth-4 {
+		width = screenWidth - 4
+	}
+	if height > screenHeight-4 {
+		height = screenHeight - 4
+	}
+	x := (screenWidth - width) / 2
+	y := (screenHeight - height) / 2
+	r.cloudMountDialogLayout.SetRect(x, y, width, height)
+
+	// A real, reported complaint: Remote's own closed box fell well
+	// short of where Target/Identifier/Tags end, and the open
+	// dropdown's own rows didn't match its closed box either. Both
+	// trace back to tview.Form.Draw's own vertical-layout formula
+	// (confirmed against form.go, not guessed): every item gets the
+	// same itemWidth (the Form's inner width) and the same labelWidth
+	// (the widest label, +1), so an InputField's own rendered field
+	// area is always itemWidth-labelWidth — reproduced here by hand
+	// because DropDown never receives that itemWidth from Form at all
+	// (see this field's own comment in newCloudMountDialogForm).
+	//
+	// 2, not some other constant — tview.NewForm's own
+	// SetBorderPadding(1, 1, 1, 1), confirmed against form.go.
+	innerWidth := width - 2
+	maxLabelWidth := 0
+	for _, label := range []string{"Remote", "Target", "Identifier", "Tags"} {
+		if w := tview.TaggedStringWidth(label); w > maxLabelWidth {
+			maxLabelWidth = w
+		}
+	}
+	maxLabelWidth++
+	fieldWidth := innerWidth - maxLabelWidth
+	if fieldWidth < 10 {
+		fieldWidth = 10
+	}
+	r.cloudMountDialogRemoteField.SetFieldWidth(fieldWidth)
+
+	// Right-padded to fieldWidth, not the bare text — the open
+	// dropdown's own popup list is sized from the options' own string
+	// length alone (DropDown.Draw's own maxWidth, confirmed against
+	// dropdown.go: it never reads fieldWidth at all), the only lever
+	// available to make it match the closed box's width instead of
+	// whatever the longest real remote name happens to be. Safe to pad
+	// every option this way because the callback below — and both
+	// read sites in saveCloudMountEntry/runDeleteSelectedCloudRemote —
+	// resolve the selected remote by index into r.cloudMountDialogRemotes,
+	// never by comparing the dropdown's own (now padded) text.
+	rawOptions := append([]string{cloudMountDialogCreateNewOption}, names...)
+	options := make([]string, len(rawOptions))
+	for i, opt := range rawOptions {
+		if w := tview.TaggedStringWidth(opt); w < fieldWidth {
+			opt += strings.Repeat(" ", fieldWidth-w)
+		}
+		options[i] = opt
+	}
 	r.cloudMountDialogRemoteField.SetOptions(options, func(text string, index int) {
+		// Delete makes no sense for the "+ Create new remote…"
+		// sentinel (nothing real to delete yet) — rebuild the button
+		// row to match, the same "which buttons are in the Flex
+		// changes per state" shape setConnectButtonsMode already
+		// establishes for the Connect dialog's own two-vs-three button
+		// modes. Has to live here, not in newCloudMountDialogForm's own
+		// SetSelectedFunc: tview's own SetOptions(texts, selected)
+		// replaces whatever SetSelectedFunc already set — both write
+		// the same internal field (confirmed against dropdown.go) — so
+		// a callback set there would never survive this call anyway.
+		r.setCloudMountDialogButtonsMode(index != 0)
 		if index == 0 {
 			// Deliberately no hideOverlay here — openCloudRemoteDialog
 			// itself uses pushOverlay, stacking on top of this dialog
@@ -417,24 +486,6 @@ func (r *Root) openCloudMountCreateDialog(preselect string) {
 	r.cloudMountDialogTagsField.SetText("")
 	r.setCloudMountDialogButtonsMode(selectedIndex != 0)
 
-	// 100, not 64 — Target's own value is a real local filesystem
-	// path (the default alone, ~/.local/share/breakthrough/mounts/
-	// <user>/<remote>, already runs well past 64 columns once Target's
-	// own label and Form's padding are counted), a real, reported
-	// complaint. Same reasoning as the "New cloud remote" dialog's own
-	// 90 (see resizeCloudRemoteDialog's doc comment) — this one's
-	// longest value, not longest label, is what was actually cramped.
-	width, height := 100, 12
-	_, _, screenWidth, screenHeight := r.GetRect()
-	if width > screenWidth-4 {
-		width = screenWidth - 4
-	}
-	if height > screenHeight-4 {
-		height = screenHeight - 4
-	}
-	x := (screenWidth - width) / 2
-	y := (screenHeight - height) / 2
-	r.cloudMountDialogLayout.SetRect(x, y, width, height)
 	r.styleCloudMountDialogFields()
 	r.showOverlay(cloudMountDialogPage, r.cloudMountDialogLayout)
 }
@@ -450,10 +501,17 @@ func (r *Root) openCloudMountCreateDialog(preselect string) {
 // comment on why), and toggleCloudMount is right there in the merged
 // list the moment this dialog closes.
 func (r *Root) saveCloudMountEntry() (rclone.MountEntry, bool) {
-	_, remoteName := r.cloudMountDialogRemoteField.GetCurrentOption()
-	if remoteName == "" || remoteName == cloudMountDialogCreateNewOption {
+	// Resolved by index into r.cloudMountDialogRemotes, not by reading
+	// the dropdown's own current option text back — that text is now
+	// right-padded to the field's own width (see
+	// openCloudMountCreateDialog's own doc comment on why), which
+	// would otherwise end up as a trailing-whitespace-corrupted
+	// "remote name" here.
+	index, _ := r.cloudMountDialogRemoteField.GetCurrentOption()
+	if index < 1 || index-1 >= len(r.cloudMountDialogRemotes) {
 		return rclone.MountEntry{}, false
 	}
+	remoteName := r.cloudMountDialogRemotes[index-1]
 	target := strings.TrimSpace(r.cloudMountDialogTargetField.GetText())
 	if target == "" {
 		return rclone.MountEntry{}, false
@@ -518,10 +576,13 @@ func (r *Root) runSaveAndMountCloudMount() {
 // selected remote in practice never has one — that case is already
 // handled by removeCloudMount's own "✕" in the merged list.
 func (r *Root) runDeleteSelectedCloudRemote() {
-	_, remoteName := r.cloudMountDialogRemoteField.GetCurrentOption()
-	if remoteName == "" || remoteName == cloudMountDialogCreateNewOption {
+	// Resolved by index — see saveCloudMountEntry's own identical
+	// comment on why (the dropdown's own text is now right-padded).
+	index, _ := r.cloudMountDialogRemoteField.GetCurrentOption()
+	if index < 1 || index-1 >= len(r.cloudMountDialogRemotes) {
 		return
 	}
+	remoteName := r.cloudMountDialogRemotes[index-1]
 
 	entries, err := rclone.LoadMountEntries()
 	if err != nil {
