@@ -42,8 +42,11 @@ const cloudMountDialogCreateNewOption = " + Create new remote cloud location"
 // A short, valid directory-name slug on purpose, not the sentinel's
 // own long label — this becomes an actual rclone.Mount argument and a
 // MountDir path component (filepath.Join(base, name)), not just
-// display text.
-const cloudMountDialogUnconfiguredRemoteName = "unconfigured"
+// display text. "N/A" (the user's own first choice) doesn't work here
+// for exactly that reason — filepath.Join would read its "/" as a
+// path separator, nesting an "N" directory with an "A" inside instead
+// of a single "N/A"-named one.
+const cloudMountDialogUnconfiguredRemoteName = "uncfg"
 
 // The "New cloud mount" dialog — reached via the "+ New" chooser (see
 // openNewConnectionChooser) rather than its own key, same as the
@@ -320,6 +323,39 @@ func (r *Root) cloudMountDialogDefaultTarget(remoteName string) string {
 	return rclone.MountDir(rclone.MountBase(r.settings), remoteName)
 }
 
+// cloudMountDialogUniqueUnconfiguredTarget is the sentinel's own
+// default-Target prefill, made unique — a real, reported gap: every
+// placeholder entry (see cloudMountDialogUnconfiguredRemoteName's own
+// doc comment) shares that exact same RemoteName, so
+// cloudMountDialogDefaultTarget alone always computed the exact same
+// path for every one of them, tripping AddMountEntry's own duplicate-
+// Target refusal the moment a second placeholder was saved without
+// first hand-editing Target. Unlike a real remote's own default
+// (already unique — distinct remote names never collide, and
+// openCloudMountCreateDialog's own inUse filter keeps an already-used
+// real remote out of the dropdown entirely), nothing else makes this
+// one unique on its own, so the suffix is added here instead.
+func (r *Root) cloudMountDialogUniqueUnconfiguredTarget() string {
+	base := r.cloudMountDialogDefaultTarget(cloudMountDialogUnconfiguredRemoteName)
+	configured, err := rclone.LoadMountEntries()
+	if err != nil {
+		return base
+	}
+	used := make(map[string]bool, len(configured))
+	for _, e := range configured {
+		used[e.Target] = true
+	}
+	if !used[base] {
+		return base
+	}
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s-%d", base, i)
+		if !used[candidate] {
+			return candidate
+		}
+	}
+}
+
 // cloudMountDialogSyncTargetToSelection updates Target to the newly
 // selected remote's own default path — but only while Target still
 // holds *some* remote's own unmodified default (i.e. it matches
@@ -361,7 +397,7 @@ func (r *Root) cloudMountDialogSyncTargetToSelection(selectedRemote string) {
 // including the "create new remote" entry. An empty real-remote list
 // is no longer that kind of dead end (see cloudMountDialogCreateNewOption's
 // own doc comment on why).
-func (r *Root) openCloudMountCreateDialog(preselect string) {
+func (r *Root) openCloudMountCreateDialog(preselect string, editing *rclone.MountEntry) {
 	if !rclone.Available() {
 		r.showError(errRcloneNotAvailable)
 		return
@@ -378,6 +414,12 @@ func (r *Root) openCloudMountCreateDialog(preselect string) {
 	}
 	inUse := make(map[string]bool, len(configured))
 	for _, e := range configured {
+		// editing's own entry is excluded from "in use" — it's using
+		// its own remote already, which must not make that remote
+		// vanish from its own Remote dropdown.
+		if editing != nil && e.Target == editing.Target {
+			continue
+		}
 		inUse[e.RemoteName] = true
 	}
 
@@ -388,6 +430,15 @@ func (r *Root) openCloudMountCreateDialog(preselect string) {
 		}
 	}
 	r.cloudMountDialogRemotes = names
+
+	if editing != nil {
+		r.cloudMountDialogEditTarget = editing.Target
+		if preselect == "" {
+			preselect = editing.RemoteName
+		}
+	} else {
+		r.cloudMountDialogEditTarget = ""
+	}
 
 	// 100, not 64 — Target's own value is a real local filesystem
 	// path (the default alone, ~/.local/share/breakthrough/mounts/
@@ -497,18 +548,35 @@ func (r *Root) openCloudMountCreateDialog(preselect string) {
 		selectedIndex = 1
 	}
 	r.cloudMountDialogRemoteField.SetCurrentOption(selectedIndex)
-	if selectedIndex > 0 {
+	switch {
+	case editing != nil:
+		// The entry's own real values, not the computed default — an
+		// edit should show exactly what's already saved, including a
+		// Target that was never the default to begin with.
+		r.cloudMountDialogTargetField.SetText(editing.Target)
+		r.cloudMountDialogIdentifierField.SetText(editing.Identifier)
+		r.cloudMountDialogTagsField.SetText(strings.Join(editing.Tags, ", "))
+	case selectedIndex > 0:
 		r.cloudMountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(names[selectedIndex-1]))
-	} else {
-		// cloudMountDialogUnconfiguredRemoteName's own default, not "" —
-		// leaving Target blank here would make OK silently do nothing
-		// again the moment this sentinel is selected (saveCloudMountEntry
-		// still refuses an empty Target), the exact dead end this whole
-		// placeholder path exists to remove.
-		r.cloudMountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(cloudMountDialogUnconfiguredRemoteName))
+		r.cloudMountDialogIdentifierField.SetText("")
+		r.cloudMountDialogTagsField.SetText("")
+	default:
+		// cloudMountDialogUniqueUnconfiguredTarget's own default, not
+		// "" — leaving Target blank here would make OK silently do
+		// nothing again the moment this sentinel is selected
+		// (saveCloudMountEntry still refuses an empty Target), the
+		// exact dead end this whole placeholder path exists to remove.
+		// The unique variant, not the bare default — a real, reported
+		// gap: every placeholder shares the same RemoteName, so the
+		// bare default always computed the exact same path, tripping
+		// AddMountEntry's own duplicate-Target refusal the moment a
+		// second placeholder was saved without first hand-editing
+		// Target (see cloudMountDialogUniqueUnconfiguredTarget's own
+		// doc comment).
+		r.cloudMountDialogTargetField.SetText(r.cloudMountDialogUniqueUnconfiguredTarget())
+		r.cloudMountDialogIdentifierField.SetText("")
+		r.cloudMountDialogTagsField.SetText("")
 	}
-	r.cloudMountDialogIdentifierField.SetText("")
-	r.cloudMountDialogTagsField.SetText("")
 	r.setCloudMountDialogButtonsMode(selectedIndex != 0)
 
 	r.styleCloudMountDialogFields()
@@ -558,10 +626,23 @@ func (r *Root) saveCloudMountEntry() (rclone.MountEntry, bool) {
 		return rclone.MountEntry{}, false
 	}
 	entry := rclone.MountEntry{RemoteName: remoteName, Target: target, Identifier: identifier, Tags: tags}
+	if r.cloudMountDialogEditTarget != "" {
+		// Removed before adding, not updated in place — AddMountEntry's
+		// own duplicate-Target refusal (see internal/rclone/config.go)
+		// would otherwise block saving an edit that leaves Target
+		// unchanged (Identifier/Tags-only edits are the common case).
+		// This same remove-then-add also covers the Target-did-change
+		// case uniformly, with no separate code path needed for it.
+		if err := rclone.RemoveMountEntry(r.cloudMountDialogEditTarget); err != nil {
+			r.showError(err)
+			return rclone.MountEntry{}, false
+		}
+	}
 	if err := rclone.AddMountEntry(entry); err != nil {
 		r.showError(err)
 		return rclone.MountEntry{}, false
 	}
+	r.cloudMountDialogEditTarget = ""
 	return entry, true
 }
 
@@ -655,7 +736,7 @@ func (r *Root) runDeleteSelectedCloudRemote() {
 			// while this dialog stays open — the same "stay open, just
 			// update" shape removeCloudMount's own confirm has for the
 			// merged list it acts on instead.
-			r.openCloudMountCreateDialog("")
+			r.openCloudMountCreateDialog("", nil)
 		},
 	)
 }
