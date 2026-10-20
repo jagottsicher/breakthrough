@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,13 +68,16 @@ func TestOpenCloudMountCreateDialogAlwaysOffersCreateNewRemote(t *testing.T) {
 	requireRclone(t)
 	r := newTestRootForCloudMount(t)
 
-	r.openCloudMountCreateDialog("")
+	r.openCloudMountCreateDialog("", nil)
 
 	if r.activePage != cloudMountDialogPage {
 		t.Fatalf("activePage = %q, want %q (dialog should have opened)", r.activePage, cloudMountDialogPage)
 	}
-	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); text != cloudMountDialogCreateNewOption {
-		t.Errorf("selected option = %q, want %q (the only choice with zero real remotes)", text, cloudMountDialogCreateNewOption)
+	// TrimSpace — the dropdown's own options are right-padded to the
+	// field's own width now (see openCloudMountCreateDialog's own doc
+	// comment on why), so the raw text carries trailing spaces.
+	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != cloudMountDialogCreateNewOption {
+		t.Errorf("selected option = %q, want %q (the only choice with zero real remotes)", strings.TrimRight(text, " "), cloudMountDialogCreateNewOption)
 	}
 }
 
@@ -88,7 +92,7 @@ func TestCloudMountDialogButtonsHideDeleteForCreateNewSentinel(t *testing.T) {
 	requireRclone(t)
 	r := newTestRootForCloudMount(t)
 
-	r.openCloudMountCreateDialog("")
+	r.openCloudMountCreateDialog("", nil)
 	if hasFlexItem(r.cloudMountDialogButtons, r.cloudMountDialogDeleteBtn) {
 		t.Error("Delete should not be in the button row while the \"+ Create new remote…\" sentinel is selected")
 	}
@@ -96,7 +100,7 @@ func TestCloudMountDialogButtonsHideDeleteForCreateNewSentinel(t *testing.T) {
 	if err := rclone.CreateStaticRemote("real", "local", nil); err != nil {
 		t.Fatalf("CreateStaticRemote: %v", err)
 	}
-	r.openCloudMountCreateDialog("real")
+	r.openCloudMountCreateDialog("real", nil)
 	if !hasFlexItem(r.cloudMountDialogButtons, r.cloudMountDialogDeleteBtn) {
 		t.Error("Delete should be in the button row once a real remote is selected")
 	}
@@ -129,30 +133,100 @@ func TestOpenCloudMountCreateDialogPreselectsByName(t *testing.T) {
 		}
 	}
 
-	r.openCloudMountCreateDialog("beta")
+	r.openCloudMountCreateDialog("beta", nil)
 
-	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); text != "beta" {
-		t.Errorf("selected option = %q, want %q", text, "beta")
+	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != "beta" {
+		t.Errorf("selected option = %q, want %q", strings.TrimRight(text, " "), "beta")
 	}
 }
 
-// TestRunAddCloudMountIgnoresTheCreateNewSentinel pins that landing on
-// "Add" while cloudMountDialogCreateNewOption is still the selected
-// option (e.g. zero real remotes, never actually changed) is a no-op
-// — never persists a MountEntry for a remote that doesn't exist.
-func TestRunAddCloudMountIgnoresTheCreateNewSentinel(t *testing.T) {
+// TestRunAddCloudMountSavesAPlaceholderForTheCreateNewSentinel pins
+// the real, reported gap this now closes: a user with zero real
+// remotes configured (or who simply never changed the default
+// selection) can still save a MountEntry — naming a Target the same
+// way SFTP's own free-text Host field lets you save against a host
+// that doesn't answer yet. The saved entry's RemoteName is the fixed
+// cloudMountDialogUnconfiguredRemoteName placeholder, not a remote
+// that doesn't exist in rclone's own config.
+func TestRunAddCloudMountSavesAPlaceholderForTheCreateNewSentinel(t *testing.T) {
 	requireRclone(t)
 	r := newTestRootForCloudMount(t)
-	r.openCloudMountCreateDialog("")
+	r.openCloudMountCreateDialog("", nil)
 
+	r.runSaveCloudMount()
+
+	if r.activePage == cloudMountDialogPage {
+		t.Error("dialog should have closed after a successful save")
+	}
+	entries, err := rclone.LoadMountEntries()
+	if err != nil {
+		t.Fatalf("LoadMountEntries: %v", err)
+	}
+	if len(entries) != 1 || entries[0].RemoteName != cloudMountDialogUnconfiguredRemoteName {
+		t.Errorf("entries = %+v, want exactly one with RemoteName %q", entries, cloudMountDialogUnconfiguredRemoteName)
+	}
+}
+
+// TestRunAddCloudMountSavesASecondPlaceholderWithAUniqueTarget pins
+// the real, reported gap closed alongside the test above: every
+// placeholder shares cloudMountDialogUnconfiguredRemoteName as its own
+// RemoteName, so reopening fresh (same sentinel, Target never hand-
+// edited) used to compute the exact same default Target every time —
+// AddMountEntry's own duplicate-Target refusal then silently blocked
+// a second placeholder from ever being saved at all.
+func TestRunAddCloudMountSavesASecondPlaceholderWithAUniqueTarget(t *testing.T) {
+	requireRclone(t)
+	r := newTestRootForCloudMount(t)
+	r.openCloudMountCreateDialog("", nil)
+	r.runSaveCloudMount()
+
+	r.openCloudMountCreateDialog("", nil)
+	r.runSaveCloudMount()
+
+	if r.activePage == cloudMountDialogPage {
+		t.Error("second save should have succeeded and closed the dialog too")
+	}
+	entries, err := rclone.LoadMountEntries()
+	if err != nil {
+		t.Fatalf("LoadMountEntries: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entries = %+v, want exactly two placeholders", entries)
+	}
+	if entries[0].Target == entries[1].Target {
+		t.Errorf("entries = %+v, want two distinct Targets", entries)
+	}
+}
+
+// TestRemoveCloudMountWorksForAPlaceholderEntry pins that a saved
+// placeholder MountEntry (see the test above) can still be removed
+// through the merged list's own "✕" (removeCloudMount) — DeleteRemote
+// already treats a nonexistent remote name as a harmless no-op (see
+// its own doc comment), so the RemoteName never backing a real rclone
+// remote must not block removing the MountEntry itself.
+func TestRemoveCloudMountWorksForAPlaceholderEntry(t *testing.T) {
+	requireRclone(t)
+	r := newTestRootForCloudMount(t)
+	r.openCloudMountCreateDialog("", nil)
 	r.runSaveCloudMount()
 
 	entries, err := rclone.LoadMountEntries()
 	if err != nil {
 		t.Fatalf("LoadMountEntries: %v", err)
 	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %+v, want exactly one", entries)
+	}
+
+	r.removeCloudMount(entries[0])
+	r.acceptConfirm()
+
+	entries, err = rclone.LoadMountEntries()
+	if err != nil {
+		t.Fatalf("LoadMountEntries: %v", err)
+	}
 	if len(entries) != 0 {
-		t.Errorf("entries = %+v, want none", entries)
+		t.Errorf("entries = %+v, want none after removing the placeholder", entries)
 	}
 }
 
@@ -166,7 +240,7 @@ func TestRunAddCloudMountPersistsEntryAndCloses(t *testing.T) {
 	if err := rclone.CreateStaticRemote("myremote", "local", nil); err != nil {
 		t.Fatalf("CreateStaticRemote: %v", err)
 	}
-	r.openCloudMountCreateDialog("")
+	r.openCloudMountCreateDialog("", nil)
 
 	r.runSaveCloudMount()
 
@@ -196,7 +270,7 @@ func TestRunAddCloudMountRefusesDuplicateTarget(t *testing.T) {
 		}
 	}
 
-	r.openCloudMountCreateDialog("first")
+	r.openCloudMountCreateDialog("first", nil)
 	r.runSaveCloudMount()
 
 	entries, err := rclone.LoadMountEntries()
@@ -208,7 +282,7 @@ func TestRunAddCloudMountRefusesDuplicateTarget(t *testing.T) {
 	}
 	firstTarget := entries[0].Target
 
-	r.openCloudMountCreateDialog("second")
+	r.openCloudMountCreateDialog("second", nil)
 	r.cloudMountDialogTargetField.SetText(firstTarget)
 	r.runSaveCloudMount()
 
@@ -232,7 +306,7 @@ func TestCloudMountDialogSyncTargetToSelectionOnlyWhileStillDefault(t *testing.T
 			t.Fatalf("CreateStaticRemote(%q): %v", name, err)
 		}
 	}
-	r.openCloudMountCreateDialog("alpha")
+	r.openCloudMountCreateDialog("alpha", nil)
 
 	// Still the unmodified default for "alpha" — switching to "beta"
 	// should follow.
@@ -266,7 +340,7 @@ func TestRunSaveAndMountCloudMountActuallyMounts(t *testing.T) {
 	if err := rclone.CreateStaticRemote("mountme", "alias", []string{"remote=" + srcDir}); err != nil {
 		t.Fatalf("CreateStaticRemote: %v", err)
 	}
-	r.openCloudMountCreateDialog("mountme")
+	r.openCloudMountCreateDialog("mountme", nil)
 
 	r.runSaveAndMountCloudMount()
 
@@ -308,7 +382,7 @@ func TestRunDeleteSelectedCloudRemoteWithoutMountEntry(t *testing.T) {
 	if err := rclone.CreateStaticRemote("orphan", "local", nil); err != nil {
 		t.Fatalf("CreateStaticRemote: %v", err)
 	}
-	r.openCloudMountCreateDialog("orphan")
+	r.openCloudMountCreateDialog("orphan", nil)
 
 	r.runDeleteSelectedCloudRemote()
 	if r.pendingConfirm == nil {
@@ -354,7 +428,7 @@ func TestRunDeleteSelectedCloudRemoteWithoutMountEntry(t *testing.T) {
 func TestRunDeleteSelectedCloudRemoteIgnoresTheCreateNewSentinel(t *testing.T) {
 	requireRclone(t)
 	r := newTestRootForCloudMount(t)
-	r.openCloudMountCreateDialog("")
+	r.openCloudMountCreateDialog("", nil)
 
 	r.runDeleteSelectedCloudRemote()
 

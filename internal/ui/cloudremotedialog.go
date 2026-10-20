@@ -568,7 +568,7 @@ func (r *Root) runCreateCloudRemote() {
 		return
 	}
 	r.hideOverlay()
-	r.openCloudMountCreateDialog(name)
+	r.openCloudMountCreateDialog(name, nil)
 }
 
 // currentCloudRemoteFields reads the currently selected backend, its
@@ -615,7 +615,7 @@ func (r *Root) runSaveCloudRemoteLenient() {
 		return
 	}
 	r.hideOverlay()
-	r.openCloudMountCreateDialog(name)
+	r.openCloudMountCreateDialog(name, nil)
 }
 
 // cloudRemoteTestTimeout bounds both TestRemote's own connect and I/O
