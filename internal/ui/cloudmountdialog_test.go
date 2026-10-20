@@ -288,7 +288,7 @@ func TestRunSaveAndMountCloudMountActuallyMounts(t *testing.T) {
 			t.Fatalf("IsMounted: %v", err)
 		}
 		if mounted {
-			rclone.Unmount(target)
+			_ = rclone.Unmount(target)
 			return
 		}
 		time.Sleep(100 * time.Millisecond)

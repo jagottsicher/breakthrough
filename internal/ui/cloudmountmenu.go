@@ -25,26 +25,6 @@ import (
 // same "✕" every per-row remove action in this app already uses.
 const cloudMountRemoveGlyph = connectionHistoryRemoveGlyph
 
-// cloudMountStatusText reports entry's own live status, by shelling
-// out through internal/rclone.IsMounted — or, while a Mount/Unmount
-// call for its Target is still running in the background (see
-// toggleCloudMount), a transient "mounting…"/"unmounting…" label
-// instead of a stale "mounted"/"not mounted" that would otherwise sit
-// there, unexplained, for however long that subprocess takes.
-func (r *Root) cloudMountStatusText(entry rclone.MountEntry) string {
-	if pending, ok := r.cloudMountPending[entry.Target]; ok {
-		return pending
-	}
-	mounted, err := rclone.IsMounted(entry.Target)
-	if err != nil {
-		return "error"
-	}
-	if mounted {
-		return "mounted"
-	}
-	return "not mounted"
-}
-
 // cloudMountRowColor mirrors connectionHistoryColor's own shape for
 // the other kind of row connectionMenuTable now carries: green
 // (theme.EntryExecutable) while actually mounted — the same color

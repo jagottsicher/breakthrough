@@ -1282,10 +1282,9 @@ type Root struct {
 	connectionMenuNewRow int
 	// cloudMountPending maps a MountEntry's own Target to a transient
 	// "mounting…"/"unmounting…" label while toggleCloudMount's own
-	// background Mount/Unmount call is still running — see
-	// cloudMountStatusText's own doc comment for why a stale real
-	// status would otherwise sit there unexplained for however long
-	// that subprocess takes.
+	// background Mount/Unmount call is still running — read by
+	// renderConnectionMenu, so a stale "mount"/"unmount" never sits
+	// there unexplained for however long that subprocess takes.
 	cloudMountPending map[string]string
 
 	// sshShellMenuTable/TitleBar/Layout is the "gs" chord's own dropdown

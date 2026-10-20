@@ -101,10 +101,9 @@ func shortenPathLastSegments(path string, n int) string {
 // User/@/Host-IP themselves are never hidden either. Deliberately
 // never sortable (connectionMenuSortNone, same as Tags) — see
 // connectionMenuSortHistory's own doc comment for why a sort key only
-// makes sense for a column every row can meaningfully compare on, and
-// cloudMountStatusText's own doc comment for the matching reasoning on
-// why User/Host-IP themselves don't try to mean anything for a cloud
-// row either.
+// makes sense for a column every row can meaningfully compare on; the
+// same reason User/Host-IP themselves don't try to mean anything for a
+// cloud row either.
 //
 // Only connectionMenuColUser is ever selectable — @/Host-IP/Identifier/
 // Type/Tags each still carry their own SetClickedFunc (see

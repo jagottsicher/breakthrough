@@ -180,7 +180,7 @@ func parseListRemotesJSON(data []byte) ([]Remote, error) {
 	}
 	remotes := make([]Remote, 0, len(entries))
 	for _, e := range entries {
-		remotes = append(remotes, Remote{Name: e.Name, Type: e.Type})
+		remotes = append(remotes, Remote(e))
 	}
 	return remotes, nil
 }

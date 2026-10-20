@@ -116,7 +116,7 @@ func TestRemoveCloudMountRefusesWhileStillMounted(t *testing.T) {
 	if err := rclone.Mount("myremote:", target, rclone.MountOptions{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
-	defer rclone.Unmount(target)
+	defer func() { _ = rclone.Unmount(target) }()
 
 	r.removeCloudMount(entry)
 
