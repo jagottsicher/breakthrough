@@ -140,23 +140,62 @@ func TestOpenCloudMountCreateDialogPreselectsByName(t *testing.T) {
 	}
 }
 
-// TestRunAddCloudMountIgnoresTheCreateNewSentinel pins that landing on
-// "Add" while cloudMountDialogCreateNewOption is still the selected
-// option (e.g. zero real remotes, never actually changed) is a no-op
-// — never persists a MountEntry for a remote that doesn't exist.
-func TestRunAddCloudMountIgnoresTheCreateNewSentinel(t *testing.T) {
+// TestRunAddCloudMountSavesAPlaceholderForTheCreateNewSentinel pins
+// the real, reported gap this now closes: a user with zero real
+// remotes configured (or who simply never changed the default
+// selection) can still save a MountEntry — naming a Target the same
+// way SFTP's own free-text Host field lets you save against a host
+// that doesn't answer yet. The saved entry's RemoteName is the fixed
+// cloudMountDialogUnconfiguredRemoteName placeholder, not a remote
+// that doesn't exist in rclone's own config.
+func TestRunAddCloudMountSavesAPlaceholderForTheCreateNewSentinel(t *testing.T) {
 	requireRclone(t)
 	r := newTestRootForCloudMount(t)
 	r.openCloudMountCreateDialog("")
 
 	r.runSaveCloudMount()
 
+	if r.activePage == cloudMountDialogPage {
+		t.Error("dialog should have closed after a successful save")
+	}
 	entries, err := rclone.LoadMountEntries()
 	if err != nil {
 		t.Fatalf("LoadMountEntries: %v", err)
 	}
+	if len(entries) != 1 || entries[0].RemoteName != cloudMountDialogUnconfiguredRemoteName {
+		t.Errorf("entries = %+v, want exactly one with RemoteName %q", entries, cloudMountDialogUnconfiguredRemoteName)
+	}
+}
+
+// TestRemoveCloudMountWorksForAPlaceholderEntry pins that a saved
+// placeholder MountEntry (see the test above) can still be removed
+// through the merged list's own "✕" (removeCloudMount) — DeleteRemote
+// already treats a nonexistent remote name as a harmless no-op (see
+// its own doc comment), so the RemoteName never backing a real rclone
+// remote must not block removing the MountEntry itself.
+func TestRemoveCloudMountWorksForAPlaceholderEntry(t *testing.T) {
+	requireRclone(t)
+	r := newTestRootForCloudMount(t)
+	r.openCloudMountCreateDialog("")
+	r.runSaveCloudMount()
+
+	entries, err := rclone.LoadMountEntries()
+	if err != nil {
+		t.Fatalf("LoadMountEntries: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %+v, want exactly one", entries)
+	}
+
+	r.removeCloudMount(entries[0])
+	r.acceptConfirm()
+
+	entries, err = rclone.LoadMountEntries()
+	if err != nil {
+		t.Fatalf("LoadMountEntries: %v", err)
+	}
 	if len(entries) != 0 {
-		t.Errorf("entries = %+v, want none", entries)
+		t.Errorf("entries = %+v, want none after removing the placeholder", entries)
 	}
 }
 
