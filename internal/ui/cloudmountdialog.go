@@ -25,6 +25,26 @@ var errRcloneNotAvailable = fmt.Errorf("rclone is not installed — cloud mounts
 // doc comment on why it used to refuse to open at all in that case).
 const cloudMountDialogCreateNewOption = " + Create new remote cloud location"
 
+// cloudMountDialogUnconfiguredRemoteName is the RemoteName
+// saveCloudMountEntry gives a MountEntry saved while
+// cloudMountDialogCreateNewOption is still selected — a real, reported
+// gap: unlike the Connect dialog's own free-text Host field, Remote
+// here is a closed choice (ListRemotes' own result), so there was
+// previously no way to save a placeholder entry — naming it and
+// setting a Target — before a real rclone remote exists to back it,
+// the same "prepared, not yet working" state SFTP's own untested Host
+// already allows. Mounting one still fails, honestly, exactly the way
+// it would for any other nonexistent rclone remote (rclone.DeleteRemote
+// already treats this same no-such-remote case as a harmless no-op,
+// see its own doc comment — not a real, reported error path, just
+// nothing to find and remove).
+//
+// A short, valid directory-name slug on purpose, not the sentinel's
+// own long label — this becomes an actual rclone.Mount argument and a
+// MountDir path component (filepath.Join(base, name)), not just
+// display text.
+const cloudMountDialogUnconfiguredRemoteName = "unconfigured"
+
 // The "New cloud mount" dialog — reached via the "+ New" chooser (see
 // openNewConnectionChooser) rather than its own key, same as the
 // Connect dialog it sits beside. Picks an rclone remote (by name, from
@@ -480,7 +500,12 @@ func (r *Root) openCloudMountCreateDialog(preselect string) {
 	if selectedIndex > 0 {
 		r.cloudMountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(names[selectedIndex-1]))
 	} else {
-		r.cloudMountDialogTargetField.SetText("")
+		// cloudMountDialogUnconfiguredRemoteName's own default, not "" —
+		// leaving Target blank here would make OK silently do nothing
+		// again the moment this sentinel is selected (saveCloudMountEntry
+		// still refuses an empty Target), the exact dead end this whole
+		// placeholder path exists to remove.
+		r.cloudMountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(cloudMountDialogUnconfiguredRemoteName))
 	}
 	r.cloudMountDialogIdentifierField.SetText("")
 	r.cloudMountDialogTagsField.SetText("")
@@ -506,12 +531,21 @@ func (r *Root) saveCloudMountEntry() (rclone.MountEntry, bool) {
 	// right-padded to the field's own width (see
 	// openCloudMountCreateDialog's own doc comment on why), which
 	// would otherwise end up as a trailing-whitespace-corrupted
-	// "remote name" here.
+	// "remote name" here. index < 1 covers both "nothing selected"
+	// (-1) and the "+ Create new remote…" sentinel (0) — saves a
+	// placeholder entry instead of refusing outright in that case, see
+	// cloudMountDialogUnconfiguredRemoteName's own doc comment on why.
+	// Mounting it still fails, honestly, the same as any other
+	// MountEntry whose own RemoteName doesn't resolve to a real rclone
+	// remote (toggleCloudMount's own real Mount call is the one place
+	// that actually finds out, same as it always was).
 	index, _ := r.cloudMountDialogRemoteField.GetCurrentOption()
+	var remoteName string
 	if index < 1 || index-1 >= len(r.cloudMountDialogRemotes) {
-		return rclone.MountEntry{}, false
+		remoteName = cloudMountDialogUnconfiguredRemoteName
+	} else {
+		remoteName = r.cloudMountDialogRemotes[index-1]
 	}
-	remoteName := r.cloudMountDialogRemotes[index-1]
 	target := strings.TrimSpace(r.cloudMountDialogTargetField.GetText())
 	if target == "" {
 		return rclone.MountEntry{}, false
