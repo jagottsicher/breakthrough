@@ -288,9 +288,12 @@ pattern field, the size checkbox, the size expression field, the
 modified-time checkbox, the modified-time expression field, the Labels
 row, and the "Exclude dirs" checkbox, wrapping back to the first —
 `Space` or `Enter` toggles whichever checkbox (or, on the Labels row,
-whichever swatch) currently has focus, and `Escape` closes the whole
-dropdown from any of them, the same as clicking elsewhere or `Ctrl`+`C`
-already did.
+whichever swatch) currently has focus. On one of the three expression
+fields (glob pattern, size, modified time), `Enter` instead commits that
+field and moves on to the next expression field — the same jump `/`
+itself makes, see below — so confirming one filter never costs you the
+others still sitting open. `Escape` closes the whole dropdown from any
+of them, the same as clicking elsewhere or `Ctrl`+`C` already did.
 
 `/` itself, pressed again once the dropdown is already open, is a
 faster way to reach the size or modified-time field specifically: it

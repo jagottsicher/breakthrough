@@ -496,11 +496,17 @@ func TestFilterResetsOnNavigationWhenNotPersistent(t *testing.T) {
 	}
 }
 
-// TestFilterFieldDoneReturnsFocusToTableWithoutClearing pins that
-// Enter/Escape in the filter field just returns focus to the table —
-// the filter itself stays applied, since it's meant to be a persistent
-// narrowing of the view, not a one-shot search box that clears itself.
-func TestFilterFieldDoneReturnsFocusToTableWithoutClearing(t *testing.T) {
+// TestFilterFieldEnterKeepsTextAndAdvancesWithoutClosing pins the
+// corrected contract: Enter in the filter field commits to the next
+// expression field instead of closing the whole dropdown (see
+// TestFilterMenuEnterAdvancesThroughFieldsInsteadOfClosing in
+// filtermenu_test.go for the full three-field cycle) — the filter text
+// itself is never touched by Enter either way, since it's meant to be
+// a persistent narrowing of the view, not a one-shot search box that
+// clears itself. Escape, not Enter, is what returns focus to the table
+// by closing the dropdown (see TestFilterMenuSlashAdvancesThroughFields
+// AndWraps's sibling Escape coverage elsewhere in this package).
+func TestFilterFieldEnterKeepsTextAndAdvancesWithoutClosing(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -514,17 +520,18 @@ func TestFilterFieldDoneReturnsFocusToTableWithoutClearing(t *testing.T) {
 	// press or "Y" click would.
 	r.openFilterMenu()
 	r.panel.filterField.SetText("ap*")
+	sizeField := filterMenuFieldRowField(t, r, 2)
 
 	r.panel.filterField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if got := r.panel.filterField.GetText(); got != "ap*" {
 		t.Errorf("filterField text after Enter = %q, want unchanged %q", got, "ap*")
 	}
-	if r.activePage == filterMenuPage {
-		t.Error("Enter in the filter field should close the dropdown, not just move focus")
+	if r.activePage != filterMenuPage {
+		t.Error("Enter in the filter field should advance focus, not close the dropdown")
 	}
-	if !r.panel.table.HasFocus() {
-		t.Error("focus should return to the table after Enter closes the filter menu")
+	if !sizeField.HasFocus() {
+		t.Error("Enter in the filter field should move focus to the size field")
 	}
 }
 

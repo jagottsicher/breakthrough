@@ -324,7 +324,14 @@ func (r *Root) renderFilterMenu() {
 			moveFocus(panel.filterField, 1)
 		case tcell.KeyBacktab:
 			moveFocus(panel.filterField, -1)
-		case tcell.KeyEnter, tcell.KeyEscape:
+		case tcell.KeyEnter:
+			// Enter commits this field's value and moves on to the next
+			// real expression field — it must not close the whole dropdown,
+			// or every other still-open row (size, modified time, labels,
+			// exclude dirs) gets lost in one keystroke. Closing stays
+			// Escape's job.
+			nextField(panel.filterField)
+		case tcell.KeyEscape:
 			closeMenu()
 		}
 	})
@@ -360,7 +367,9 @@ func (r *Root) renderFilterMenu() {
 			moveFocus(sizeField, 1)
 		case tcell.KeyBacktab:
 			moveFocus(sizeField, -1)
-		case tcell.KeyEnter, tcell.KeyEscape:
+		case tcell.KeyEnter:
+			nextField(sizeField)
+		case tcell.KeyEscape:
 			closeMenu()
 		}
 	})
@@ -375,7 +384,9 @@ func (r *Root) renderFilterMenu() {
 			moveFocus(mtimeField, 1)
 		case tcell.KeyBacktab:
 			moveFocus(mtimeField, -1)
-		case tcell.KeyEnter, tcell.KeyEscape:
+		case tcell.KeyEnter:
+			nextField(mtimeField)
+		case tcell.KeyEscape:
 			closeMenu()
 		}
 	})
