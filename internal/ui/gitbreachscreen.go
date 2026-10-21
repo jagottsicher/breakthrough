@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"hash/fnv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -1338,22 +1337,13 @@ var gitBreachAuthorColors = [12]tcell.Color{
 // deterministically — the same author always gets the same color
 // across a render and across reloads, without this package having to
 // track "which author got which color already" state of its own
-// anywhere. Hashes the email, not the display name (per the user's own
-// implied "color by who, not by what they're currently called"
-// expectation): the same person's commits should read as the same
-// author even if they changed their git config's user.name at some
-// point, and email is what actually stays stable across that. FNV-1a,
-// not a cryptographic hash: this only ever needs to be a consistent,
-// well-distributed bucket index, never resistant to anyone
-// deliberately choosing an email to collide with another author's
-// color — a real but harmless failure mode (two authors sharing a
-// color) rather than a security concern, and with only twelve buckets,
-// one every real repository with more than a handful of contributors
-// will eventually hit anyway by sheer chance, not just adversarially.
+// anywhere. The actual email→bucket hashing (FNV-1a; see its own doc
+// comment in internal/git/diff.go for why) is internal/git.
+// AuthorColorIndex, kept UI-free and testable without tcell; only the
+// mapping from a bucket index to one of *this file's own* twelve
+// tcell.Color values lives here.
 func gitBreachAuthorColor(email string) tcell.Color {
-	h := fnv.New32a()
-	h.Write([]byte(email))
-	return gitBreachAuthorColors[h.Sum32()%uint32(len(gitBreachAuthorColors))]
+	return gitBreachAuthorColors[git.AuthorColorIndex(email, len(gitBreachAuthorColors))]
 }
 
 // gitBreachLaneColor reuses the same twelve contrast-verified colors
@@ -1497,40 +1487,15 @@ func (r *Root) renderGitBreachDiffHeader(width, height int) {
 	r.gitBreachDiffHeader.SetText(title + strings.Repeat(" ", padding) + hint)
 }
 
-// gitBreachDiffPage maps a scroll row to a 1-based "page" number out of
-// totalPages, given the box's own current height — not simply
-// row/height+1, clamped: when totalLines isn't a multiple of height,
-// tview's own scroll offset never goes past totalLines-height (there's
-// nothing further to scroll to), which that naive formula would then
-// report as something short of the real last page, forever out of
-// reach no matter how far down the user scrolls — the user's own
-// explicit report: a 29-line diff at height 10 (3 pages, ceil(29/10))
-// never showing "Page 3/3" because the maximum reachable row (19) is
-// still "page 2" under row/height+1. Instead, row is mapped
-// proportionally across [0, maxRow] onto [1, totalPages], so the true
-// top always reads as page 1 and the true bottom (wherever tview
-// itself clamps scrolling to) always reads as the real last page,
-// reachable by construction — the tradeoff is that a page "boundary"
-// while scrolling line by line no longer falls at an exact multiple of
-// height once totalLines doesn't divide evenly, the same rounding
-// every proportional (not fixed-size) pagination scheme has.
+// gitBreachDiffPage maps a scroll row to a 1-based "page" number out
+// of totalPages, given the box's own current height — tview-specific
+// naming kept here (the box/scroll framing is this package's own),
+// but the actual proportional-mapping math (see its own doc comment
+// in internal/git/diff.go for why it isn't simply row/height+1) is
+// internal/git.DiffPage, shared with any other caller that ever needs
+// the same "always reach the true last page" guarantee.
 func gitBreachDiffPage(row, totalLines, height int) (currentPage, totalPages int) {
-	totalPages = (totalLines + height - 1) / height
-	if totalPages < 1 {
-		totalPages = 1
-	}
-	maxRow := totalLines - height
-	if maxRow <= 0 {
-		return 1, totalPages
-	}
-	if row > maxRow {
-		row = maxRow
-	}
-	if row < 0 {
-		row = 0
-	}
-	currentPage = 1 + (row*(totalPages-1)+maxRow/2)/maxRow
-	return currentPage, totalPages
+	return git.DiffPage(row, totalLines, height)
 }
 
 func (r *Root) renderGitBreachCommits() {
@@ -1824,20 +1789,13 @@ func gitBreachColorizeDiff(diff, path string, theme config.ResolvedTheme) string
 }
 
 // gitBreachDiffHeaderPath extracts the post-change ("b/...") path out
-// of a "diff --git a/X b/Y" header line — the last " b/" occurrence,
-// not the first, since X itself could coincidentally contain the
-// substring " b/" (rare, but a known, accepted edge case: a path
-// containing that exact substring right before a rename's own "b/"
-// marker could still pick the wrong split point — not solved here,
-// same spirit as this file's other documented, non-blocking
-// limitations).
+// of a "diff --git a/X b/Y" header line — pure string parsing, no UI
+// dependency at all, so the logic itself lives in internal/git.
+// DiffHeaderPath (see its own doc comment there for the one known,
+// accepted edge case); this is only the name gitBreachColorizeDiff's
+// own call site already uses.
 func gitBreachDiffHeaderPath(line string) (string, bool) {
-	rest := strings.TrimPrefix(line, "diff --git ")
-	idx := strings.LastIndex(rest, " b/")
-	if idx < 0 {
-		return "", false
-	}
-	return rest[idx+len(" b/"):], true
+	return git.DiffHeaderPath(line)
 }
 
 // gitBreachColorizeDiffLine renders one added/removed line: markerColor
