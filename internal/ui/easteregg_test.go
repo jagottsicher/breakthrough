@@ -115,6 +115,99 @@ func TestFeedEasterEggPhraseIsInertWhileAnOverlayIsOpen(t *testing.T) {
 	}
 }
 
+func TestOpenEasterEggStartsInIntroStage(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+
+	if r.easterEggView.stage != easterEggStageIntro {
+		t.Errorf("stage = %d, want easterEggStageIntro", r.easterEggView.stage)
+	}
+	if r.easterEggView.stageFrame != 0 {
+		t.Errorf("stageFrame = %d, want 0 right after opening", r.easterEggView.stageFrame)
+	}
+}
+
+// TestTickEasterEggFrameStaysInIntroBeforeHoldFramesElapse and
+// TestTickEasterEggFrameTransitionsFromIntroToRainAfterHoldFrames pin
+// the Intro→Rain transition boundary exactly — tickEasterEggFrame lets
+// this simulate N frames instantly rather than waiting on
+// easterEggFrameInterval for real (see its own doc comment).
+func TestTickEasterEggFrameStaysInIntroBeforeHoldFramesElapse(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+
+	for i := 0; i < easterEggIntroRevealFrames+easterEggIntroHoldFrames-1; i++ {
+		r.tickEasterEggFrame()
+	}
+
+	if r.easterEggView.stage != easterEggStageIntro {
+		t.Errorf("stage = %d, want still easterEggStageIntro one frame before the transition", r.easterEggView.stage)
+	}
+}
+
+func TestTickEasterEggFrameTransitionsFromIntroToRainAfterHoldFrames(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+	r.easterEggView.SetRect(0, 0, 80, 24)
+
+	for i := 0; i < easterEggIntroRevealFrames+easterEggIntroHoldFrames; i++ {
+		r.tickEasterEggFrame()
+	}
+
+	if r.easterEggView.stage != easterEggStageRain {
+		t.Errorf("stage = %d, want easterEggStageRain after %d frames", r.easterEggView.stage, easterEggIntroRevealFrames+easterEggIntroHoldFrames)
+	}
+	if r.easterEggView.stageFrame != 0 {
+		t.Errorf("stageFrame = %d, want reset to 0 on entering the new stage", r.easterEggView.stageFrame)
+	}
+	if len(r.easterEggView.rainColumns) != 80 {
+		t.Errorf("len(rainColumns) = %d, want 80 (the view's own width) once Rain starts", len(r.easterEggView.rainColumns))
+	}
+}
+
+func TestDrawRainRebuildsColumnsOnWidthMismatch(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+	r.easterEggView.stage = easterEggStageRain
+	r.easterEggView.SetRect(0, 0, 80, 24)
+	r.easterEggView.rainColumns = make([]easteregg.RainColumn, 40) // stale — simulates a resize since Rain started
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(80, 24)
+	r.easterEggView.Draw(screen)
+
+	if len(r.easterEggView.rainColumns) != 80 {
+		t.Errorf("len(rainColumns) after Draw = %d, want rebuilt to 80 to match the current width", len(r.easterEggView.rainColumns))
+	}
+}
+
+func TestEasterEggRainPaletteCoversEveryIntensityLevel(t *testing.T) {
+	for level := 1; level <= easteregg.RainIntensityLevels; level++ {
+		if easterEggRainPalette[level] == tcell.ColorDefault {
+			t.Errorf("easterEggRainPalette[%d] is unset (ColorDefault)", level)
+		}
+	}
+}
+
 func TestFeedEasterEggPhraseIgnoresNonRuneAndModifiedKeys(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
