@@ -503,8 +503,8 @@
     },
     {
       "path": "internal/easteregg/reveal.go",
-      "size": 4595,
-      "sha256": "dbc5ab4239e17e737a48093eaff3acb2a2b9264823dfb5d35fc9aca033261bcc"
+      "size": 5473,
+      "sha256": "c31ee45ac80c25cbff4d90e47e97420b4a18a0cdad1a07df1f80e22a7700064f"
     },
     {
       "path": "internal/easteregg/reveal_test.go",
@@ -8129,63 +8129,70 @@
       "file": "internal/easteregg/reveal.go",
       "name": "revealAspectCorrection",
       "kind": "const",
-      "line": 12
+      "line": 11
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealHarmonics",
       "kind": "const",
-      "line": 21
+      "line": 20
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealHarmonicBaseWeight",
       "kind": "const",
-      "line": 22
+      "line": 21
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealPhaseSpread",
       "kind": "const",
-      "line": 30
+      "line": 29
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealJagSpread",
       "kind": "var",
-      "line": 39
+      "line": 38
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
+      "file": "internal/easteregg/reveal.go",
+      "name": "revealPhaseHash",
+      "kind": "function",
+      "line": 56
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealHarmonicPhase",
       "kind": "function",
-      "line": 51
+      "line": 67
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealJag",
       "kind": "function",
-      "line": 60
+      "line": 76
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "RevealEdgeBand",
       "kind": "const",
-      "line": 72
+      "line": 88
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "RevealMask",
       "kind": "function",
-      "line": 88
+      "line": 104
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
@@ -55605,5 +55612,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "5476d8a6e157d29e884cad47350d1bff52442b2e098efca86235bf14117300bb"
+  "merkle_root": "d5ffc2333352459683e37312227d1eea9852e382382790f492c7a3f80382be3e"
 }
