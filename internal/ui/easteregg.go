@@ -47,16 +47,20 @@ const easterEggIntroRevealFrames = 42
 const easterEggIntroHoldFrames = 20
 
 // easterEggRainFrames is how long the Matrix rain runs, from entering
-// the Rain stage to the abrupt "SYSTEM FAILURE" cutoff — about 9
-// seconds at easterEggFrameInterval, long enough to actually read as
-// rain rather than a flash.
-const easterEggRainFrames = 150
+// the Rain stage to the abrupt "SYSTEM FAILURE" cutoff — about 4.2
+// seconds at easterEggFrameInterval. Originally 150 (~9s); cut after
+// the user's own explicit report that it ran far too long, enough that
+// "SYSTEM FAILURE" right after it went unnoticed — a shorter rain
+// keeps attention through to the stage that actually matters.
+const easterEggRainFrames = 70
 
 // easterEggFailureHoldFrames is how long "SYSTEM FAILURE" sits on
 // screen, static, before it starts morphing into "breakthrough" —
-// about 1.5 seconds, long enough to land as a real interruption before
-// the morph softens it.
-const easterEggFailureHoldFrames = 25
+// about 2.1 seconds. Originally 25 frames (~1.5s); lengthened after
+// the user's own explicit report ("SYSTEM FAILURE habe ich gar nicht
+// gesehen") that it read as too brief a beat to register at all,
+// alongside the rain duration cut just above.
+const easterEggFailureHoldFrames = 35
 
 // easterEggMorphFrames is how many frames the "SYSTEM FAILURE" →
 // "breakthrough" character morph itself takes — about 2.4 seconds,
@@ -78,19 +82,37 @@ const (
 )
 
 // easterEggRevealFrames is how long the torn-wall opening takes to
-// grow from nothing to covering the entire screen — about 3 seconds,
-// deliberately quicker than the slow-burn Intro/Rain/Failure stages
-// before it: a "breakthrough" should feel like it arrives suddenly
-// once it starts, not creep in.
-const easterEggRevealFrames = 50
+// grow from nothing to covering the entire screen — about 1.9 seconds.
+// Originally 50 frames (~3s); shortened after the user's own explicit
+// request that the reveal itself feel a bit quicker — a "breakthrough"
+// should feel like it arrives suddenly once it starts, more so than
+// the first cut already aimed for.
+const easterEggRevealFrames = 32
+
+// easterEggCaptionDelayFrames is how long after "breakthrough" itself
+// appears (stageFrame reaching easterEggRevealFrames) the signature
+// line fades in beneath it — exactly 3 seconds at
+// easterEggFrameInterval, per the user's own explicit request.
+const easterEggCaptionDelayFrames = 50
+
+// easterEggCaptionHoldFrames is how long the signature line stays up
+// once it appears before the whole overlay closes — about 1.5 seconds,
+// long enough to actually read it rather than catching only a flash.
+const easterEggCaptionHoldFrames = 25
 
 // easterEggRevealHoldFrames is how long the fully-revealed, bright
-// field holds with "breakthrough" stenciled across it before the
-// whole overlay closes on its own — the only stage with a real ending
-// (see easterEggStageReveal's own doc comment): Escape still skips out
-// at any point, same as every other stage, but this one doesn't need
-// it to finish.
-const easterEggRevealHoldFrames = 35
+// field holds — "breakthrough", then the signature line two rows below
+// it once easterEggCaptionDelayFrames has passed — before the whole
+// overlay closes on its own — the only stage with a real ending (see
+// easterEggStageReveal's own doc comment): Escape still skips out at
+// any point, same as every other stage, but this one doesn't need it
+// to finish.
+const easterEggRevealHoldFrames = easterEggCaptionDelayFrames + easterEggCaptionHoldFrames
+
+// easterEggCaptionText is the signature line shown beneath
+// "breakthrough" once the reveal settles — per the user's own explicit
+// request.
+const easterEggCaptionText = "written with ♥ in Go by Jens Schendel"
 
 // Stages of the Easter egg's own animation, in order — see
 // easterEggView.Draw's own per-stage branch and Root.animateEasterEgg's
@@ -317,7 +339,8 @@ func (v *easterEggView) drawFailure(screen tcell.Screen, x, y, width, height int
 // sits from the boundary. Once the mask has grown to cover the whole
 // field (stageFrame >= easterEggRevealFrames), "breakthrough" is
 // stenciled across the middle in the same dark rock color, the one
-// dark shape left against all that light.
+// dark shape left against all that light — and, easterEggCaptionDelayFrames
+// later, easterEggCaptionText fades in the same way two rows below it.
 func (v *easterEggView) drawReveal(screen tcell.Screen, x, y, width, height int) {
 	rock := tcell.StyleDefault.Background(easterEggRockColor)
 	for row := 0; row < height; row++ {
@@ -352,16 +375,29 @@ func (v *easterEggView) drawReveal(screen tcell.Screen, x, y, width, height int)
 	if v.stageFrame < easterEggRevealFrames {
 		return
 	}
-	runes := []rune(easterEggBreakthroughText)
-	textX := x + (width-len(runes))/2
 	textY := y + height/2
 	style := tcell.StyleDefault.Background(easterEggWhiteColor).Foreground(easterEggRockColor)
+	drawStencilLine(screen, easterEggBreakthroughText, x, textY, width, style)
+
+	if v.stageFrame < easterEggRevealFrames+easterEggCaptionDelayFrames {
+		return
+	}
+	drawStencilLine(screen, easterEggCaptionText, x, textY+2, width, style)
+}
+
+// drawStencilLine centers text on row, the same dark-rock-on-bright
+// "stencil" look drawReveal's own "breakthrough" text and
+// easterEggCaptionText share — split out once there were two lines
+// using it rather than duplicating the centering/clipping math.
+func drawStencilLine(screen tcell.Screen, text string, x, row, width int, style tcell.Style) {
+	runes := []rune(text)
+	textX := x + (width-len(runes))/2
 	for i, ch := range runes {
 		col := textX + i
 		if col < x || col >= x+width {
 			continue
 		}
-		screen.SetContent(col, textY, ch, nil, style)
+		screen.SetContent(col, row, ch, nil, style)
 	}
 }
 
