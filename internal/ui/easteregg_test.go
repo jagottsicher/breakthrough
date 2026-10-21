@@ -360,6 +360,67 @@ func TestDrawRevealPaintsRockOutsideAndTextOnceFullyGrown(t *testing.T) {
 	}
 }
 
+func TestDrawRevealOmitsTheCaptionBeforeItsOwnDelayElapses(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+	r.easterEggView.stage = easterEggStageReveal
+	// Fully grown, but still short of easterEggCaptionDelayFrames —
+	// "breakthrough" should show, the caption line should not yet.
+	r.easterEggView.stageFrame = easterEggRevealFrames + easterEggCaptionDelayFrames - 1
+	r.easterEggView.SetRect(0, 0, 80, 24)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(80, 24)
+	r.easterEggView.Draw(screen)
+
+	row := 24/2 + 2
+	for col := 0; col < 80; col++ {
+		ch, _, _ := screen.Get(col, row)
+		if ch == "w" {
+			t.Fatalf("found the caption's own leading 'w' at (%d,%d) before easterEggCaptionDelayFrames elapsed", col, row)
+		}
+	}
+}
+
+func TestDrawRevealShowsTheCaptionTwoRowsBelowBreakthroughAfterItsDelay(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+	r.easterEggView.stage = easterEggStageReveal
+	r.easterEggView.stageFrame = easterEggRevealFrames + easterEggCaptionDelayFrames
+	r.easterEggView.SetRect(0, 0, 80, 24)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(80, 24)
+	r.easterEggView.Draw(screen)
+
+	row := 24/2 + 2
+	found := false
+	for col := 0; col < 80; col++ {
+		ch, _, _ := screen.Get(col, row)
+		if ch == "w" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find the caption's own leading 'w' (\"written with ♥ in Go...\") two rows below \"breakthrough\" once easterEggCaptionDelayFrames has elapsed")
+	}
+}
+
 func TestDrawRevealDoesNotPanicPartwayThroughGrowth(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {

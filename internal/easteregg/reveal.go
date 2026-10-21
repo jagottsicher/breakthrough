@@ -2,7 +2,6 @@ package easteregg
 
 import (
 	"math"
-	"math/rand"
 )
 
 // revealAspectCorrection compensates for a terminal cell being roughly
@@ -44,13 +43,30 @@ var revealJagSpread = func() float64 {
 	return sum
 }()
 
+// revealPhaseHash is a splitmix64-style mix, used in place of a full
+// math/rand.Source for revealHarmonicPhase: RevealMask calls it once
+// per harmonic for every cell on every frame (the Reveal stage's own
+// Draw repaints the whole field each tick), and constructing a real
+// rand.Source that often — only to draw a single float64 from it and
+// throw it away — was expensive enough to stretch each frame's real
+// wall-clock time past easterEggFrameInterval, silently lengthening
+// "breakthrough" and the signature caption's own holds past their
+// intended 3 seconds each. This mix is a handful of arithmetic
+// operations, no allocation, same determinism contract.
+func revealPhaseHash(x uint64) uint64 {
+	x += 0x9E3779B97F4A7C15
+	x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9
+	x = (x ^ (x >> 27)) * 0x94D049BB133111EB
+	return x ^ (x >> 31)
+}
+
 // revealHarmonicPhase deterministically picks harmonic h's own phase
 // offset from seed — different phases per harmonic (and per seed) are
 // what keep the jagged boundary looking organic rather than a fixed,
 // instantly-recognizable wave pattern every time the egg runs.
 func revealHarmonicPhase(h int, seed int64) float64 {
-	r := rand.New(rand.NewSource(seed ^ int64(h)*revealPhaseSpread))
-	return r.Float64() * 2 * math.Pi
+	mixed := revealPhaseHash(uint64(seed) ^ uint64(h)*revealPhaseSpread)
+	return (float64(mixed>>11) / float64(uint64(1)<<53)) * 2 * math.Pi
 }
 
 // revealJag returns the boundary's own radius multiplier at angle
