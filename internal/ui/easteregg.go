@@ -12,6 +12,24 @@ import (
 
 const easterEggPage = "easterEgg"
 
+// easterEggSentinelPath is the fake "file" the Easter egg's Find
+// trigger uses (see Panel.appendEasterEggSearchResult, Root.openLook,
+// Panel.activateRow, and Root.loadDetailsTarget — every place that
+// needs to recognize this one synthetic row rather than treat it as a
+// real path) — NUL-prefixed, which a real POSIX path can never
+// contain (the kernel itself rejects one), so collision with any real
+// file is impossible by construction, not merely unlikely.
+const easterEggSentinelPath = "\x00easteregg-follow-the-white-rabbit"
+
+// easterEggSentinelLabel is this fake row's own display name in the
+// search results list.
+const easterEggSentinelLabel = "Follow the white rabbit"
+
+// easterEggDetailsText is what the Details sidebar shows for
+// easterEggSentinelPath — a fixed, decorative block rather than a
+// failed stat, per the user's own explicit request.
+const easterEggDetailsText = "🐇 " + easterEggSentinelLabel + "\n\nThere is no path here — only a choice.\n\nPress \"l\" to see how deep it goes."
+
 // easterEggFrameInterval is the animation's own target frame rate —
 // see feature_ideas.txt's "Easter Egg" section, "Laufzeit-
 // Eigenschaften" (~50-80ms).

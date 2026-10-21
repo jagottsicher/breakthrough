@@ -1351,6 +1351,18 @@ func (r *Root) runSearch() {
 
 	r.hideOverlay() // close the form, revealing the panel underneath
 	r.panel.showSearchResults()
+	// The hidden Easter egg's own Find trigger (see easteregg.go and
+	// feature_ideas.txt's "Easter Egg" section) — a Filename search for
+	// exactly "easteregg" (case-insensitive) always gets one extra,
+	// synthetic result appended on top of whatever the real search
+	// below finds, per the user's own explicit request: if a real file
+	// genuinely named "easteregg" exists, it still shows up too,
+	// completely unaffected. Filename only, not Content: the sentinel
+	// is about what you're looking *for*, not text appearing inside a
+	// file.
+	if strings.EqualFold(strings.TrimSpace(r.searchFilenameValue), "easteregg") {
+		r.panel.appendEasterEggSearchResult()
+	}
 	// scope is already validated at this point for every case that
 	// actually checks it (see the os.Stat above) — the "continue here"
 	// breadcrumb (see Panel.setSearchStatus) starts at the search's own

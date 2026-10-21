@@ -1776,6 +1776,21 @@ func (p *Panel) appendSearchResult(res search.Result) {
 	p.renderSearchEntries()
 }
 
+// appendEasterEggSearchResult adds the hidden Easter egg's own one
+// synthetic result — see easteregg.go's own doc comment on
+// easterEggSentinelPath and runSearch's own call site. Deliberately
+// bypasses fsops.DescribeEntry entirely (there's nothing on disk to
+// stat): a plain, non-directory TypeFile with everything else left at
+// its zero value, which every other reader of a row already treats as
+// "nothing further to show" (zero Size, zero ModTime, ...).
+func (p *Panel) appendEasterEggSearchResult() {
+	p.searchEntries = append(p.searchEntries, searchResultEntry{
+		Entry:   fsops.Entry{Name: easterEggSentinelPath, Type: fsops.TypeFile},
+		display: easterEggSentinelLabel,
+	})
+	p.renderSearchEntries()
+}
+
 // setSearchStatus paints the header's own two-part display while search
 // results are showing: text itself (the animated "still searching"
 // indicator, then a final "Done — N found") followed by a real,
@@ -2353,10 +2368,21 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	// to it already gets, rather than inventing a second color scheme.
 	var typeText string
 	typeColor := p.theme.Text
-	if p.fileIcons {
+	switch {
+	case ref.path == easterEggSentinelPath:
+		// The hidden Easter egg's own row — a rabbit with icons on,
+		// "π" (no icon font to assume one exists) otherwise, mirroring
+		// the same icon/plain-Unicode-fallback split every real file
+		// already gets just below, rather than inventing a second one.
+		if p.fileIcons {
+			typeText = "🐇"
+		} else {
+			typeText = "π"
+		}
+	case p.fileIcons:
 		typeText = string(fileicons.For(ref.entryType, ref.name, ref.mode))
 		typeColor = p.entryColor(ref)
-	} else {
+	default:
 		typeText = fallbackTypeText(ref)
 	}
 	typeCell := tview.NewTableCell(typeText).SetTextColor(typeColor)
@@ -3859,6 +3885,16 @@ func (p *Panel) handleNameClick(row int) bool {
 func (p *Panel) activateRow(row int) (handledSelection bool) {
 	ref, ok := p.rowRef(row)
 	if !ok {
+		return false
+	}
+	if ref.path == easterEggSentinelPath {
+		// The hidden Easter egg's own row (see easteregg.go) — Enter
+		// means the same thing "l" does for it (openLook's own sentinel
+		// check), not the real-path navigation attempt every other
+		// filename-match row below would otherwise fall through to.
+		if p.onOpenEasterEgg != nil {
+			p.onOpenEasterEgg()
+		}
 		return false
 	}
 	if p.searchMode {
