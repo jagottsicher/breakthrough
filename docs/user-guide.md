@@ -2290,7 +2290,7 @@ briefly cover this whole row for a few seconds — see
 | Mouse | "Mouse on"/"Mouse off" (see the `om` chord) | unchanged |
 | Disk space | `<TYPE> free <free>/<total> (<percent>%)` for the current directory's own filesystem — `<TYPE>` is the real filesystem type (`EXT4`, `CIFS`, `NFS4`, `ECRYPTFS`, ...), the same one the [Mounts](#mounts) screen shows, or a plain `Disk` if it can't be determined | Blue, percentage green/orange/red |
 | Inode usage | `Inodes used <used>/<total> (<percent>%)` for the same filesystem — omitted entirely on a filesystem that can't report a count at all (some CIFS/SMB mounts) rather than showing a misleading 0/0 | Violet, percentage green/orange/red |
-| Git status | `git:(branch) ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts` for the current directory, only while it's part of a git repository | Green (clean) / orange (dirty) / red (conflicts) |
+| Git status | `git:(branch) ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts` for the current directory, only while it's part of a git repository — clickable, opens Git Breach (`jg`) for the same repository | Green (clean) / orange (dirty) / red (conflicts) |
 | Kernel version | `uname -r`'s own output | Gold |
 | Uptime | `up <days> <HH:MM>` (Linux's own `/proc/uptime`) | Teal |
 | Load average | The 1/5/15-minute load average (Linux's own `/proc/loadavg`) | Slate blue label, each number green/orange/red |

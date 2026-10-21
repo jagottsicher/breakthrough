@@ -2077,6 +2077,7 @@ type Root struct {
 	rsyncCancelSpan     buttonBarSpan
 	compressCancelSpan  buttonBarSpan
 	labelScanCancelSpan buttonBarSpan
+	gitStatusSpan       buttonBarSpan
 
 	statusBar *tview.TextView
 
