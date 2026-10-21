@@ -42,9 +42,8 @@ const easterEggIntroRevealFrames = 42
 
 // easterEggView is breakthrough's hidden "follow the white rabbit"
 // overlay — Phase 1 of feature_ideas.txt's own phased plan: the
-// trigger (rabbit button, see panel.go, or the typed phrase, see
-// cmd/breakthrough's own SetInputCapture feeding easteregg.
-// PhraseDetector) and the intro glitch stage only. Later phases
+// trigger (a Find search for "easteregg" — see activateRow/openLook's
+// own sentinel checks) and the intro glitch stage only. Later phases
 // (Matrix rain, SYSTEM FAILURE → breakthrough morph, the breakthrough
 // reveal) extend this same type and its Draw rather than replacing
 // either.
@@ -100,11 +99,10 @@ func (v *easterEggView) Draw(screen tcell.Screen) {
 	}
 }
 
-// openEasterEgg is the one entry point both triggers call — see
-// panel.go's rabbitBtn click wiring and cmd/breakthrough's own
-// phrase-detector feed. A second trigger while the overlay is already
-// open (e.g. the phrase completing right as someone also clicks the
-// button) is a no-op rather than restarting the animation from
+// openEasterEgg is the one entry point the Find trigger calls — see
+// Panel.activateRow (Enter) and Root.openLook ("l"), both checking
+// against easterEggSentinelPath. A second trigger while the overlay is
+// already open is a no-op rather than restarting the animation from
 // scratch.
 func (r *Root) openEasterEgg() {
 	if r.activePage == easterEggPage {

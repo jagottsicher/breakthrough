@@ -160,8 +160,8 @@ func TestEasterEggSentinelIconFlipsWithFileIcons(t *testing.T) {
 	r.panel.fileIcons = false
 	r.panel.renderSearchEntries()
 	iconCell = r.panel.table.GetCell(0, colType)
-	if iconCell.Text != "π" {
-		t.Errorf("type cell with fileIcons off = %q, want the π fallback", iconCell.Text)
+	if iconCell.Text != "╨" {
+		t.Errorf("type cell with fileIcons off = %q, want the ╨ fallback", iconCell.Text)
 	}
 }
 

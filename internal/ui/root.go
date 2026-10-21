@@ -3306,9 +3306,10 @@ func (r *Root) wirePanel(panel *Panel) {
 	// onOpenFilterMenu just above.
 	panel.onOpenFind = func() { r.openSearch() }
 
-	// rabbitBtn's click opens the hidden Easter egg overlay (see
-	// easteregg.go) — same "closure captures r, not this specific
-	// panel" shape as onOpenFilterMenu above.
+	// Activating the hidden Easter egg's own synthetic search result
+	// (see easteregg.go, Panel.activateRow's own sentinel check) opens
+	// the overlay — same "closure captures r, not this specific panel"
+	// shape as onOpenFilterMenu above.
 	panel.onOpenEasterEgg = func() { r.openEasterEgg() }
 
 	// The header row's own "@" button opens the connection dropdown

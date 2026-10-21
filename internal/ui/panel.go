@@ -269,25 +269,12 @@ type Panel struct {
 	// reference to Root, the same reason onOpenFilterMenu exists.
 	onOpenFind func()
 
-	// rabbitBtn is the hidden "follow the white rabbit" Easter egg's
-	// own trigger button (see internal/ui/easteregg.go and
-	// feature_ideas.txt's "Easter Egg" section) — sits directly left of
-	// filterMenuBtn's own " f " in the same header row (see NewPanel),
-	// per the user's own explicit request. Always visible starting at
-	// app launch, hidden again after rabbitVisibleDuration — see
-	// startRabbitTimer/hideRabbitButton — and never re-shown later in
-	// the same session (no re-roll, per the user's own explicit
-	// decision in feature_ideas.txt).
-	rabbitBtn *tview.TextView
-	// onOpenEasterEgg is Root's own wiring for rabbitBtn's click — Panel
-	// has no direct reference to Root, the same reason onOpenFind
-	// exists.
+	// onOpenEasterEgg is Root's own wiring for activating the hidden
+	// "follow the white rabbit" Easter egg's own synthetic search
+	// result (see easteregg.go and activateRow/openLook's own sentinel
+	// checks) — Panel has no direct reference to Root, the same reason
+	// onOpenFind exists.
 	onOpenEasterEgg func()
-	// rabbitHideTimer is non-nil only between NewPanel and whichever of
-	// hideRabbitButton/the Panel's own teardown comes first — stopped
-	// explicitly on teardown so a leftover timer can never fire against
-	// an already-gone Panel (see Close).
-	rabbitHideTimer *time.Timer
 
 	// onOpenConnectionMenu is Root's own wiring for the header's
 	// connection button (see buildHeaderSpans/actionOpenConnectionMenu,
@@ -857,25 +844,6 @@ const (
 	// the user's own explicit request.
 	filterMenuGlyph = 'Ÿ'
 
-	// rabbitButtonGlyph/rabbitButtonWidth back the hidden Easter egg's
-	// own trigger button (see rabbitBtn's own doc comment on the
-	// struct) — sits directly left of filterMenuBtn in the header row,
-	// per the user's own explicit request. Width covers the glyph plus
-	// one column of padding on each side, verified live against a real
-	// terminal (tmux capture-pane) that the path bar and "f"/"Ÿ" still
-	// land exactly where they did before this button existed.
-	rabbitButtonGlyph = " 🐇 "
-	rabbitButtonWidth = 4
-
-	// rabbitVisibleDuration is how long the trigger button stays shown
-	// after the app starts, per the user's own explicit decision
-	// (feature_ideas.txt's "Easter Egg" section) — always at launch,
-	// never re-rolled or re-shown later in the same session. Shared app-
-	// wide via rabbitButtonDeadline, not restarted per tab: opening a
-	// new tab while the window is still open must not give that tab its
-	// own fresh five minutes.
-	rabbitVisibleDuration = 5 * time.Minute
-
 	// headerTabStripGap is one column of lead-in the tab strip draws for
 	// itself before its own first glyph ("+", or the first tab number) —
 	// without it that glyph sat flush against the filter box with no
@@ -891,14 +859,6 @@ const (
 	// fix for the first one.
 	headerTabStripGap = 1
 )
-
-// rabbitButtonDeadline is computed exactly once, at process start —
-// every Panel's own rabbitHideTimer (including ones created later for
-// a new tab) counts down to this same absolute point in time rather
-// than each starting its own fresh five-minute window, so "visible for
-// five minutes after the app starts" means exactly that, app-wide, not
-// per tab.
-var rabbitButtonDeadline = time.Now().Add(rabbitVisibleDuration)
 
 // Theme/App satisfy scrollbarHost (scrollbar.go) — Panel already has
 // both as plain fields; see p.scrollbar's own construction in NewPanel
@@ -1032,27 +992,6 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// pass's own keyboard focus-cycling order and close callback —
 	// something a fixed, one-time SetDoneFunc set here could never do.
 
-	// rabbitBtn is the hidden Easter egg's own trigger button — see its
-	// own doc comment on the struct. Always built (never nil), so
-	// headerRow's own item list/widths stay simple even once it's
-	// hidden again — hideRabbitButton collapses its column to zero
-	// width rather than this field ever becoming nil.
-	p.rabbitBtn = tview.NewTextView().SetDynamicColors(true)
-	p.rabbitBtn.SetText(rabbitButtonGlyph)
-	p.rabbitBtn.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-		if !p.rabbitBtn.InRect(event.Position()) {
-			return action, event
-		}
-		if action == tview.MouseLeftClick && p.onOpenEasterEgg != nil {
-			p.onOpenEasterEgg()
-		}
-		return tview.MouseConsumed, nil
-	})
-	// Deadline-checking itself (start the timer, or collapse outright if
-	// a tab opened after the five-minute window already closed) happens
-	// once headerRow exists below — hideRabbitButton touches
-	// p.headerRow, which isn't built yet at this point in NewPanel.
-
 	// filterMenuBtn is what actually sits in the header row now — see
 	// its own doc comment on the struct for the full reasoning.
 	// renderFilterMenuBtn (called from load(), and from Root's own
@@ -1151,9 +1090,6 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// entirely.
 	headerRow := tview.NewFlex().SetDirection(tview.FlexColumn)
 	headerRow.AddItem(p.headerPages, 0, 1, false)
-	// rabbitBtn sits directly left of filterMenuBtn, per the user's own
-	// explicit request — see its own doc comment on the struct.
-	headerRow.AddItem(p.rabbitBtn, rabbitButtonWidth, 0, false)
 	// filterMenuBtn replaces filterRegexBtn/filterField's own old,
 	// always-visible slot here — see its own doc comment on the struct.
 	headerRow.AddItem(p.filterMenuBtn, filterMenuBtnWidth, 0, false)
@@ -1164,17 +1100,6 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	headerRow.AddItem(p.tabStrip, 0, 0, false)
 	headerRow.AddItem(p.detailsExpandBtn, headerDetailsExpandWidth, 0, false)
 	p.headerRow = headerRow
-
-	// Now that headerRow exists, start rabbitBtn's own countdown to
-	// rabbitButtonDeadline — or collapse it immediately if a tab opened
-	// after that deadline already passed (see hideRabbitButton).
-	if remaining := time.Until(rabbitButtonDeadline); remaining > 0 {
-		p.rabbitHideTimer = time.AfterFunc(remaining, func() {
-			p.app.QueueUpdateDraw(p.hideRabbitButton)
-		})
-	} else {
-		p.hideRabbitButton()
-	}
 
 	// p itself, not a *Root: NewPanel runs before Root even exists (see
 	// its own call site in NewRoot — the very first panel has to be
@@ -1200,27 +1125,6 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	return p, nil
 }
 
-// hideRabbitButton collapses rabbitBtn's own header-row column to zero
-// width and clears its text — called once rabbitButtonDeadline passes
-// (via rabbitHideTimer, from NewPanel) or immediately at construction
-// for a tab opened after that deadline already passed. Never re-shown
-// afterward, per the user's own explicit decision (feature_ideas.txt's
-// "Easter Egg" section): no re-roll, no second window.
-//
-// Guarded on p.headerRow being non-nil: NewPanel's own deadline-already-
-// passed branch can reach this before headerRow exists yet (see its own
-// call site) — in that case the AddItem call right after construction
-// already places rabbitBtn at its real width, so this only needs to run
-// once more, right after headerRow is actually built, which NewPanel's
-// own code does (see its own comment there).
-func (p *Panel) hideRabbitButton() {
-	p.rabbitHideTimer = nil
-	p.rabbitBtn.SetText("")
-	if p.headerRow != nil {
-		p.headerRow.ResizeItem(p.rabbitBtn, 0, 0)
-	}
-}
-
 // paintStaticChrome applies p.theme's colors to every widget that exists
 // for the panel's whole lifetime — as opposed to per-row table cells
 // (see addRow/entryColor), which are baked in at construction and only
@@ -1233,13 +1137,6 @@ func (p *Panel) paintStaticChrome() {
 
 	p.header.SetTextColor(p.theme.TextColor)
 	p.header.SetBackgroundColor(p.theme.SurfaceBackground)
-
-	// rabbitBtn's own glyph carries no color tag of its own (unlike
-	// filterMenuBtn's own trailing " Ÿ " button below) — same reasoning,
-	// same fix: without an explicit background here it would fall back
-	// to tview's own uninitialized default (plain black) instead of
-	// matching the header row around it.
-	p.rabbitBtn.SetBackgroundColor(p.theme.SurfaceBackground)
 
 	// filterMenuBtn's own "Nx" prefix (and the padding filling out
 	// whatever's left of filterMenuBtnWidth — see renderFilterMenuBtn)
@@ -2371,13 +2268,14 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	switch {
 	case ref.path == easterEggSentinelPath:
 		// The hidden Easter egg's own row — a rabbit with icons on,
-		// "π" (no icon font to assume one exists) otherwise, mirroring
-		// the same icon/plain-Unicode-fallback split every real file
-		// already gets just below, rather than inventing a second one.
+		// "╨" (U+2568, no icon font to assume one exists) otherwise,
+		// mirroring the same icon/plain-Unicode-fallback split every
+		// real file already gets just below, rather than inventing a
+		// second one.
 		if p.fileIcons {
 			typeText = "🐇"
 		} else {
-			typeText = "π"
+			typeText = "╨"
 		}
 	case p.fileIcons:
 		typeText = string(fileicons.For(ref.entryType, ref.name, ref.mode))
