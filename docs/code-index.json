@@ -1472,6 +1472,16 @@
       "sha256": "9b8367facb2bf1c1890b1be929d0b7ac09b54b1daa5ba1b2a9e341b76a13943d"
     },
     {
+      "path": "internal/sshshell/sshshell.go",
+      "size": 4101,
+      "sha256": "df5e24ebdb2d9fce40f5a016014d93c8aeca1775476ef035283ad7c9f96b1a2d"
+    },
+    {
+      "path": "internal/sshshell/sshshell_test.go",
+      "size": 1794,
+      "sha256": "9677caae6d8c0dde533a046585d799869d9368f464aee7e694bb49009a0839b3"
+    },
+    {
       "path": "internal/ui/activitylog.go",
       "size": 11714,
       "sha256": "e61e556d4c83bdee6251d06e0b0d2df7ad8a73bca4349e247127047a98fe7b03"
@@ -2293,13 +2303,13 @@
     },
     {
       "path": "internal/ui/sshshell.go",
-      "size": 27584,
-      "sha256": "17b2f8d0dd37d606850530adebccc755fcd37c0ce3df218cdc3474158f26863f"
+      "size": 25675,
+      "sha256": "6d2018fd231cd1eed41ce8094d1631f92b2d415c487011aef264b40ead983bf0"
     },
     {
       "path": "internal/ui/sshshell_test.go",
-      "size": 17377,
-      "sha256": "e5c5ff586627b19bd2fc77c814f0e56c037f90faf5b39de81f751737618f2c64"
+      "size": 16111,
+      "sha256": "0c292c63a0f7da51c877ea9c1c228e17aa3a03ff1a553f6d28e7cc2e29ce783c"
     },
     {
       "path": "internal/ui/suspend.go",
@@ -3435,6 +3445,24 @@
       ]
     },
     {
+      "import_path": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "directory": "internal/sshshell",
+      "name": "sshshell",
+      "files": [
+        "internal/sshshell/sshshell.go",
+        "internal/sshshell/sshshell_test.go"
+      ],
+      "imports": [
+        "errors",
+        "github.com/jagottsicher/breakthrough/internal/remotefs",
+        "os",
+        "os/exec",
+        "os/user",
+        "strconv",
+        "testing"
+      ]
+    },
+    {
       "import_path": "github.com/jagottsicher/breakthrough/internal/ui",
       "directory": "internal/ui",
       "name": "ui",
@@ -3670,6 +3698,7 @@
         "github.com/jagottsicher/breakthrough/internal/search",
         "github.com/jagottsicher/breakthrough/internal/session",
         "github.com/jagottsicher/breakthrough/internal/sshkeys",
+        "github.com/jagottsicher/breakthrough/internal/sshshell",
         "github.com/jagottsicher/breakthrough/internal/viewer",
         "github.com/rivo/tview",
         "github.com/ulikunitz/xz",
@@ -19544,6 +19573,111 @@
       "name": "TestDefaultDir",
       "kind": "function",
       "line": 277
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell.go",
+      "name": "DefaultPort",
+      "kind": "const",
+      "line": 26
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell.go",
+      "name": "ConnectionFailedExitCode",
+      "kind": "const",
+      "line": 34
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell.go",
+      "name": "Argv",
+      "kind": "function",
+      "line": 39
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell.go",
+      "name": "currentUsername",
+      "kind": "function",
+      "line": 69
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell.go",
+      "name": "Outcome",
+      "kind": "type",
+      "line": 77
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell.go",
+      "name": "Succeeded",
+      "kind": "const",
+      "line": 83
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell.go",
+      "name": "ConnectionFailed",
+      "kind": "const",
+      "line": 86
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell.go",
+      "name": "LocalError",
+      "kind": "const",
+      "line": 89
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell.go",
+      "name": "Run",
+      "kind": "function",
+      "line": 99
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell_test.go",
+      "name": "equalStrings",
+      "kind": "function",
+      "line": 9
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell_test.go",
+      "name": "TestArgvOmitsPortWhenItIsTheDefault",
+      "kind": "function",
+      "line": 21
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell_test.go",
+      "name": "TestArgvIncludesANonDefaultPort",
+      "kind": "function",
+      "line": 29
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell_test.go",
+      "name": "TestArgvIncludesEveryCheckedFlag",
+      "kind": "function",
+      "line": 37
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell_test.go",
+      "name": "TestArgvFallsBackToTheCurrentUsernameWhenNoneIsSet",
+      "kind": "function",
+      "line": 49
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/sshshell",
+      "file": "internal/sshshell/sshshell_test.go",
+      "name": "TestRunReportsLocalErrorWhenSSHBinaryIsMissing",
+      "kind": "function",
+      "line": 57
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -46172,14 +46306,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 26
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 26
     },
@@ -48989,21 +49123,21 @@
       "file": "internal/ui/sshshell.go",
       "name": "sshShellMenuColLabel",
       "kind": "const",
-      "line": 25
+      "line": 23
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell.go",
       "name": "sshShellMenuColEdit",
       "kind": "const",
-      "line": 26
+      "line": 24
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell.go",
       "name": "sshShellMenuColRemove",
       "kind": "const",
-      "line": 27
+      "line": 25
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49011,7 +49145,7 @@
       "name": "openSSHShellMenu",
       "kind": "method",
       "receiver": "*Root",
-      "line": 36
+      "line": 34
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49019,7 +49153,7 @@
       "name": "renderSSHShellMenu",
       "kind": "method",
       "receiver": "*Root",
-      "line": 61
+      "line": 59
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49027,7 +49161,7 @@
       "name": "newSSHShellMenuTable",
       "kind": "method",
       "receiver": "*Root",
-      "line": 114
+      "line": 112
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49035,7 +49169,7 @@
       "name": "newSSHShellMenuLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 124
+      "line": 122
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49043,7 +49177,7 @@
       "name": "newSSHShellMenuTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 134
+      "line": 132
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49051,7 +49185,7 @@
       "name": "renderSSHShellMenuTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 152
+      "line": 150
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49059,7 +49193,7 @@
       "name": "captureSSHShellMenuTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 167
+      "line": 165
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49067,7 +49201,7 @@
       "name": "activateSSHShellMenuCell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 187
+      "line": 185
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49075,7 +49209,7 @@
       "name": "clickSSHShellMenuCell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 206
+      "line": 204
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49083,7 +49217,7 @@
       "name": "captureSSHShellMenuKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 218
+      "line": 216
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49091,7 +49225,7 @@
       "name": "removeSSHShellHistoryRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 250
+      "line": 248
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49099,28 +49233,28 @@
       "name": "sshShellMenuSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 270
+      "line": 268
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell.go",
       "name": "shellFlagsSuffix",
       "kind": "function",
-      "line": 303
+      "line": 301
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell.go",
       "name": "plainFormCheckbox",
       "kind": "type",
-      "line": 338
+      "line": 336
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell.go",
       "name": "newPlainFormCheckbox",
       "kind": "function",
-      "line": 346
+      "line": 344
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49128,7 +49262,7 @@
       "name": "paint",
       "kind": "method",
       "receiver": "*plainFormCheckbox",
-      "line": 361
+      "line": 359
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49136,7 +49270,7 @@
       "name": "SetFormAttributes",
       "kind": "method",
       "receiver": "*plainFormCheckbox",
-      "line": 383
+      "line": 381
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49144,7 +49278,7 @@
       "name": "openSSHShellDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 394
+      "line": 392
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49152,7 +49286,7 @@
       "name": "newSSHShellForm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 432
+      "line": 430
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49160,7 +49294,7 @@
       "name": "newSSHShellButtons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 485
+      "line": 483
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49168,7 +49302,7 @@
       "name": "newSSHShellLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 530
+      "line": 528
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49176,7 +49310,7 @@
       "name": "renderSSHShellTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 549
+      "line": 547
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49184,7 +49318,7 @@
       "name": "captureSSHShellTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 563
+      "line": 561
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49192,7 +49326,7 @@
       "name": "setSSHShellStatus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 576
+      "line": 574
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49200,7 +49334,7 @@
       "name": "cancelSSHShell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 581
+      "line": 579
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49208,14 +49342,7 @@
       "name": "runSSHShellFromDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 589
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/sshshell.go",
-      "name": "sshConnectionFailedExitCode",
-      "kind": "const",
-      "line": 630
+      "line": 587
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49223,21 +49350,7 @@
       "name": "launchSSHShell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 650
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/sshshell.go",
-      "name": "sshShellArgv",
-      "kind": "function",
-      "line": 684
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/sshshell.go",
-      "name": "defaultSSHPort",
-      "kind": "const",
-      "line": 715
+      "line": 638
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -49319,79 +49432,51 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell_test.go",
-      "name": "TestSSHShellArgvOmitsPortWhenItIsTheDefault",
+      "name": "TestShellFlagsSuffixIsEmptyWithNoFlagsSet",
       "kind": "function",
       "line": 288
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell_test.go",
-      "name": "TestSSHShellArgvIncludesANonDefaultPort",
-      "kind": "function",
-      "line": 296
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/sshshell_test.go",
-      "name": "TestSSHShellArgvIncludesEveryCheckedFlag",
-      "kind": "function",
-      "line": 304
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/sshshell_test.go",
-      "name": "TestSSHShellArgvFallsBackToTheCurrentUsernameWhenNoneIsSet",
-      "kind": "function",
-      "line": 316
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/sshshell_test.go",
-      "name": "TestShellFlagsSuffixIsEmptyWithNoFlagsSet",
-      "kind": "function",
-      "line": 324
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/sshshell_test.go",
       "name": "TestShellFlagsSuffixListsEveryFlagThatIsSet",
       "kind": "function",
-      "line": 330
+      "line": 294
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell_test.go",
       "name": "TestRenderSSHShellMenuDistinguishesFlagVariantsByLabelSuffix",
       "kind": "function",
-      "line": 344
+      "line": 308
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell_test.go",
       "name": "TestActivateSSHShellMenuCellOnNewConnectionRowOpensDialog",
       "kind": "function",
-      "line": 382
+      "line": 346
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell_test.go",
       "name": "TestRemoveSSHShellHistoryRowDropsEntry",
       "kind": "function",
-      "line": 402
+      "line": 366
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell_test.go",
       "name": "TestGSChordOpensSSHShellMenu",
       "kind": "function",
-      "line": 432
+      "line": 396
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell_test.go",
       "name": "TestBacktabFromHostAfterAFullTabRoundTripWrapsToX11",
       "kind": "function",
-      "line": 469
+      "line": 433
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54320,5 +54405,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "91a81be33d40b6851ba7315f06eb727ff823ac98ccb752c73c71026a218cd93b"
+  "merkle_root": "7e6e81aafba111bd705988a9ae05520077efbc78ef8bba35979b11724b5bb34c"
 }
