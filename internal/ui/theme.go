@@ -315,59 +315,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// The Options screen (see optionsscreen.go/applyOptionsTheme).
 	r.applyOptionsTheme(theme)
 
-	// The Batch Rename screen (see batchrename.go) — guarded the same
-	// way the Options block above is (applyTheme also runs from
-	// NewRoot, before newBatchRenameScreen has built any of these).
-	if r.batchRenameStepsList != nil {
-		styleList(r.batchRenameStepsList, theme)
-
-		r.batchRenameLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.batchRenameButtons.SetBackgroundColor(theme.SurfaceBackground)
-
-		r.batchRenameTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.batchRenameTitleBar.SetTextColor(theme.TextColor)
-		r.batchRenameHint.SetBackgroundColor(theme.InputBackground)
-		r.batchRenameHint.SetTextColor(theme.MutedTextColor)
-
-		r.batchRenameFieldsTable.SetBackgroundColor(theme.SurfaceBackground)
-		r.batchRenameFieldHelp.SetBackgroundColor(theme.SurfaceBackground)
-		r.batchRenameFieldHelp.SetTextColor(theme.MutedTextColor)
-		r.batchRenamePreviewTable.SetBackgroundColor(theme.SurfaceBackground)
-		// Without this, tview's own default selected-cell style just
-		// reverses each cell's own foreground into a background instead
-		// of using one consistent selection bar — the same fix already
-		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
-		// tabSwitcher/gitBreach's tables, for the identical reason.
-		// batchRenameFieldsTable doesn't need this: setOptionsPaneFocused
-		// already covers it, the same way it covers optionsTable.
-		r.batchRenamePreviewTable.SetSelectedStyle(tcell.StyleDefault.
-			Background(theme.SelectionBackground).
-			Foreground(theme.TextColor))
-		r.batchRenameStatus.SetBackgroundColor(theme.SurfaceBackground)
-		r.batchRenameStatus.SetTextColor(theme.TextColor)
-
-		styleInput(r.batchRenameInput, theme, true)
-		r.batchRenameInput.SetLabelColor(theme.TextColor)
-
-		styleList(r.batchRenamePresetList, theme)
-		r.batchRenamePresetTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.batchRenamePresetTitleBar.SetTextColor(theme.TextColor)
-
-		for _, b := range r.batchRenameButtonList() {
-			styleButton(b, theme)
-		}
-
-		// Last, and deliberately after styleList above — see
-		// applyTheme's own identical comment on the Options screen's
-		// two panes just above for why.
-		r.setOptionsPaneFocused(r.batchRenameStepsList, r.batchRenameStepsList.HasFocus())
-		r.setOptionsPaneFocused(r.batchRenameFieldsTable, r.batchRenameFieldsTable.HasFocus())
-
-		// Re-render: both tables' own cell colors are baked in per cell
-		// at render time, not looked up live at draw time.
-		r.renderBatchRenameFields()
-		r.renderBatchRenamePreview()
-	}
+	// The Batch Rename screen (see batchrename.go/applyBatchRenameTheme).
+	r.applyBatchRenameTheme(theme)
 
 	// The Toolbox screen (see toolbox.go/applyToolboxTheme).
 	r.applyToolboxTheme(theme)
@@ -446,21 +395,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.applyCompareFileTheme(theme)
 	r.applyCompareDiffTheme(theme)
 
-	if r.searchTop != nil {
-		r.searchTop.SetBackgroundColor(theme.SurfaceBackground)
-		r.searchLeft.SetBackgroundColor(theme.SurfaceBackground)
-		r.searchRight.SetBackgroundColor(theme.SurfaceBackground)
-		styleInput(r.searchEditField, theme, true)
-		r.searchButtons.SetBackgroundColor(theme.SurfaceBackground)
-		styleButton(r.searchCancelBtn, theme)
-		styleButton(r.searchSearchBtn, theme)
-		// FocusedBackground, fixed — Search is a single-layer, always-modal
-		// dialog nothing else ever stacks on top of, the same reasoning
-		// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
-		r.searchTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.searchTitleBar.SetTextColor(theme.TextColor)
-		r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme
-	}
+	// The Search/Find dialog (see search.go/applySearchTheme).
+	r.applySearchTheme(theme)
 
 	if r.chmodText != nil {
 		r.chmodText.SetBackgroundColor(theme.SurfaceBackground)
@@ -533,18 +469,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.detailsTitleBar.SetTextColor(theme.Text)
 	}
 
-	r.sedForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.sedForm.SetLabelColor(theme.TextColor)
-	r.sedForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.sedForm.SetFieldTextColor(theme.TextColor)
-	styleList(r.sedFlagsList, theme)
-	styleList(r.sedActions, theme)
-	// FocusedBackground, fixed — Sed Replace/Preview are single-layer,
-	// always-modal dialogs nothing else ever stacks on top of, the same
-	// reasoning confirmDialogTitleBar/quitConfirmTitleBar/chmodTitleBar
-	// already follow.
-	r.sedTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.sedTitleBar.SetTextColor(theme.TextColor)
+	// Sed Replace (see sedreplace.go/applySedTheme).
+	r.applySedTheme(theme)
 
 	r.connectForm.SetBackgroundColor(theme.SurfaceBackground)
 	r.connectForm.SetLabelColor(theme.TextColor)
@@ -685,47 +611,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// TitleBar's own Text.
 	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)
 
-	r.duplicateForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.duplicateForm.SetLabelColor(theme.TextColor)
-	r.duplicateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.duplicateForm.SetFieldTextColor(theme.TextColor)
-	// See themeDuplicateDropDown's own doc comment (duplicate.go) for why
-	// both dropdowns need this explicit call at all: SetFormAttributes
-	// (what the two lines above actually drive, applied fresh every
-	// Draw) only ever reaches DropDown's own fieldStyle, never its
-	// separate focusedStyle, and never its open popup list's own colors
-	// either — a color-scheme switch while Multiply happens to be open
-	// would otherwise leave either dropdown showing stale colors, or the
-	// popup showing tview's own stock palette, indefinitely.
-	// duplicateDateTimeTypeField only exists while the Date/time
-	// strategy is the one currently selected (see renderDuplicateForm).
-	if r.duplicateStrategyField != nil {
-		r.themeDuplicateDropDown(r.duplicateStrategyField)
-	}
-	if r.duplicateDateTimeTypeField != nil {
-		r.themeDuplicateDropDown(r.duplicateDateTimeTypeField)
-	}
-	// The Date/time format field's own disabled ("Unix timestamp") look
-	// is set directly in renderDuplicateDateTimeFields, not by Form's
-	// own generic pass above (which would otherwise fight it back to
-	// the ordinary editable field colors) — refreshed here too, for the
-	// same reason the other two dropdowns are: a color-scheme switch
-	// while it's showing must not leave it in the previous scheme's dim
-	// color indefinitely.
-	if r.duplicateDateTimeFormatField != nil && r.duplicateDateTimeFormatType == duplicateDateTimeTypeUnix {
-		styleDisabledInput(r.duplicateDateTimeFormatField, theme)
-	}
-	r.duplicatePreviewView.SetBackgroundColor(theme.SurfaceBackground)
-	r.duplicatePreviewView.SetTextColor(theme.TextColor)
-	r.duplicateSpacer.SetBackgroundColor(theme.SurfaceBackground)
-	r.duplicateButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.duplicateCancelBtn, theme)
-	styleButton(r.duplicateApplyBtn, theme)
-	// FocusedBackground, fixed — Multiply is a single-layer, always-modal
-	// dialog nothing else ever stacks on top of, the same reasoning
-	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
-	r.duplicateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.duplicateTitleBar.SetTextColor(theme.TextColor)
+	// Duplicate/Multiply (see duplicate.go/applyDuplicateTheme).
+	r.applyDuplicateTheme(theme)
 
 	if r.compressForm != nil {
 		r.compressForm.SetBackgroundColor(theme.SurfaceBackground)

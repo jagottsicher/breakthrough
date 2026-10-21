@@ -13,6 +13,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 )
 
@@ -694,4 +695,23 @@ func (r *Root) SedReplaceShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.openSedReplace()
 	}
+}
+
+// applySedTheme themes Sed Replace. sedForm and its siblings are built
+// unconditionally during NewRoot (unlike Batch Rename's/Search's own
+// lazily-built widgets), so no nil guard is needed — matches the
+// unconditional access applyTheme's own call site already had.
+func (r *Root) applySedTheme(theme config.ResolvedTheme) {
+	r.sedForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.sedForm.SetLabelColor(theme.TextColor)
+	r.sedForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.sedForm.SetFieldTextColor(theme.TextColor)
+	styleList(r.sedFlagsList, theme)
+	styleList(r.sedActions, theme)
+	// FocusedBackground, fixed — Sed Replace/Preview are single-layer,
+	// always-modal dialogs nothing else ever stacks on top of, the same
+	// reasoning confirmDialogTitleBar/quitConfirmTitleBar/chmodTitleBar
+	// already follow.
+	r.sedTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.sedTitleBar.SetTextColor(theme.TextColor)
 }
