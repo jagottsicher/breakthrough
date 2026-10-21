@@ -99,6 +99,16 @@ type searchSpan struct {
 	startCol, endCol int
 	activate         func()
 	tag              string
+	// isTextField marks a span built by textField (Filename/Content/
+	// Start-at), as opposed to one built by choice (every checkbox/
+	// radio option) — setSearchFocus reads this to decide whether
+	// landing focus on this span should also immediately open its own
+	// inline edit, per the user's own explicit request that Tab (not
+	// just the very first Filename focus on open) land ready to type,
+	// no Enter needed first. A choice span has nothing to "edit" —
+	// activating it on mere arrival would toggle it, a real behavior
+	// change nobody asked for — so this stays false there.
+	isTextField bool
 }
 
 // searchBuilder assembles one of the search dialog's three TextViews'
@@ -171,10 +181,10 @@ func (sb *searchBuilder) hintText(s string) {
 // span appends one clickable region for whatever was just written
 // between start and sb.col, under activate — the shared tail every
 // span-producing builder method below ends with.
-func (sb *searchBuilder) span(start int, activate func(), tagName string) {
+func (sb *searchBuilder) span(start int, activate func(), tagName string, isTextField bool) {
 	sb.root.searchSpans = append(sb.root.searchSpans, searchSpan{
 		widget: sb.widget, row: sb.row, startCol: start, endCol: sb.col,
-		activate: activate, tag: tagName,
+		activate: activate, tag: tagName, isTextField: isTextField,
 	})
 }
 
@@ -215,7 +225,7 @@ func (sb *searchBuilder) textField(value, placeholder string, dimmed bool, maxWi
 	sb.text(shown)
 	sb.tag("[-:-:-]")
 
-	sb.span(start, func() { sb.root.activateSearchTextField(idx, value, set) }, tagName)
+	sb.span(start, func() { sb.root.activateSearchTextField(idx, value, set) }, tagName, true)
 }
 
 // truncateForDisplay shortens s to at most maxWidth display columns by
@@ -244,7 +254,7 @@ func (sb *searchBuilder) choice(selected bool, label string, action func()) {
 	start := sb.col
 	sb.text(checkboxText(selected) + " " + label)
 	sb.tag("[-:-:-]")
-	sb.span(start, func() { action(); sb.root.rerenderSearchDialog() }, "")
+	sb.span(start, func() { action(); sb.root.rerenderSearchDialog() }, "", false)
 }
 
 // newSearchDialog builds the search overlay after MC's own Find File
@@ -663,7 +673,7 @@ func (sb *searchBuilder) button(label string, action func()) {
 	start := sb.col
 	sb.text(tview.Escape("[" + label + "]")) // unescaped, "[Tree]" parses as an (invalid, silently dropped) style tag instead of visible text — see tview's own doc.go on its color-tag syntax
 	sb.tag("[-:-:-]")
-	sb.span(start, action, "")
+	sb.span(start, action, "", false)
 }
 
 // searchSpanIndex returns the index of the one span tagged tagName
@@ -698,6 +708,20 @@ func (r *Root) setSearchFocus(idx int) {
 		r.app.SetFocus(r.searchSearchBtn)
 	case idx >= 0 && idx < n:
 		r.app.SetFocus(r.searchSpans[idx].widget)
+		// Per the user's own explicit request: Filename, Content, and
+		// Start-at (every searchSpan.isTextField span — see its own
+		// doc comment) should all be immediately typeable the moment
+		// focus lands on them, whether that's this dialog's own
+		// initial open (openSearch) or ordinary Tab/Backtab traversal
+		// (moveSearchFocus, both funneling through here) — not merely
+		// highlighted, still needing its own Enter/click first. A
+		// checkbox/choice span never reaches this branch (isTextField
+		// stays false there — see searchBuilder.choice), so arriving
+		// at one via Tab still just highlights it, never toggles it
+		// as a side effect of focus alone.
+		if r.searchSpans[idx].isTextField {
+			r.searchSpans[idx].activate()
+		}
 	}
 }
 
@@ -748,10 +772,10 @@ func (r *Root) activateSearchTextField(idx int, prefill string, commit func(stri
 }
 
 // finishSearchEdit handles Enter, Tab, and Backtab (commit) and Escape
-// (discard) in the shared inline edit field — the same shape
-// finishPropertyEdit already has, including Tab/Backtab committing
-// (not discarding) before continuing the outer navigation they were
-// already asking for.
+// (discard, then close) in the shared inline edit field — the same
+// shape finishPropertyEdit already has, including Tab/Backtab
+// committing (not discarding) before continuing the outer navigation
+// they were already asking for.
 //
 // Enter specifically in Filename also runs the search immediately,
 // per the user's own request — scoped to that one field alone (not
@@ -760,6 +784,15 @@ func (r *Root) activateSearchTextField(idx int, prefill string, commit func(stri
 // the "type it and go" field, so Enter there matching Search's own
 // button is the one place it reads as obviously intended rather than
 // surprising.
+//
+// Escape closes the whole dialog rather than merely leaving edit mode
+// — per the user's own explicit "Escape always means Cancel in this
+// dialog" request (see TestEscapeClosesSearchRegardlessOfFocus), which
+// now also covers Filename's own field: openSearch activates it for
+// editing immediately on open (per the user's own later request to
+// start typing right away, no Enter needed first), so Escape right
+// after opening Find would otherwise do nothing visible at all instead
+// of closing it.
 func (r *Root) finishSearchEdit(key tcell.Key) {
 	text := r.searchEditField.GetText()
 	commit := r.searchEditCommit
@@ -769,6 +802,11 @@ func (r *Root) finishSearchEdit(key tcell.Key) {
 	}
 	r.searchEditCommit = nil // see commitPendingSearchEdit's own doc comment on why this must go back to nil, not just get overwritten on the next activate
 	r.searchFieldsPages.HidePage("editfield")
+
+	if key == tcell.KeyEscape {
+		r.closeSearch()
+		return
+	}
 
 	if key == tcell.KeyEnter || key == tcell.KeyTab || key == tcell.KeyBacktab {
 		if commit != nil {
@@ -786,7 +824,7 @@ func (r *Root) finishSearchEdit(key tcell.Key) {
 		r.moveSearchFocus(1)
 	case tcell.KeyBacktab:
 		r.moveSearchFocus(-1)
-	default: // Enter or Escape: conclude editing, stay on the same field
+	default: // Enter: conclude editing, stay on the same field
 		r.setSearchFocus(r.searchFocusedIdx)
 	}
 }
@@ -970,12 +1008,34 @@ func (r *Root) openSearch() {
 	r.searchFieldsPages.SwitchToPage("fields")
 
 	r.rerenderSearchDialog()
-	if idx, ok := r.searchSpanIndex("filename"); ok {
-		r.setSearchFocus(idx)
-	}
-
 	r.resizeSearchPages()
 	r.showOverlay(searchPage, r.searchPages)
+
+	if idx, ok := r.searchSpanIndex("filename"); ok {
+		// setSearchFocus itself opens the filename span's own inline
+		// edit immediately (its isTextField is true — see searchSpan's
+		// own doc comment), per the user's own explicit request that
+		// landing focus on Filename, Content, or Start-at — on open
+		// here, or via ordinary Tab/Backtab (moveSearchFocus) — always
+		// means "ready to type", never "still needs Enter first".
+		//
+		// That activation positions the inline edit field from
+		// searchLeft's own GetInnerRect() — but searchLeft is nested
+		// inside Flex layouts whose children only get a real rect once
+		// something actually calls their Draw(screen), which only
+		// ever happens as a side effect of a real draw pass, not of
+		// SetRect alone (see tview's own Flex.Draw). showOverlay just
+		// above switches the dialog's page in; nothing has drawn it
+		// yet. ForceDraw runs that one draw pass synchronously right
+		// now (safe here — this runs on the main/event-handling
+		// goroutine, the one case its own doc comment sanctions, and
+		// it's a no-op with no screen attached, e.g. under test) so
+		// setSearchFocus reads a real rect instead of the zero one
+		// that otherwise lands the edit field at the screen's own
+		// top-left corner, outside the dialog entirely.
+		r.app.ForceDraw()
+		r.setSearchFocus(idx)
+	}
 }
 
 // resizeSearchPages centers the dialog's own fixed searchFormWidth/
@@ -994,17 +1054,18 @@ func (r *Root) resizeSearchPages() {
 	r.renderSearchTitleBar(w)
 }
 
-// renderSearchTitleBar sets searchTitleBar's own text to " Find ",
-// padded out to width columns, with a close glyph
-// (toolWindowCloseGlyph, the same one toolWindow's/Properties' own
-// title bars already use — see their own doc comments) in its own
-// top-right corner — per the user's own explicit request for a
-// mouse-clickable close button that behaves exactly like Cancel (see
-// dragSearchMouseCapture's own close-glyph check), the same request
-// already granted to Properties (see renderPropertiesTitleBar, this
-// function's own direct template).
+// renderSearchTitleBar sets searchTitleBar's own text to
+// " Find Needle (in haystack) " — per the user's own explicit request
+// for a punchier title than a plain " Find " — padded out to width
+// columns, with a close glyph (toolWindowCloseGlyph, the same one
+// toolWindow's/Properties' own title bars already use — see their own
+// doc comments) in its own top-right corner — per the user's own
+// explicit request for a mouse-clickable close button that behaves
+// exactly like Cancel (see dragSearchMouseCapture's own close-glyph
+// check), the same request already granted to Properties (see
+// renderPropertiesTitleBar, this function's own direct template).
 func (r *Root) renderSearchTitleBar(width int) {
-	const label = " Find "
+	const label = " Find Needle (in haystack) "
 	closeCol := toolWindowCloseButtonCol(0, width)
 	padding := closeCol - tview.TaggedStringWidth(label)
 	if padding < 0 {
