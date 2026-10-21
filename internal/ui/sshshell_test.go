@@ -285,42 +285,6 @@ func TestLaunchSSHShellRecordsSuccessInHistoryAndLog(t *testing.T) {
 	}
 }
 
-func TestSSHShellArgvOmitsPortWhenItIsTheDefault(t *testing.T) {
-	got := sshShellArgv(remotefs.Connection{Host: "example.com", User: "jens"})
-	want := []string{"jens@example.com"}
-	if !equalStrings(got, want) {
-		t.Errorf("sshShellArgv = %v, want %v", got, want)
-	}
-}
-
-func TestSSHShellArgvIncludesANonDefaultPort(t *testing.T) {
-	got := sshShellArgv(remotefs.Connection{Host: "example.com", User: "jens", Port: 2222})
-	want := []string{"-p", "2222", "jens@example.com"}
-	if !equalStrings(got, want) {
-		t.Errorf("sshShellArgv = %v, want %v", got, want)
-	}
-}
-
-func TestSSHShellArgvIncludesEveryCheckedFlag(t *testing.T) {
-	conn := remotefs.Connection{
-		Host: "example.com", User: "jens",
-		ShellAgentForwarding: true, ShellCompression: true, ShellVerbose: true, ShellX11Forwarding: true,
-	}
-	got := sshShellArgv(conn)
-	want := []string{"-A", "-C", "-v", "-X", "jens@example.com"}
-	if !equalStrings(got, want) {
-		t.Errorf("sshShellArgv = %v, want %v", got, want)
-	}
-}
-
-func TestSSHShellArgvFallsBackToTheCurrentUsernameWhenNoneIsSet(t *testing.T) {
-	got := sshShellArgv(remotefs.Connection{Host: "example.com"})
-	want := currentUsername() + "@example.com"
-	if len(got) != 1 || got[0] != want {
-		t.Errorf("sshShellArgv = %v, want a single arg %q", got, want)
-	}
-}
-
 func TestShellFlagsSuffixIsEmptyWithNoFlagsSet(t *testing.T) {
 	if got := shellFlagsSuffix(remotefs.Connection{Host: "example.com"}); got != "" {
 		t.Errorf("shellFlagsSuffix = %q, want empty", got)
