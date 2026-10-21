@@ -748,10 +748,10 @@ func (r *Root) activateSearchTextField(idx int, prefill string, commit func(stri
 }
 
 // finishSearchEdit handles Enter, Tab, and Backtab (commit) and Escape
-// (discard) in the shared inline edit field — the same shape
-// finishPropertyEdit already has, including Tab/Backtab committing
-// (not discarding) before continuing the outer navigation they were
-// already asking for.
+// (discard, then close) in the shared inline edit field — the same
+// shape finishPropertyEdit already has, including Tab/Backtab
+// committing (not discarding) before continuing the outer navigation
+// they were already asking for.
 //
 // Enter specifically in Filename also runs the search immediately,
 // per the user's own request — scoped to that one field alone (not
@@ -760,6 +760,15 @@ func (r *Root) activateSearchTextField(idx int, prefill string, commit func(stri
 // the "type it and go" field, so Enter there matching Search's own
 // button is the one place it reads as obviously intended rather than
 // surprising.
+//
+// Escape closes the whole dialog rather than merely leaving edit mode
+// — per the user's own explicit "Escape always means Cancel in this
+// dialog" request (see TestEscapeClosesSearchRegardlessOfFocus), which
+// now also covers Filename's own field: openSearch activates it for
+// editing immediately on open (per the user's own later request to
+// start typing right away, no Enter needed first), so Escape right
+// after opening Find would otherwise do nothing visible at all instead
+// of closing it.
 func (r *Root) finishSearchEdit(key tcell.Key) {
 	text := r.searchEditField.GetText()
 	commit := r.searchEditCommit
@@ -769,6 +778,11 @@ func (r *Root) finishSearchEdit(key tcell.Key) {
 	}
 	r.searchEditCommit = nil // see commitPendingSearchEdit's own doc comment on why this must go back to nil, not just get overwritten on the next activate
 	r.searchFieldsPages.HidePage("editfield")
+
+	if key == tcell.KeyEscape {
+		r.closeSearch()
+		return
+	}
 
 	if key == tcell.KeyEnter || key == tcell.KeyTab || key == tcell.KeyBacktab {
 		if commit != nil {
@@ -786,7 +800,7 @@ func (r *Root) finishSearchEdit(key tcell.Key) {
 		r.moveSearchFocus(1)
 	case tcell.KeyBacktab:
 		r.moveSearchFocus(-1)
-	default: // Enter or Escape: conclude editing, stay on the same field
+	default: // Enter: conclude editing, stay on the same field
 		r.setSearchFocus(r.searchFocusedIdx)
 	}
 }
@@ -972,6 +986,12 @@ func (r *Root) openSearch() {
 	r.rerenderSearchDialog()
 	if idx, ok := r.searchSpanIndex("filename"); ok {
 		r.setSearchFocus(idx)
+		// Per the user's own explicit request: typing should start
+		// immediately on open, not land on a merely-highlighted span
+		// that still needs its own Enter/click first to become
+		// editable (see activateSearchTextField) before a single
+		// character can be typed into it.
+		r.activateFocusedSearchSpan()
 	}
 
 	r.resizeSearchPages()
@@ -994,17 +1014,18 @@ func (r *Root) resizeSearchPages() {
 	r.renderSearchTitleBar(w)
 }
 
-// renderSearchTitleBar sets searchTitleBar's own text to " Find ",
-// padded out to width columns, with a close glyph
-// (toolWindowCloseGlyph, the same one toolWindow's/Properties' own
-// title bars already use — see their own doc comments) in its own
-// top-right corner — per the user's own explicit request for a
-// mouse-clickable close button that behaves exactly like Cancel (see
-// dragSearchMouseCapture's own close-glyph check), the same request
-// already granted to Properties (see renderPropertiesTitleBar, this
-// function's own direct template).
+// renderSearchTitleBar sets searchTitleBar's own text to
+// " Find Needle (in haystack) " — per the user's own explicit request
+// for a punchier title than a plain " Find " — padded out to width
+// columns, with a close glyph (toolWindowCloseGlyph, the same one
+// toolWindow's/Properties' own title bars already use — see their own
+// doc comments) in its own top-right corner — per the user's own
+// explicit request for a mouse-clickable close button that behaves
+// exactly like Cancel (see dragSearchMouseCapture's own close-glyph
+// check), the same request already granted to Properties (see
+// renderPropertiesTitleBar, this function's own direct template).
 func (r *Root) renderSearchTitleBar(width int) {
-	const label = " Find "
+	const label = " Find Needle (in haystack) "
 	closeCol := toolWindowCloseButtonCol(0, width)
 	padding := closeCol - tview.TaggedStringWidth(label)
 	if padding < 0 {
