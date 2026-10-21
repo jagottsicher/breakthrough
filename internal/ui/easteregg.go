@@ -56,11 +56,11 @@ const easterEggRainFrames = 70
 
 // easterEggFailureHoldFrames is how long "SYSTEM FAILURE" sits on
 // screen, static, before it starts morphing into "breakthrough" —
-// about 2.1 seconds. Originally 25 frames (~1.5s); lengthened after
-// the user's own explicit report ("SYSTEM FAILURE habe ich gar nicht
-// gesehen") that it read as too brief a beat to register at all,
-// alongside the rain duration cut just above.
-const easterEggFailureHoldFrames = 35
+// exactly 3 seconds, per the user's own explicit request (after an
+// earlier, shorter hold already got lengthened once from 1.5s to
+// 2.1s, following a report that it read as too brief a beat to
+// register at all).
+const easterEggFailureHoldFrames = 50
 
 // easterEggMorphFrames is how many frames the "SYSTEM FAILURE" →
 // "breakthrough" character morph itself takes — about 2.4 seconds,
@@ -96,9 +96,12 @@ const easterEggRevealFrames = 32
 const easterEggCaptionDelayFrames = 50
 
 // easterEggCaptionHoldFrames is how long the signature line stays up
-// once it appears before the whole overlay closes — about 1.5 seconds,
-// long enough to actually read it rather than catching only a flash.
-const easterEggCaptionHoldFrames = 25
+// once it appears before the whole overlay closes — exactly 3 seconds,
+// per the user's own explicit request, the same duration as
+// "breakthrough" itself gets (easterEggCaptionDelayFrames) and
+// "SYSTEM FAILURE" gets (easterEggFailureHoldFrames): every beat in
+// the closing sequence reads for the same length now.
+const easterEggCaptionHoldFrames = 50
 
 // easterEggRevealHoldFrames is how long the fully-revealed, bright
 // field holds — "breakthrough", then the signature line two rows below
