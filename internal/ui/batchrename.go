@@ -961,3 +961,61 @@ func (r *Root) undoLastBatchRename() {
 	}
 	r.reloadPanel(err)
 }
+
+// applyBatchRenameTheme themes the Batch Rename screen — guarded the
+// same way the Options screen's own applyOptionsTheme is (applyTheme
+// also runs from NewRoot, before newBatchRenameScreen has built any of
+// these).
+func (r *Root) applyBatchRenameTheme(theme config.ResolvedTheme) {
+	if r.batchRenameStepsList == nil {
+		return
+	}
+	styleList(r.batchRenameStepsList, theme)
+
+	r.batchRenameLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.batchRenameButtons.SetBackgroundColor(theme.SurfaceBackground)
+
+	r.batchRenameTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.batchRenameTitleBar.SetTextColor(theme.TextColor)
+	r.batchRenameHint.SetBackgroundColor(theme.InputBackground)
+	r.batchRenameHint.SetTextColor(theme.MutedTextColor)
+
+	r.batchRenameFieldsTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.batchRenameFieldHelp.SetBackgroundColor(theme.SurfaceBackground)
+	r.batchRenameFieldHelp.SetTextColor(theme.MutedTextColor)
+	r.batchRenamePreviewTable.SetBackgroundColor(theme.SurfaceBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead
+	// of using one consistent selection bar — the same fix already
+	// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
+	// tabSwitcher/gitBreach's tables, for the identical reason.
+	// batchRenameFieldsTable doesn't need this: setOptionsPaneFocused
+	// already covers it, the same way it covers optionsTable.
+	r.batchRenamePreviewTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
+	r.batchRenameStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.batchRenameStatus.SetTextColor(theme.TextColor)
+
+	styleInput(r.batchRenameInput, theme, true)
+	r.batchRenameInput.SetLabelColor(theme.TextColor)
+
+	styleList(r.batchRenamePresetList, theme)
+	r.batchRenamePresetTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.batchRenamePresetTitleBar.SetTextColor(theme.TextColor)
+
+	for _, b := range r.batchRenameButtonList() {
+		styleButton(b, theme)
+	}
+
+	// Last, and deliberately after styleList above — see
+	// applyTheme's own identical comment on the Options screen's
+	// two panes just above for why.
+	r.setOptionsPaneFocused(r.batchRenameStepsList, r.batchRenameStepsList.HasFocus())
+	r.setOptionsPaneFocused(r.batchRenameFieldsTable, r.batchRenameFieldsTable.HasFocus())
+
+	// Re-render: both tables' own cell colors are baked in per cell
+	// at render time, not looked up live at draw time.
+	r.renderBatchRenameFields()
+	r.renderBatchRenamePreview()
+}
