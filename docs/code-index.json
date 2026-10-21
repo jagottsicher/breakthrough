@@ -503,8 +503,8 @@
     },
     {
       "path": "internal/easteregg/reveal.go",
-      "size": 4595,
-      "sha256": "dbc5ab4239e17e737a48093eaff3acb2a2b9264823dfb5d35fc9aca033261bcc"
+      "size": 5473,
+      "sha256": "c31ee45ac80c25cbff4d90e47e97420b4a18a0cdad1a07df1f80e22a7700064f"
     },
     {
       "path": "internal/easteregg/reveal_test.go",
@@ -1828,8 +1828,8 @@
     },
     {
       "path": "internal/ui/easteregg.go",
-      "size": 20995,
-      "sha256": "e422edc15cfc884ea1dea88c5108916980cba0d0fae8416635c9308fb3c77510"
+      "size": 23128,
+      "sha256": "c2b2e0b731a3fbbbffb8ea13793b7f0b9c8e64db4d769dfbab8792254c6894b5"
     },
     {
       "path": "internal/ui/easteregg_find_test.go",
@@ -1838,8 +1838,8 @@
     },
     {
       "path": "internal/ui/easteregg_test.go",
-      "size": 14149,
-      "sha256": "8e14f562f85f28ee4ac7edd6aa12ecf30935be4fba54563c6d2dbf26ff206023"
+      "size": 16004,
+      "sha256": "d7bbff57aca9f0fc63002716a31a31332bd48a85feb763297cc00189e53af0ef"
     },
     {
       "path": "internal/ui/errors.go",
@@ -8129,63 +8129,70 @@
       "file": "internal/easteregg/reveal.go",
       "name": "revealAspectCorrection",
       "kind": "const",
-      "line": 12
+      "line": 11
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealHarmonics",
       "kind": "const",
-      "line": 21
+      "line": 20
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealHarmonicBaseWeight",
       "kind": "const",
-      "line": 22
+      "line": 21
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealPhaseSpread",
       "kind": "const",
-      "line": 30
+      "line": 29
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealJagSpread",
       "kind": "var",
-      "line": 39
+      "line": 38
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
+      "file": "internal/easteregg/reveal.go",
+      "name": "revealPhaseHash",
+      "kind": "function",
+      "line": 56
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealHarmonicPhase",
       "kind": "function",
-      "line": 51
+      "line": 67
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "revealJag",
       "kind": "function",
-      "line": 60
+      "line": 76
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "RevealEdgeBand",
       "kind": "const",
-      "line": 72
+      "line": 88
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
       "file": "internal/easteregg/reveal.go",
       "name": "RevealMask",
       "kind": "function",
-      "line": 88
+      "line": 104
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/easteregg",
@@ -30443,91 +30450,112 @@
       "file": "internal/ui/easteregg.go",
       "name": "easterEggRainFrames",
       "kind": "const",
-      "line": 53
+      "line": 55
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggFailureHoldFrames",
       "kind": "const",
-      "line": 59
+      "line": 63
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggMorphFrames",
       "kind": "const",
-      "line": 65
+      "line": 69
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggFailurePostMorphHoldFrames",
       "kind": "const",
-      "line": 71
+      "line": 75
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggFailureText",
       "kind": "const",
-      "line": 76
+      "line": 80
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggBreakthroughText",
       "kind": "const",
-      "line": 77
+      "line": 81
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggRevealFrames",
       "kind": "const",
-      "line": 85
+      "line": 90
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
-      "name": "easterEggRevealHoldFrames",
+      "name": "easterEggCaptionDelayFrames",
       "kind": "const",
-      "line": 93
+      "line": 96
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
-      "name": "easterEggStageIntro",
-      "kind": "const",
-      "line": 102
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/easteregg.go",
-      "name": "easterEggStageRain",
-      "kind": "const",
-      "line": 103
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/easteregg.go",
-      "name": "easterEggStageFailure",
+      "name": "easterEggCaptionHoldFrames",
       "kind": "const",
       "line": 104
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
+      "name": "easterEggRevealHoldFrames",
+      "kind": "const",
+      "line": 113
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/easteregg.go",
+      "name": "easterEggCaptionText",
+      "kind": "const",
+      "line": 118
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/easteregg.go",
+      "name": "easterEggStageIntro",
+      "kind": "const",
+      "line": 127
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/easteregg.go",
+      "name": "easterEggStageRain",
+      "kind": "const",
+      "line": 128
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/easteregg.go",
+      "name": "easterEggStageFailure",
+      "kind": "const",
+      "line": 129
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/easteregg.go",
       "name": "easterEggStageReveal",
       "kind": "const",
-      "line": 105
+      "line": 130
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggView",
       "kind": "type",
-      "line": 118
+      "line": 143
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30535,56 +30563,56 @@
       "name": "newEasterEggView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 139
+      "line": 164
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggRainPalette",
       "kind": "var",
-      "line": 153
+      "line": 178
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggFailureColor",
       "kind": "var",
-      "line": 169
+      "line": 194
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggBreakthroughColor",
       "kind": "var",
-      "line": 170
+      "line": 195
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggRockColor",
       "kind": "var",
-      "line": 180
+      "line": 205
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggAmberColor",
       "kind": "var",
-      "line": 181
+      "line": 206
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggWhiteColor",
       "kind": "var",
-      "line": 182
+      "line": 207
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "easterEggEdgeGlyphs",
       "kind": "var",
-      "line": 193
+      "line": 218
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30592,7 +30620,7 @@
       "name": "Draw",
       "kind": "method",
       "receiver": "*easterEggView",
-      "line": 202
+      "line": 227
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30600,7 +30628,7 @@
       "name": "drawIntro",
       "kind": "method",
       "receiver": "*easterEggView",
-      "line": 233
+      "line": 258
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30608,7 +30636,7 @@
       "name": "drawRain",
       "kind": "method",
       "receiver": "*easterEggView",
-      "line": 255
+      "line": 280
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30616,7 +30644,7 @@
       "name": "drawFailure",
       "kind": "method",
       "receiver": "*easterEggView",
-      "line": 282
+      "line": 307
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30624,14 +30652,21 @@
       "name": "drawReveal",
       "kind": "method",
       "receiver": "*easterEggView",
-      "line": 321
+      "line": 347
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/easteregg.go",
+      "name": "drawStencilLine",
+      "kind": "function",
+      "line": 395
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg.go",
       "name": "newRainColumns",
       "kind": "function",
-      "line": 368
+      "line": 407
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30639,7 +30674,7 @@
       "name": "openEasterEgg",
       "kind": "method",
       "receiver": "*Root",
-      "line": 381
+      "line": 420
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30647,7 +30682,7 @@
       "name": "animateEasterEgg",
       "kind": "method",
       "receiver": "*Root",
-      "line": 408
+      "line": 447
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30655,7 +30690,7 @@
       "name": "tickEasterEggFrame",
       "kind": "method",
       "receiver": "*Root",
-      "line": 435
+      "line": 474
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30663,7 +30698,7 @@
       "name": "closeEasterEgg",
       "kind": "method",
       "receiver": "*Root",
-      "line": 463
+      "line": 502
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30671,7 +30706,7 @@
       "name": "FeedEasterEggPhrase",
       "kind": "method",
       "receiver": "*Root",
-      "line": 489
+      "line": 528
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30679,7 +30714,7 @@
       "name": "captureEasterEggKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 505
+      "line": 544
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30852,30 +30887,44 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg_test.go",
-      "name": "TestDrawRevealDoesNotPanicPartwayThroughGrowth",
+      "name": "TestDrawRevealOmitsTheCaptionBeforeItsOwnDelayElapses",
       "kind": "function",
       "line": 363
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg_test.go",
+      "name": "TestDrawRevealShowsTheCaptionTwoRowsBelowBreakthroughAfterItsDelay",
+      "kind": "function",
+      "line": 392
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/easteregg_test.go",
+      "name": "TestDrawRevealDoesNotPanicPartwayThroughGrowth",
+      "kind": "function",
+      "line": 424
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/easteregg_test.go",
       "name": "TestDrawRainRebuildsColumnsOnWidthMismatch",
       "kind": "function",
-      "line": 384
+      "line": 445
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg_test.go",
       "name": "TestEasterEggRainPaletteCoversEveryIntensityLevel",
       "kind": "function",
-      "line": 407
+      "line": 468
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/easteregg_test.go",
       "name": "TestFeedEasterEggPhraseIgnoresNonRuneAndModifiedKeys",
       "kind": "function",
-      "line": 415
+      "line": 476
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -55563,5 +55612,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "ebd1ce365c5b013396fa7499afe1b8080efa1bf0dc2f5a511da31e60b85e855c"
+  "merkle_root": "d5ffc2333352459683e37312227d1eea9852e382382790f492c7a3f80382be3e"
 }
