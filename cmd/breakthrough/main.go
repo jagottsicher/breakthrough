@@ -199,6 +199,15 @@ func run() error {
 	// has focus: none of them installs a SetDoneFunc, so it was already
 	// a pure no-op in every state this repurposes it for.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// The hidden "follow the white rabbit" Easter egg's own typed
+		// trigger (see internal/ui/easteregg.go and feature_ideas.txt's
+		// "Easter Egg" section) — fed every plain rune first, ahead of
+		// everything below, and deliberately never consumes or returns
+		// early: every one of these runes must still reach its own
+		// normal handler afterward (HandlePlainKey included), exactly
+		// as if this watcher weren't here at all.
+		root.FeedEasterEggPhrase(event)
+
 		// The primary keyboard layer (see internal/ui/keymap.go): plain
 		// letters, and the g/p/z chords built on top of them. Checked
 		// next, ahead of every Ctrl-letter/F-key case below, so a chord

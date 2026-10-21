@@ -17,6 +17,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/easteregg"
 	"github.com/jagottsicher/breakthrough/internal/filelabels"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
@@ -2461,6 +2462,23 @@ type Root struct {
 	transferCenterTable     *tview.Table
 	transferCenterScrollbar *verticalScrollbar
 	transferCenterOps       []operations.Operation
+
+	// easterEggView/easterEggCancel back the hidden "follow the white
+	// rabbit" overlay (see easteregg.go) — built once like every other
+	// full-screen catalog screen, state reset on each openEasterEgg
+	// rather than rebuilt. easterEggCancel is nil whenever the overlay
+	// isn't animating (closeEasterEgg always nils it back out after
+	// calling it), the same "nil means not running" contract
+	// searchCancel already establishes.
+	easterEggView   *easterEggView
+	easterEggCancel context.CancelFunc
+
+	// easterEggPhrase is the global typed-trigger's own rolling match
+	// state (see easteregg.PhraseDetector's own doc comment) — fed one
+	// rune at a time from cmd/breakthrough's own SetInputCapture,
+	// gated there on acceptsGlobalShortcut() so it stays inert whenever
+	// any text field has focus.
+	easterEggPhrase easteregg.PhraseDetector
 }
 
 // NewRoot creates the top-level UI rooted at path. app is passed down to
@@ -3109,6 +3127,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
 	r.AddPage(sshShellDialogPage, r.sshShellLayout, false, false)
 	r.AddPage(sshShellMenuPage, r.sshShellMenuLayout, false, false)
+	// resize=true: the hidden Easter egg overlay fills the whole
+	// terminal too, the same reasoning every other full-screen catalog's
+	// own comment above gives.
+	r.easterEggView = r.newEasterEggView()
+	r.AddPage(easterEggPage, r.easterEggView, true, false)
 	r.newNotifyBar()
 
 	r.SetMouseCapture(r.captureOutsideClick)
@@ -3282,6 +3305,11 @@ func (r *Root) wirePanel(panel *Panel) {
 	// same "closure captures r, not this specific panel" shape as
 	// onOpenFilterMenu just above.
 	panel.onOpenFind = func() { r.openSearch() }
+
+	// rabbitBtn's click opens the hidden Easter egg overlay (see
+	// easteregg.go) — same "closure captures r, not this specific
+	// panel" shape as onOpenFilterMenu above.
+	panel.onOpenEasterEgg = func() { r.openEasterEgg() }
 
 	// The header row's own "@" button opens the connection dropdown
 	// (see Panel.onOpenConnectionMenu/buildHeaderSpans' own doc
