@@ -566,6 +566,16 @@ func (r *Root) loadDetailsTarget(path string) {
 		return
 	}
 
+	if path == easterEggSentinelPath {
+		// The hidden Easter egg's own row (see easteregg.go) — a fixed,
+		// decorative block (see renderDetailsSidebar's own sentinel
+		// check), not a failed stat against a path that was never real
+		// to begin with, per the user's own explicit request.
+		r.renderDetailsSidebar()
+		r.detailsSidebar.ScrollToBeginning()
+		return
+	}
+
 	if path != "" {
 		// Only the stat block synchronously: one syscall (or one round
 		// trip, remotely), and it is what the sidebar shows first
@@ -926,6 +936,10 @@ func (r *Root) renderDetailsSidebar() {
 
 	if r.detailsTarget == "" {
 		r.detailsSidebar.SetText("(nothing selected)")
+		return
+	}
+	if r.detailsTarget == easterEggSentinelPath {
+		r.detailsSidebar.SetText(easterEggDetailsText)
 		return
 	}
 	if r.detailsStatErr != nil {

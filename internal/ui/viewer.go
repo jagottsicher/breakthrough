@@ -127,6 +127,11 @@ func (r *Root) openLook() {
 		return
 	}
 
+	if path == easterEggSentinelPath {
+		r.openEasterEgg()
+		return
+	}
+
 	if remote := r.panel.remote; remote != nil {
 		r.openRemoteLook(remote, path)
 		return
