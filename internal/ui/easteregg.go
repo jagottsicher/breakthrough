@@ -64,6 +64,12 @@ const easterEggFailureHoldFrames = 25
 // so the two read as the same kind of event.
 const easterEggMorphFrames = 40
 
+// easterEggFailurePostMorphHoldFrames is how long the completed,
+// fully-green "breakthrough" text sits still after the morph finishes
+// — about 1.2 seconds, long enough to actually land as "it worked"
+// before the wall itself tears open.
+const easterEggFailurePostMorphHoldFrames = 20
+
 // easterEggFailureText/easterEggBreakthroughText are the two anchor
 // strings easteregg.MorphLine transitions between.
 const (
@@ -71,12 +77,27 @@ const (
 	easterEggBreakthroughText = "breakthrough"
 )
 
+// easterEggRevealFrames is how long the torn-wall opening takes to
+// grow from nothing to covering the entire screen — about 3 seconds,
+// deliberately quicker than the slow-burn Intro/Rain/Failure stages
+// before it: a "breakthrough" should feel like it arrives suddenly
+// once it starts, not creep in.
+const easterEggRevealFrames = 50
+
+// easterEggRevealHoldFrames is how long the fully-revealed, bright
+// field holds with "breakthrough" stenciled across it before the
+// whole overlay closes on its own — the only stage with a real ending
+// (see easterEggStageReveal's own doc comment): Escape still skips out
+// at any point, same as every other stage, but this one doesn't need
+// it to finish.
+const easterEggRevealHoldFrames = 35
+
 // Stages of the Easter egg's own animation, in order — see
 // easterEggView.Draw's own per-stage branch and Root.animateEasterEgg's
 // own stage-transition logic. All four are defined now, even though
-// this phase only implements Intro, Rain, and Failure: Reveal adds a
-// Draw case and a transition out of Failure, never restructures this
-// list.
+// this phase implements all four — Reveal, the last of them, ends by
+// closing the overlay on its own (see easterEggRevealHoldFrames)
+// rather than transitioning onward.
 const (
 	easterEggStageIntro = iota
 	easterEggStageRain
@@ -85,11 +106,10 @@ const (
 )
 
 // easterEggView is breakthrough's hidden "follow the white rabbit"
-// overlay — Phase 1+2+3 of feature_ideas.txt's own phased plan:
-// trigger, intro glitch stage, Matrix rain, and the SYSTEM FAILURE →
-// breakthrough morph. The breakthrough reveal (Phase 4) is the last
-// phase, extending this same type and its Draw rather than replacing
-// either.
+// overlay — the complete, four-phase animation from feature_ideas.txt's
+// own "Easter Egg" section: trigger, intro glitch stage, Matrix rain,
+// the SYSTEM FAILURE → breakthrough morph, and finally the torn-wall
+// breakthrough reveal.
 //
 // *tview.Box embedded purely for Draw's own per-cell control —
 // nothing here tview itself can draw for us, the same reasoning
@@ -150,12 +170,35 @@ var (
 	easterEggBreakthroughColor = easterEggRainPalette[easteregg.RainIntensityLevels]
 )
 
-// Draw paints the current stage only — a full black field first
-// (every stage sits on the same black background), then whichever
-// stage-specific content stageFrame/frame select. Reads state only,
-// never advances it (see Root.animateEasterEgg's own doc comment on
-// why): a live terminal resize mid-animation must repaint the current
-// frame at the new size, not accidentally skip frames.
+// easterEggRockColor/easterEggAmberColor/easterEggWhiteColor are
+// drawReveal's own palette — dark, unlit rock outside the growing
+// opening, warming from amber to near-white moving in from its own
+// jagged edge, the same "torn wall, sunlit landscape beyond it" image
+// the README's own hero picture (docs/images/) shows, reduced to what
+// a character grid can actually render.
+var (
+	easterEggRockColor  = tcell.NewRGBColor(32, 28, 26)
+	easterEggAmberColor = tcell.NewRGBColor(214, 140, 40)
+	easterEggWhiteColor = tcell.NewRGBColor(255, 248, 230)
+)
+
+// easterEggEdgeGlyphs are drawReveal's own half-block shading
+// characters for the mask's own jagged boundary band — from mostly
+// rock (sparse shading, still reads as the dark field behind it)
+// closest to the edge, to mostly light (dense shading) just inside it,
+// a torn rather than a smooth, anti-aliased-looking edge. The same
+// kind of half-block technique detailsiconbox.go's own diagonal fold
+// already establishes for this project, applied to an irregular
+// boundary instead of a straight diagonal one.
+var easterEggEdgeGlyphs = []rune{'░', '▒', '▓'}
+
+// Draw paints the current stage only — a full base field first (black
+// for Intro/Rain/Failure; drawReveal paints its own dark-rock base
+// instead, see its own doc comment), then whichever stage-specific
+// content stageFrame/frame select. Reads state only, never advances
+// it (see Root.animateEasterEgg's own doc comment on why): a live
+// terminal resize mid-animation must repaint the current frame at the
+// new size, not accidentally skip frames.
 func (v *easterEggView) Draw(screen tcell.Screen) {
 	v.DrawForSubclass(screen, v)
 	x, y, width, height := v.GetInnerRect()
@@ -164,9 +207,11 @@ func (v *easterEggView) Draw(screen tcell.Screen) {
 	}
 
 	blank := tcell.StyleDefault.Background(tcell.ColorBlack)
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, blank)
+	if v.stage != easterEggStageReveal {
+		for row := y; row < y+height; row++ {
+			for col := x; col < x+width; col++ {
+				screen.SetContent(col, row, ' ', nil, blank)
+			}
 		}
 	}
 
@@ -177,6 +222,8 @@ func (v *easterEggView) Draw(screen tcell.Screen) {
 		v.drawRain(screen, x, y, width, height, blank)
 	case easterEggStageFailure:
 		v.drawFailure(screen, x, y, width, height, blank)
+	case easterEggStageReveal:
+		v.drawReveal(screen, x, y, width, height)
 	}
 }
 
@@ -256,6 +303,62 @@ func (v *easterEggView) drawFailure(screen tcell.Screen, x, y, width, height int
 	for i, ch := range runes {
 		col := textX + i
 		if col < x || col >= x+width || ch == ' ' {
+			continue
+		}
+		screen.SetContent(col, textY, ch, nil, style)
+	}
+}
+
+// drawReveal paints the growing, jagged "torn wall" opening
+// (easteregg.RevealMask) — dark rock everywhere outside it, warming
+// from amber (right at the ragged edge, rendered with a half-block
+// shading glyph — easterEggEdgeGlyphs) to near-white (deep inside,
+// a solid colored cell, nothing left to shade) the further a cell
+// sits from the boundary. Once the mask has grown to cover the whole
+// field (stageFrame >= easterEggRevealFrames), "breakthrough" is
+// stenciled across the middle in the same dark rock color, the one
+// dark shape left against all that light.
+func (v *easterEggView) drawReveal(screen tcell.Screen, x, y, width, height int) {
+	rock := tcell.StyleDefault.Background(easterEggRockColor)
+	for row := 0; row < height; row++ {
+		for col := 0; col < width; col++ {
+			inside, edge := easteregg.RevealMask(col, row, v.stageFrame, easterEggRevealFrames, width, height, v.seed)
+			if !inside {
+				screen.SetContent(x+col, y+row, ' ', nil, rock)
+				continue
+			}
+			switch {
+			case edge >= 0.3:
+				// Near the boundary: a half-block shading glyph in the
+				// warmed foreground color, on the dark rock background
+				// still showing through it — bucketed into
+				// easterEggEdgeGlyphs' own three steps across the
+				// remaining [0.3, 1.0] edge range.
+				bucket := int((edge - 0.3) / 0.7 * float64(len(easterEggEdgeGlyphs)))
+				if bucket >= len(easterEggEdgeGlyphs) {
+					bucket = len(easterEggEdgeGlyphs) - 1
+				}
+				glyph := easterEggEdgeGlyphs[len(easterEggEdgeGlyphs)-1-bucket]
+				color := blendToward(easterEggAmberColor, easterEggWhiteColor, 1-edge/0.3)
+				screen.SetContent(x+col, y+row, glyph, nil, rock.Foreground(color))
+			default:
+				depth := 1 - edge/0.3
+				color := blendToward(easterEggAmberColor, easterEggWhiteColor, depth)
+				screen.SetContent(x+col, y+row, ' ', nil, tcell.StyleDefault.Background(color))
+			}
+		}
+	}
+
+	if v.stageFrame < easterEggRevealFrames {
+		return
+	}
+	runes := []rune(easterEggBreakthroughText)
+	textX := x + (width-len(runes))/2
+	textY := y + height/2
+	style := tcell.StyleDefault.Background(easterEggWhiteColor).Foreground(easterEggRockColor)
+	for i, ch := range runes {
+		col := textX + i
+		if col < x || col >= x+width {
 			continue
 		}
 		screen.SetContent(col, textY, ch, nil, style)
@@ -342,6 +445,14 @@ func (r *Root) tickEasterEggFrame() {
 	case v.stage == easterEggStageRain && v.stageFrame >= easterEggRainFrames:
 		v.stage = easterEggStageFailure
 		v.stageFrame = 0
+	case v.stage == easterEggStageFailure && v.stageFrame >= easterEggFailureHoldFrames+easterEggMorphFrames+easterEggFailurePostMorphHoldFrames:
+		v.stage = easterEggStageReveal
+		v.stageFrame = 0
+	case v.stage == easterEggStageReveal && v.stageFrame >= easterEggRevealFrames+easterEggRevealHoldFrames:
+		// The only stage with a real ending (see easterEggStageReveal's
+		// own doc comment) — closes itself rather than holding
+		// indefinitely like every stage before it.
+		r.closeEasterEgg()
 	}
 }
 
