@@ -726,6 +726,51 @@ func TestFilterMenuSlashAdvancesThroughFieldsAndWraps(t *testing.T) {
 	}
 }
 
+// TestFilterMenuEnterAdvancesThroughFieldsInsteadOfClosing pins the bug
+// fix: Enter in one of the three expression fields used to close the
+// whole dropdown immediately, losing whatever the other rows (size,
+// modified time, labels, exclude dirs) still had open. It now behaves
+// like "/" — advance to the next real field — leaving Escape as the
+// only way to close from inside a field.
+func TestFilterMenuEnterAdvancesThroughFieldsInsteadOfClosing(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+
+	sizeField := filterMenuFieldRowField(t, r, 2)
+	mtimeField := filterMenuFieldRowField(t, r, 3)
+
+	enter := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
+	noop := func(tview.Primitive) {}
+
+	r.panel.filterField.InputHandler()(enter, noop)
+	if !sizeField.HasFocus() {
+		t.Error("Enter from filterField should advance to the size field, not close the dropdown")
+	}
+	if r.activePage != filterMenuPage {
+		t.Fatal("Enter from filterField should never close the dropdown")
+	}
+
+	sizeField.InputHandler()(enter, noop)
+	if !mtimeField.HasFocus() {
+		t.Error("Enter from the size field should advance to the modified-time field")
+	}
+	if r.activePage != filterMenuPage {
+		t.Fatal("Enter from the size field should never close the dropdown")
+	}
+
+	mtimeField.InputHandler()(enter, noop)
+	if !r.panel.filterField.HasFocus() {
+		t.Error("Enter from the modified-time field should wrap back to filterField")
+	}
+	if r.activePage != filterMenuPage {
+		t.Fatal("Enter from the modified-time field should never close the dropdown")
+	}
+}
+
 // TestFilterMenuSlashFromCheckboxJumpsToItsOwnField pins the other
 // starting point: "/" pressed while a checkbox (not yet a field) has
 // focus jumps to that same row's own field — the field immediately
