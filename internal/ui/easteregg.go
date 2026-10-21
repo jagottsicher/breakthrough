@@ -40,13 +40,29 @@ const easterEggFrameInterval = 60 * time.Millisecond
 // at easterEggFrameInterval this is roughly 2.5 seconds.
 const easterEggIntroRevealFrames = 42
 
+// easterEggIntroHoldFrames is how much longer the intro stays on
+// screen, fully resolved, before the Matrix rain stage begins — about
+// 1.2 more seconds at easterEggFrameInterval, long enough to actually
+// read "Wake up, <username>…" before it's gone.
+const easterEggIntroHoldFrames = 20
+
+// Stages of the Easter egg's own animation, in order — see
+// easterEggView.Draw's own per-stage branch and Root.animateEasterEgg's
+// own stage-transition logic. All four are defined now, even though
+// this phase only implements Intro and Rain: later phases add Draw
+// cases and a transition out of Rain, never restructure this list.
+const (
+	easterEggStageIntro = iota
+	easterEggStageRain
+	easterEggStageFailure
+	easterEggStageReveal
+)
+
 // easterEggView is breakthrough's hidden "follow the white rabbit"
-// overlay — Phase 1 of feature_ideas.txt's own phased plan: the
-// trigger (a Find search for "easteregg" — see activateRow/openLook's
-// own sentinel checks) and the intro glitch stage only. Later phases
-// (Matrix rain, SYSTEM FAILURE → breakthrough morph, the breakthrough
-// reveal) extend this same type and its Draw rather than replacing
-// either.
+// overlay — Phase 1+2 of feature_ideas.txt's own phased plan: trigger,
+// intro glitch stage, and Matrix rain. SYSTEM FAILURE → breakthrough
+// morph and the breakthrough reveal are later phases, extending this
+// same type and its Draw rather than replacing either.
 //
 // *tview.Box embedded purely for Draw's own per-cell control —
 // nothing here tview itself can draw for us, the same reasoning
@@ -55,9 +71,22 @@ const easterEggIntroRevealFrames = 42
 type easterEggView struct {
 	*tview.Box
 
-	frame int
-	seed  int64
-	line  string // the fully-resolved target text, e.g. "Wake up, jens…"
+	seed int64
+	line string // the intro's fully-resolved target text, e.g. "Wake up, jens…"
+
+	stage      int
+	frame      int // advances every tick for as long as the overlay is open, never reset between stages — rainColumns' own HeadRow needs a continuously advancing frame, not one that jumps back to 0 at every stage change
+	stageFrame int // frames spent in the current stage alone — what Draw's own per-stage branch actually reads
+
+	// rainColumns is built once, the moment the Rain stage begins (see
+	// Root.animateEasterEgg), and reused every frame after that —
+	// NewRainColumn is pure and independent of frame, so there's
+	// nothing to gain from recomputing it per Draw call, only CPU to
+	// waste. Rebuilt on the fly by Draw itself if the screen's own
+	// width no longer matches (a live terminal resize mid-animation),
+	// which keeps Draw a pure function of current state rather than
+	// needing a resize to also route through the ticker.
+	rainColumns []easteregg.RainColumn
 }
 
 func (r *Root) newEasterEggView() *easterEggView {
@@ -66,9 +95,29 @@ func (r *Root) newEasterEggView() *easterEggView {
 	return v
 }
 
-// Draw paints a full black field, then the intro line mid-screen,
-// resolving out of noise via easteregg.GlitchLine as frame advances
-// (see Root.animateEasterEgg).
+// easterEggRainPalette maps a RainColumn.CellAt level (1..RainIntensityLevels)
+// to the color it renders in — index 0 is unused (CellAt never returns
+// level 0; see its own doc comment), brightest near-white-green at the
+// head down to a dim, near-background green at the trail's faintest
+// end. Plain tcell.Color constants, not config.ResolvedTheme fields:
+// this overlay is deliberately its own fixed black-and-green world,
+// the same way the Matrix's own visual language always is, independent
+// of whichever color scheme the rest of the app is currently using.
+var easterEggRainPalette = [easteregg.RainIntensityLevels + 1]tcell.Color{
+	1: tcell.NewRGBColor(0, 40, 0),
+	2: tcell.NewRGBColor(0, 70, 0),
+	3: tcell.NewRGBColor(0, 110, 0),
+	4: tcell.NewRGBColor(20, 160, 20),
+	5: tcell.NewRGBColor(120, 220, 120),
+	6: tcell.NewRGBColor(220, 255, 220),
+}
+
+// Draw paints the current stage only — a full black field first
+// (every stage sits on the same black background), then whichever
+// stage-specific content stageFrame/frame select. Reads state only,
+// never advances it (see Root.animateEasterEgg's own doc comment on
+// why): a live terminal resize mid-animation must repaint the current
+// frame at the new size, not accidentally skip frames.
 func (v *easterEggView) Draw(screen tcell.Screen) {
 	v.DrawForSubclass(screen, v)
 	x, y, width, height := v.GetInnerRect()
@@ -83,7 +132,19 @@ func (v *easterEggView) Draw(screen tcell.Screen) {
 		}
 	}
 
-	text := []rune(easteregg.GlitchLine(v.line, v.frame, easterEggIntroRevealFrames, v.seed))
+	switch v.stage {
+	case easterEggStageIntro:
+		v.drawIntro(screen, x, y, width, height, blank)
+	case easterEggStageRain:
+		v.drawRain(screen, x, y, width, height, blank)
+	}
+}
+
+// drawIntro paints the glitching, then fully-resolved, "Wake up,
+// <username>…" line — stageFrame-driven (not frame), so the reveal
+// timing is always relative to when the Intro stage itself began.
+func (v *easterEggView) drawIntro(screen tcell.Screen, x, y, width, height int, blank tcell.Style) {
+	text := []rune(easteregg.GlitchLine(v.line, v.stageFrame, easterEggIntroRevealFrames, v.seed))
 	if len(text) == 0 {
 		return
 	}
@@ -99,6 +160,35 @@ func (v *easterEggView) Draw(screen tcell.Screen) {
 	}
 }
 
+// drawRain paints the falling-stream field — rainColumns is rebuilt
+// here (not just in animateEasterEgg) whenever its own length no
+// longer matches width, so a live terminal resize mid-rain is
+// reflected immediately rather than drawing against a stale column
+// count or leaving newly-exposed columns blank.
+func (v *easterEggView) drawRain(screen tcell.Screen, x, y, width, height int, blank tcell.Style) {
+	if len(v.rainColumns) != width {
+		v.rainColumns = newRainColumns(width, height, v.seed)
+	}
+	for col := 0; col < width; col++ {
+		for row := 0; row < height; row++ {
+			ch, level, ok := v.rainColumns[col].CellAt(col, row, v.frame, v.seed)
+			if !ok {
+				continue
+			}
+			style := blank.Foreground(easterEggRainPalette[level])
+			screen.SetContent(x+col, y+row, ch, nil, style)
+		}
+	}
+}
+
+func newRainColumns(width, height int, seed int64) []easteregg.RainColumn {
+	cols := make([]easteregg.RainColumn, width)
+	for i := range cols {
+		cols[i] = easteregg.NewRainColumn(i, height, seed)
+	}
+	return cols
+}
+
 // openEasterEgg is the one entry point the Find trigger calls — see
 // Panel.activateRow (Enter) and Root.openLook ("l"), both checking
 // against easterEggSentinelPath. A second trigger while the overlay is
@@ -108,9 +198,12 @@ func (r *Root) openEasterEgg() {
 	if r.activePage == easterEggPage {
 		return
 	}
+	r.easterEggView.stage = easterEggStageIntro
 	r.easterEggView.frame = 0
+	r.easterEggView.stageFrame = 0
 	r.easterEggView.seed = time.Now().UnixNano()
 	r.easterEggView.line = "Wake up, " + currentUsername() + "…"
+	r.easterEggView.rainColumns = nil
 	r.showOverlay(easterEggPage, r.easterEggView)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -118,13 +211,16 @@ func (r *Root) openEasterEgg() {
 	r.safeGo("easter egg animation", r.closeEasterEgg, func() { r.animateEasterEgg(ctx) })
 }
 
-// animateEasterEgg advances easterEggView.frame every
-// easterEggFrameInterval until ctx is cancelled — the same ticker-
-// driven, context-cancelled shape animateSearchProgress (search.go)
-// already establishes for exactly the same reason: nothing else would
-// ever stop this ticker on its own, and search.go's own doc comment
-// there documents the real bug that shape avoids (a ticker outliving
-// the state it updates, silently overwriting what came after it).
+// animateEasterEgg advances easterEggView.frame/stageFrame every
+// easterEggFrameInterval until ctx is cancelled, and owns every stage
+// transition (never Draw — see its own doc comment on why): a resize
+// forces a redraw at any time, but must never itself advance the
+// animation or skip a stage. The same ticker-driven, context-cancelled
+// shape animateSearchProgress (search.go) already establishes, for
+// exactly the same reason: nothing else would ever stop this ticker on
+// its own, and search.go's own doc comment there documents the real
+// bug that shape avoids (a ticker outliving the state it updates,
+// silently overwriting what came after it).
 func (r *Root) animateEasterEgg(ctx context.Context) {
 	ticker := time.NewTicker(easterEggFrameInterval)
 	defer ticker.Stop()
@@ -138,11 +234,29 @@ func (r *Root) animateEasterEgg(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				r.easterEggView.frame++
+				r.tickEasterEggFrame()
 			})
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+// tickEasterEggFrame advances easterEggView by exactly one frame and
+// runs any stage transition that frame triggers — split out from
+// animateEasterEgg's own ticker loop so a test can call it directly,
+// instantly simulating N frames, instead of waiting on
+// easterEggFrameInterval N times for real (see this file's own test
+// for exactly that).
+func (r *Root) tickEasterEggFrame() {
+	v := r.easterEggView
+	v.frame++
+	v.stageFrame++
+	if v.stage == easterEggStageIntro && v.stageFrame >= easterEggIntroRevealFrames+easterEggIntroHoldFrames {
+		v.stage = easterEggStageRain
+		v.stageFrame = 0
+		_, _, width, height := v.GetInnerRect()
+		v.rainColumns = newRainColumns(width, height, v.seed)
 	}
 }
 
@@ -159,10 +273,12 @@ func (r *Root) closeEasterEgg() {
 }
 
 // FeedEasterEggPhrase feeds one candidate rune to the global typed-
-// trigger's own rolling match (easteregg.PhraseDetector) — exported
-// for cmd/breakthrough, the same reason AcceptsGlobalShortcut is (see
-// its own doc comment in bottombar.go): main.go's SetInputCapture is
-// outside this package.
+// trigger's own rolling match (easteregg.PhraseDetector) — not wired
+// into cmd/breakthrough's own input capture (see feature_ideas.txt's
+// "Easter Egg" section: the typed phrase turned out to collide with
+// "f" opening Find and was replaced by the Find-based trigger), kept
+// here because it's pure, tested, and cheap, in case a non-colliding
+// phrase is chosen later.
 //
 // Inert whenever AcceptsGlobalShortcut itself would refuse (any
 // overlay open, or the bash line focused) — not just as a courtesy:
