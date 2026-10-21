@@ -2111,3 +2111,87 @@ func TestOpenSearchFirstTimeActivatesFilenameEditInsideTheDialog(t *testing.T) {
 		t.Errorf("searchEditField rect = (%d,%d), want inside the dialog's own rect (%d,%d,%d,%d)", fieldX, fieldY, dialogX, dialogY, dialogW, dialogH)
 	}
 }
+
+// searchTextFieldSpanOn returns the index of the one isTextField span
+// drawn in widget — Content and Start-at don't get their own stable
+// tag the way Filename does (see searchSpanIndex's own doc comment),
+// so tests that need to reach them by identity rather than by exact
+// Tab-count go by which column/row TextView they're drawn in instead.
+func searchTextFieldSpanOn(t *testing.T, r *Root, widget *tview.TextView) int {
+	t.Helper()
+	for i, s := range r.searchSpans {
+		if s.widget == widget && s.isTextField {
+			return i
+		}
+	}
+	t.Fatalf("setup: no isTextField span found on the given widget")
+	return -1
+}
+
+// TestSetSearchFocusActivatesContentAndStartAtImmediately pins the
+// user's own explicit follow-up request: landing focus on Content or
+// Start-at — the same way Tab/Backtab (moveSearchFocus) always lands
+// focus, by calling setSearchFocus — must immediately open that
+// field's own inline edit too, exactly like Filename's first focus on
+// open already does (see openSearch/setSearchFocus's own isTextField
+// branch), not merely highlight the span and wait for a separate
+// Enter. Whatever value was already there (set before this focus
+// change, as if the user had typed it on an earlier visit to this
+// dialog) must still be exactly what the inline editor shows.
+func TestSetSearchFocusActivatesContentAndStartAtImmediately(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	r.searchContentValue = "needle"
+	r.searchScopeValue = "/some/preexisting/path"
+	r.rerenderSearchDialog()
+
+	contentIdx := searchTextFieldSpanOn(t, r, r.searchRight)
+	r.setSearchFocus(contentIdx)
+	if !r.searchEditField.HasFocus() {
+		t.Error("focusing Content should have immediately opened its own inline edit, not merely highlighted the span")
+	}
+	if got := r.searchEditField.GetText(); got != "needle" {
+		t.Errorf("Content's inline edit text = %q, want the existing value %q preserved", got, "needle")
+	}
+
+	startAtIdx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.setSearchFocus(startAtIdx)
+	if !r.searchEditField.HasFocus() {
+		t.Error("focusing Start-at should have immediately opened its own inline edit too")
+	}
+	if got := r.searchEditField.GetText(); got != "/some/preexisting/path" {
+		t.Errorf("Start-at's inline edit text = %q, want the existing value %q preserved", got, "/some/preexisting/path")
+	}
+}
+
+// TestFinishSearchEditTabCommitsContentBeforeLeavingIt pins the other
+// half of the same request: tabbing out of a field must keep whatever
+// was typed, the same contract finishSearchEdit's own doc comment
+// already states for Tab/Backtab in general — this pins it concretely
+// for Content now that arriving there (via Tab) also means arriving in
+// edit mode already, not just arriving highlighted.
+func TestFinishSearchEditTabCommitsContentBeforeLeavingIt(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	contentIdx := searchTextFieldSpanOn(t, r, r.searchRight)
+	r.setSearchFocus(contentIdx)
+	r.searchEditField.SetText("needle")
+	r.finishSearchEdit(tcell.KeyTab)
+
+	if r.searchContentValue != "needle" {
+		t.Errorf("searchContentValue = %q, want %q committed before Tab moved focus on", r.searchContentValue, "needle")
+	}
+}

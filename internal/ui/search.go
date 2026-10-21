@@ -99,6 +99,16 @@ type searchSpan struct {
 	startCol, endCol int
 	activate         func()
 	tag              string
+	// isTextField marks a span built by textField (Filename/Content/
+	// Start-at), as opposed to one built by choice (every checkbox/
+	// radio option) — setSearchFocus reads this to decide whether
+	// landing focus on this span should also immediately open its own
+	// inline edit, per the user's own explicit request that Tab (not
+	// just the very first Filename focus on open) land ready to type,
+	// no Enter needed first. A choice span has nothing to "edit" —
+	// activating it on mere arrival would toggle it, a real behavior
+	// change nobody asked for — so this stays false there.
+	isTextField bool
 }
 
 // searchBuilder assembles one of the search dialog's three TextViews'
@@ -171,10 +181,10 @@ func (sb *searchBuilder) hintText(s string) {
 // span appends one clickable region for whatever was just written
 // between start and sb.col, under activate — the shared tail every
 // span-producing builder method below ends with.
-func (sb *searchBuilder) span(start int, activate func(), tagName string) {
+func (sb *searchBuilder) span(start int, activate func(), tagName string, isTextField bool) {
 	sb.root.searchSpans = append(sb.root.searchSpans, searchSpan{
 		widget: sb.widget, row: sb.row, startCol: start, endCol: sb.col,
-		activate: activate, tag: tagName,
+		activate: activate, tag: tagName, isTextField: isTextField,
 	})
 }
 
@@ -215,7 +225,7 @@ func (sb *searchBuilder) textField(value, placeholder string, dimmed bool, maxWi
 	sb.text(shown)
 	sb.tag("[-:-:-]")
 
-	sb.span(start, func() { sb.root.activateSearchTextField(idx, value, set) }, tagName)
+	sb.span(start, func() { sb.root.activateSearchTextField(idx, value, set) }, tagName, true)
 }
 
 // truncateForDisplay shortens s to at most maxWidth display columns by
@@ -244,7 +254,7 @@ func (sb *searchBuilder) choice(selected bool, label string, action func()) {
 	start := sb.col
 	sb.text(checkboxText(selected) + " " + label)
 	sb.tag("[-:-:-]")
-	sb.span(start, func() { action(); sb.root.rerenderSearchDialog() }, "")
+	sb.span(start, func() { action(); sb.root.rerenderSearchDialog() }, "", false)
 }
 
 // newSearchDialog builds the search overlay after MC's own Find File
@@ -663,7 +673,7 @@ func (sb *searchBuilder) button(label string, action func()) {
 	start := sb.col
 	sb.text(tview.Escape("[" + label + "]")) // unescaped, "[Tree]" parses as an (invalid, silently dropped) style tag instead of visible text — see tview's own doc.go on its color-tag syntax
 	sb.tag("[-:-:-]")
-	sb.span(start, action, "")
+	sb.span(start, action, "", false)
 }
 
 // searchSpanIndex returns the index of the one span tagged tagName
@@ -698,6 +708,20 @@ func (r *Root) setSearchFocus(idx int) {
 		r.app.SetFocus(r.searchSearchBtn)
 	case idx >= 0 && idx < n:
 		r.app.SetFocus(r.searchSpans[idx].widget)
+		// Per the user's own explicit request: Filename, Content, and
+		// Start-at (every searchSpan.isTextField span — see its own
+		// doc comment) should all be immediately typeable the moment
+		// focus lands on them, whether that's this dialog's own
+		// initial open (openSearch) or ordinary Tab/Backtab traversal
+		// (moveSearchFocus, both funneling through here) — not merely
+		// highlighted, still needing its own Enter/click first. A
+		// checkbox/choice span never reaches this branch (isTextField
+		// stays false there — see searchBuilder.choice), so arriving
+		// at one via Tab still just highlights it, never toggles it
+		// as a side effect of focus alone.
+		if r.searchSpans[idx].isTextField {
+			r.searchSpans[idx].activate()
+		}
 	}
 }
 
@@ -984,37 +1008,33 @@ func (r *Root) openSearch() {
 	r.searchFieldsPages.SwitchToPage("fields")
 
 	r.rerenderSearchDialog()
-	idx, hasFilenameSpan := r.searchSpanIndex("filename")
-	if hasFilenameSpan {
-		r.setSearchFocus(idx)
-	}
-
 	r.resizeSearchPages()
 	r.showOverlay(searchPage, r.searchPages)
 
-	if hasFilenameSpan {
-		// Per the user's own explicit request: typing should start
-		// immediately on open, not land on a merely-highlighted span
-		// that still needs its own Enter/click first to become
-		// editable (see activateSearchTextField) before a single
-		// character can be typed into it.
+	if idx, ok := r.searchSpanIndex("filename"); ok {
+		// setSearchFocus itself opens the filename span's own inline
+		// edit immediately (its isTextField is true — see searchSpan's
+		// own doc comment), per the user's own explicit request that
+		// landing focus on Filename, Content, or Start-at — on open
+		// here, or via ordinary Tab/Backtab (moveSearchFocus) — always
+		// means "ready to type", never "still needs Enter first".
 		//
-		// activateSearchTextField positions the inline edit field
-		// from searchLeft's own GetInnerRect() — but searchLeft is
-		// nested inside Flex layouts whose children only get a real
-		// rect once something actually calls their Draw(screen), which
-		// only ever happens as a side effect of a real draw pass, not
-		// of SetRect alone (see tview's own Flex.Draw). showOverlay
-		// just above switches the dialog's page in; nothing has drawn
-		// it yet. ForceDraw runs that one draw pass synchronously
-		// right now (safe here — this runs on the main/event-handling
+		// That activation positions the inline edit field from
+		// searchLeft's own GetInnerRect() — but searchLeft is nested
+		// inside Flex layouts whose children only get a real rect once
+		// something actually calls their Draw(screen), which only
+		// ever happens as a side effect of a real draw pass, not of
+		// SetRect alone (see tview's own Flex.Draw). showOverlay just
+		// above switches the dialog's page in; nothing has drawn it
+		// yet. ForceDraw runs that one draw pass synchronously right
+		// now (safe here — this runs on the main/event-handling
 		// goroutine, the one case its own doc comment sanctions, and
 		// it's a no-op with no screen attached, e.g. under test) so
-		// activateFocusedSearchSpan reads a real rect instead of the
-		// zero one that previously landed the edit field at the
-		// screen's own top-left corner, outside the dialog entirely.
+		// setSearchFocus reads a real rect instead of the zero one
+		// that otherwise lands the edit field at the screen's own
+		// top-left corner, outside the dialog entirely.
 		r.app.ForceDraw()
-		r.activateFocusedSearchSpan()
+		r.setSearchFocus(idx)
 	}
 }
 
