@@ -494,9 +494,22 @@ func (r *Root) buildStatusBar() string {
 			}
 		}
 	}
+	// Stale otherwise — same "zero-value, never matches a click" shape
+	// every other optional segment's own span already follows (see
+	// pasteCancelSpan/rsyncCancelSpan/compressCancelSpan/
+	// labelScanCancelSpan just above): without this, a click at this
+	// segment's last-known column could still fire after Git Status
+	// itself is toggled off or the panel leaves a repo.
+	r.gitStatusSpan = buttonBarSpan{}
 	if r.settings.ShowGitStatus {
 		if git, ok := gitStatusForStatusBar(r.theme, r.panel.path); ok {
+			gitStatusStart := col
 			write(git)
+			// Clicking it opens Git Breach — the full dashboard for the
+			// same repo this summary is already about, per the user's own
+			// explicit request. Mirrors notifyBadgeSpan's own click-opens-
+			// the-full-screen shape just above, not a toggle or a cancel.
+			r.gitStatusSpan = buttonBarSpan{startCol: gitStatusStart, endCol: col, run: func(r *Root) { r.openGitBreach() }}
 			sep()
 		}
 	}
@@ -1127,7 +1140,7 @@ func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.Even
 	x, _ := event.Position()
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
 	col := x - rectX
-	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsyncCancelSpan, r.compressCancelSpan, r.labelScanCancelSpan} {
+	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsyncCancelSpan, r.compressCancelSpan, r.labelScanCancelSpan, r.gitStatusSpan} {
 		if span.run != nil && col >= span.startCol && col < span.endCol {
 			span.run(r)
 			break
