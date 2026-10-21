@@ -268,6 +268,119 @@ func TestDrawFailureShowsBreakthroughInGreenAfterTheMorphCompletes(t *testing.T)
 	}
 }
 
+func TestTickEasterEggFrameTransitionsFromFailureToRevealAfterPostMorphHold(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+	r.easterEggView.SetRect(0, 0, 80, 24)
+	r.easterEggView.stage = easterEggStageFailure
+	r.easterEggView.stageFrame = 0
+
+	for i := 0; i < easterEggFailureHoldFrames+easterEggMorphFrames+easterEggFailurePostMorphHoldFrames; i++ {
+		r.tickEasterEggFrame()
+	}
+
+	if r.easterEggView.stage != easterEggStageReveal {
+		t.Errorf("stage = %d, want easterEggStageReveal", r.easterEggView.stage)
+	}
+	if r.easterEggView.stageFrame != 0 {
+		t.Errorf("stageFrame = %d, want reset to 0 on entering Reveal", r.easterEggView.stageFrame)
+	}
+}
+
+// TestTickEasterEggFrameClosesTheOverlayAfterTheRevealHoldEnds pins
+// Reveal's own real ending — the only stage that closes itself rather
+// than holding indefinitely (see easterEggStageReveal's own doc
+// comment).
+func TestTickEasterEggFrameClosesTheOverlayAfterTheRevealHoldEnds(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	r.easterEggView.SetRect(0, 0, 80, 24)
+	r.easterEggView.stage = easterEggStageReveal
+	r.easterEggView.stageFrame = 0
+
+	for i := 0; i < easterEggRevealFrames+easterEggRevealHoldFrames; i++ {
+		r.tickEasterEggFrame()
+	}
+
+	if r.activePage == easterEggPage {
+		t.Error("the overlay should have closed itself once the Reveal hold ended")
+	}
+	if r.easterEggCancel != nil {
+		t.Error("easterEggCancel should be nil after the self-close")
+	}
+}
+
+func TestDrawRevealPaintsRockOutsideAndTextOnceFullyGrown(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+	r.easterEggView.stage = easterEggStageReveal
+	r.easterEggView.stageFrame = easterEggRevealFrames + 5 // fully grown, text should be stenciled on
+	r.easterEggView.SetRect(0, 0, 80, 24)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(80, 24)
+	r.easterEggView.Draw(screen)
+
+	// A point well off-center but still inside the field (not a corner,
+	// which stays within the jagged edge's own shading band even at
+	// full growth by design — see RevealMask's own doc comment on
+	// edgeCloseness) should be fully revealed: solid, non-rock
+	// background.
+	_, style, _ := screen.Get(10, 12)
+	_, bg, _ := style.Decompose()
+	if bg == easterEggRockColor {
+		t.Error("(10,12) is still rock-colored once the mask is fully grown, want it revealed")
+	}
+
+	// Find "breakthrough"'s own leading 'b' somewhere on the middle row.
+	found := false
+	for col := 0; col < 80; col++ {
+		ch, _, _ := screen.Get(col, 24/2)
+		if ch == "b" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find \"breakthrough\"'s own leading 'b' stenciled across the middle row once fully grown")
+	}
+}
+
+func TestDrawRevealDoesNotPanicPartwayThroughGrowth(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+	r.easterEggView.stage = easterEggStageReveal
+	r.easterEggView.SetRect(0, 0, 80, 24)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(80, 24)
+	for _, frame := range []int{0, 1, 10, 25, 49, 50, 60} {
+		r.easterEggView.stageFrame = frame
+		r.easterEggView.Draw(screen) // must not panic at any point in the growth
+	}
+}
+
 func TestDrawRainRebuildsColumnsOnWidthMismatch(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
