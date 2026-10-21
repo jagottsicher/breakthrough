@@ -1,10 +1,7 @@
 package ui
 
 import (
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
@@ -14,6 +11,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
+	"github.com/jagottsicher/breakthrough/internal/sshshell"
 )
 
 // sshShellMenuCol{Label,Edit,Remove} are the three columns
@@ -621,95 +619,40 @@ func (r *Root) runSSHShellFromDialog() {
 	r.launchSSHShell(conn)
 }
 
-// sshConnectionFailedExitCode is the exit code ssh itself uses for "the
-// connection could not be established at all" (refused, unreachable,
-// auth failed, ...) — as opposed to the *remote shell's own* exit
-// code, which ssh simply passes through unchanged and can be anything.
-// Documented in ssh(1); used by launchSSHShell to tell the two apart
-// before deciding whether to mark a history entry as having failed.
-const sshConnectionFailedExitCode = 255
-
 // launchSSHShell suspends the TUI (see tview.Application.Suspend) and
-// runs a real `ssh` process with the terminal handed over for the
-// duration — full interactivity, including a remote `sudo -i`/`su -`
-// identity switch, exactly like running ssh from a bare terminal,
-// since this *is* a bare terminal for as long as the child process
-// runs. No working directory is set and no local panel ever reloads
-// afterwards: unlike runShellCommandFullScreen's own local command,
-// nothing here ever touches anything on this machine's own
-// filesystem.
+// runs a real `ssh` process via internal/sshshell.Run, with the
+// terminal handed over for the duration — full interactivity, exactly
+// like running ssh from a bare terminal, since this *is* a bare
+// terminal for as long as the child process runs. No working directory
+// is set and no local panel ever reloads afterwards: unlike
+// runShellCommandFullScreen's own local command, nothing here ever
+// touches anything on this machine's own filesystem.
 //
 // Records the attempt in the shared connections.json history (see
-// remotefs.RecordAttempt) once ssh itself returns — failed only when
-// its own exit code is exactly sshConnectionFailedExitCode, the one
-// code that actually means "never really connected" rather than
-// "the remote shell exited with some status", which is none of this
-// app's business. A local problem (ssh itself missing, say) surfaces
-// immediately instead, without ever touching history at all: no
-// connection attempt was actually made.
+// remotefs.RecordAttempt) once ssh itself returns — failed only on
+// sshshell.ConnectionFailed, the one outcome that actually means
+// "never really connected" rather than "the remote shell exited with
+// some status", which is none of this app's business. A local problem
+// (ssh itself missing, say) surfaces immediately instead, without ever
+// touching history at all: no connection attempt was actually made.
 func (r *Root) launchSSHShell(conn remotefs.Connection) {
-	argv := sshShellArgv(conn)
-
+	var outcome sshshell.Outcome
 	var runErr error
 	r.suspend(func() {
-		cmd := exec.Command("ssh", argv...)
-		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-		runErr = cmd.Run()
+		outcome, runErr = sshshell.Run(conn)
 	})
 
-	var exitErr *exec.ExitError
-	switch {
-	case runErr == nil:
+	switch outcome {
+	case sshshell.Succeeded:
 		_ = remotefs.RecordAttempt(conn, false)
 		r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s", conn.Label()))
-	case errors.As(runErr, &exitErr):
-		failed := exitErr.ExitCode() == sshConnectionFailedExitCode
-		_ = remotefs.RecordAttempt(conn, failed)
-		if failed {
-			r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s: connection failed", conn.Label()))
-		} else {
-			r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s", conn.Label()))
-		}
-	default:
+	case sshshell.ConnectionFailed:
+		_ = remotefs.RecordAttempt(conn, true)
+		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s: connection failed", conn.Label()))
+	case sshshell.LocalError:
 		// ssh itself never actually ran (missing binary, ...) — a local
 		// problem, not a connection attempt at all, so history is left
 		// untouched.
 		r.showError(fmt.Errorf("ssh: %w", runErr))
 	}
 }
-
-// sshShellArgv builds the argv (after "ssh" itself) that launchSSHShell
-// runs — split out so the exact flag mapping can be pinned by a test
-// without actually exec'ing ssh.
-func sshShellArgv(conn remotefs.Connection) []string {
-	var args []string
-	if conn.Port != 0 && conn.Port != defaultSSHPort {
-		args = append(args, "-p", strconv.Itoa(conn.Port))
-	}
-	if conn.ShellAgentForwarding {
-		args = append(args, "-A")
-	}
-	if conn.ShellCompression {
-		args = append(args, "-C")
-	}
-	if conn.ShellVerbose {
-		args = append(args, "-v")
-	}
-	if conn.ShellX11Forwarding {
-		args = append(args, "-X")
-	}
-	user := conn.User
-	if user == "" {
-		user = currentUsername()
-	}
-	args = append(args, user+"@"+conn.Host)
-	return args
-}
-
-// defaultSSHPort mirrors remotefs' own unexported defaultSFTPPort —
-// duplicated here rather than exported from remotefs purely to avoid
-// growing that package's own public surface for a single int only
-// this file needs: ssh itself already defaults to 22 without "-p" at
-// all, so this just has to agree with what Connection.Port22IfZero
-// already treats as "nothing typed".
-const defaultSSHPort = 22
