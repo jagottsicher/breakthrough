@@ -12,6 +12,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/search"
 )
 
@@ -1553,4 +1554,26 @@ func (r *Root) streamSearchResults(ctx context.Context, req search.Request, resu
 		// hashAnimationInterval.
 		r.cancelSearch()
 	})
+}
+
+// applySearchTheme themes the Search/Find dialog — guarded the same
+// way applyBatchRenameTheme is (applyTheme also runs from NewRoot,
+// before the search dialog has built any of these).
+func (r *Root) applySearchTheme(theme config.ResolvedTheme) {
+	if r.searchTop == nil {
+		return
+	}
+	r.searchTop.SetBackgroundColor(theme.SurfaceBackground)
+	r.searchLeft.SetBackgroundColor(theme.SurfaceBackground)
+	r.searchRight.SetBackgroundColor(theme.SurfaceBackground)
+	styleInput(r.searchEditField, theme, true)
+	r.searchButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.searchCancelBtn, theme)
+	styleButton(r.searchSearchBtn, theme)
+	// FocusedBackground, fixed — Search is a single-layer, always-modal
+	// dialog nothing else ever stacks on top of, the same reasoning
+	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
+	r.searchTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.searchTitleBar.SetTextColor(theme.TextColor)
+	r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme
 }
