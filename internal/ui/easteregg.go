@@ -46,11 +46,37 @@ const easterEggIntroRevealFrames = 42
 // read "Wake up, <username>…" before it's gone.
 const easterEggIntroHoldFrames = 20
 
+// easterEggRainFrames is how long the Matrix rain runs, from entering
+// the Rain stage to the abrupt "SYSTEM FAILURE" cutoff — about 9
+// seconds at easterEggFrameInterval, long enough to actually read as
+// rain rather than a flash.
+const easterEggRainFrames = 150
+
+// easterEggFailureHoldFrames is how long "SYSTEM FAILURE" sits on
+// screen, static, before it starts morphing into "breakthrough" —
+// about 1.5 seconds, long enough to land as a real interruption before
+// the morph softens it.
+const easterEggFailureHoldFrames = 25
+
+// easterEggMorphFrames is how many frames the "SYSTEM FAILURE" →
+// "breakthrough" character morph itself takes — about 2.4 seconds,
+// the same pace as the intro's own reveal (easterEggIntroRevealFrames)
+// so the two read as the same kind of event.
+const easterEggMorphFrames = 40
+
+// easterEggFailureText/easterEggBreakthroughText are the two anchor
+// strings easteregg.MorphLine transitions between.
+const (
+	easterEggFailureText      = "SYSTEM FAILURE"
+	easterEggBreakthroughText = "breakthrough"
+)
+
 // Stages of the Easter egg's own animation, in order — see
 // easterEggView.Draw's own per-stage branch and Root.animateEasterEgg's
 // own stage-transition logic. All four are defined now, even though
-// this phase only implements Intro and Rain: later phases add Draw
-// cases and a transition out of Rain, never restructure this list.
+// this phase only implements Intro, Rain, and Failure: Reveal adds a
+// Draw case and a transition out of Failure, never restructures this
+// list.
 const (
 	easterEggStageIntro = iota
 	easterEggStageRain
@@ -59,10 +85,11 @@ const (
 )
 
 // easterEggView is breakthrough's hidden "follow the white rabbit"
-// overlay — Phase 1+2 of feature_ideas.txt's own phased plan: trigger,
-// intro glitch stage, and Matrix rain. SYSTEM FAILURE → breakthrough
-// morph and the breakthrough reveal are later phases, extending this
-// same type and its Draw rather than replacing either.
+// overlay — Phase 1+2+3 of feature_ideas.txt's own phased plan:
+// trigger, intro glitch stage, Matrix rain, and the SYSTEM FAILURE →
+// breakthrough morph. The breakthrough reveal (Phase 4) is the last
+// phase, extending this same type and its Draw rather than replacing
+// either.
 //
 // *tview.Box embedded purely for Draw's own per-cell control —
 // nothing here tview itself can draw for us, the same reasoning
@@ -112,6 +139,17 @@ var easterEggRainPalette = [easteregg.RainIntensityLevels + 1]tcell.Color{
 	6: tcell.NewRGBColor(220, 255, 220),
 }
 
+// easterEggFailureColor/easterEggBreakthroughColor are drawFailure's
+// own two endpoint colors — "SYSTEM FAILURE" in alarm red, morphing
+// through blendToward (panel.go) into "breakthrough" in the same
+// bright green easterEggRainPalette's own head color already uses, so
+// the morph's own finishing color reads as a continuation of the rain
+// that just stopped, not an unrelated third color introduced only here.
+var (
+	easterEggFailureColor      = tcell.NewRGBColor(255, 50, 50)
+	easterEggBreakthroughColor = easterEggRainPalette[easteregg.RainIntensityLevels]
+)
+
 // Draw paints the current stage only — a full black field first
 // (every stage sits on the same black background), then whichever
 // stage-specific content stageFrame/frame select. Reads state only,
@@ -137,6 +175,8 @@ func (v *easterEggView) Draw(screen tcell.Screen) {
 		v.drawIntro(screen, x, y, width, height, blank)
 	case easterEggStageRain:
 		v.drawRain(screen, x, y, width, height, blank)
+	case easterEggStageFailure:
+		v.drawFailure(screen, x, y, width, height, blank)
 	}
 }
 
@@ -178,6 +218,47 @@ func (v *easterEggView) drawRain(screen tcell.Screen, x, y, width, height int, b
 			style := blank.Foreground(easterEggRainPalette[level])
 			screen.SetContent(x+col, y+row, ch, nil, style)
 		}
+	}
+}
+
+// drawFailure paints the Failure stage's own two beats: "SYSTEM
+// FAILURE" held static in red for easterEggFailureHoldFrames, then
+// morphing character by character into "breakthrough" over
+// easterEggMorphFrames (easteregg.MorphLine), its color sliding from
+// red to green across that same span (blendToward, panel.go). Once
+// the morph completes, stageFrame keeps advancing but both the text
+// and the color stay at their final values — "breakthrough", fully
+// green — since nothing beyond this stage exists yet (see
+// easterEggStageReveal's own doc comment on the struct): the egg
+// simply holds there until Escape, the same honest "nothing further
+// to show" boundary Phase 1 ended the Intro stage on.
+func (v *easterEggView) drawFailure(screen tcell.Screen, x, y, width, height int, blank tcell.Style) {
+	morphFrame := v.stageFrame - easterEggFailureHoldFrames
+	var text string
+	var color tcell.Color
+	switch {
+	case morphFrame < 0:
+		text = easterEggFailureText
+		color = easterEggFailureColor
+	default:
+		text = easteregg.MorphLine(easterEggFailureText, easterEggBreakthroughText, morphFrame, easterEggMorphFrames, v.seed)
+		t := float64(morphFrame) / float64(easterEggMorphFrames)
+		color = blendToward(easterEggFailureColor, easterEggBreakthroughColor, t)
+	}
+
+	runes := []rune(text)
+	if len(runes) == 0 {
+		return
+	}
+	textX := x + (width-len(runes))/2
+	textY := y + height/2
+	style := blank.Foreground(color)
+	for i, ch := range runes {
+		col := textX + i
+		if col < x || col >= x+width || ch == ' ' {
+			continue
+		}
+		screen.SetContent(col, textY, ch, nil, style)
 	}
 }
 
@@ -252,11 +333,15 @@ func (r *Root) tickEasterEggFrame() {
 	v := r.easterEggView
 	v.frame++
 	v.stageFrame++
-	if v.stage == easterEggStageIntro && v.stageFrame >= easterEggIntroRevealFrames+easterEggIntroHoldFrames {
+	switch {
+	case v.stage == easterEggStageIntro && v.stageFrame >= easterEggIntroRevealFrames+easterEggIntroHoldFrames:
 		v.stage = easterEggStageRain
 		v.stageFrame = 0
 		_, _, width, height := v.GetInnerRect()
 		v.rainColumns = newRainColumns(width, height, v.seed)
+	case v.stage == easterEggStageRain && v.stageFrame >= easterEggRainFrames:
+		v.stage = easterEggStageFailure
+		v.stageFrame = 0
 	}
 }
 

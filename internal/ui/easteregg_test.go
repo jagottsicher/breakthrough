@@ -177,6 +177,97 @@ func TestTickEasterEggFrameTransitionsFromIntroToRainAfterHoldFrames(t *testing.
 	}
 }
 
+func TestTickEasterEggFrameTransitionsFromRainToFailureAfterRainFrames(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+	r.easterEggView.SetRect(0, 0, 80, 24)
+
+	for i := 0; i < easterEggIntroRevealFrames+easterEggIntroHoldFrames+easterEggRainFrames; i++ {
+		r.tickEasterEggFrame()
+	}
+
+	if r.easterEggView.stage != easterEggStageFailure {
+		t.Errorf("stage = %d, want easterEggStageFailure", r.easterEggView.stage)
+	}
+	if r.easterEggView.stageFrame != 0 {
+		t.Errorf("stageFrame = %d, want reset to 0 on entering Failure", r.easterEggView.stageFrame)
+	}
+}
+
+func TestDrawFailureShowsSystemFailureInRedBeforeTheHoldEnds(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+	r.easterEggView.stage = easterEggStageFailure
+	r.easterEggView.stageFrame = 0
+	r.easterEggView.SetRect(0, 0, 80, 24)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(80, 24)
+	r.easterEggView.Draw(screen)
+
+	textX := (80 - len(easterEggFailureText)) / 2
+	textY := 24 / 2
+	ch, style, _ := screen.Get(textX, textY)
+	if ch != string(easterEggFailureText[0]) {
+		t.Errorf("first char at (%d,%d) = %q, want %q (\"SYSTEM FAILURE\" held, not yet morphing)", textX, textY, ch, string(easterEggFailureText[0]))
+	}
+	fg, _, _ := style.Decompose()
+	if fg != easterEggFailureColor {
+		t.Errorf("color = %v, want the alarm-red easterEggFailureColor", fg)
+	}
+}
+
+func TestDrawFailureShowsBreakthroughInGreenAfterTheMorphCompletes(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openEasterEgg()
+	defer r.closeEasterEgg()
+	r.easterEggView.stage = easterEggStageFailure
+	r.easterEggView.stageFrame = easterEggFailureHoldFrames + easterEggMorphFrames + 10
+	r.easterEggView.SetRect(0, 0, 80, 24)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(80, 24)
+	r.easterEggView.Draw(screen)
+
+	textX := (80 - len(easterEggFailureText)) / 2 // same width as the morph's own padded field
+	textY := 24 / 2
+	// "breakthrough" is centered within that same padded width — find
+	// its own first non-space column rather than assuming an exact
+	// offset.
+	found := false
+	for i := 0; i < len(easterEggFailureText); i++ {
+		ch, style, _ := screen.Get(textX+i, textY)
+		if ch == "b" {
+			found = true
+			fg, _, _ := style.Decompose()
+			if fg != easterEggBreakthroughColor {
+				t.Errorf("color = %v, want easterEggBreakthroughColor once the morph has fully completed", fg)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find \"breakthrough\"'s own leading 'b' somewhere in the padded field after the morph completes")
+	}
+}
+
 func TestDrawRainRebuildsColumnsOnWidthMismatch(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
