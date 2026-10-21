@@ -2068,3 +2068,46 @@ func TestSearchDragStopsOnStrayButtonRelease(t *testing.T) {
 		t.Error("searchDragging should be false once a move arrives with no button held")
 	}
 }
+
+// TestOpenSearchFirstTimeActivatesFilenameEditInsideTheDialog pins a
+// real regression: the first time Find ever opens in a fresh session,
+// the inline edit field used to land at the screen's own top-left
+// corner, outside the dialog entirely, instead of over the Filename
+// span — openSearch's own activateFocusedSearchSpan call read
+// searchLeft's rect before any real draw pass had cascaded it down
+// through the Flex tree (see openSearch's own doc comment on
+// ForceDraw). drawRoot alone doesn't exercise this: it draws directly,
+// bypassing Root.app entirely, so openSearch's own r.app.ForceDraw()
+// call would silently no-op (nil screen) exactly like it does in every
+// other test in this file — the bug would still be "fixed" on paper
+// while the one call path that matters stays untested. This test
+// wires app.SetScreen/SetRoot first specifically so that call path is
+// real.
+func TestOpenSearchFirstTimeActivatesFilenameEditInsideTheDialog(t *testing.T) {
+	dir := fixtureDir(t)
+	app := tview.NewApplication()
+	r, err := NewRoot(app, dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	const width, height = 120, 30
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	t.Cleanup(screen.Fini)
+	screen.SetSize(width, height)
+	app.SetScreen(screen)
+	app.SetRoot(r, true)
+	r.SetRect(0, 0, width, height)
+	r.Draw(screen) // one real pass, same as app.Run() would give it before any key ever opens Find
+
+	r.openSearch()
+
+	dialogX, dialogY, dialogW, dialogH := r.searchPages.GetRect()
+	fieldX, fieldY, _, _ := r.searchEditField.GetRect()
+	if fieldX < dialogX || fieldY < dialogY || fieldX >= dialogX+dialogW || fieldY >= dialogY+dialogH {
+		t.Errorf("searchEditField rect = (%d,%d), want inside the dialog's own rect (%d,%d,%d,%d)", fieldX, fieldY, dialogX, dialogY, dialogW, dialogH)
+	}
+}

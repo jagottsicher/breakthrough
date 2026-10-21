@@ -984,18 +984,38 @@ func (r *Root) openSearch() {
 	r.searchFieldsPages.SwitchToPage("fields")
 
 	r.rerenderSearchDialog()
-	if idx, ok := r.searchSpanIndex("filename"); ok {
+	idx, hasFilenameSpan := r.searchSpanIndex("filename")
+	if hasFilenameSpan {
 		r.setSearchFocus(idx)
+	}
+
+	r.resizeSearchPages()
+	r.showOverlay(searchPage, r.searchPages)
+
+	if hasFilenameSpan {
 		// Per the user's own explicit request: typing should start
 		// immediately on open, not land on a merely-highlighted span
 		// that still needs its own Enter/click first to become
 		// editable (see activateSearchTextField) before a single
 		// character can be typed into it.
+		//
+		// activateSearchTextField positions the inline edit field
+		// from searchLeft's own GetInnerRect() — but searchLeft is
+		// nested inside Flex layouts whose children only get a real
+		// rect once something actually calls their Draw(screen), which
+		// only ever happens as a side effect of a real draw pass, not
+		// of SetRect alone (see tview's own Flex.Draw). showOverlay
+		// just above switches the dialog's page in; nothing has drawn
+		// it yet. ForceDraw runs that one draw pass synchronously
+		// right now (safe here — this runs on the main/event-handling
+		// goroutine, the one case its own doc comment sanctions, and
+		// it's a no-op with no screen attached, e.g. under test) so
+		// activateFocusedSearchSpan reads a real rect instead of the
+		// zero one that previously landed the edit field at the
+		// screen's own top-left corner, outside the dialog entirely.
+		r.app.ForceDraw()
 		r.activateFocusedSearchSpan()
 	}
-
-	r.resizeSearchPages()
-	r.showOverlay(searchPage, r.searchPages)
 }
 
 // resizeSearchPages centers the dialog's own fixed searchFormWidth/
