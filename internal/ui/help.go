@@ -437,7 +437,9 @@ var helpText = strings.TrimLeft(`
   already open — jumps straight to the next of the three real fields
   instead (the Labels row has none of its own, so it's skipped), the
   same "press it again to advance further" trick Ctrl+T uses for the
-  tab switcher. Escape closes it. By default (filter_persistent) all
+  tab switcher. Enter on one of the three fields does the same jump,
+  committing that field instead of closing the dropdown. Escape closes
+  it. By default (filter_persistent) all
   five carry over across a directory change, so browsing a whole tree
   with the same filter on is the normal way to use it; set
   filter_persistent = false to have every new directory start
