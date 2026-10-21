@@ -486,7 +486,8 @@ var helpText = strings.TrimLeft(`
   of a git repository — quietly nothing otherwise. Green while clean,
   orange the moment anything's staged, unstaged, or untracked, red the
   instant there's a real merge conflict; a figure that's zero is left
-  out entirely rather than shown as "+0".
+  out entirely rather than shown as "+0". Click it to open Git Breach
+  ("jg") for the same repository.
 
   Every one of these nine segments can be turned off individually —
   see "oo" → Status bar below.

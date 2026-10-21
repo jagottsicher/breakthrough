@@ -114,6 +114,68 @@ func TestGitStatusForStatusBarOutsideARepository(t *testing.T) {
 	}
 }
 
+// TestCaptureStatusBarMouseClickOnGitStatusOpensGitBreach pins the
+// user's own explicit request: the git-status segment is clickable,
+// the same discoverable, mouse-first entry point the notify badge
+// already has (see TestCaptureStatusBarMouseClickOnBadgeOpensMessages
+// in bottombar_test.go), and opens Git Breach for the same repository
+// it's already summarizing.
+func TestCaptureStatusBarMouseClickOnGitStatusOpensGitBreach(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	// 200, not 80: enough segments render ahead of git-status (clipboard,
+	// username, notify/mail badges, mouse, disk/inode, ...) that a
+	// narrower rect would put this span's own columns outside the
+	// widget's real InRect bounds, the same way the test itself would
+	// fail to click anything past the edge of a real, narrow terminal.
+	r.statusBar.SetRect(0, 0, 200, 1)
+	r.refreshStatusBar() // populates gitStatusSpan against this rect's own width
+
+	if r.gitStatusSpan.endCol <= r.gitStatusSpan.startCol {
+		t.Fatalf("gitStatusSpan = %+v, want a real, non-empty column range", r.gitStatusSpan)
+	}
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	x := rectX + (r.gitStatusSpan.startCol+r.gitStatusSpan.endCol)/2
+	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
+
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if r.activePage != gitBreachPage {
+		t.Errorf("activePage = %q, want %q after clicking the git-status segment", r.activePage, gitBreachPage)
+	}
+}
+
+// TestGitStatusSpanIsStaleWhenSettingIsOff pins the "zero-value, never
+// matches a click" contract every other optional status-bar span
+// already follows (see rsyncCancelSpan/compressCancelSpan): toggling
+// Git Status off must clear gitStatusSpan too, not just the visible
+// text, or a stale column range from before the toggle could still
+// fire.
+func TestGitStatusSpanIsStaleWhenSettingIsOff(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.statusBar.SetRect(0, 0, 200, 1)
+	r.refreshStatusBar()
+	if r.gitStatusSpan.endCol <= r.gitStatusSpan.startCol {
+		t.Fatalf("setup: gitStatusSpan should be real before toggling off")
+	}
+
+	r.settings.ShowGitStatus = false
+	r.refreshStatusBar()
+
+	if r.gitStatusSpan.endCol > r.gitStatusSpan.startCol {
+		t.Errorf("gitStatusSpan = %+v, want the zero value once Git Status is toggled off", r.gitStatusSpan)
+	}
+}
+
 func TestBuildStatusBarShowsGitSegmentAndItToggles(t *testing.T) {
 	requireGit(t)
 	dir := initRepo(t)
