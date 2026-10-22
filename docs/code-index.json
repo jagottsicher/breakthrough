@@ -2532,6 +2532,36 @@
       "sha256": "f4d202e828fb341725fefa093c0c512b62553d1925e9a450ed65979b85ac5c4f"
     },
     {
+      "path": "internal/ui/termtabcolor.go",
+      "size": 2025,
+      "sha256": "46b7abbcb09966cb76355f78f76e2483af05fa798ec5c509f23b327e371fc652"
+    },
+    {
+      "path": "internal/ui/termtabcolor_test.go",
+      "size": 2562,
+      "sha256": "52946849994b15fbdb8e590c48cac2b57d2823d5e7a32ca3f5265a625dd898b3"
+    },
+    {
+      "path": "internal/ui/termtabkeys.go",
+      "size": 1965,
+      "sha256": "322a9239c4252b2b6937d4c63ec3fee2f2ded05bf752920d43642ecd5d174d24"
+    },
+    {
+      "path": "internal/ui/termtabkeys_test.go",
+      "size": 2500,
+      "sha256": "423cc255868424fd92de8abd20a4a04daee51d140c18e2a70ded3e3389e6f691"
+    },
+    {
+      "path": "internal/ui/termtabview.go",
+      "size": 3601,
+      "sha256": "da1f880082a98137769f7967580b70672d54c067397d3fd9712682cbdab27fb6"
+    },
+    {
+      "path": "internal/ui/termtabview_test.go",
+      "size": 3919,
+      "sha256": "5bbd70da675286d339f7801e4832e60f2cf248fe65c1580531458552e6234d84"
+    },
+    {
       "path": "internal/ui/theme.go",
       "size": 39864,
       "sha256": "3cecca33150d20f5eb1dcd5aac7b9461426b5d1a7d0d09cff9ae2db27a444fc3"
@@ -3869,6 +3899,12 @@
         "internal/ui/tabstrip.go",
         "internal/ui/tabstrip_test.go",
         "internal/ui/tabswitcher.go",
+        "internal/ui/termtabcolor.go",
+        "internal/ui/termtabcolor_test.go",
+        "internal/ui/termtabkeys.go",
+        "internal/ui/termtabkeys_test.go",
+        "internal/ui/termtabview.go",
+        "internal/ui/termtabview_test.go",
         "internal/ui/theme.go",
         "internal/ui/theme_test.go",
         "internal/ui/toolbox.go",
@@ -3894,6 +3930,7 @@
         "fmt",
         "github.com/creack/pty",
         "github.com/gdamore/tcell/v2",
+        "github.com/hinshun/vt10x",
         "github.com/jagottsicher/breakthrough/internal/activitylog",
         "github.com/jagottsicher/breakthrough/internal/archive",
         "github.com/jagottsicher/breakthrough/internal/batchrename",
@@ -3922,6 +3959,7 @@
         "github.com/jagottsicher/breakthrough/internal/session",
         "github.com/jagottsicher/breakthrough/internal/sshkeys",
         "github.com/jagottsicher/breakthrough/internal/sshshell",
+        "github.com/jagottsicher/breakthrough/internal/termtab",
         "github.com/jagottsicher/breakthrough/internal/viewer",
         "github.com/rivo/tview",
         "github.com/ulikunitz/xz",
@@ -35245,14 +35283,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -48558,14 +48596,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 27
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 27
     },
@@ -53418,6 +53456,197 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabcolor.go",
+      "name": "termAttrReverse",
+      "kind": "const",
+      "line": 20
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabcolor.go",
+      "name": "termAttrUnderline",
+      "kind": "const",
+      "line": 21
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabcolor.go",
+      "name": "termAttrBold",
+      "kind": "const",
+      "line": 22
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabcolor.go",
+      "name": "termColor",
+      "kind": "function",
+      "line": 33
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabcolor.go",
+      "name": "termCellStyle",
+      "kind": "function",
+      "line": 45
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabcolor_test.go",
+      "name": "TestTermColorANSIRange",
+      "kind": "function",
+      "line": 10
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabcolor_test.go",
+      "name": "TestTermColorXtermExtendedRange",
+      "kind": "function",
+      "line": 22
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabcolor_test.go",
+      "name": "TestTermColorDefaults",
+      "kind": "function",
+      "line": 29
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabcolor_test.go",
+      "name": "TestTermCellStyleColorsCarryThrough",
+      "kind": "function",
+      "line": 38
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabcolor_test.go",
+      "name": "TestTermCellStyleBoldUnderlineReverse",
+      "kind": "function",
+      "line": 50
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabkeys.go",
+      "name": "termKeyBytes",
+      "kind": "function",
+      "line": 26
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabkeys_test.go",
+      "name": "TestTermKeyBytesPlainRunes",
+      "kind": "function",
+      "line": 9
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabkeys_test.go",
+      "name": "TestTermKeyBytesEnterBackspaceTabEscape",
+      "kind": "function",
+      "line": 16
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabkeys_test.go",
+      "name": "TestTermKeyBytesArrowKeys",
+      "kind": "function",
+      "line": 33
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabkeys_test.go",
+      "name": "TestTermKeyBytesCtrlLetters",
+      "kind": "function",
+      "line": 50
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabkeys_test.go",
+      "name": "TestTermKeyBytesUnmappedKeyReturnsNil",
+      "kind": "function",
+      "line": 70
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabkeys_test.go",
+      "name": "TestTermKeyBytesPlainRuneIsUnaffectedByUnrelatedModifiers",
+      "kind": "function",
+      "line": 76
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview.go",
+      "name": "termTabView",
+      "kind": "type",
+      "line": 29
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview.go",
+      "name": "newTermTabView",
+      "kind": "function",
+      "line": 35
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview.go",
+      "name": "Draw",
+      "kind": "method",
+      "receiver": "*termTabView",
+      "line": 48
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview.go",
+      "name": "InputHandler",
+      "kind": "method",
+      "receiver": "*termTabView",
+      "line": 84
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview_test.go",
+      "name": "termNoopConn",
+      "kind": "function",
+      "line": 19
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview_test.go",
+      "name": "newTestSimulationScreen",
+      "kind": "function",
+      "line": 23
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview_test.go",
+      "name": "waitForScreenRow",
+      "kind": "function",
+      "line": 41
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview_test.go",
+      "name": "TestTermTabViewDrawRendersRealSessionOutput",
+      "kind": "function",
+      "line": 61
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview_test.go",
+      "name": "TestTermTabViewDrawResizesTheSessionToMatchItsOwnRect",
+      "kind": "function",
+      "line": 78
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview_test.go",
+      "name": "TestTermTabViewInputHandlerWritesToTheRealSession",
+      "kind": "function",
+      "line": 99
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "loadInitialSettings",
       "kind": "var",
@@ -56700,5 +56929,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "8dc1da7534abc1324561aa4bc11722a522239591e62c3c372bb36218c859f02f"
+  "merkle_root": "cc7857592c12b381cad1e261b7407bc1697050cc236cfb84db504032969b8206"
 }
