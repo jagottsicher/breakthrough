@@ -820,12 +820,21 @@ func (r *Root) finishSearchEdit(key tcell.Key) {
 	}
 
 	switch key {
-	case tcell.KeyTab:
+	case tcell.KeyEnter, tcell.KeyTab:
+		// Per the user's own explicit request: Enter must always
+		// conclude a field's own input exactly like Tab does —
+		// previously it just fell back to setSearchFocus on the same
+		// span, which (once setSearchFocus started auto-activating
+		// every isTextField span's own edit mode — see its own doc
+		// comment) immediately reopened the very edit field Enter had
+		// just closed, so Enter visibly did nothing at all. Start-at
+		// is the field where this mattered most: its own Tab is
+		// already spoken for by path completion (captureSearchScopeKey),
+		// so Enter is the *only* way to actually leave it — it has to
+		// behave like Tab elsewhere does, not like a no-op.
 		r.moveSearchFocus(1)
 	case tcell.KeyBacktab:
 		r.moveSearchFocus(-1)
-	default: // Enter: conclude editing, stay on the same field
-		r.setSearchFocus(r.searchFocusedIdx)
 	}
 }
 
@@ -991,9 +1000,10 @@ func (r *Root) openSearchTreePicker() {
 // when this opens *fresh* — the panel isn't already showing search
 // results (see Panel.searchMode) — the far more common case; reopening
 // it to refine an already-running or already-finished search ("f"
-// again, or Escape — see backToSearchForm, this func's only other
-// caller) leaves everything exactly as it was left instead, per the
-// user's own explicit request that this not reinitialize. Engine/Mode/
+// again — the only way back to the form once results are showing;
+// Escape instead closes them outright, see Panel.onSearchEscape)
+// leaves everything exactly as it was left instead, per the user's own
+// explicit request that this not reinitialize. Engine/Mode/
 // Ignored dirs/Search in/Case sensitive/Skip hidden are never reset
 // either way — there's no similarly obvious reason to. First focus
 // goes to Filename (the "filename" tagged span — see
@@ -1148,10 +1158,11 @@ func (r *Root) dragSearchMouseCapture(action tview.MouseAction, event *tcell.Eve
 // overlay (see showError), which used to close the whole search dialog
 // outright over what's typically just a typo — discarding whatever was
 // already typed into Filename/Content/Start-at and needing the entire
-// dialog reopened from scratch just to fix it. Per the user's own
-// explicit request: showing it here instead means Escape (see Panel.
-// onSearchEscape, wired to backToSearchForm) goes straight back to the
-// form, with everything exactly as it was left.
+// dialog reopened from scratch just to fix it. Escape here now closes
+// this (empty, error-only) results state outright, same as it does
+// for a real results list (see Panel.onSearchEscape/closeSearch) —
+// "f" is still how you get back to the form to fix the typo and
+// retry.
 //
 // Deliberately skips starting animateSearchProgress/streamSearchResults
 // (searchCancel stays nil) — there's no real search running here for
@@ -1174,31 +1185,23 @@ func (r *Root) showSearchError(msg string) {
 }
 
 // closeSearch cancels any in-flight search (see cancelSearch), closes
-// the dialog, and — if search results are currently showing (see
+// the dialog if one's open (hideOverlay is a no-op otherwise — see its
+// own doc comment), and — if search results are currently showing (see
 // Panel.searchMode) — discards them, restoring the real directory the
 // panel was showing before the search that produced them ever ran (see
-// Panel.exitSearchResults). Escape/Cancel from the fields page: "I
-// don't want this search, or these results, any more" — the one
-// explicit way out of search mode that isn't picking a result (see
-// Panel.activateRow's own searchMode branch).
+// Panel.exitSearchResults). "I don't want this search, or these
+// results, any more" — the one explicit way out of search mode that
+// isn't picking a result (see Panel.activateRow's own searchMode
+// branch). Two call sites: Escape/Cancel from the fields page, and —
+// per the user's own explicit request — Escape directly on an
+// already-showing results list too (wired as Panel.onSearchEscape in
+// NewRoot): Escape always means "leave search entirely, back to where
+// it started", never "reopen the form to refine" — "f" still does
+// that, unchanged (see openSearch's own searchMode-aware reset).
 func (r *Root) closeSearch() {
 	r.cancelSearch()
 	r.hideOverlay()
 	r.showError(r.panel.exitSearchResults())
-}
-
-// backToSearchForm cancels any in-flight search and reopens the form
-// (see openSearch, which — since the panel is already showing search
-// results by the time this runs, see Panel.onSearchEscape — leaves
-// every field exactly as it already was, not reset) without touching
-// whatever the panel currently has on screen: Escape while search
-// results are showing (wired as Panel.onSearchEscape in NewRoot), so
-// refining a search that came back wrong (or empty) doesn't lose the
-// results already gathered, and doesn't need reopening the whole
-// dialog from scratch either.
-func (r *Root) backToSearchForm() {
-	r.cancelSearch()
-	r.openSearch()
 }
 
 // cancelSearch stops whatever search.Run call is currently in flight,
@@ -1520,13 +1523,16 @@ func (r *Root) renderSearchStatus() {
 
 // searchEscHint reminds the user, regardless of a search's own outcome
 // (still running, done, no matches, or the non-existent-Start-at error
-// — see showSearchError) that Escape goes back to the form — per the
+// — see showSearchError) that Escape is always there to leave —
+// closing the results and returning to the directory the search
+// started from (see closeSearch/Panel.onSearchEscape), not reopening
+// the form the way it used to; "f" does that instead now, per the
 // user's own explicit request. setSearchStatus/setSearchStatusLive are
 // the only two places the panel's own header status text actually gets
 // set while search results are showing (see their own doc comments),
 // so the hint can never be left off some future third one, whichever
 // of the two it ends up using.
-const searchEscHint = "(Esc: back to search)"
+const searchEscHint = "(Esc: close)"
 
 // setSearchStatus sets the panel's own header status to text, with
 // searchEscHint appended at the end — streamSearchResults' own final

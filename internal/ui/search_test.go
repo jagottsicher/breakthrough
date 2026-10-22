@@ -220,11 +220,15 @@ func TestCloseSearchHidesOverlay(t *testing.T) {
 	}
 }
 
-// TestBackToSearchFormReturnsToFormWithoutClosing pins Escape's own
-// two-stage behavior: from the results page, it returns to the fields
-// (see backToSearchForm) rather than closing the whole dialog the way
-// Escape from the fields page itself does (see closeSearch).
-func TestBackToSearchFormReturnsToFormWithoutClosing(t *testing.T) {
+// TestOnSearchEscapeClosesResultsAndReturnsToStartingDirectory pins
+// the user's own explicit request: Escape directly on an
+// already-showing results list closes search mode outright — back to
+// the real directory the search started from — rather than reopening
+// the form to refine, which used to be Escape's own job here (see
+// closeSearch's own doc comment); "f" still reopens the form to
+// refine, unchanged (see TestRunSearchUsesStartAtAgainAfterReopening,
+// if present, or openSearch's own searchMode-aware reset).
+func TestOnSearchEscapeClosesResultsAndReturnsToStartingDirectory(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -237,10 +241,16 @@ func TestBackToSearchFormReturnsToFormWithoutClosing(t *testing.T) {
 	r.searchFilenameValue = "anything"
 	r.runSearch() // switches to the results page
 
-	r.backToSearchForm()
+	r.panel.onSearchEscape()
 
-	if r.activePage != searchPage {
-		t.Errorf("activePage = %q, want still open (%q)", r.activePage, searchPage)
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after Escape on search results, want closed", r.activePage)
+	}
+	if r.panel.searchMode {
+		t.Error("panel.searchMode should be false after Escape on results — want search left entirely, not just the form reopened")
+	}
+	if r.panel.path != dir {
+		t.Errorf("panel.path = %q after Escape, want back to %q (where the search started)", r.panel.path, dir)
 	}
 }
 
@@ -458,6 +468,50 @@ func TestEnterInOtherFieldsDoesNotRunSearch(t *testing.T) {
 	}
 }
 
+// TestEnterInStartAtLeavesEditModeInsteadOfReopeningIt pins a real
+// regression: once setSearchFocus started auto-activating every
+// isTextField span's own edit mode on arrival (per the user's own
+// request that Tab/Backtab land ready to type), Enter's own "conclude
+// editing, stay on the same field" fallback — which called
+// setSearchFocus on that very same span — immediately reopened the
+// edit field it had just closed, so Enter visibly did nothing at all.
+// Start-at is the field where this mattered most: Tab there is
+// already spoken for by path completion (captureSearchScopeKey), so
+// Enter is the *only* way to ever leave it. finishSearchEdit now
+// treats Enter the same as Tab (commit, then moveSearchFocus) for
+// every field except Filename's own "runs the search" case, so Enter
+// always actually leaves the field instead of bouncing right back
+// into it.
+func TestEnterInStartAtLeavesEditModeInsteadOfReopeningIt(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.setSearchFocus(idx)
+	if !r.searchEditField.HasFocus() {
+		t.Fatal("setup: focusing Start-at should have opened its own inline edit")
+	}
+
+	r.searchEditField.SetText(dir)
+	r.finishSearchEdit(tcell.KeyEnter)
+
+	if r.searchEditField.HasFocus() {
+		t.Error("Enter should have left Start-at's own edit mode, not reopened it on the same field")
+	}
+	if r.searchScopeValue != dir {
+		t.Errorf("searchScopeValue = %q, want %q committed before Enter moved focus on", r.searchScopeValue, dir)
+	}
+	if r.searchFocusedIdx == idx {
+		t.Error("Enter should have advanced focus (same as Tab), not left it on Start-at's own span")
+	}
+}
+
 // TestCommitPendingSearchEditPreservesInProgressText pins the fix for
 // a real bug: refining Start-at by hand after a Tree pick, then
 // leaving the field via a click elsewhere rather than Enter/Tab, used
@@ -521,8 +575,9 @@ func TestCommitPendingSearchEditNoopWhenNotEditing(t *testing.T) {
 // than Root's own global error overlay, which used to close the whole
 // search dialog outright and discard whatever was already typed in
 // ("das ist doof... das muss ja nicht so ein Game-Killer sein").
-// Escape from there (see Panel.onSearchEscape) goes straight back to
-// the still-intact form.
+// Escape from there (see Panel.onSearchEscape) now closes this error
+// state outright, same as a real results list — "f" is how you get
+// back to the still-intact form to fix the path and retry.
 func TestRunSearchRejectsNonexistentStartAt(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -557,17 +612,18 @@ func TestRunSearchRejectsNonexistentStartAt(t *testing.T) {
 		t.Errorf("panel status = %q, want it to mention the directory doesn't exist", got)
 	}
 	if got := r.panel.header.GetText(true); !strings.Contains(got, "Esc") {
-		t.Errorf("panel status = %q, want the Esc-back-to-search hint even for this error case (see setSearchStatus)", got)
+		t.Errorf("panel status = %q, want the Esc hint even for this error case (see setSearchStatus)", got)
 	}
 
-	// Escape must return to the still-intact form, with Filename
-	// untouched.
+	// Escape now closes this error state outright — back to the real
+	// directory, same as it does for a real results list — rather than
+	// reopening the form.
 	r.panel.captureTableKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
-	if r.activePage != searchPage {
-		t.Errorf("activePage = %q after Escape, want the form open again (%q)", r.activePage, searchPage)
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after Escape, want closed", r.activePage)
 	}
-	if r.searchFilenameValue != "*.go" {
-		t.Errorf("searchFilenameValue = %q after Escape, want it preserved (%q)", r.searchFilenameValue, "*.go")
+	if r.panel.searchMode {
+		t.Error("panel.searchMode should be false after Escape — want search left entirely")
 	}
 }
 
@@ -1211,14 +1267,16 @@ func TestRunSearchClosesFormAndShowsResultsInPanel(t *testing.T) {
 	}
 }
 
-// TestBackToSearchFormReopensWithoutTouchingPanel pins Escape/"f"
-// while search results are showing: the form reopens (see openSearch's
-// own searchMode-aware reset) without discarding or otherwise
-// disturbing whatever the panel currently has on screen (see
+// TestReopeningSearchFormViaFKeepsResultsAndFields pins "f" while
+// search results are showing: the form reopens (see openSearch's own
+// searchMode-aware reset) without discarding or otherwise disturbing
+// whatever the panel currently has on screen (see
 // Panel.showSearchResults never being called again here) — refining a
 // search that came back wrong (or empty) doesn't lose the results
-// already gathered.
-func TestBackToSearchFormReopensWithoutTouchingPanel(t *testing.T) {
+// already gathered. Escape no longer does this (see
+// TestOnSearchEscapeClosesResultsAndReturnsToStartingDirectory) — "f"
+// is now the only way back to the form once results are showing.
+func TestReopeningSearchFormViaFKeepsResultsAndFields(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -1231,19 +1289,19 @@ func TestBackToSearchFormReopensWithoutTouchingPanel(t *testing.T) {
 	r.runSearch()
 	r.panel.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
 
-	r.backToSearchForm()
+	r.openSearch() // "f" again, while results are already showing
 
 	if r.activePage != searchPage {
 		t.Errorf("activePage = %q, want the form open again (%q)", r.activePage, searchPage)
 	}
 	if !r.panel.searchMode {
-		t.Error("panel.searchMode = false after backToSearchForm, want still true — results shouldn't be discarded")
+		t.Error("panel.searchMode = false after reopening via \"f\", want still true — results shouldn't be discarded")
 	}
 	if got := r.panel.table.GetRowCount(); got != 1 {
-		t.Errorf("panel has %d rows after backToSearchForm, want the one already-gathered result still there", got)
+		t.Errorf("panel has %d rows after reopening via \"f\", want the one already-gathered result still there", got)
 	}
 	if r.searchFilenameValue != "anything" {
-		t.Errorf("searchFilenameValue = %q after backToSearchForm, want it preserved", r.searchFilenameValue)
+		t.Errorf("searchFilenameValue = %q after reopening via \"f\", want it preserved", r.searchFilenameValue)
 	}
 }
 
