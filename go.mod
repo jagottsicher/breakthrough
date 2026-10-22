@@ -26,6 +26,7 @@ require (
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 // indirect
 	github.com/evanoberholster/imagemeta v1.1.0 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
+	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
