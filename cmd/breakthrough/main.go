@@ -148,6 +148,12 @@ func run() error {
 	stopClock := root.StartClock()
 	defer stopClock()
 
+	// Same "only meaningful once Run is about to drain QueueUpdateDraw"
+	// reasoning as StartClock just above — see StartMailImapPoll's own
+	// doc comment.
+	stopMailImapPoll := root.StartMailImapPoll()
+	defer stopMailImapPoll()
+
 	// tcell puts the terminal in raw mode, so these arrive as regular key
 	// events rather than signals. These are global captures (not tied to
 	// any one primitive) so they work regardless of what currently has

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/mail"
 )
 
 // isolateMailDetection fakes mailDetect/mailInstalled to report exactly
@@ -178,4 +180,118 @@ func TestMailBadgeCountFalseOnAReadError(t *testing.T) {
 	if _, ok := r.mailBadgeCount(); ok {
 		t.Error("mailBadgeCount() ok = true, want false on a read error")
 	}
+}
+
+// TestMailBadgeCountPrefersImapOverMbox pins the priority order
+// mailBadgeCount's own doc comment states: an IMAP host configured at
+// all outranks the mbox override — IMAP's own count/ok come straight
+// from the cache (mailImapCount/mailImapOK), never a fresh read, since
+// mailBadgeCount itself must never dial the network (see mailimap.go's
+// own doc comment).
+func TestMailBadgeCountPrefersImapOverMbox(t *testing.T) {
+	r := newTestRootForMail(t)
+	r.settings.MailImapHost = "imap.example.com"
+	r.settings.MailMboxPath = "/some/mbox"
+	isolateMailUnreadSources(t, 0, nil, 99, nil, "")
+	r.mailImapCount, r.mailImapOK = 5, true
+
+	count, ok := r.mailBadgeCount()
+	if !ok || count != 5 {
+		t.Errorf("mailBadgeCount() = (%d, %v), want (5, true) — the IMAP cache must win over mbox", count, ok)
+	}
+}
+
+// TestMailBadgeCountMaildirStillWinsOverImap pins that IMAP only
+// outranks mbox, not Maildir — Maildir's own "explicit, cheap local
+// read" priority (TestMailBadgeCountPrefersMaildirOverMbox) is
+// unaffected by IMAP's addition.
+func TestMailBadgeCountMaildirStillWinsOverImap(t *testing.T) {
+	r := newTestRootForMail(t)
+	r.settings.MailMaildirPath = "/some/maildir"
+	r.settings.MailImapHost = "imap.example.com"
+	isolateMailUnreadSources(t, 3, nil, 0, nil, "")
+	r.mailImapCount, r.mailImapOK = 99, true
+
+	count, ok := r.mailBadgeCount()
+	if !ok || count != 3 {
+		t.Errorf("mailBadgeCount() = (%d, %v), want (3, true) — Maildir must still win over IMAP", count, ok)
+	}
+}
+
+// TestMailBadgeCountImapFalseWhenCacheNotOk pins that an IMAP read
+// failure (mailImapOK false, as StartMailImapPoll's own poll leaves it
+// after a failed fetchMailImapCount) degrades the same way every other
+// mail-badge Source's own failure already does — the badge simply
+// isn't shown, not an error overlay.
+func TestMailBadgeCountImapFalseWhenCacheNotOk(t *testing.T) {
+	r := newTestRootForMail(t)
+	r.settings.MailImapHost = "imap.example.com"
+	r.mailImapCount, r.mailImapOK = 0, false
+
+	if _, ok := r.mailBadgeCount(); ok {
+		t.Error("mailBadgeCount() ok = true, want false when the IMAP cache's own last fetch failed")
+	}
+}
+
+// isolateMailImapSourceUnreadCount fakes mailImapSourceUnreadCount —
+// so fetchMailImapCount/StartMailImapPoll can be tested without a real
+// IMAP server.
+func isolateMailImapSourceUnreadCount(t *testing.T, count int, err error) {
+	t.Helper()
+	original := mailImapSourceUnreadCount
+	t.Cleanup(func() { mailImapSourceUnreadCount = original })
+	mailImapSourceUnreadCount = func(mail.IMAPConfig) (int, error) { return count, err }
+}
+
+func TestFetchMailImapCountReturnsTheSourcesOwnCount(t *testing.T) {
+	r := newTestRootForMail(t)
+	r.settings.MailImapHost = "imap.example.com"
+	isolateMailImapSourceUnreadCount(t, 9, nil)
+
+	n, ok := r.fetchMailImapCount()
+	if !ok || n != 9 {
+		t.Errorf("fetchMailImapCount() = (%d, %v), want (9, true)", n, ok)
+	}
+}
+
+func TestFetchMailImapCountFalseOnError(t *testing.T) {
+	r := newTestRootForMail(t)
+	r.settings.MailImapHost = "imap.example.com"
+	isolateMailImapSourceUnreadCount(t, 0, os.ErrDeadlineExceeded)
+
+	if _, ok := r.fetchMailImapCount(); ok {
+		t.Error("fetchMailImapCount() ok = true, want false on a fetch error")
+	}
+}
+
+// TestMailImapConfigReadsEverySetting pins that mailImapConfig carries
+// every relevant setting through to the mail.IMAPConfig it builds —
+// catches a field silently left out the moment a new one is added to
+// either side, rather than only showing up as a confusing runtime
+// mismatch later.
+func TestMailImapConfigReadsEverySetting(t *testing.T) {
+	r := newTestRootForMail(t)
+	r.settings.MailImapHost = "imap.example.com"
+	r.settings.MailImapPort = 2525
+	r.settings.MailImapMailbox = "Work"
+	r.settings.MailImapStartTLS = true
+
+	got := r.mailImapConfig()
+	want := mail.IMAPConfig{Host: "imap.example.com", Port: 2525, Mailbox: "Work", StartTLS: true}
+	if got != want {
+		t.Errorf("mailImapConfig() = %+v, want %+v", got, want)
+	}
+}
+
+// TestStartMailImapPollIsANoopWithoutAHost pins that nothing — no
+// ticker, no goroutine, no QueueUpdateDraw call that would otherwise
+// block forever without a running event loop to drain it — ever
+// starts while settings.MailImapHost is empty, and that its own
+// returned stop func is always safe to call regardless.
+func TestStartMailImapPollIsANoopWithoutAHost(t *testing.T) {
+	r := newTestRootForMail(t)
+	r.settings.MailImapHost = ""
+
+	stop := r.StartMailImapPoll()
+	stop() // must not panic or block
 }

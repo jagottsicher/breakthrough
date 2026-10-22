@@ -433,7 +433,43 @@ type Settings struct {
 	// opt-in the way MailMaildirPath does) is the right default here.
 	// MailMaildirPath, if also set, wins outright — a mailbox can only
 	// be one format or the other.
-	MailMboxPath      string
+	MailMboxPath string
+
+	// MailImapHost is an IMAP server the status bar's own mail badge
+	// reads an unread count from (see internal/mail.IMAPSource) — ""
+	// (the default) disables it, the same "badge just isn't shown"
+	// degradation every other mail-badge source already has.
+	// MailMaildirPath, then MailImapHost, then MailMboxPath win in
+	// that order when more than one is set — IMAP ranks above the mbox
+	// override since setting it up (a real server, a netrc entry) is
+	// at least as deliberate an opt-in as a bare path override.
+	//
+	// There is deliberately no MailImapUser setting: the login name
+	// comes from the same ~/.netrc entry (keyed by MailImapHost
+	// itself) that supplies the password — see internal/mail's own
+	// lookupNetrc. breakthrough never stores an IMAP secret of its
+	// own, the same invariant SSH (agent/real keys) and cloud mounts
+	// (rclone owns its own config) already keep; a second,
+	// independent "username" setting here could silently drift from
+	// whatever ~/.netrc actually has on file for the same host.
+	MailImapHost string
+
+	// MailImapPort overrides IMAPSource's own default port — 0 (the
+	// default) means 993 (implicit TLS) or 143 (MailImapStartTLS),
+	// whichever matches MailImapStartTLS.
+	MailImapPort int
+
+	// MailImapMailbox overrides which mailbox IMAPSource runs STATUS
+	// against — "" (the default) means "INBOX", the one mailbox name
+	// every IMAP server is required to have (RFC 9051).
+	MailImapMailbox string
+
+	// MailImapStartTLS selects plaintext-then-STARTTLS (port 143 by
+	// default) instead of implicit TLS (port 993, the default here) —
+	// false unless a server specifically needs it; implicit TLS is the
+	// more common modern setup.
+	MailImapStartTLS bool
+
 	RsyncCopyContents bool
 	RsyncArchive      bool
 	RsyncCompress     bool
@@ -629,6 +665,11 @@ func DefaultSettings() Settings {
 		MailMaildirPath: "",
 		MailMboxPath:    "",
 
+		MailImapHost:     "",
+		MailImapPort:     0,
+		MailImapMailbox:  "",
+		MailImapStartTLS: false,
+
 		RsyncCopyContents: false,
 		RsyncArchive:      true,
 		RsyncCompress:     false,
@@ -800,6 +841,14 @@ func (s *Settings) apply(key, value string) error {
 		s.MailMaildirPath = value
 	case "mail_mbox_path":
 		s.MailMboxPath = value
+	case "mail_imap_host":
+		s.MailImapHost = value
+	case "mail_imap_port":
+		return parseInt(&s.MailImapPort)
+	case "mail_imap_mailbox":
+		s.MailImapMailbox = value
+	case "mail_imap_starttls":
+		return parseBool(&s.MailImapStartTLS)
 	case "rsync_copy_contents":
 		return parseBool(&s.RsyncCopyContents)
 	case "rsync_archive":

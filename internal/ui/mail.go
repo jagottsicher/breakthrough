@@ -50,17 +50,30 @@ var (
 // mailBadgeCount is the status bar's own mail badge (bottombar.go)
 // resolving which mailbox to read and reporting its unread count in
 // one step: an explicit Maildir path (settings.MailMaildirPath) wins
-// outright if set, then an explicit mbox override
-// (settings.MailMboxPath), then the auto-detected system mailbox
-// (mailDefaultMboxPath — see MailMboxPath's own doc comment on why
-// this one case is auto-detected at all, unlike Maildir's own several
-// genuinely ambiguous candidates). ok is false whenever none of those
-// apply, or the one that does fails to read — the badge simply isn't
-// shown either way, never an error overlay.
+// outright if set, then an IMAP server (settings.MailImapHost — ranks
+// above the mbox override since setting it up at all, a real server
+// plus a ~/.netrc entry, is at least as deliberate an opt-in as a bare
+// path; see MailImapHost's own doc comment), then an explicit mbox
+// override (settings.MailMboxPath), then the auto-detected system
+// mailbox (mailDefaultMboxPath — see MailMboxPath's own doc comment on
+// why this one case is auto-detected at all, unlike Maildir's own
+// several genuinely ambiguous candidates). ok is false whenever none
+// of those apply, or the one that does fails to read — the badge
+// simply isn't shown either way, never an error overlay.
+//
+// IMAP's own count/ok come from mailImapCount/mailImapOK, a cache kept
+// current by StartMailImapPoll's own background goroutine — this
+// function itself never dials the network: a real round-trip on every
+// once-a-second status-bar tick (the cadence Maildir/mbox's own cheap
+// local reads tolerate fine) would be unreasonable, see
+// mailimap.go's own doc comment.
 func (r *Root) mailBadgeCount() (count int, ok bool) {
 	if r.settings.MailMaildirPath != "" {
 		n, err := mailUnreadCount(r.settings.MailMaildirPath)
 		return n, err == nil
+	}
+	if r.settings.MailImapHost != "" {
+		return r.mailImapCount, r.mailImapOK
 	}
 	path := r.settings.MailMboxPath
 	if path == "" {
