@@ -984,6 +984,52 @@ func optionCategories() []optionCategory {
 						r.persistSetting("mail_mbox_path", v)
 					},
 				),
+				stringOption("mail_imap_host", "IMAP host",
+					"An IMAP server for the mail badge's unread count — empty (the default) "+
+						"disables it.\n\n"+
+						"breakthrough never stores the password itself: it's read fresh from "+
+						"~/.netrc on every check, keyed by this same host as the \"machine\" "+
+						"name — the same file curl/git/etc. already read for exactly this "+
+						"purpose. Add an entry there first (machine <host> login <you> "+
+						"password <app password>) or this stays disabled.\n\n"+
+						"If \"Maildir path\" above is also set, it wins outright; otherwise this "+
+						"wins over \"Mbox path\" below.",
+					func(r *Root) string { return r.settings.MailImapHost },
+					func(r *Root, v string) {
+						r.settings.MailImapHost = v
+						r.persistSetting("mail_imap_host", v)
+					},
+				),
+				intOption("mail_imap_port", "IMAP port",
+					"Overrides the IMAP server's own port. 0 (the default) means 993 "+
+						"(implicit TLS) or 143 (if \"IMAP via STARTTLS\" below is on).",
+					func(r *Root) int { return r.settings.MailImapPort },
+					func(r *Root, n int) {
+						r.settings.MailImapPort = n
+						r.persistSetting("mail_imap_port", strconv.Itoa(n))
+					},
+				),
+				stringOption("mail_imap_mailbox", "IMAP mailbox",
+					"Which mailbox the unread count is for. Empty (the default) means "+
+						"\"INBOX\" — the one mailbox name every IMAP server is required to have.",
+					func(r *Root) string { return r.settings.MailImapMailbox },
+					func(r *Root, v string) {
+						r.settings.MailImapMailbox = v
+						r.persistSetting("mail_imap_mailbox", v)
+					},
+				),
+				boolOption("mail_imap_starttls", "IMAP via STARTTLS",
+					"Off (the default) connects with implicit TLS (port 993) — the connection "+
+						"itself is TLS from the first byte. On connects in plaintext and then "+
+						"upgrades via STARTTLS (port 143) — only needed for a server that "+
+						"specifically requires that mode.",
+					false,
+					func(r *Root) bool { return r.settings.MailImapStartTLS },
+					func(r *Root, b bool) {
+						r.settings.MailImapStartTLS = b
+						r.persistSetting("mail_imap_starttls", strconv.FormatBool(b))
+					},
+				),
 			},
 		},
 		{
@@ -1463,6 +1509,14 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.MailMaildirPath, true
 	case "mail_mbox_path":
 		return s.MailMboxPath, true
+	case "mail_imap_host":
+		return s.MailImapHost, true
+	case "mail_imap_port":
+		return strconv.Itoa(s.MailImapPort), true
+	case "mail_imap_mailbox":
+		return s.MailImapMailbox, true
+	case "mail_imap_starttls":
+		return strconv.FormatBool(s.MailImapStartTLS), true
 	case "rsync_copy_contents":
 		return strconv.FormatBool(s.RsyncCopyContents), true
 	case "rsync_archive":
