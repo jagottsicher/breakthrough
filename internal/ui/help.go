@@ -392,7 +392,9 @@ var helpText = strings.TrimLeft(`
       directory is currently selected — on demand, since it can take a
       real, visible amount of time on a large tree
   M   Load the selected file's own metadata: EXIF for images, plus PDF,
-      Office Open XML (docx/xlsx/pptx) and EPUB documents
+      Office Open XML (docx/xlsx/pptx), old binary Office (doc/xls/ppt),
+      EPUB documents, and video containers (duration/codec/resolution,
+      needs ffmpeg)
 
   Click a path segment in the header to jump straight there; click the
   path itself to type a new one (Tab completes it, Enter goes); click
