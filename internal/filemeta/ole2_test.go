@@ -59,9 +59,14 @@ func TestForOLE2NotACompoundFile(t *testing.T) {
 // ForPDF's own real-file test already has, just not satisfiable the
 // same way here). The fixture's own real properties (verified once by
 // hand against it, not assumed): Author "Lehane, Richard", CreateTime
-// 2013-05-28, LastSaveTime 2013-06-13 — no Title/Subject/AppName set
-// at all, a realistic sparse real-world file, not a cherry-picked
-// complete one.
+// 2013-05-28 06:38:24 UTC, LastSaveTime 2013-06-13 11:36:39 UTC — no
+// Title/Subject/AppName set at all, a realistic sparse real-world
+// file, not a cherry-picked complete one. UTC specifically, not
+// whatever zone this test happens to run in — see
+// ole2PropertyString's own doc comment on why that distinction is the
+// whole point here, not incidental: an earlier version of this very
+// test asserted the local-zone (CEST) rendering instead and passed
+// locally while failing in CI, which runs under UTC.
 func TestForOLE2RealFixture(t *testing.T) {
 	got, err := ForOLE2(filepath.Join("testdata", "ole2-fixture.xls"))
 	if err != nil {
@@ -76,11 +81,11 @@ func TestForOLE2RealFixture(t *testing.T) {
 	if byLabel["Author"] != "Lehane, Richard" {
 		t.Errorf("Author = %q, want %q", byLabel["Author"], "Lehane, Richard")
 	}
-	if byLabel["Created"] != "2013-05-28 08:38:24" {
-		t.Errorf("Created = %q, want %q", byLabel["Created"], "2013-05-28 08:38:24")
+	if byLabel["Created"] != "2013-05-28 06:38:24" {
+		t.Errorf("Created = %q, want %q", byLabel["Created"], "2013-05-28 06:38:24")
 	}
-	if byLabel["Modified"] != "2013-06-13 13:36:39" {
-		t.Errorf("Modified = %q, want %q", byLabel["Modified"], "2013-06-13 13:36:39")
+	if byLabel["Modified"] != "2013-06-13 11:36:39" {
+		t.Errorf("Modified = %q, want %q", byLabel["Modified"], "2013-06-13 11:36:39")
 	}
 	// Properties the fixture genuinely doesn't set must simply be
 	// absent, not shown as empty-string noise — the same convention

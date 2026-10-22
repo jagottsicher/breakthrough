@@ -553,13 +553,13 @@
     },
     {
       "path": "internal/filemeta/ole2.go",
-      "size": 4637,
-      "sha256": "81e487ca8c3424b3d995cdbfe5f512b618b0e9aa3883e4922c7c02446d789b20"
+      "size": 5022,
+      "sha256": "9ec45f3b258ff6599513d107bf66eaf10a326d0c037b2e16156db2016004aabd"
     },
     {
       "path": "internal/filemeta/ole2_test.go",
-      "size": 4598,
-      "sha256": "2d9cf68dcf20537c11402429587bd52c2b8c0b99ffcf970ef2f3c3d6523bc59e"
+      "size": 4961,
+      "sha256": "21987fe8d96ca16365157cd537e34cdb9a141791881627d25370edf54b1a856f"
     },
     {
       "path": "internal/filemeta/pdf.go",
@@ -9087,7 +9087,7 @@
       "file": "internal/filemeta/ole2.go",
       "name": "ole2PropertyString",
       "kind": "function",
-      "line": 117
+      "line": 124
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filemeta",
@@ -9122,28 +9122,28 @@
       "file": "internal/filemeta/ole2_test.go",
       "name": "TestForOLE2RealFixture",
       "kind": "function",
-      "line": 65
+      "line": 70
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filemeta",
       "file": "internal/filemeta/ole2_test.go",
       "name": "TestForOLE2RealFixtureViaForPath",
       "kind": "function",
-      "line": 95
+      "line": 100
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filemeta",
       "file": "internal/filemeta/ole2_test.go",
       "name": "TestForOLE2RealFixtureRegardlessOfExtension",
       "kind": "function",
-      "line": 111
+      "line": 116
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filemeta",
       "file": "internal/filemeta/ole2_test.go",
       "name": "TestForOLE2ErrorIsNotWrappedWeirdly",
       "kind": "function",
-      "line": 137
+      "line": 142
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filemeta",
@@ -56441,5 +56441,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "66b20387dae35bdcd37b33bdfb4bdc92141098b0c47459483294600ff2940a9f"
+  "merkle_root": "91a9ad4d87923724611e1835d9c6e58e931b47ee429140165d1e91306b4121ed"
 }

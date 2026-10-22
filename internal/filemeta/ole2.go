@@ -109,14 +109,21 @@ func ForOLE2(path string) ([]Field, error) {
 // ole2PropertyString renders one decoded MS-OLEPS property value as
 // display text — a real time.Time, formatted the same
 // "2006-01-02 15:04:05" shape ForOfficeOpenXML's own Created/Modified
-// fields already use (rather than types.FileTime's own String(),
-// which includes a zone offset/name ForOfficeOpenXML's dates never
-// show, see parseW3CDTF's own callers) for CreateTime/LastSaveTime
-// specifically, T's own String() for everything else (Title/Subject/
-// Author/AppName are all plain text types already).
+// fields already use, for CreateTime/LastSaveTime specifically, T's
+// own String() for everything else (Title/Subject/Author/AppName are
+// all plain text types already).
+//
+// Explicitly converted to UTC first — types.FileTime.Time() calls
+// time.Unix, which Go's own documentation states returns a Time in
+// the *host machine's* local Location, not UTC (verified directly
+// against msoleps' own filetime.go, not assumed): without this, the
+// exact same file would display a different Created/Modified time
+// depending on which timezone breakthrough happens to be running in,
+// a real bug this package's own test caught by running in CI under a
+// different zone than it was first written in.
 func ole2PropertyString(t types.Type) string {
 	if ft, ok := t.(types.FileTime); ok {
-		return ft.Time().Format("2006-01-02 15:04:05")
+		return ft.Time().UTC().Format("2006-01-02 15:04:05")
 	}
 	return t.String()
 }
