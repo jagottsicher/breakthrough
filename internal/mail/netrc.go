@@ -58,7 +58,7 @@ func lookupNetrc(machine string) (netrcCredentials, error) {
 	if err != nil {
 		return netrcCredentials{}, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only; nothing to do if this fails
 
 	tokens, err := tokenizeNetrc(f)
 	if err != nil {

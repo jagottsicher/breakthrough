@@ -112,7 +112,7 @@ func startFakeIMAPServer(t *testing.T, user, pass string, unseen map[string]uint
 		InsecureAuth: true, // plaintext test server — see imapDial's own test override, no TLS involved
 		Logger:       discardIMAPServerLog{},
 	})
-	t.Cleanup(func() { server.Close() })
+	t.Cleanup(func() { _ = server.Close() }) // test teardown; nothing to assert on a close failure here
 
 	go func() {
 		_ = server.Serve(ln)

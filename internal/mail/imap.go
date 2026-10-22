@@ -125,7 +125,7 @@ func (s IMAPSource) UnreadCount() (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("imap %s: dial: %w", s.cfg.Host, err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() // tearing down regardless; nothing left to do if this itself fails
 
 	if err := client.Login(creds.Login, creds.Password).Wait(); err != nil {
 		return 0, fmt.Errorf("imap %s: login: %w", s.cfg.Host, err)

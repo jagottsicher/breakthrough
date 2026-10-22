@@ -1058,13 +1058,13 @@
     },
     {
       "path": "internal/mail/imap.go",
-      "size": 5631,
-      "sha256": "f79e0f8ad6c383f60ad23c438bf0a66d7a1e9d1136017addb8cc93f4b41e5124"
+      "size": 5716,
+      "sha256": "7914f5c8ae5d72488634c440d0aa647690612fbc6965b40d3099f38fa1a32bb9"
     },
     {
       "path": "internal/mail/imap_test.go",
-      "size": 8249,
-      "sha256": "bfe8639dc1d7acba71678dc79b85785e8493c3a655d8efdd551eda09019a52d6"
+      "size": 8313,
+      "sha256": "a0286552b18ac5b65b05aa1474fd33967a422f79e51ac571dd4d14a30bf8d009"
     },
     {
       "path": "internal/mail/maildir.go",
@@ -1098,8 +1098,8 @@
     },
     {
       "path": "internal/mail/netrc.go",
-      "size": 5777,
-      "sha256": "b449107459d4a3439ae2058467cf93c2e85b1f46f892267a5aa9daf25c10d29e"
+      "size": 5836,
+      "sha256": "0d6f5b2f187929a3481a3220a882a0eebde956967f94076415df65a6ce943a55"
     },
     {
       "path": "internal/mail/netrc_test.go",
@@ -56199,5 +56199,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "597553fb6b30887e08429ad7bb3804c4538a717fbbfca940811211003b3593e8"
+  "merkle_root": "90cd39c277e227d6117c8c7d69c1af232521edb857a8d3373366b744593aacc7"
 }
