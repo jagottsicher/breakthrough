@@ -820,12 +820,21 @@ func (r *Root) finishSearchEdit(key tcell.Key) {
 	}
 
 	switch key {
-	case tcell.KeyTab:
+	case tcell.KeyEnter, tcell.KeyTab:
+		// Per the user's own explicit request: Enter must always
+		// conclude a field's own input exactly like Tab does —
+		// previously it just fell back to setSearchFocus on the same
+		// span, which (once setSearchFocus started auto-activating
+		// every isTextField span's own edit mode — see its own doc
+		// comment) immediately reopened the very edit field Enter had
+		// just closed, so Enter visibly did nothing at all. Start-at
+		// is the field where this mattered most: its own Tab is
+		// already spoken for by path completion (captureSearchScopeKey),
+		// so Enter is the *only* way to actually leave it — it has to
+		// behave like Tab elsewhere does, not like a no-op.
 		r.moveSearchFocus(1)
 	case tcell.KeyBacktab:
 		r.moveSearchFocus(-1)
-	default: // Enter: conclude editing, stay on the same field
-		r.setSearchFocus(r.searchFocusedIdx)
 	}
 }
 
