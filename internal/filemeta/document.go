@@ -12,13 +12,17 @@ import (
 )
 
 // IsDocumentPath reports whether path's extension is one ForPath
-// dispatches to a document extractor for (Office Open XML/EPUB) rather
-// than falling through to ForImage's content-sniffed decode — the
-// Details sidebar uses this to decide whether to show a metadata
-// section at all for a file with no preview image of its own (see
-// renderDetailsSidebar), since unlike images (gated on a preview having
-// actually decoded), these have no such signal to key off.
+// dispatches to a document extractor for (Office Open XML/EPUB/the
+// old binary Office formats — see IsOLE2Path) rather than falling
+// through to ForImage's content-sniffed decode — the Details sidebar
+// uses this to decide whether to show a metadata section at all for a
+// file with no preview image of its own (see renderDetailsSidebar),
+// since unlike images (gated on a preview having actually decoded),
+// these have no such signal to key off.
 func IsDocumentPath(path string) bool {
+	if IsOLE2Path(path) {
+		return true
+	}
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".docx", ".xlsx", ".pptx", ".epub":
 		return true
@@ -31,13 +35,28 @@ func IsDocumentPath(path string) bool {
 // Open XML (DOCX/XLSX/PPTX) and EPUB are both ZIP containers with no
 // reliable way to tell them apart from an image by content alone (every
 // one of them starts with the same "PK\x03\x04" ZIP signature), so
-// these two go by extension; PDF goes by extension too, for a
-// different reason — pdfinfo needs a real file path, not sniffed
-// content, since it shells out rather than parsing anything itself.
+// these two go by extension; the old binary Office formats (DOC/XLS/
+// PPT, see IsOLE2Path) and PDF go by extension too, for a different
+// reason each — PDF because pdfinfo needs a real file path, not
+// sniffed content, since it shells out rather than parsing anything
+// itself; OLE2 because a Compound File's own magic number alone can't
+// tell a DOC from an XLS from a PPT (mscfb reads the container either
+// way; the extension is only needed to route here at all, see
+// ForOLE2's own doc comment for what actually happens once it does).
 // Everything else falls through to ForImage's own content-sniffed
 // decode, which already returns ErrNotSupported for anything imagemeta
 // doesn't recognize.
 func ForPath(path string) ([]Field, error) {
+	// Checked ahead of the extension switch below, by its own separate
+	// allowlist (see IsVideoPath/viewer.LooksLikeVideoPath's own doc
+	// comment on why that one is shared rather than duplicated here) —
+	// a video container's own binary structure gives nothing reliable
+	// to sniff across formats the way image.DecodeConfig does for
+	// pictures, the same reasoning every case below already has for
+	// its own format.
+	if IsVideoPath(path) {
+		return ForVideo(path)
+	}
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".docx", ".xlsx", ".pptx":
 		return ForOfficeOpenXML(path)
@@ -45,6 +64,8 @@ func ForPath(path string) ([]Field, error) {
 		return ForEPUB(path)
 	case ".pdf":
 		return ForPDF(path)
+	case ".doc", ".xls", ".ppt":
+		return ForOLE2(path)
 	default:
 		return ForImage(path)
 	}
