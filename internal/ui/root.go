@@ -3221,13 +3221,16 @@ func (r *Root) wirePanel(panel *Panel) {
 	// one tab (see Panel's own labels field doc comment).
 	panel.setLabels(r.labels)
 
-	// "Esc: back to search" while search results are showing (see
-	// Panel.onSearchEscape's own doc comment) — a right-click on a
-	// search-result row already reaches r.menu the exact same way a
-	// real row's does (see captureMouse's MouseRightClick case, never
-	// mode-specific to begin with), so there's no separate context menu
-	// to build here any more.
-	panel.onSearchEscape = r.backToSearchForm
+	// "Esc: leave search entirely" while search results are showing
+	// (see Panel.onSearchEscape's own doc comment, and closeSearch's —
+	// per the user's own explicit request this closes the results and
+	// returns to the directory the search started from, rather than
+	// reopening the form to refine; "f" still does that) — a
+	// right-click on a search-result row already reaches r.menu the
+	// exact same way a real row's does (see captureMouse's
+	// MouseRightClick case, never mode-specific to begin with), so
+	// there's no separate context menu to build here any more.
+	panel.onSearchEscape = r.closeSearch
 
 	// Live-updates the Details sidebar as the cursor moves — tview's own
 	// native hook for "the table's current row changed, for any reason"
