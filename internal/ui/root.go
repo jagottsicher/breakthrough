@@ -2066,6 +2066,19 @@ type Root struct {
 	// empty, never-matching range) whenever its own segment isn't
 	// currently shown at all — the same way buttonBarSpans locate
 	// buttonBar's own many.
+	// mailImapCount/mailImapOK are the IMAP mail badge's own cached
+	// unread count — written only from StartMailImapPoll's own
+	// QueueUpdateDraw callback (never read concurrently with that write
+	// — both only ever run on the UI goroutine), read by
+	// mailBadgeCount. Unlike Maildir/mbox (a cheap local read, cheap
+	// enough to redo on every once-a-second status-bar tick), IMAP
+	// means a real network round-trip — polled on its own, much longer
+	// interval instead (see mailImapPollInterval), with this pair
+	// holding whatever StartMailImapPoll's last successful (or failed)
+	// check found in the meantime.
+	mailImapCount int
+	mailImapOK    bool
+
 	bashConsole         *tview.Flex
 	bashLine            *tview.TextArea
 	bashHint            *tview.TextView
