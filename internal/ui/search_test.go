@@ -458,6 +458,50 @@ func TestEnterInOtherFieldsDoesNotRunSearch(t *testing.T) {
 	}
 }
 
+// TestEnterInStartAtLeavesEditModeInsteadOfReopeningIt pins a real
+// regression: once setSearchFocus started auto-activating every
+// isTextField span's own edit mode on arrival (per the user's own
+// request that Tab/Backtab land ready to type), Enter's own "conclude
+// editing, stay on the same field" fallback — which called
+// setSearchFocus on that very same span — immediately reopened the
+// edit field it had just closed, so Enter visibly did nothing at all.
+// Start-at is the field where this mattered most: Tab there is
+// already spoken for by path completion (captureSearchScopeKey), so
+// Enter is the *only* way to ever leave it. finishSearchEdit now
+// treats Enter the same as Tab (commit, then moveSearchFocus) for
+// every field except Filename's own "runs the search" case, so Enter
+// always actually leaves the field instead of bouncing right back
+// into it.
+func TestEnterInStartAtLeavesEditModeInsteadOfReopeningIt(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.setSearchFocus(idx)
+	if !r.searchEditField.HasFocus() {
+		t.Fatal("setup: focusing Start-at should have opened its own inline edit")
+	}
+
+	r.searchEditField.SetText(dir)
+	r.finishSearchEdit(tcell.KeyEnter)
+
+	if r.searchEditField.HasFocus() {
+		t.Error("Enter should have left Start-at's own edit mode, not reopened it on the same field")
+	}
+	if r.searchScopeValue != dir {
+		t.Errorf("searchScopeValue = %q, want %q committed before Enter moved focus on", r.searchScopeValue, dir)
+	}
+	if r.searchFocusedIdx == idx {
+		t.Error("Enter should have advanced focus (same as Tab), not left it on Start-at's own span")
+	}
+}
+
 // TestCommitPendingSearchEditPreservesInProgressText pins the fix for
 // a real bug: refining Start-at by hand after a Tree pick, then
 // leaving the field via a click elsewhere rather than Enter/Tab, used
