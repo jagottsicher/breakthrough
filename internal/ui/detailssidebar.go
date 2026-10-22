@@ -698,17 +698,20 @@ func detailsMetadataErrorMessage(err error) string {
 		return "(no metadata found)"
 	case errors.Is(err, filemeta.ErrPopplerUtilsMissing):
 		return "(install poppler-utils)"
+	case errors.Is(err, filemeta.ErrFfprobeMissing):
+		return "(install ffmpeg)"
 	default:
 		return "(read error)"
 	}
 }
 
 // fetchDetailsMetadata is "M"/the metadata hint's click zone's own
-// action. Images, DOCX/XLSX/PPTX and EPUB today (see filemeta.ForPath's
-// own doc comment on how it picks an extractor, and
+// action. Images, PDF, DOCX/XLSX/PPTX, EPUB, and the old binary Office
+// formats (DOC/XLS/PPT — see filemeta.IsOLE2Path) today (see
+// filemeta.ForPath's own doc comment on how it picks an extractor, and
 // renderDetailsSidebar's own gate on when this section is shown at
-// all — isPDF/isVideo never reach here); PDF's own metadata is the one
-// remaining piece of feature_ideas.txt #26 not built yet.
+// all); video-container metadata (duration/codec/resolution) is the
+// one remaining piece of feature_ideas.txt #26 not built yet.
 //
 // Mirrors computeDetailsHashes' own async shape (safeGo, a cancellable
 // context, QueueUpdateDraw, re-checking the target hasn't changed before
@@ -785,7 +788,7 @@ func (r *Root) applyDetailsMetadataResult(target string, fields []filemeta.Field
 	}
 	if err != nil {
 		r.detailsMetadataState = detailsMetadataErrorMessage(err)
-		routine := errors.Is(err, filemeta.ErrNotSupported) || errors.Is(err, filemeta.ErrNoMetadata) || errors.Is(err, filemeta.ErrPopplerUtilsMissing)
+		routine := errors.Is(err, filemeta.ErrNotSupported) || errors.Is(err, filemeta.ErrNoMetadata) || errors.Is(err, filemeta.ErrPopplerUtilsMissing) || errors.Is(err, filemeta.ErrFfprobeMissing)
 		if !routine {
 			r.showError(fmt.Errorf("reading metadata for %s: %w", target, err))
 		}
@@ -1023,21 +1026,20 @@ func (r *Root) renderDetailsSidebar() {
 		_, previewEnd := writeSection(strings.Join(infoLines, "\n"))
 		r.detailsPreviewRowStart, r.detailsPreviewRowEnd = previewStart, previewEnd
 
-		if !isVideo {
-			// A video's preview frame has no metadata concept of its own
-			// worth showing here; images and a successfully-rasterized
-			// PDF (filemeta.ForPath dispatches by extension, so this
-			// works the same regardless of which one it is) both do.
-			// DOCX/XLSX/PPTX/EPUB get their own metadata section further
-			// down instead (see the "IsDocumentPath" case below), never
-			// reaching here since none of them ever produce a preview
-			// image.
-			meta := r.detailsMetadataState
-			if meta == "" {
-				meta = detailsMetadataHint(r.theme)
-			}
-			r.detailsMetaRowStart, r.detailsMetaRowEnd = writeSection(meta)
+		// A video's own metadata (Duration/Codec/Resolution, via
+		// ffprobe — filemeta.ForVideo) shows here too now, independent
+		// of the thumbnail frame just rendered above: one comes from
+		// mpv decoding a single frame, the other from ffprobe reading
+		// the container, two separate tools neither one depends on
+		// the other succeeding. DOCX/XLSX/PPTX/EPUB/old-Office get
+		// their own metadata section further down instead (see the
+		// "IsDocumentPath" case below), never reaching here since none
+		// of them ever produce a preview image.
+		meta := r.detailsMetadataState
+		if meta == "" {
+			meta = detailsMetadataHint(r.theme)
 		}
+		r.detailsMetaRowStart, r.detailsMetaRowEnd = writeSection(meta)
 
 	case isPDF:
 		// PDFPageCount succeeded but rasterizing page 1 didn't (most
@@ -1068,6 +1070,22 @@ func (r *Root) renderDetailsSidebar() {
 		// only place their own metadata section ever shows at all —
 		// gated on the path's extension (see IsDocumentPath's own doc
 		// comment on why that's the right signal here, unlike images).
+		_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
+		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.theme.SurfaceBackground, r.detailsTypeGlyph(), innerWidth, true, true))
+		meta := r.detailsMetadataState
+		if meta == "" {
+			meta = detailsMetadataHint(r.theme)
+		}
+		r.detailsMetaRowStart, r.detailsMetaRowEnd = writeSection(meta)
+
+	case !isDirish(r.detailsStat) && filemeta.IsVideoPath(r.detailsTarget):
+		// A video whose own thumbnail frame extraction didn't succeed
+		// (mpv missing, or this particular file failed — see
+		// detailsPreviewFor) never reaches the "r.detailsImage != nil"
+		// case above, the only place isVideo's own metadata section
+		// otherwise shows — still worth its own metadata here:
+		// ffprobe (filemeta.ForVideo) reads the container directly,
+		// entirely independent of mpv's own preview pipeline.
 		_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
 		writeSection(renderFileIconBox(fileIconBoxBackground, fileIconBoxForeground, r.theme.SurfaceBackground, r.detailsTypeGlyph(), innerWidth, true, true))
 		meta := r.detailsMetadataState
