@@ -333,6 +333,24 @@ func run() error {
 				root.SwitchToTabShortcut(n)
 				return nil
 			}
+			// Alt+S opens the Shells overlay (see internal/ui/shellsmenu.go)
+			// — a single modifier, deliberately not Alt+0..9's own
+			// Ctrl-or-Alt pairing above: those two are already taken,
+			// permanently, by the existing tab-switch fallback just
+			// above, and Ctrl+Shift+digit was ruled out as commonly
+			// intercepted by the terminal emulator itself before ever
+			// reaching this app (GNOME Terminal, iTerm2, Windows
+			// Terminal, Konsole all reserve it for their own tab
+			// switching). Always intercepted globally for now; a
+			// planned Options toggle (mirroring the existing "Mouse on/
+			// off" setting) will let this be disabled later so Alt+S
+			// can instead reach an embedded remote shell that wants it
+			// for its own purposes (Emacs' M-s isearch prefix being the
+			// one real, accepted collision).
+			if event.Modifiers()&tcell.ModAlt != 0 && event.Rune() == 's' {
+				root.OpenShellsMenuShortcut()
+				return nil
+			}
 			return event
 		case tcell.KeyDelete:
 			// Entf triggers the safe action (Trash), matching both the

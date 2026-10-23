@@ -611,6 +611,16 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// TitleBar's own Text.
 	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)
 
+	// The Shells overlay (shellsmenu.go) — the identical close-glyph
+	// title bar treatment sshShellMenuTitleBar just above uses, for
+	// the identical reason (see that block's own doc comment).
+	r.shellsMenuTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.shellsMenuTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
+	r.shellsMenuTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.shellsMenuTitleBar.SetTextColor(theme.TextColor)
+
 	// Duplicate/Multiply (see duplicate.go/applyDuplicateTheme).
 	r.applyDuplicateTheme(theme)
 

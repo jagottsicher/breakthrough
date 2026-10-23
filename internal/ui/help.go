@@ -1342,6 +1342,39 @@ var helpText = strings.TrimLeft(`
   strip, and the context menu all work regardless of what your terminal
   can report.
 
+[::b]Shells[::-]
+
+  A separate, independent set of live embedded remote terminals — one
+  per open connection, each a real background process that keeps
+  running whether or not it's the one on screen right now. Unlike
+  Tabs above, a Shell has no directory or file list of its own; it's
+  a terminal, not a panel.
+
+  Alt+S              Open the Shells overlay: every currently open
+                     Shell, numbered, plus "+ New shell…" to start one
+                     and, while a Shell is on screen, "Files" to
+                     return to the panel.
+
+  In the overlay: a bare digit (no Ctrl or Alt) jumps straight to that
+  numbered Shell — only the first ten get a digit of their own, the
+  same "...0 is the tenth" numbering Tabs above uses. Enter or Space
+  on a row switches to it; "✕" (or "x"/Delete from anywhere in the
+  row) closes that Shell outright. Escape closes the overlay without
+  changing anything.
+
+  "+ New shell…" reuses the exact same "Add new ssh connection" dialog
+  the "gs" chord's own one-off ssh shell already opens — Host/Port/
+  User plus the agent-forwarding/compression/verbose/X11 flags —
+  except this one stays open in its own Shell afterwards instead of
+  handing the whole terminal over for as long as the connection lasts.
+
+  While a Shell has focus, nearly every keystroke goes straight to the
+  remote side, exactly as if you'd ssh'd in from a bare terminal — with
+  one deliberate exception: Alt+S itself is always caught here first,
+  even then, so there's always a way back to this overlay. A later
+  Options setting is planned to let that interception be turned off,
+  for the rare remote program that wants Alt+S for its own purposes.
+
   The open tabs are saved when you quit, but a bare "breakthrough"
   opens in the current directory rather than reopening them; setting
   "restore_tabs = true" in the config resumes your last layout instead.
