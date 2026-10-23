@@ -96,11 +96,20 @@ func TestRemountShellViewCollapsesTheBashConsoleAndShowsTheActiveView(t *testing
 	r.openNewShellEmbedded(testShellConn("one"))
 	defer func() { _ = r.shells[0].session.Close() }()
 
-	if r.panelHost.GetItemCount() != 1 {
-		t.Fatalf("panelHost.GetItemCount() = %d, want 1", r.panelHost.GetItemCount())
+	// Three items: the panel's own header row (kept visible — see
+	// remountShellView's own doc comment), this Terminal's own
+	// one-line header, and the terminal view itself.
+	if got, want := r.panelHost.GetItemCount(), 3; got != want {
+		t.Fatalf("panelHost.GetItemCount() = %d, want %d", got, want)
 	}
-	if r.panelHost.GetItem(0) != r.shells[0].view {
-		t.Error("panelHost's only item isn't the active shell's own view")
+	if r.panelHost.GetItem(0) != r.panel.headerRow {
+		t.Error("panelHost's first item isn't the panel's own header row")
+	}
+	if r.panelHost.GetItem(1) != r.shells[0].header {
+		t.Error("panelHost's second item isn't the active shell's own header")
+	}
+	if r.panelHost.GetItem(2) != r.shells[0].view {
+		t.Error("panelHost's third item isn't the active shell's own view")
 	}
 }
 
@@ -256,5 +265,106 @@ func TestCloseShellClosesTheUnderlyingSession(t *testing.T) {
 	case <-tab.session.Done():
 	case <-time.After(2 * time.Second):
 		t.Fatal("session.Done() never fired after closeShell")
+	}
+}
+
+// The tests below pin the user's own explicit request: a Terminal
+// whose own process exits on its own stays exactly where it was — in
+// r.shells, in the strip, in the switcher, and on screen if it was the
+// one showing — rather than disappearing or falling back to the
+// panel. watchShellExit itself only ever runs inside an
+// r.app.QueueUpdateDraw callback (see shells.go's own doc comment on
+// why that needs a real running Application event loop no test here
+// starts — the same reasoning TestRemoveShellFallsBackToTheNextOne...
+// already established for removeShell). These tests therefore reproduce
+// that callback's own body directly, the same convention
+// finishCompressJob's own tests already establish.
+
+func TestExitedTerminalStaysInTheListAndOnScreen(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	tab := r.shells[0]
+
+	// watchShellExit's own callback body, reproduced directly (see
+	// this block's own doc comment).
+	tab.exited = true
+	refreshShellHeader(tab)
+
+	if len(r.shells) != 1 {
+		t.Errorf("len(r.shells) = %d after exit, want 1 (still there)", len(r.shells))
+	}
+	if !r.viewingShells {
+		t.Error("viewingShells = false after exit while it was the one on screen, want true (no auto fallback)")
+	}
+	if r.panelHost.GetItem(2) != tab.view {
+		t.Error("panelHost's view item changed after exit, want the same frozen view still mounted")
+	}
+}
+
+func TestExitedTerminalLabelAndHeaderShowExited(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	tab := r.shells[0]
+
+	if got := tab.label(); got == tab.conn.Label()+"  (exited)" {
+		t.Fatalf("label already marked exited before the process exited: %q", got)
+	}
+
+	tab.exited = true
+	refreshShellHeader(tab)
+
+	wantLabel := tab.conn.Label() + "  (exited)"
+	if got := tab.label(); got != wantLabel {
+		t.Errorf("label() after exit = %q, want %q", got, wantLabel)
+	}
+	if got, want := tab.header.GetText(true), " "+wantLabel+" "; got != want {
+		t.Errorf("header text after exit = %q, want %q", got, want)
+	}
+}
+
+// TestApplyThemeColorsEveryShellHeader is a regression test for the
+// identical real bug TestApplyThemeColorsTheShellsMenu/
+// TestApplyThemeColorsTheSSHShellMenuAndDialog already pin for two
+// earlier widgets in this same feature: a dynamically created widget
+// with no fixed Root field (there can be any number of open
+// Terminals) needs its own loop in applyTheme, not just a styling
+// call at construction time — otherwise a live scheme switch leaves
+// it showing whatever color it was built with.
+func TestApplyThemeColorsEveryShellHeader(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	custom := solarizedTheme().Resolve()
+	r.applyTheme(custom)
+
+	if got := r.shells[0].header.GetBackgroundColor(); got != custom.InputFocusedBackground {
+		t.Errorf("shell header background = %v, want %v", got, custom.InputFocusedBackground)
+	}
+}
+
+func TestClosingAnExitedTerminalStillRemovesIt(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "exit 0") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	tab := r.shells[0]
+	select {
+	case <-tab.session.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("the stub process never exited")
+	}
+	tab.exited = true
+
+	r.closeShell(0)
+
+	if len(r.shells) != 0 {
+		t.Errorf("len(r.shells) = %d after explicitly closing an exited terminal, want 0", len(r.shells))
 	}
 }

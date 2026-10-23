@@ -1384,6 +1384,21 @@ var helpText = strings.TrimLeft(`
   of handing the whole terminal over for as long as the connection
   lasts.
 
+  A Terminal fills most of the screen, but not quite all of it: the
+  panel's own top row (path bar, filter, the strips themselves) stays
+  visible above it, and a one-line header right below that names
+  which connection this particular Terminal is open to — both there so
+  the screen while viewing a Terminal still looks like part of the
+  same app, not a bare takeover.
+
+  If a Terminal's own remote process ends on its own — the connection
+  drops, you log out on the far side — nothing happens here
+  automatically: the screen keeps showing whatever was last on it, the
+  entry stays in the strip and the switcher (now marked "(exited)"),
+  and leaving is exactly the same as for a live one — switch to a tab,
+  open the switcher, Ctrl+\, or close it outright with "✕"/Delete.
+  Nothing about an ended Terminal disappears until you tell it to.
+
   While a Terminal has focus, nearly every keystroke goes straight to
   the remote side, exactly as if you'd ssh'd in from a bare terminal —
   with two deliberate exceptions: Alt+S (above) and Ctrl+\, reserved
