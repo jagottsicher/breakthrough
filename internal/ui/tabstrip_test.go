@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -139,12 +140,11 @@ func TestTabStripWindowNeverExceedsMaxVisible(t *testing.T) {
 
 // TestRenderTabStripHandlesDegenerateInput pins that a zero/negative
 // count and an out-of-range active index can't panic or produce a
-// nonsense highlight — both are reachable from a corrupted saved layout.
-// A non-positive count still gets the bare "+" (see the count < 2 case
-// below it never draws literally nothing), the same as the ordinary
-// single-tab case.
+// nonsense highlight — both are reachable from a corrupted saved
+// layout (count itself is never actually 0 in practice — there's
+// always at least one tab — this only pins that it doesn't panic).
 func TestRenderTabStripHandlesDegenerateInput(t *testing.T) {
-	if got, want := stripText(0, 0), tabStripNewLabel; got != want {
+	if got, want := stripText(0, 0), " "+tabStripNewLabel; got != want {
 		t.Errorf("renderTabStrip(0, 0) = %q, want %q", got, want)
 	}
 	if got, want := stripText(2, 99), "1 2 +"; got != want {
@@ -152,18 +152,28 @@ func TestRenderTabStripHandlesDegenerateInput(t *testing.T) {
 	}
 }
 
-// TestRenderTabStripWithASingleTabIsJustThePlusButton pins the fix for a
-// real reported gap: hiding the strip entirely with one tab (an earlier
-// version of this) also hid the only way to discover that tabs exist at
-// all. A single tab draws no number — there's nothing to number against
-// — but the "+" itself stays, as a real, clickable entry point.
-func TestRenderTabStripWithASingleTabIsJustThePlusButton(t *testing.T) {
-	text, spans := renderTabStrip(1, 0, tcell.ColorWhite, tcell.ColorBlack)
-	if text != tabStripNewLabel {
-		t.Errorf("renderTabStrip(1, 0) = %q, want just %q", text, tabStripNewLabel)
+// TestRenderTabStripWithASingleTabStillGetsARealNumber pins the current
+// contract (see renderTabStrip's own doc comment on why the earlier
+// "+"-only version of this wasn't enough once Terminals could cover the
+// whole screen): a single tab still draws its own real "1", a genuine
+// clickable target to leave Terminal view and land back on it, not just
+// the "+".
+func TestRenderTabStripWithASingleTabStillGetsARealNumber(t *testing.T) {
+	_, spans := renderTabStrip(1, 0, tcell.ColorWhite, tcell.ColorBlack)
+	// Tab 0 is also the active one here, so its own "1" carries the
+	// highlight color tag — stripText strips it, the same as every
+	// other test in this file that only cares about the plain glyphs.
+	if want := "1 " + tabStripNewLabel; stripText(1, 0) != want {
+		t.Errorf("renderTabStrip(1, 0) plain text = %q, want %q", stripText(1, 0), want)
 	}
-	if len(spans) != 1 || spans[0].tab != tabStripSpanNew {
-		t.Errorf("spans = %v, want a single span targeting tabStripSpanNew", spans)
+	if len(spans) != 2 {
+		t.Fatalf("spans = %v, want 2 (the tab, then +)", spans)
+	}
+	if spans[0].tab != 0 {
+		t.Errorf("first span targets %d, want tab 0", spans[0].tab)
+	}
+	if spans[1].tab != tabStripSpanNew {
+		t.Errorf("last span targets %d, want tabStripSpanNew", spans[1].tab)
 	}
 }
 
@@ -179,11 +189,11 @@ func TestTabStripWidthMatchesRenderedText(t *testing.T) {
 	}
 }
 
-// TestPanelTabStripShowsJustPlusWithASingleTab pins the fix for a real
-// reported gap: an earlier version of this hid the strip entirely with
-// one tab, which also hid the only way to discover tabs exist at all.
-// One tab now still shows a bare "+", with its own click span.
-func TestPanelTabStripShowsJustPlusWithASingleTab(t *testing.T) {
+// TestPanelTabStripShowsANumberAndPlusWithASingleTab pins the current
+// contract (see renderTabStrip's own doc comment): one tab still shows
+// its own real "1", not just "+" — a real, clickable way back to it
+// once a Terminal is covering the screen.
+func TestPanelTabStripShowsANumberAndPlusWithASingleTab(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -195,15 +205,21 @@ func TestPanelTabStripShowsJustPlusWithASingleTab(t *testing.T) {
 	// comment on why that's baked into the text, not a separate spacer
 	// item) — spans are shifted the same amount so a click still maps to
 	// the right column.
-	want := strings.Repeat(" ", headerTabStripGap) + tabStripNewLabel
+	want := strings.Repeat(" ", headerTabStripGap) + "1 " + tabStripNewLabel
 	if got := r.panel.tabStrip.GetText(true); got != want {
 		t.Errorf("tab strip with one tab = %q, want %q", got, want)
 	}
-	if len(r.panel.tabStripSpans) != 1 || r.panel.tabStripSpans[0].tab != tabStripSpanNew {
-		t.Errorf("tab strip spans = %v, want a single span targeting tabStripSpanNew", r.panel.tabStripSpans)
+	if len(r.panel.tabStripSpans) != 2 {
+		t.Fatalf("tab strip spans = %v, want 2 (the tab, then +)", r.panel.tabStripSpans)
+	}
+	if r.panel.tabStripSpans[0].tab != 0 {
+		t.Errorf("first span targets %d, want tab 0", r.panel.tabStripSpans[0].tab)
+	}
+	if r.panel.tabStripSpans[1].tab != tabStripSpanNew {
+		t.Errorf("last span targets %d, want tabStripSpanNew", r.panel.tabStripSpans[1].tab)
 	}
 	if got, want := r.panel.tabStripSpans[0].start, headerTabStripGap; got != want {
-		t.Errorf("the + span starts at column %d, want %d (right after the leading gap)", got, want)
+		t.Errorf("the \"1\" span starts at column %d, want %d (right after the leading gap)", got, want)
 	}
 }
 
@@ -218,17 +234,45 @@ func TestTabStripPlusClickWithASingleTabOpensANewTab(t *testing.T) {
 	}
 	r.panel.tabStrip.SetRect(0, 0, 10, 1)
 
-	// Column headerTabStripGap, not 0: the "+" itself starts right after
-	// the leading gap the widget now draws as part of its own text (see
-	// refreshTabStrip). Clicking column 0 — inside the gap, not the "+"
-	// — is covered separately below.
+	plus := r.panel.tabStripSpans[len(r.panel.tabStripSpans)-1]
+	if plus.tab != tabStripSpanNew {
+		t.Fatalf("setup: last span targets %d, want tabStripSpanNew", plus.tab)
+	}
 	r.panel.captureTabStripMouse(
 		tview.MouseLeftClick,
-		tcell.NewEventMouse(headerTabStripGap, 0, tcell.ButtonNone, 0),
+		tcell.NewEventMouse(plus.start, 0, tcell.ButtonNone, 0),
 	)
 
 	if got := r.tabCount(); got != 2 {
 		t.Errorf("tab count after clicking the lone + = %d, want 2", got)
+	}
+}
+
+// TestTabStripNumberClickWithASingleTabLeavesTerminalView pins the real
+// bug this whole fix is for: with only one tab open and a Terminal on
+// screen, clicking that tab's own "1" has to actually leave Terminal
+// view and show the panel again — not a no-op just because the active
+// tab index never changes (see switchToTab's own doc comment).
+func TestTabStripNumberClickWithASingleTabLeavesTerminalView(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	r.panel.headerRow.SetRect(0, 0, 40, 1)
+	r.panel.tabStrip.SetRect(0, 0, 10, 1)
+
+	one := r.panel.tabStripSpans[0]
+	if one.tab != 0 {
+		t.Fatalf("setup: first span targets %d, want tab 0", one.tab)
+	}
+	r.panel.captureTabStripMouse(
+		tview.MouseLeftClick,
+		tcell.NewEventMouse(one.start, 0, tcell.ButtonNone, 0),
+	)
+
+	if r.viewingShells {
+		t.Error("viewingShells still true after clicking the tab's own number")
 	}
 }
 

@@ -141,7 +141,16 @@ func (r *Root) switchToTab(i int) {
 	if i < 0 || i >= len(r.tabs) {
 		return
 	}
-	if i == r.activeTab {
+	// Not an unconditional early return: while viewing a Terminal, the
+	// active tab is still i (switching tabs never touches it — see
+	// shells.go's own design), but the panel itself isn't what's on
+	// screen. Clicking that tab's own strip number has to be able to
+	// leave the Terminal view and show it again even though i never
+	// actually changes — a real, user-reported bug otherwise: with
+	// only one tab open there was no way back to it at all once a
+	// Terminal was showing (see tabstrip.go's own doc comment on why
+	// a single tab now still gets a real number to click).
+	if i == r.activeTab && !r.viewingShells {
 		return
 	}
 
@@ -172,6 +181,17 @@ func (r *Root) switchToTab(i int) {
 	r.remountPanels()
 
 	r.refreshTabStrips()
+	// Also on every switch, not just when a Shell actually opens or
+	// closes (shells.go's own two call sites): a freshly built Panel
+	// (NewPanel's own paintStaticChrome call) renders its own terminal
+	// strip from its own just-constructed, still-default
+	// terminalCount/terminalActive (0/-1) — correct only by accident
+	// if no Shell happens to be open yet. Opening a new tab while
+	// Terminals already exist left that new tab's own strip showing
+	// "+" alone, out of sync with the real r.shells, until some
+	// unrelated Shell event happened to sweep past it. This pulls the
+	// real state into every panel, this new one included.
+	r.refreshTerminalStrips()
 	r.refreshStatusBar()
 	r.refreshDetailsSidebar()
 
