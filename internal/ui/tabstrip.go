@@ -227,9 +227,12 @@ func (p *Panel) refreshTabStrip() {
 		spans[i].end += headerTabStripGap
 	}
 	p.tabStripSpans = spans
-	// One trailing column of breathing room before the Details "<"
-	// button, so the "+" doesn't sit flush against it.
-	p.headerRow.ResizeItem(p.tabStrip, headerTabStripGap+tview.TaggedStringWidth(text)+1, 0)
+	// No trailing padding column here any more — the terminal strip
+	// sits directly after this one now (see NewPanel's own headerRow
+	// order) and carries its own leading gap, which is what used to
+	// sit here when this strip was the one directly before the
+	// Details "<" button.
+	p.headerRow.ResizeItem(p.tabStrip, headerTabStripGap+tview.TaggedStringWidth(text), 0)
 }
 
 // captureTabStripMouse turns a click on a tab number into a switch, and a

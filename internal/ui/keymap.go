@@ -170,6 +170,14 @@ func plainCommands() []plainCommand {
 		// three ways to reach it.
 		{key: '@', label: "Connect…", quick: true, short: "Conn", action: func(r *Root) { r.openConnectionMenu() }},
 		{key: 't', label: "Tab switcher", quick: true, short: "Tabs", action: func(r *Root) { r.openTabSwitcher(r.activeTab) }},
+		// Shift+t, right next to plain "t" above — the same key, Shift
+		// tells apart file tabs from embedded remote Terminals. Only
+		// reachable while the panel itself has focus (same as every
+		// other plain-letter binding — see acceptsPlainKeyCommand), so
+		// this alone can't get anyone back out of an open Terminal;
+		// Alt+S (cmd/breakthrough) and Ctrl+\ (same file, Terminal-only)
+		// both still work regardless of focus for that.
+		{key: 'T', label: "Terminal switcher", quick: true, short: "Term", action: func(r *Root) { r.openTerminalSwitcher(r.activeShell) }},
 		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
 		{key: '?', label: "Help", quick: true, short: "Help", action: func(r *Root) { r.openHelp() }},
 		{key: 'n', label: "New tab", action: func(r *Root) { r.newTabHere() }},
