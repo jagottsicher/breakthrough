@@ -511,6 +511,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		's': " s Split",
 		'@': " @ Conn",
 		't': " t Tabs",
+		'T': " T Term",
 	}
 	found := map[rune]bool{}
 	for _, s := range spans {

@@ -74,6 +74,39 @@ func (r *Root) openNewShellEmbedded(conn remotefs.Connection) {
 	r.switchToShell(len(r.shells) - 1)
 }
 
+// openNewTerminalDialog opens the existing "Add new ssh connection"
+// dialog with its submit overridden to land here (openNewShellEmbedded)
+// instead of the default Suspend+exec ssh launcher — the one place both
+// the terminal strip's own leading "+" (terminalstrip.go) and the
+// switcher's own "+ New terminal…" row (terminalswitcher.go) end up, so
+// neither has to duplicate the override-then-open sequence.
+// ExitTerminalViewShortcut is Ctrl+\ (see cmd/breakthrough's own global
+// SetInputCapture) — the one way out of a Terminal when neither Alt+S
+// nor the switcher's own Escape is reachable (a real iPad-keyboard
+// report: Option+S, Alt+S's own equivalent there, never reached the
+// app at all). Reserved exclusively while a Terminal is actually on
+// screen; reports false otherwise so the global handler lets the
+// keystroke fall through unconsumed rather than swallowing a
+// combination that means nothing here.
+//
+// Closes any overlay stacked on top first (the terminal switcher
+// itself, most likely) rather than only ever working with none open:
+// the point of this key is "get me back to the files, whatever's
+// currently in the way", not one more thing to navigate past first.
+func (r *Root) ExitTerminalViewShortcut() bool {
+	if !r.viewingShells {
+		return false
+	}
+	r.closeAllOverlays()
+	r.viewFiles()
+	return true
+}
+
+func (r *Root) openNewTerminalDialog() {
+	r.sshShellSubmit = r.openNewShellEmbedded
+	r.openSSHShellDialog(remotefs.Connection{})
+}
+
 // watchShellExit removes tab once its own underlying process exits on
 // its own (the remote shell was told to log out, the connection
 // dropped, ...) — one background goroutine per open Shell, the same
@@ -89,6 +122,17 @@ func (r *Root) watchShellExit(tab *shellTab) {
 			r.removeShell(tab)
 		})
 	})
+}
+
+// refreshTerminalStrips pushes the current Terminal count and active
+// index into every tab's own terminal strip — the identical shape
+// Root.refreshTabStrips already establishes for the tab strip, for the
+// identical reason: a tab that isn't currently on screen still has to be
+// correct the instant it's switched to.
+func (r *Root) refreshTerminalStrips() {
+	for _, p := range r.tabs {
+		p.setTerminals(len(r.shells), r.activeShell)
+	}
 }
 
 // shellIndex returns tab's own current position in r.shells, or -1 if
@@ -165,12 +209,16 @@ func (r *Root) removeShell(tab *shellTab) {
 	case r.activeShell > i:
 		r.activeShell--
 	}
+	r.refreshTerminalStrips()
 }
 
 // switchToShell makes shell i the visible one, entering "viewing
 // shells" mode if not already in it — the Shells menu's own Enter/
 // click on a shell row, and a plain digit typed while that menu has
-// focus (see captureShellsMenuKey).
+// focus (see captureShellsMenuKey). Also refreshes every panel's own
+// terminal strip, since this is the one place r.activeShell actually
+// moves (removeShell's own index-only-adjustment branch is the lone
+// exception, and calls refreshTerminalStrips itself).
 func (r *Root) switchToShell(i int) {
 	if i < 0 || i >= len(r.shells) {
 		return
@@ -178,6 +226,7 @@ func (r *Root) switchToShell(i int) {
 	r.activeShell = i
 	r.remountShellView()
 	r.app.SetFocus(r.shells[i].view)
+	r.refreshTerminalStrips()
 }
 
 // viewFiles leaves "viewing shells" mode, returning to whichever

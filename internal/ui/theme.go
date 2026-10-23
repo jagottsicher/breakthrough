@@ -611,15 +611,17 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// TitleBar's own Text.
 	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)
 
-	// The Shells overlay (shellsmenu.go) — the identical close-glyph
-	// title bar treatment sshShellMenuTitleBar just above uses, for
-	// the identical reason (see that block's own doc comment).
-	r.shellsMenuTable.SetBackgroundColor(theme.SurfaceBackground)
-	r.shellsMenuTable.SetSelectedStyle(tcell.StyleDefault.
+	// The Terminal switcher (terminalswitcher.go) — the identical
+	// plain-title-bar treatment tabSwitcherTitleBar below uses (no
+	// close glyph, see that overlay's own doc comment on why), since
+	// this one was deliberately rebuilt to look and behave like the
+	// tab switcher.
+	r.terminalSwitcher.SetBackgroundColor(theme.SurfaceBackground)
+	r.terminalSwitcher.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
-	r.shellsMenuTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.shellsMenuTitleBar.SetTextColor(theme.TextColor)
+	r.terminalSwitcherTitleBar.SetBackgroundColor(theme.SurfaceBackground)
+	r.terminalSwitcherTitleBar.SetTextColor(theme.Text)
 
 	// Duplicate/Multiply (see duplicate.go/applyDuplicateTheme).
 	r.applyDuplicateTheme(theme)

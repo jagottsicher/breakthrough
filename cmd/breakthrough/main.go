@@ -333,22 +333,46 @@ func run() error {
 				root.SwitchToTabShortcut(n)
 				return nil
 			}
-			// Alt+S opens the Shells overlay (see internal/ui/shellsmenu.go)
-			// — a single modifier, deliberately not Alt+0..9's own
-			// Ctrl-or-Alt pairing above: those two are already taken,
-			// permanently, by the existing tab-switch fallback just
-			// above, and Ctrl+Shift+digit was ruled out as commonly
-			// intercepted by the terminal emulator itself before ever
-			// reaching this app (GNOME Terminal, iTerm2, Windows
-			// Terminal, Konsole all reserve it for their own tab
-			// switching). Always intercepted globally for now; a
-			// planned Options toggle (mirroring the existing "Mouse on/
-			// off" setting) will let this be disabled later so Alt+S
-			// can instead reach an embedded remote shell that wants it
-			// for its own purposes (Emacs' M-s isearch prefix being the
-			// one real, accepted collision).
+			// Alt+S opens the Terminal switcher (see
+			// internal/ui/terminalswitcher.go) — a single modifier,
+			// deliberately not Alt+0..9's own Ctrl-or-Alt pairing above:
+			// those two are already taken, permanently, by the existing
+			// tab-switch fallback just above, and Ctrl+Shift+digit was
+			// ruled out as commonly intercepted by the terminal
+			// emulator itself before ever reaching this app (GNOME
+			// Terminal, iTerm2, Windows Terminal, Konsole all reserve
+			// it for their own tab switching). Always intercepted
+			// globally for now; a planned Options toggle (mirroring the
+			// existing "Mouse on/off" setting) will let this be
+			// disabled later so Alt+S can instead reach an embedded
+			// remote terminal that wants it for its own purposes
+			// (Emacs' M-s isearch prefix being the one real, accepted
+			// collision). The plain "T" key (keymap.go) reaches the
+			// same overlay too, but only while the panel itself has
+			// focus — this is the one that also works while a Terminal
+			// is focused, on a real iPad-keyboard report where
+			// Option+S (this binding's own iPad equivalent) doesn't
+			// reach the app at all.
 			if event.Modifiers()&tcell.ModAlt != 0 && event.Rune() == 's' {
-				root.OpenShellsMenuShortcut()
+				root.OpenTerminalSwitcherShortcut()
+				return nil
+			}
+			return event
+		case tcell.KeyCtrlBackslash:
+			// The one way out of a Terminal when neither Alt+S nor the
+			// terminal switcher's own Escape is reachable — the same
+			// real iPad report just above. Reserved exclusively while a
+			// Terminal is actually on screen (ExitTerminalViewShortcut's
+			// own guard), the user's own explicit choice among the
+			// classic rare-control-character "detach"/"escape"
+			// conventions telnet and tmux/screen already use for the
+			// identical problem (a key that's otherwise almost never
+			// typed deliberately into a real shell session) — Ctrl+]
+			// was the other candidate offered. Falls through unconsumed
+			// whenever no Terminal is showing, so it never takes this
+			// combination away from bashLine or anything else that
+			// might one day want it.
+			if root.ExitTerminalViewShortcut() {
 				return nil
 			}
 			return event

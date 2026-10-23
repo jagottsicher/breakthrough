@@ -327,6 +327,20 @@ type Panel struct {
 	onNewTab          func()
 	onOpenTabSwitcher func()
 
+	// terminalStrip is the Terminal-number strip sitting right after
+	// tabStrip, before detailsExpandBtn (see terminalstrip.go for the
+	// whole design, and NewPanel for the header row it's added to).
+	// Mirrors tabStrip's own fields one for one; terminalActive of -1
+	// means no Terminal is currently active (possible here, unlike a
+	// tab, since a session can have zero open Terminals).
+	terminalStrip          *tview.TextView
+	terminalStripSpans     []terminalStripSpan
+	terminalCount          int
+	terminalActive         int
+	onSelectTerminal       func(int)
+	onNewTerminal          func()
+	onOpenTerminalSwitcher func()
+
 	// columnHeader is a second, single-row table sitting between the path
 	// bar and the data table (table) — its own doc comment (see
 	// buildColumnHeader) explains why a second table, not a shared row 0
@@ -858,6 +872,13 @@ const (
 	// reading as part of it — a second real report, this time about the
 	// fix for the first one.
 	headerTabStripGap = 1
+
+	// headerTerminalStripGap is the terminal strip's own one-column
+	// lead-in, drawn as part of its own text the same way
+	// headerTabStripGap is — see that constant's own doc comment for
+	// why (a separate blank Flex item has no background color of its
+	// own to paint, leaving a visibly different-colored seam).
+	headerTerminalStripGap = 1
 )
 
 // Theme/App satisfy scrollbarHost (scrollbar.go) — Panel already has
@@ -1042,6 +1063,15 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	p.tabStrip.SetDynamicColors(true) // the active tab's own highlight is a color tag
 	p.tabStrip.SetMouseCapture(p.captureTabStripMouse)
 
+	// The Terminal strip — see terminalstrip.go. Starts empty, showing
+	// only its own leading "+" (never fully hidden — see that file's
+	// own doc comment).
+	p.terminalActive = -1
+	p.terminalStrip = tview.NewTextView()
+	p.terminalStrip.SetWrap(false)
+	p.terminalStrip.SetDynamicColors(true)
+	p.terminalStrip.SetMouseCapture(p.captureTerminalStripMouse)
+
 	// "<" expands the Details sidebar — see detailsExpandBtn's own doc
 	// comment on the struct.
 	p.detailsExpandBtn = tview.NewButton("<")
@@ -1098,6 +1128,12 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// itself as tabs come and go, which is why headerRow is kept as a
 	// field.
 	headerRow.AddItem(p.tabStrip, 0, 0, false)
+	// The Terminal strip goes right after the tab strip, before the
+	// Details button — per the user's own explicit request for that
+	// order (its own "+" first, then its numbers — see
+	// terminalstrip.go's own doc comment on why that's not simply
+	// mirrored from the tab strip's own numbers-then-"+" layout).
+	headerRow.AddItem(p.terminalStrip, 0, 0, false)
 	headerRow.AddItem(p.detailsExpandBtn, headerDetailsExpandWidth, 0, false)
 	p.headerRow = headerRow
 
@@ -1165,6 +1201,14 @@ func (p *Panel) paintStaticChrome() {
 	// is baked into the text as a color tag (see renderTabStrip), so a
 	// live scheme switch has to rebuild the text to pick up the new one.
 	p.refreshTabStrip()
+
+	p.styleTerminalStrip(p.theme)
+	// Re-render for the identical reason refreshTabStrip is called just
+	// above — styleTerminalStrip only repaints the strip's own idle
+	// background (AccentBackground), not the fixed gray/white/green
+	// glyph colors baked into the text itself, but AccentBackground
+	// itself can still change with the scheme.
+	p.refreshTerminalStrip()
 
 	// Unlike headerEdit above, filterField DOES have a real "sometimes
 	// focused, sometimes not" cycle — it sits permanently in the header

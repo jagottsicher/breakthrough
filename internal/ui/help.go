@@ -1342,38 +1342,60 @@ var helpText = strings.TrimLeft(`
   strip, and the context menu all work regardless of what your terminal
   can report.
 
-[::b]Shells[::-]
+[::b]Terminals[::-]
 
   A separate, independent set of live embedded remote terminals — one
   per open connection, each a real background process that keeps
   running whether or not it's the one on screen right now. Unlike
-  Tabs above, a Shell has no directory or file list of its own; it's
-  a terminal, not a panel.
+  Tabs above, a Terminal has no directory or file list of its own;
+  it's a terminal, not a panel.
 
-  Alt+S              Open the Shells overlay: every currently open
-                     Shell, numbered, plus "+ New shell…" to start one
-                     and, while a Shell is on screen, "Files" to
-                     return to the panel.
+  The Terminal strip sits right after the tab strip's own "+", in the
+  same header row — its own "+" first (click it for a new Terminal),
+  then a number per currently open one. Deliberately drawn in a fixed
+  gray-on-white look (gray-on-green for whichever one is active) that
+  doesn't change with the color scheme, so it always reads as its own
+  thing next to the themed tab numbers beside it. Click a number to
+  switch, click anywhere else in the strip for the full switcher
+  below.
 
-  In the overlay: a bare digit (no Ctrl or Alt) jumps straight to that
-  numbered Shell — only the first ten get a digit of their own, the
-  same "...0 is the tenth" numbering Tabs above uses. Enter or Space
-  on a row switches to it; "✕" (or "x"/Delete from anywhere in the
-  row) closes that Shell outright. Escape closes the overlay without
-  changing anything.
+  T                  Open the Terminal switcher — only while the panel
+                     itself has focus, the same as "t" for Tabs above.
+  Alt+S              The same switcher, but reaches it regardless of
+                     where the keyboard focus currently is, including
+                     from inside an open Terminal — the only one of
+                     the three that does.
 
-  "+ New shell…" reuses the exact same "Add new ssh connection" dialog
-  the "gs" chord's own one-off ssh shell already opens — Host/Port/
-  User plus the agent-forwarding/compression/verbose/X11 flags —
-  except this one stays open in its own Shell afterwards instead of
-  handing the whole terminal over for as long as the connection lasts.
+  The switcher itself looks and works exactly like the Tab switcher
+  above: every currently open Terminal, numbered, with "+  New
+  terminal" to start one and, while a Terminal is actually on screen,
+  "Files" to return to the panel. Up/Down picks one, Right steps onto
+  its own "✕" (or Delete from anywhere in the row) to close it, Enter
+  or Space goes there, Escape stays put. A bare digit (no Ctrl or Alt)
+  jumps straight to that numbered Terminal and closes the switcher
+  immediately — only the first ten get a digit this way, the same
+  "...0 is the tenth" numbering Tabs above uses; it's the one thing
+  this switcher has that the Tab switcher doesn't.
 
-  While a Shell has focus, nearly every keystroke goes straight to the
-  remote side, exactly as if you'd ssh'd in from a bare terminal — with
-  one deliberate exception: Alt+S itself is always caught here first,
-  even then, so there's always a way back to this overlay. A later
-  Options setting is planned to let that interception be turned off,
-  for the rare remote program that wants Alt+S for its own purposes.
+  "+  New terminal" reuses the exact same "Add new ssh connection"
+  dialog the "gs" chord's own one-off ssh shell already opens — Host/
+  Port/User plus the agent-forwarding/compression/verbose/X11 flags —
+  except this one stays open in its own Terminal afterwards instead
+  of handing the whole terminal over for as long as the connection
+  lasts.
+
+  While a Terminal has focus, nearly every keystroke goes straight to
+  the remote side, exactly as if you'd ssh'd in from a bare terminal —
+  with two deliberate exceptions: Alt+S (above) and Ctrl+\, reserved
+  exclusively while a Terminal is on screen as a guaranteed way back
+  out even when neither Alt+S nor the switcher's own Escape reaches
+  the app (a real report: some keyboards/terminal apps never deliver
+  Option+S at all). The same classic rare-control-character "detach"
+  convention telnet and tmux/screen already use for the identical
+  problem — a key that's otherwise almost never typed deliberately
+  into a real shell session. A later Options setting is planned to
+  let Alt+S's own interception be turned off, for the rare remote
+  program that wants it for its own purposes.
 
   The open tabs are saved when you quit, but a bare "breakthrough"
   opens in the current directory rather than reopening them; setting
