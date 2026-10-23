@@ -59,6 +59,22 @@ func (r *Root) splitDirection() int {
 // removes the positional page-name bookkeeping that made closing a tab
 // from the middle of the list a rebuild anyway.
 func (r *Root) remountPanels() {
+	// Every existing caller of remountPanels (switching tabs, closing
+	// one, entering/leaving split view, restoring saved tabs on
+	// startup) predates Shells and has no reason to know they exist —
+	// so leaving Shell view is handled here, once, as a side effect of
+	// this function putting tabs/panes back into panelHost, rather
+	// than needing a parallel check at every one of those call sites
+	// (see shells.go's own package doc comment on this same point).
+	// r.shells itself is left untouched: a Shell keeps running in the
+	// background regardless of what's currently on screen (see
+	// openNewShellEmbedded's own doc comment) — only the display and
+	// bashConsole's own collapsed row size are restored here.
+	if r.viewingShells {
+		r.viewingShells = false
+		r.mainLayout.ResizeItem(r.bashConsole, 1, 0)
+	}
+
 	r.panelHost.Clear()
 
 	if !r.splitActive {

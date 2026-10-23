@@ -577,6 +577,7 @@ func (r *Root) setSSHShellStatus(text string, color tcell.Color) {
 }
 
 func (r *Root) cancelSSHShell() {
+	r.sshShellSubmit = nil
 	r.hideOverlay()
 }
 
@@ -616,6 +617,12 @@ func (r *Root) runSSHShellFromDialog() {
 	}
 
 	r.hideOverlay()
+	if r.sshShellSubmit != nil {
+		submit := r.sshShellSubmit
+		r.sshShellSubmit = nil
+		submit(conn)
+		return
+	}
 	r.launchSSHShell(conn)
 }
 

@@ -59,6 +59,7 @@ const (
 	// shell instead of mounting an SFTP panel.
 	sshShellMenuPage   = "ssh-shell-menu"
 	sshShellDialogPage = "ssh-shell-dialog"
+	shellsMenuPage     = "shells-menu"
 	// pasteConflictPage's own dialog is built in pasteconflict.go
 	// (newPasteConflictDialog), not here — kept in this block anyway,
 	// like every other page name, so cmd/breakthrough and tests never
@@ -913,6 +914,32 @@ type Root struct {
 	splitActive bool
 	splitPanes  [2]int
 
+	// shells/activeShell/viewingShells back the Shells manager (see
+	// shells.go) — a separate, independent collection of embedded
+	// remote terminals, deliberately not merged into tabs/activeTab
+	// above (see shells.go's own package doc comment on why). Opening
+	// or closing a Shell never touches tabs/activeTab/splitPanes;
+	// conversely remountPanels (split.go) is the one place that turns
+	// viewingShells back off, so every existing path that already
+	// calls it (switching tabs, closing one, entering/leaving split
+	// view) leaves Shell view as an automatic side effect.
+	shells        []*shellTab
+	activeShell   int
+	viewingShells bool
+
+	// The Shells menu overlay (see shellsmenu.go) — opened by Alt+S,
+	// modeled directly on the sshShellMenuTable/sshShellMenuPage
+	// pattern just below, with its own page constant and widgets.
+	// shellsMenuRows maps a row to the open-shell index it names (the
+	// "+ New shell…" and "Files" rows are deliberately left out of it
+	// — see renderShellsMenu).
+	shellsMenuTable    *tview.Table
+	shellsMenuTitleBar *tview.TextView
+	shellsMenuLayout   *tview.Flex
+	shellsMenuRows     map[int]int
+	shellsMenuNewRow   int
+	shellsMenuFilesRow int
+
 	// The tab switcher overlay (see tabswitcher.go) — the same
 	// List/title-bar/Flex split every other overlay here uses, with
 	// tabSwitcher itself the real focus target and tabSwitcherLayout what
@@ -1336,6 +1363,17 @@ type Root struct {
 	sshShellButtons             *tview.Flex
 	sshShellTitleBar            *tview.TextView
 	sshShellLayout              *tview.Flex
+
+	// sshShellSubmit, when set, is what runSSHShellFromDialog calls
+	// instead of its own default r.launchSSHShell — cleared again right
+	// after, a one-shot override. This is the entire hook the Shells
+	// menu's own "+ New shell…" row needs to reuse this whole dialog/
+	// form as-is (see shellsmenu.go's openNewShellMenuDialog): set this
+	// to r.openNewShellEmbedded, then call the existing
+	// r.openSSHShellDialog(remotefs.Connection{}) unchanged. The "gs"
+	// launcher's own default path (this field left nil) is completely
+	// untouched.
+	sshShellSubmit func(remotefs.Connection)
 
 	// duplicateForm/duplicateButtons/duplicateLayout together make up the
 	// "Multiply" dialog (see duplicate.go). Unlike Sed Replace's own
@@ -2826,6 +2864,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.sshShellMenuTitleBar = r.newSSHShellMenuTitleBar()
 	r.sshShellMenuLayout = r.newSSHShellMenuLayout()
 
+	// The Shells overlay (Alt+S — see shellsmenu.go), the same two-
+	// pieces shape as the "gs" dropdown just above.
+	r.activeShell = -1
+	r.shellsMenuTable = r.newShellsMenuTable()
+	r.shellsMenuTitleBar = r.newShellsMenuTitleBar()
+	r.shellsMenuLayout = r.newShellsMenuLayout()
+
 	// The Batch Rename screen (see batchrename.go) — built once here,
 	// the same as the Options screen just below; only its contents are
 	// rebuilt per open (see openBatchRename).
@@ -3140,6 +3185,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
 	r.AddPage(sshShellDialogPage, r.sshShellLayout, false, false)
 	r.AddPage(sshShellMenuPage, r.sshShellMenuLayout, false, false)
+	r.AddPage(shellsMenuPage, r.shellsMenuLayout, false, false)
 	// resize=true: the hidden Easter egg overlay fills the whole
 	// terminal too, the same reasoning every other full-screen catalog's
 	// own comment above gives.
@@ -4123,6 +4169,7 @@ func (r *Root) setMouseEnabled(enabled bool) {
 // user never actually chose to leave behind.
 func (r *Root) confirmQuit() {
 	r.saveTabs()
+	r.closeAllShells()
 	_ = r.activityLog.Close()
 	r.app.Stop()
 }
