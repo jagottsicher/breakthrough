@@ -623,6 +623,15 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.terminalSwitcherTitleBar.SetBackgroundColor(theme.SurfaceBackground)
 	r.terminalSwitcherTitleBar.SetTextColor(theme.Text)
 
+	// Every open Terminal's own per-tab header line (see shells.go's
+	// newShellHeader) — a dynamically created widget with no fixed
+	// Root field of its own (there can be any number of them), so it
+	// needs its own loop here the same way r.forEachTab's own loop
+	// just below covers every Panel's long-lived widgets.
+	for _, tab := range r.shells {
+		styleShellHeader(tab.header, theme)
+	}
+
 	// Duplicate/Multiply (see duplicate.go/applyDuplicateTheme).
 	r.applyDuplicateTheme(theme)
 
