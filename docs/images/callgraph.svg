@@ -731,7 +731,7 @@
 <!-- (*github.com/jagottsicher/breakthrough/internal/ui.Root).RestoreSavedTabs -->
 <g id="node20" class="node">
 <title>(*github.com/jagottsicher/breakthrough/internal/ui.Root).RestoreSavedTabs</title>
-<g id="a_node20"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).RestoreSavedTabs | defined in tabs.go:288">
+<g id="a_node20"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).RestoreSavedTabs | defined in tabs.go:308">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M2255.7338,-292.4C2255.7338,-292.4 2104.2662,-292.4 2104.2662,-292.4 2098.2662,-292.4 2092.2662,-286.4 2092.2662,-280.4 2092.2662,-280.4 2092.2662,-268.4 2092.2662,-268.4 2092.2662,-262.4 2098.2662,-256.4 2104.2662,-256.4 2104.2662,-256.4 2255.7338,-256.4 2255.7338,-256.4 2261.7338,-256.4 2267.7338,-262.4 2267.7338,-268.4 2267.7338,-268.4 2267.7338,-280.4 2267.7338,-280.4 2267.7338,-286.4 2261.7338,-292.4 2255.7338,-292.4"/>
 <text text-anchor="middle" x="2180" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">(*Root).RestoreSavedTabs</text>
 </a>
@@ -749,7 +749,7 @@
 <!-- (*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo -->
 <g id="node21" class="node">
 <title>(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo</title>
-<g id="a_node21"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo | defined in root.go:3515">
+<g id="a_node21"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo | defined in root.go:3524">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M1597.075,-292.4C1597.075,-292.4 1464.925,-292.4 1464.925,-292.4 1458.925,-292.4 1452.925,-286.4 1452.925,-280.4 1452.925,-280.4 1452.925,-268.4 1452.925,-268.4 1452.925,-262.4 1458.925,-256.4 1464.925,-256.4 1464.925,-256.4 1597.075,-256.4 1597.075,-256.4 1603.075,-256.4 1609.075,-262.4 1609.075,-268.4 1609.075,-268.4 1609.075,-280.4 1609.075,-280.4 1609.075,-286.4 1603.075,-292.4 1597.075,-292.4"/>
 <text text-anchor="middle" x="1531" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">(*Root).SetVersionInfo</text>
 </a>

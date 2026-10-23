@@ -3069,6 +3069,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.activeTab = 0
 	r.splitPanes = [2]int{-1, -1} // no pair chosen yet; see splitPanes' own doc comment
 	r.remountPanels()
+	// panel's own tabCount/tabActive otherwise stay at their Go zero
+	// values (0, 0) until some later tab-related event happens to call
+	// this — invisible so far only because renderTabStrip's own former
+	// "count < 2" special case rendered 0 and 1 identically. Now that a
+	// single tab gets a real, clickable number (see tabstrip.go's own
+	// doc comment), that zero value would show as a bare "+" with no
+	// number at all until the first tab-related event ran.
+	r.refreshTabStrips()
+	r.refreshTerminalStrips() // defensive symmetry; terminalCount already correctly starts at 0
 
 	r.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
 	r.mainLayout.AddItem(r.panelHost, 0, 1, true)

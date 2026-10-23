@@ -44,7 +44,7 @@ func TestRenderTerminalStripPutsThePlusBeforeTheNumbers(t *testing.T) {
 func TestRenderTerminalStripHighlightsOnlyTheActiveTerminal(t *testing.T) {
 	text, _ := renderTerminalStrip(4, 2)
 
-	tag := ":" + colorTag(tcell.ColorGray) + "]"
+	tag := ":" + colorTag(tcell.ColorDimGray) + "]"
 	if got := strings.Count(text, tag); got != 1 {
 		t.Fatalf("found %d gray-background segments in %q, want exactly 1 (the active terminal)", got, text)
 	}
@@ -56,7 +56,7 @@ func TestRenderTerminalStripHighlightsOnlyTheActiveTerminal(t *testing.T) {
 
 func TestRenderTerminalStripNoHighlightWhenNoneIsActive(t *testing.T) {
 	text, _ := renderTerminalStrip(3, -1)
-	tag := ":" + colorTag(tcell.ColorGray) + "]"
+	tag := ":" + colorTag(tcell.ColorDimGray) + "]"
 	if strings.Count(text, tag) != 0 {
 		t.Errorf("renderTerminalStrip(3, -1) = %q, want no active-terminal highlight at all", text)
 	}
