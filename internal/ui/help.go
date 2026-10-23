@@ -1397,7 +1397,10 @@ var helpText = strings.TrimLeft(`
   entry stays in the strip and the switcher (now marked "(exited)"),
   and leaving is exactly the same as for a live one — switch to a tab,
   open the switcher, Ctrl+\, or close it outright with "✕"/Delete.
-  Nothing about an ended Terminal disappears until you tell it to.
+  Once it has actually exited, Ctrl+C, Escape, and Tab leave it too —
+  there's nothing left to send those to on the other end at that
+  point, so this app takes them back instead. Nothing about an ended
+  Terminal disappears until you tell it to.
 
   While a Terminal has focus, nearly every keystroke goes straight to
   the remote side, exactly as if you'd ssh'd in from a bare terminal —

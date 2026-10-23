@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
+
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -323,6 +325,35 @@ func TestExitedTerminalLabelAndHeaderShowExited(t *testing.T) {
 	}
 	if got, want := tab.header.GetText(true), " "+wantLabel+" "; got != want {
 		t.Errorf("header text after exit = %q, want %q", got, want)
+	}
+}
+
+// TestExitedTerminalLeaveKeysReturnToFiles pins the full, wired-up
+// path a real exit goes through — not just termtabview.go's own
+// isolated InputHandler tests: watchShellExit's own callback body
+// (reproduced directly, see this file's own doc comment on why) sets
+// tab.view.exited, and openNewShellEmbedded wired tab.view.onLeave to
+// ExitTerminalViewShortcut — so once exited, Ctrl+C/Escape/Tab on the
+// actual mounted view really do leave Terminal view, the user's own
+// explicit request ("mit Aktivierung des äußeren breakthrough").
+func TestExitedTerminalLeaveKeysReturnToFiles(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	tab := r.shells[0]
+
+	tab.exited = true
+	tab.view.exited = true
+	refreshShellHeader(tab)
+
+	tab.view.InputHandler()(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.viewingShells {
+		t.Error("viewingShells still true after Ctrl+C on an exited terminal's own view")
+	}
+	if r.panel == nil || r.app.GetFocus() != r.panel.table {
+		t.Error("focus didn't return to the panel after leaving an exited terminal")
 	}
 }
 
