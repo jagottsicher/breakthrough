@@ -91,11 +91,13 @@ var helpText = strings.TrimLeft(`
   4000ms by default:
 
     g  goto     gg top · gh home · gu up · gp back · gn forward ·
-                gr / (root) · gb Trashbin · gc Connect… · gs SSH shell…
-                (a real interactive remote shell, same connection list
-                as gc) · gm Flareup · ge Email (launches neomutt/aerc/
-                himalaya/mail/mailx, whichever is installed —
-                configurable under Options) ·
+                gr / (root) · gb Trashbin · gc Connect… · gs Direct
+                SSH shell… (a real, blocking interactive remote shell,
+                same connection list as gc) · gT Terminal (same as
+                plain "T" — a persistent, embedded one instead) ·
+                gm Flareup · ge Email (launches neomutt/aerc/himalaya/
+                mail/mailx, whichever is installed — configurable
+                under Options) ·
                 g: Bash prompt (same as plain ":")
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
@@ -366,13 +368,19 @@ var helpText = strings.TrimLeft(`
   Compare Faultline, Batch rename, Sed Replace, and Properties as a whole still
   refuse outright for now.
 
-  "gs" opens a second dropdown ("Open shell to"), shaped like the one
-  above but for a real interactive SSH shell instead of mounting a
-  panel — reads and writes the exact same connection history, so a
-  host saved from either one shows up in both. Picking a row launches
-  a real ssh process with the whole terminal handed over (same Suspend
-  mechanism Email above uses), so a remote "sudo -i"/"su -" identity
-  switch just works, the same as typing it at any other real shell.
+  "gs" ("Direct SSH shell…") opens a second dropdown ("Open shell
+  to"), shaped like the one above but for a real interactive SSH
+  shell instead of mounting a panel — reads and writes the exact same
+  connection history, so a host saved from either one shows up in
+  both. Picking a row launches a real ssh process with the whole
+  terminal handed over (same Suspend mechanism Email above uses), so
+  a remote "sudo -i"/"su -" identity switch just works, the same as
+  typing it at any other real shell. "Direct" is what tells this
+  apart from the Terminal feature below (plain "T"/"gT"): this one
+  suspends breakthrough itself for as long as the remote shell runs,
+  one process, no switching away and back — the Terminal feature is
+  the one to reach for instead whenever a connection should keep
+  running in the background.
   "+ New connection" (or "✎" on an existing row) opens "Add new ssh
   connection": Host/Port/User plus four one-off flags — Agent forwarding (-A),
   Compression (-C), Verbose (-v), X11 forwarding (-X) — no password
@@ -1362,6 +1370,9 @@ var helpText = strings.TrimLeft(`
 
   T                  Open the Terminal switcher — only while the panel
                      itself has focus, the same as "t" for Tabs above.
+  gT                 The same action again, reachable through the "g"
+                     chord (see Chords above) — a second, mnemonic
+                     path to this one switcher, not a separate one.
   Alt+S              The same switcher, but reaches it regardless of
                      where the keyboard focus currently is, including
                      from inside an open Terminal — the only one of
