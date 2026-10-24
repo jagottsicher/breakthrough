@@ -15,12 +15,15 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"os/exec"
 
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
+	"github.com/jagottsicher/breakthrough/internal/sshshell"
 	"github.com/jagottsicher/breakthrough/internal/termtab"
 )
 
@@ -99,6 +102,16 @@ func (r *Root) openNewShellEmbedded(conn remotefs.Connection) {
 	// own check at all (see termtabview.go's own doc comment).
 	tab.view.onLeave = func() { r.ExitTerminalViewShortcut() }
 	r.shells = append(r.shells, tab)
+	// Untested, not RecordAttempt: the local pty/exec starting
+	// successfully says nothing about whether ssh itself will actually
+	// reach the far end — unlike sshshell.Run's own blocking
+	// Suspend+exec launcher, this call returns long before that's
+	// known. watchShellExit's own RecordAttempt call, once the process
+	// actually ends, is what turns this into a real, classified
+	// outcome — see its own doc comment. Best-effort: a connection
+	// still opens even if the user config directory can't be written
+	// to.
+	_ = remotefs.SaveConnection(conn)
 	r.watchShellExit(tab)
 	r.switchToShell(len(r.shells) - 1)
 }
@@ -137,12 +150,6 @@ func refreshShellHeader(tab *shellTab) {
 	tab.header.SetText(" " + tab.label() + " ")
 }
 
-// openNewTerminalDialog opens the existing "Add new ssh connection"
-// dialog with its submit overridden to land here (openNewShellEmbedded)
-// instead of the default Suspend+exec ssh launcher — the one place both
-// the terminal strip's own leading "+" (terminalstrip.go) and the
-// switcher's own "+ New terminal…" row (terminalswitcher.go) end up, so
-// neither has to duplicate the override-then-open sequence.
 // ViewingTerminal reports whether a Terminal is currently on screen —
 // cmd/breakthrough's own guard for Ctrl+C (and anything else that
 // needs to stop treating a global shortcut as global the moment a
@@ -174,9 +181,20 @@ func (r *Root) ExitTerminalViewShortcut() bool {
 	return true
 }
 
-func (r *Root) openNewTerminalDialog() {
+// openNewTerminalDialog opens the existing "Add new ssh connection"
+// dialog with its submit overridden to land here (openNewShellEmbedded)
+// instead of the default Suspend+exec ssh launcher — the one place the
+// terminal strip's own leading "+" (terminalstrip.go), the switcher's
+// own "+ New terminal…" row, and its own "✎" Edit cell on a
+// history-only row (terminalswitcher.go) all end up, so none of them
+// has to duplicate the override-then-open sequence. prefill is the
+// zero Connection for "+ New terminal…", or a history entry's own
+// Connection when editing/reconnecting one — identical shape
+// openSSHShellDialog itself already has for the "gs" dropdown's own
+// Edit column.
+func (r *Root) openNewTerminalDialog(prefill remotefs.Connection) {
 	r.sshShellSubmit = r.openNewShellEmbedded
-	r.openSSHShellDialog(remotefs.Connection{})
+	r.openSSHShellDialog(prefill)
 }
 
 // watchShellExit marks tab exited once its own underlying process ends
@@ -190,6 +208,18 @@ func (r *Root) openNewTerminalDialog() {
 // Still runs via QueueUpdateDraw, not a bare field write, since this
 // fires from a background goroutine and both the flag and the header
 // text it updates are read from the UI thread.
+//
+// Also records the real, now-known outcome into the shared connection
+// history — turning openNewShellEmbedded's own "Untested" into a real
+// RecordAttempt the identical way SaveConnection's own doc comment
+// says a real Connect eventually must. Classified the identical way
+// sshshell.Run already does for the blocking "gs" launcher: exit code
+// sshshell.ConnectionFailedExitCode (255) is ssh itself never having
+// connected at all; anything else — including a nonzero code from the
+// *remote* shell, none of this app's business — counts as a real,
+// successful connection. tab.session.Exited()'s own error is exactly
+// exec.Cmd.Wait's, the same contract sshshell.Run's own classification
+// already reads.
 func (r *Root) watchShellExit(tab *shellTab) {
 	r.safeGo("shell exit watch", nil, func() {
 		<-tab.session.Done()
@@ -197,6 +227,14 @@ func (r *Root) watchShellExit(tab *shellTab) {
 			tab.exited = true
 			tab.view.exited = true
 			refreshShellHeader(tab)
+
+			_, exitErr := tab.session.Exited()
+			failed := false
+			var ee *exec.ExitError
+			if errors.As(exitErr, &ee) {
+				failed = ee.ExitCode() == sshshell.ConnectionFailedExitCode
+			}
+			_ = remotefs.RecordAttempt(tab.conn, failed)
 		})
 	})
 }

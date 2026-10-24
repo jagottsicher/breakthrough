@@ -7,6 +7,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 // terminalSwitcherLabel is one switcher row's own label text — the
@@ -114,6 +116,32 @@ func TestTerminalSwitcherMarksTheCurrentTerminal(t *testing.T) {
 	other := terminalSwitcherLabel(r, 0)
 	if strings.Contains(other, "(current)") {
 		t.Errorf("row 0 = %q, want only the active terminal marked", other)
+	}
+}
+
+// TestTerminalSwitcherShowsExitedNotCurrentForTheActiveExitedTerminal
+// pins the user's own explicit request: once the active Terminal has
+// exited, that's the state worth showing — "(current)" on top of it
+// read as if a dead Terminal were still the one actually in use.
+func TestTerminalSwitcherShowsExitedNotCurrentForTheActiveExitedTerminal(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("alpha"))
+	tab := r.shells[0]
+	defer func() { _ = tab.session.Close() }()
+
+	tab.exited = true
+	refreshShellHeader(tab)
+
+	r.openTerminalSwitcher(0)
+
+	row := terminalSwitcherLabel(r, 0)
+	if !strings.Contains(row, "(exited)") {
+		t.Errorf("row 0 = %q, want it marked exited", row)
+	}
+	if strings.Contains(row, "(current)") {
+		t.Errorf("row 0 = %q, want no (current) marker on an exited terminal", row)
 	}
 }
 
@@ -342,5 +370,169 @@ func TestExitTerminalViewShortcutIsANoOpWhileBrowsingFiles(t *testing.T) {
 
 	if r.ExitTerminalViewShortcut() {
 		t.Error("ExitTerminalViewShortcut returned true while not viewing a terminal")
+	}
+}
+
+// The tests below pin the switcher's own merged row list — open
+// Terminals from r.shells plus history-only connections the shared,
+// persisted history remembers but has no open Terminal for right now
+// (see terminalswitcher.go's own package doc comment for the whole
+// design and what each row kind's three columns do).
+
+func TestTerminalSwitcherListsAHistoryOnlyRowAfterClosingATerminal(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	conn := testShellConn("closedone")
+	r.openNewShellEmbedded(conn)
+	tab := r.shells[0]
+	_ = tab.session.Close()
+	r.removeShell(tab) // the real path closeShell would take, reproduced directly
+
+	r.openTerminalSwitcher(0)
+
+	// The history-only row, then "+ New terminal" — no "Files" row:
+	// nothing is being viewed any more once the only Terminal closed.
+	if got, want := r.terminalSwitcher.GetRowCount(), 2; got != want {
+		t.Errorf("row count = %d, want %d", got, want)
+	}
+	if _, ok := r.terminalSwitcherHistRows[0]; !ok {
+		t.Fatalf("row 0 isn't a history-only row: openRows=%v histRows=%v", r.terminalSwitcherOpenRows, r.terminalSwitcherHistRows)
+	}
+	label := terminalSwitcherLabel(r, 0)
+	if !strings.Contains(label, conn.Label()) {
+		t.Errorf("row 0 = %q, want it to contain the closed connection's own label", label)
+	}
+}
+
+func TestTerminalSwitcherDoesNotDuplicateAnOpenTerminalAsHistory(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("stillopen"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	r.openTerminalSwitcher(0)
+
+	if len(r.terminalSwitcherHistRows) != 0 {
+		t.Errorf("terminalSwitcherHistRows = %v, want empty — the only history entry is already open", r.terminalSwitcherHistRows)
+	}
+	if _, ok := r.terminalSwitcherOpenRows[0]; !ok {
+		t.Error("row 0 isn't recognized as the open Terminal")
+	}
+}
+
+func TestTerminalSwitcherLabelClickOnAHistoryRowConnectsDirectly(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	conn := testShellConn("reconnectme")
+	r.openNewShellEmbedded(conn)
+	tab := r.shells[0]
+	_ = tab.session.Close()
+	r.removeShell(tab)
+
+	r.openTerminalSwitcher(0)
+	r.activateTerminalSwitcherCell(0, terminalSwitcherColLabel)
+
+	if len(r.shells) != 1 {
+		t.Fatalf("len(r.shells) = %d after selecting a history-only row, want 1 (reconnected, no dialog)", len(r.shells))
+	}
+	defer func() { _ = r.shells[0].session.Close() }()
+	if !r.shells[0].conn.Equal(conn) {
+		t.Errorf("the reopened terminal's own conn = %+v, want %+v", r.shells[0].conn, conn)
+	}
+	if r.activePage != "" {
+		t.Errorf("activePage = %q, want closed (\"\") — no dialog for a history-only reconnect", r.activePage)
+	}
+}
+
+func TestTerminalSwitcherEditActionOnAHistoryRowOpensThePrefilledDialog(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	conn := testShellConn("editme")
+	r.openNewShellEmbedded(conn)
+	tab := r.shells[0]
+	_ = tab.session.Close()
+	r.removeShell(tab)
+
+	r.openTerminalSwitcher(0)
+	r.activateTerminalSwitcherCell(0, terminalSwitcherColAction)
+
+	if r.activePage != sshShellDialogPage {
+		t.Errorf("activePage = %q, want %q", r.activePage, sshShellDialogPage)
+	}
+	if got := r.sshShellHostField.GetText(); got != conn.Host {
+		t.Errorf("Host field = %q, want %q (prefilled)", got, conn.Host)
+	}
+	if r.sshShellSubmit == nil {
+		t.Error("sshShellSubmit wasn't set — submitting would fall back to the default ssh launcher")
+	}
+}
+
+func TestTerminalSwitcherCloseActionOnAnOpenRowDisconnectsButKeepsHistory(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	conn := testShellConn("disconnectme")
+	r.openNewShellEmbedded(conn)
+
+	r.openTerminalSwitcher(0)
+	r.activateTerminalSwitcherCell(0, terminalSwitcherColAction)
+
+	if len(r.shells) != 0 {
+		t.Errorf("len(r.shells) = %d after the Action column's own disconnect, want 0", len(r.shells))
+	}
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 1 || !history[0].Equal(conn) {
+		t.Errorf("history after disconnect = %+v, want the connection still remembered", history)
+	}
+}
+
+func TestTerminalSwitcherRemoveActionOnAHistoryRowDeletesItOutright(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	conn := testShellConn("removeme")
+	r.openNewShellEmbedded(conn)
+	tab := r.shells[0]
+	_ = tab.session.Close()
+	r.removeShell(tab)
+
+	r.openTerminalSwitcher(0)
+	r.activateTerminalSwitcherCell(0, terminalSwitcherColClose)
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 0 {
+		t.Errorf("history after Remove = %+v, want empty", history)
+	}
+}
+
+func TestTerminalSwitcherBareDigitReachesAHistoryOnlyRow(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	conn := testShellConn("digitreconnect")
+	r.openNewShellEmbedded(conn)
+	tab := r.shells[0]
+	_ = tab.session.Close()
+	r.removeShell(tab)
+
+	r.openTerminalSwitcher(0)
+	r.captureTerminalSwitcherKey(tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModNone))
+
+	if len(r.shells) != 1 {
+		t.Fatalf("len(r.shells) = %d after pressing '1' on a history-only row, want 1", len(r.shells))
+	}
+	defer func() { _ = r.shells[0].session.Close() }()
+	if r.activePage != "" {
+		t.Errorf("activePage = %q, want closed (\"\")", r.activePage)
 	}
 }
