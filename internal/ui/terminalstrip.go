@@ -62,7 +62,7 @@ const terminalStripSpanNew = -1
 //
 // Colors are fixed tcell colors, not looked up from theme, per the user's
 // own explicit spec: the "+" and every inactive number render gray-on-
-// white, the active number teal-on-gray — deliberately the same pair of
+// white, the active number white-on-gray — deliberately the same pair of
 // looks regardless of which color scheme is active, so Terminals
 // read as a visually distinct strip from the themed tab numbers right
 // next to it rather than blending in. styleTerminalStrip (this file)
@@ -74,7 +74,7 @@ func renderTerminalStrip(count, active int) (string, []terminalStripSpan) {
 	const (
 		inactiveFG = tcell.ColorGray
 		inactiveBG = tcell.ColorWhite
-		activeFG   = tcell.ColorTeal
+		activeFG   = tcell.ColorWhite
 		activeBG   = tcell.ColorGray
 	)
 

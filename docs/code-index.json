@@ -2003,8 +2003,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 111009,
-      "sha256": "30a26da25279426e255fbeed60e27079089b589aae54898d056d2b84be51a540"
+      "size": 111010,
+      "sha256": "b528d5db2b4d93a1f6d1511a4f79e07eb31b30d87661d0c894b2302ae5cb2d82"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -2543,8 +2543,8 @@
     },
     {
       "path": "internal/ui/terminalstrip.go",
-      "size": 8432,
-      "sha256": "cb4670ebba540427d2286a01cb65397d5576551262df7b29a7b2a3db6f48f40d"
+      "size": 8434,
+      "sha256": "eafef36cd1f507abab873cfcf6e6bedc305ebdb9901b486049e58a9d5c29f11a"
     },
     {
       "path": "internal/ui/terminalstrip_test.go",
@@ -57839,5 +57839,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "4f2de37f396ac2fcdc3ad0cce6b4c891d9feecf5d90016af7612f491f3b46d3b"
+  "merkle_root": "8265abb43c0595c8d9d3dcea678ec44d9c8813d8a111bafaf2e6439e7cd7656e"
 }

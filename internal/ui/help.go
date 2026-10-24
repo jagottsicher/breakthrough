@@ -1354,7 +1354,7 @@ var helpText = strings.TrimLeft(`
   "+", in the same header row — a number per currently open Terminal,
   then its own "+" (click it for a new one), the identical
   numbers-then-"+" order the tab strip itself reads in. Deliberately
-  drawn in a fixed gray-on-white look (teal-on-gray for whichever one
+  drawn in a fixed gray-on-white look (white-on-gray for whichever one
   is active) that doesn't change with the color scheme, so it always
   reads as its own thing next to the themed tab numbers beside it.
   Click a number to switch, click anywhere else in the strip for the
