@@ -29,6 +29,19 @@ import (
 type termTabView struct {
 	*tview.Box
 	session *termtab.Session
+	// exited and onLeave back a real user request: once this
+	// Terminal's own process has ended on its own (set alongside
+	// shellTab.exited — see shells.go's own watchShellExit), there's
+	// nothing left to send a keystroke to, so Ctrl+C, Escape and Tab
+	// stop being forwarded to the (now-closed) session and instead
+	// call onLeave — Root's own way back to the panel (wired in
+	// shells.go). Checked only while exited, never for a live
+	// session: those three keys are real, meaningful input to an
+	// actual remote shell (interrupt, cancel, completion) and must
+	// keep reaching it right up until there's truly nothing left on
+	// the other end.
+	exited  bool
+	onLeave func()
 }
 
 // newTermTabView wraps session in a drawable, focusable Primitive.
@@ -83,10 +96,30 @@ func (v *termTabView) Draw(screen tcell.Screen) {
 // its own doc comment — no error, nothing sent.
 func (v *termTabView) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 	return v.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+		if v.exited && v.onLeave != nil && isTermLeaveKey(event) {
+			v.onLeave()
+			return
+		}
 		b := termKeyBytes(event)
 		if b == nil {
 			return
 		}
 		_, _ = v.session.WriteInput(b)
 	})
+}
+
+// isTermLeaveKey reports whether event is one of the three keys
+// exited's own doc comment on the struct names — Ctrl+C, Escape, Tab
+// — the user's own explicit choice: all three already mean "get out
+// of here" in one context or another (interrupt, cancel, move focus
+// on), so once a Terminal is dead there's nothing lost in repurposing
+// them to actually leave it, rather than writing bytes into a closed
+// pty that go nowhere.
+func isTermLeaveKey(event *tcell.EventKey) bool {
+	switch event.Key() {
+	case tcell.KeyCtrlC, tcell.KeyEscape, tcell.KeyTab:
+		return true
+	default:
+		return false
+	}
 }

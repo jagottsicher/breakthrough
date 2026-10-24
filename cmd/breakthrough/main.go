@@ -220,6 +220,37 @@ func run() error {
 			root.RequestQuit()
 			return nil
 		case tcell.KeyCtrlC:
+			// Falls through unconsumed while a Terminal is on screen —
+			// a real, live-tested bug this would otherwise be: Ctrl+C
+			// is a remote shell's own interrupt signal, arguably the
+			// single most essential keystroke a terminal has to
+			// forward, and this global case ran unconditionally before
+			// the fix, swallowing it every time regardless of focus.
+			// termTabView's own InputHandler is what actually receives
+			// it from here on — writes byte 0x03 to a live session
+			// (termKeyBytes), or, once that session has exited on its
+			// own, calls onLeave instead (see termtabview.go's own
+			// isTermLeaveKey) — the one case Ctrl+C still means "leave"
+			// rather than "forward", per the user's own explicit
+			// request.
+			if root.ViewingTerminal() {
+				// Not a bare `return event`: tview's own Application.Run
+				// has a hardcoded fallback — "Ctrl-C closes the
+				// application" — that fires whenever the event coming
+				// back from this very capture is the *same* object it
+				// was called with (event == originalEvent, checked by
+				// pointer), on the theory that an unmodified passthrough
+				// means nothing claimed it. Found by instrumenting both
+				// ends of this path live: this case's own code ran
+				// (confirmed), but termTabView's own InputHandler never
+				// did — tview's Stop() fired first and the whole
+				// process exited, taking the rest of this file's own
+				// explanation of "falls through to the focused widget"
+				// with it. A new EventKey carrying the identical key/
+				// rune/modifiers sidesteps that fallback while still
+				// reaching termTabView exactly the same way.
+				return tcell.NewEventKey(event.Key(), event.Rune(), event.Modifiers())
+			}
 			root.RequestCancel()
 			return nil
 		case tcell.KeyCtrlT:

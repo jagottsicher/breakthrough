@@ -94,6 +94,10 @@ func (r *Root) openNewShellEmbedded(conn remotefs.Connection) {
 	}
 	tab := &shellTab{session: session, view: newTermTabView(session), conn: conn}
 	tab.header = newShellHeader(tab, r.theme)
+	// Only ever actually fires once tab.view.exited is also set (see
+	// watchShellExit) — a live session never reaches isTermLeaveKey's
+	// own check at all (see termtabview.go's own doc comment).
+	tab.view.onLeave = func() { r.ExitTerminalViewShortcut() }
 	r.shells = append(r.shells, tab)
 	r.watchShellExit(tab)
 	r.switchToShell(len(r.shells) - 1)
@@ -139,6 +143,15 @@ func refreshShellHeader(tab *shellTab) {
 // the terminal strip's own leading "+" (terminalstrip.go) and the
 // switcher's own "+ New terminal…" row (terminalswitcher.go) end up, so
 // neither has to duplicate the override-then-open sequence.
+// ViewingTerminal reports whether a Terminal is currently on screen —
+// cmd/breakthrough's own guard for Ctrl+C (and anything else that
+// needs to stop treating a global shortcut as global the moment a
+// Terminal has focus, letting the keystroke fall through to
+// termTabView's own InputHandler instead).
+func (r *Root) ViewingTerminal() bool {
+	return r.viewingShells
+}
+
 // ExitTerminalViewShortcut is Ctrl+\ (see cmd/breakthrough's own global
 // SetInputCapture) — the one way out of a Terminal when neither Alt+S
 // nor the switcher's own Escape is reachable (a real iPad-keyboard
@@ -182,6 +195,7 @@ func (r *Root) watchShellExit(tab *shellTab) {
 		<-tab.session.Done()
 		r.app.QueueUpdateDraw(func() {
 			tab.exited = true
+			tab.view.exited = true
 			refreshShellHeader(tab)
 		})
 	})

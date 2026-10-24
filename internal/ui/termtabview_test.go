@@ -123,3 +123,72 @@ func TestTermTabViewInputHandlerWritesToTheRealSession(t *testing.T) {
 	// shell's own response lands on row 1.
 	waitForScreenRow(t, v, screen, 1, "got:hello", 2*time.Second)
 }
+
+func TestTermTabViewForwardsCtrlCEscapeTabToALiveSession(t *testing.T) {
+	session, err := termtab.Start(termNoopConn(), termtab.StartOptions{
+		Cols: 20, Rows: 5,
+		Command: func() *exec.Cmd { return exec.Command("sh", "-c", `sleep 5`) },
+	})
+	if err != nil {
+		t.Fatalf("termtab.Start: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	v := newTermTabView(session)
+	leaveCalls := 0
+	v.onLeave = func() { leaveCalls++ }
+
+	handler := v.InputHandler()
+	noopFocus := func(tview.Primitive) {}
+	handler(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone), noopFocus)
+	handler(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noopFocus)
+	handler(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noopFocus)
+
+	if leaveCalls != 0 {
+		t.Errorf("onLeave called %d times for a live session, want 0 — these keys must still reach it", leaveCalls)
+	}
+}
+
+func TestTermTabViewCtrlCEscapeTabCallOnLeaveOnceExited(t *testing.T) {
+	session, err := termtab.Start(termNoopConn(), termtab.StartOptions{
+		Cols: 20, Rows: 5,
+		Command: func() *exec.Cmd { return exec.Command("sh", "-c", `sleep 5`) },
+	})
+	if err != nil {
+		t.Fatalf("termtab.Start: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	v := newTermTabView(session)
+	v.exited = true
+	leaveCalls := 0
+	v.onLeave = func() { leaveCalls++ }
+
+	handler := v.InputHandler()
+	noopFocus := func(tview.Primitive) {}
+	handler(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone), noopFocus)
+	handler(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noopFocus)
+	handler(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noopFocus)
+
+	if leaveCalls != 3 {
+		t.Errorf("onLeave called %d times, want 3 (Ctrl+C, Escape, Tab each once)", leaveCalls)
+	}
+}
+
+func TestTermTabViewOtherKeysStillReachTheSessionOnceExited(t *testing.T) {
+	session, err := termtab.Start(termNoopConn(), termtab.StartOptions{
+		Cols: 20, Rows: 5,
+		Command: func() *exec.Cmd { return exec.Command("sh", "-c", `sleep 5`) },
+	})
+	if err != nil {
+		t.Fatalf("termtab.Start: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	v := newTermTabView(session)
+	v.exited = true
+	v.onLeave = func() { t.Error("onLeave should not fire for a plain rune key") }
+
+	handler := v.InputHandler()
+	handler(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), func(tview.Primitive) {})
+}
