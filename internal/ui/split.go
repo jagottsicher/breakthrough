@@ -73,6 +73,20 @@ func (r *Root) remountPanels() {
 	if r.viewingShells {
 		r.viewingShells = false
 		r.mainLayout.ResizeItem(r.bashConsole, 1, 0)
+		// r.shellStatusPanel, not r.panel: switchToTab (tabs.go) already
+		// reassigns r.panel to the newly selected tab before calling
+		// here (clicking a different tab number stays clickable while
+		// a Terminal covers the screen — the always-numbered tab
+		// strip's whole point, see tabstrip.go), so by the time this
+		// runs r.panel may no longer be the panel whose headerPages
+		// actually got switched to headerShellStatusPage in
+		// remountShellView. Resetting the tracked panel instead avoids
+		// leaving a completely different, not-currently-visible tab's
+		// header stuck showing a stale connection string forever.
+		if r.shellStatusPanel != nil {
+			r.shellStatusPanel.headerPages.SwitchToPage(headerDisplayPage)
+			r.shellStatusPanel = nil
+		}
 	}
 
 	r.panelHost.Clear()

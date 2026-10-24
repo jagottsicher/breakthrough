@@ -1405,11 +1405,12 @@ var helpText = strings.TrimLeft(`
   switcher doesn't.
 
   A Terminal fills most of the screen, but not quite all of it: the
-  panel's own top row (path bar, filter, the strips themselves) stays
-  visible above it, and a one-line header right below that names
-  which connection this particular Terminal is open to — both there so
-  the screen while viewing a Terminal still looks like part of the
-  same app, not a bare takeover.
+  panel's own top row stays visible above it (filter, the strips
+  themselves), with the path bar's own spot repurposed to name which
+  connection this particular Terminal is open to instead — one merged
+  row, not a path that no longer means anything plus a separate line
+  underneath it, so the screen while viewing a Terminal still looks
+  like part of the same app, not a bare takeover.
 
   If a Terminal's own remote process ends on its own — the connection
   drops, you log out on the far side — nothing happens here

@@ -132,7 +132,7 @@ func TestTerminalSwitcherShowsExitedNotCurrentForTheActiveExitedTerminal(t *test
 	defer func() { _ = tab.session.Close() }()
 
 	tab.exited = true
-	refreshShellHeader(tab)
+	r.refreshShellHeader(tab)
 
 	r.openTerminalSwitcher(0)
 

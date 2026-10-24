@@ -28,8 +28,9 @@ import (
 )
 
 const (
-	headerDisplayPage = "display"
-	headerEditPage    = "edit"
+	headerDisplayPage     = "display"
+	headerEditPage        = "edit"
+	headerShellStatusPage = "shell-status"
 )
 
 // Table columns — colSize/colModified are also mirrored, cell for cell,
@@ -115,6 +116,15 @@ type Panel struct {
 	headerPages *tview.Pages
 	header      *tview.TextView   // display mode: buttons + path breadcrumbs
 	headerEdit  *tview.InputField // edit mode: raw, freely editable path
+	// headerShellStatus is the third headerPages page, shown in place of
+	// header while this panel's own headerRow is the one reused for a
+	// Terminal (see shells.go's remountShellView) — the merged
+	// replacement for what used to be a separate one-line "connected
+	// to" row stacked below headerRow entirely (shellTab.header,
+	// removed). Root.shellStatusPanel, not r.panel, tracks which
+	// panel's copy is actually showing this at any moment — see its
+	// own doc comment on root.go for why that distinction matters.
+	headerShellStatus *tview.TextView
 
 	// filterField and filterRegexBtn back the glob/regex filter — a
 	// live narrow-the-listing box, and the toggle between its two
@@ -954,9 +964,14 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// constant rather than a literal repeated here.
 	p.headerEdit.SetLabel(headerButtonPrefix)
 
+	p.headerShellStatus = tview.NewTextView()
+	p.headerShellStatus.SetWrap(false)
+	p.headerShellStatus.SetDynamicColors(false)
+
 	p.headerPages = tview.NewPages()
 	p.headerPages.AddPage(headerDisplayPage, p.header, true, true)
 	p.headerPages.AddPage(headerEditPage, p.headerEdit, true, false)
+	p.headerPages.AddPage(headerShellStatusPage, p.headerShellStatus, true, false)
 
 	p.filterRegexBtn = tview.NewButton(filterModeLabel(false))
 	p.filterRegexBtn.SetSelectedFunc(func() {
@@ -1173,6 +1188,15 @@ func (p *Panel) paintStaticChrome() {
 
 	p.header.SetTextColor(p.theme.TextColor)
 	p.header.SetBackgroundColor(p.theme.SurfaceBackground)
+
+	// InputFocusedBackground/TextColor — the same close-glyph-title-bar
+	// pair sshShellTitleBar and the other dialog title bars in this app
+	// already use, since this reads the same way: a one-line label
+	// sitting above real content (formerly shellTab.header's own
+	// styleShellHeader, folded in here once that became one of
+	// headerPages' own pages instead of a separately mounted widget).
+	p.headerShellStatus.SetBackgroundColor(p.theme.InputFocusedBackground)
+	p.headerShellStatus.SetTextColor(p.theme.TextColor)
 
 	// filterMenuBtn's own "Nx" prefix (and the padding filling out
 	// whatever's left of filterMenuBtnWidth — see renderFilterMenuBtn)

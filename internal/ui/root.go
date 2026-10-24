@@ -926,6 +926,19 @@ type Root struct {
 	activeShell   int
 	viewingShells bool
 
+	// shellStatusPanel is whichever Panel's own headerRow/headerPages
+	// got repurposed to show a Terminal's connection status in place of
+	// its path (see shells.go's remountShellView) — not necessarily
+	// r.panel any more by the time remountPanels (split.go) runs its
+	// own reset, since clicking a different tab number while a
+	// Terminal covers the screen (the always-numbered tab strip's own
+	// point — see tabstrip.go) reassigns r.panel to the new target
+	// *before* remountPanels runs. Resetting whatever r.panel currently
+	// is at that point would leave the actually-repurposed panel's
+	// header stuck on the stale connection string forever. nil once no
+	// panel's header is currently repurposed.
+	shellStatusPanel *Panel
+
 	// The Terminal switcher overlay (see terminalswitcher.go) — opened
 	// by Alt+S or the plain "T" key, modeled directly on
 	// tabSwitcher/tabSwitcherPage's own pattern just below, anchored

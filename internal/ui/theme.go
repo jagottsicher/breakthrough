@@ -623,14 +623,12 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.terminalSwitcherTitleBar.SetBackgroundColor(theme.SurfaceBackground)
 	r.terminalSwitcherTitleBar.SetTextColor(theme.Text)
 
-	// Every open Terminal's own per-tab header line (see shells.go's
-	// newShellHeader) — a dynamically created widget with no fixed
-	// Root field of its own (there can be any number of them), so it
-	// needs its own loop here the same way r.forEachTab's own loop
-	// just below covers every Panel's long-lived widgets.
-	for _, tab := range r.shells {
-		styleShellHeader(tab.header, theme)
-	}
+	// The shared connection-status line a Terminal's own headerRow
+	// shows in place of the path (see shells.go's remountShellView) is
+	// now just one of headerPages' own pages, not a separate
+	// dynamically-created widget — Panel.paintStaticChrome (called from
+	// r.forEachTab's own loop just below) already repaints it along
+	// with everything else on the panel.
 
 	// Duplicate/Multiply (see duplicate.go/applyDuplicateTheme).
 	r.applyDuplicateTheme(theme)
