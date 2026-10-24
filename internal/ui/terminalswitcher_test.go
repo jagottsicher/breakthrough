@@ -58,8 +58,8 @@ func TestTerminalSwitcherListsEveryTerminalPlusNewAndFilesRows(t *testing.T) {
 
 	r.openTerminalSwitcher(r.activeShell)
 
-	// Two terminals, "+  New terminal", and "Files" (a terminal is on
-	// screen) — four rows.
+	// Two terminals, "+  New terminal", and "Go to file view" (a
+	// terminal is on screen) — four rows.
 	if got, want := r.terminalSwitcher.GetRowCount(), 4; got != want {
 		t.Fatalf("switcher has %d rows, want %d", got, want)
 	}
@@ -84,7 +84,7 @@ func TestTerminalSwitcherOmitsFilesRowWhenNotViewingATerminal(t *testing.T) {
 
 	r.openTerminalSwitcher(r.activeShell)
 
-	if got, want := r.terminalSwitcher.GetRowCount(), 2; got != want { // terminal + "New terminal", no "Files"
+	if got, want := r.terminalSwitcher.GetRowCount(), 2; got != want { // terminal + "New terminal", no "Go to file view"
 		t.Fatalf("switcher has %d rows, want %d", got, want)
 	}
 	if r.terminalSwitcherFilesRow != -1 {
@@ -391,8 +391,9 @@ func TestTerminalSwitcherListsAHistoryOnlyRowAfterClosingATerminal(t *testing.T)
 
 	r.openTerminalSwitcher(0)
 
-	// The history-only row, then "+ New terminal" — no "Files" row:
-	// nothing is being viewed any more once the only Terminal closed.
+	// The history-only row, then "+ New terminal" — no "Go to file
+	// view" row: nothing is being viewed any more once the only
+	// Terminal closed.
 	if got, want := r.terminalSwitcher.GetRowCount(), 2; got != want {
 		t.Errorf("row count = %d, want %d", got, want)
 	}

@@ -1392,9 +1392,10 @@ var helpText = strings.TrimLeft(`
   "+  New terminal" opens that same "Add new ssh connection" dialog
   blank — Host/Port/User plus the agent-forwarding/compression/
   verbose/X11 flags — and, while a Terminal is actually on screen,
-  "Files" returns to the panel. Up/Down picks a row, Right/Left move
-  between its three columns, Enter or Space activates whichever one's
-  selected, Escape stays put. A bare digit (no Ctrl or Alt) jumps
+  "Go to file view" returns to the panel. Up/Down picks a row,
+  Right/Left move between its three columns, Enter or Space
+  activates whichever one's selected, Escape stays put. A bare
+  digit (no Ctrl or Alt) jumps
   straight to that numbered row's own label action — switching to an
   open Terminal, or connecting straight to a history-only one — and
   closes the switcher immediately; only the first ten rows get a

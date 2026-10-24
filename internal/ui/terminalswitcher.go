@@ -41,9 +41,12 @@ import (
 //   - No split column: there is no split-view concept for Terminals.
 //   - A row can close down to zero, unlike tabs (one tab always stays
 //     open) — so there's no "first row has no close button" exception.
-//   - A trailing "Files" row, shown only while a Terminal is actually
-//     on screen (r.viewingShells), to leave that view — tabs have no
-//     equivalent, since a tab IS the file view.
+//   - A trailing "Go to file view" row, shown only while a Terminal is
+//     actually on screen (r.viewingShells), to leave that view — tabs
+//     have no equivalent, since a tab IS the file view. Named "Go to"
+//     rather than "Back"/"Return": a Terminal isn't reached by leaving
+//     some single, particular file view to begin with (see the user's
+//     own explicit reasoning), so neither word fits.
 //   - A bare, unmodified digit 0-9 jumps straight to that numbered
 //     row (open or history-only alike) and closes the switcher
 //     immediately — carried over unchanged from the first, centered-
@@ -68,7 +71,12 @@ const terminalSwitcherNewRowLabel = " +  New terminal"
 
 // terminalSwitcherFilesRowLabel is the trailing "leave this view" row,
 // only present while r.viewingShells — see this file's own doc comment.
-const terminalSwitcherFilesRowLabel = " Files"
+// Named for the destination action ("Go to"), not a direction
+// ("Back"/"Return"): per the user's own explicit reasoning, a Terminal
+// isn't reached by leaving one particular file view in the first
+// place, so framing this as returning to "the" view would be
+// misleading.
+const terminalSwitcherFilesRowLabel = " Go to file view"
 
 // OpenTerminalSwitcherShortcut is Alt+S (see cmd/breakthrough's own
 // global SetInputCapture, which intercepts it unconditionally so it

@@ -2003,8 +2003,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 111095,
-      "sha256": "8d29d02b574f6affc5d85304f0a1a15d9f7e2cb891f817f07e09ab5f44017a1b"
+      "size": 111107,
+      "sha256": "ba80a20c75ba6b68d2ac58cf0d9fe554d61727618294d7c4ca4edc32db3082c1"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -2553,13 +2553,13 @@
     },
     {
       "path": "internal/ui/terminalswitcher.go",
-      "size": 18769,
-      "sha256": "617938813ec2da589046c29cc72e8a81c92c58223dde969a4dcf980e83d4aa47"
+      "size": 19278,
+      "sha256": "f8baa44b14b571309860ed2538eaf0de1fec31cd2e78e225dfa3c20aae9b9db2"
     },
     {
       "path": "internal/ui/terminalswitcher_test.go",
-      "size": 17913,
-      "sha256": "08b45bc66eb99c370ea41030eaf7dc8e2175d2d0eeb4517822fe785c97707325"
+      "size": 17947,
+      "sha256": "d6d582322a95e7327415c1ce74c8dd46b722e4980606c883494df8962d23677a"
     },
     {
       "path": "internal/ui/termtabcolor.go",
@@ -35343,7 +35343,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1804
+      "line": 1805
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35351,7 +35351,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1829
+      "line": 1830
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35359,7 +35359,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1846
+      "line": 1847
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35367,7 +35367,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1862
+      "line": 1863
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35375,7 +35375,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1882
+      "line": 1883
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35383,7 +35383,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1898
+      "line": 1899
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35391,7 +35391,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1924
+      "line": 1925
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35399,7 +35399,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1954
+      "line": 1955
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35407,7 +35407,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1972
+      "line": 1973
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -53990,42 +53990,42 @@
       "file": "internal/ui/terminalswitcher.go",
       "name": "terminalSwitcherPage",
       "kind": "const",
-      "line": 56
+      "line": 59
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher.go",
       "name": "terminalSwitcherColLabel",
       "kind": "const",
-      "line": 59
+      "line": 62
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher.go",
       "name": "terminalSwitcherColAction",
       "kind": "const",
-      "line": 60
+      "line": 63
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher.go",
       "name": "terminalSwitcherColClose",
       "kind": "const",
-      "line": 61
+      "line": 64
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher.go",
       "name": "terminalSwitcherNewRowLabel",
       "kind": "const",
-      "line": 67
+      "line": 70
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher.go",
       "name": "terminalSwitcherFilesRowLabel",
       "kind": "const",
-      "line": 71
+      "line": 79
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54033,7 +54033,7 @@
       "name": "OpenTerminalSwitcherShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 78
+      "line": 86
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54041,7 +54041,7 @@
       "name": "newTerminalSwitcher",
       "kind": "method",
       "receiver": "*Root",
-      "line": 87
+      "line": 95
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54049,7 +54049,7 @@
       "name": "newTerminalSwitcherLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 97
+      "line": 105
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54057,7 +54057,7 @@
       "name": "newTerminalSwitcherTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 106
+      "line": 114
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54065,7 +54065,7 @@
       "name": "openTerminalSwitcher",
       "kind": "method",
       "receiver": "*Root",
-      "line": 122
+      "line": 130
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54073,7 +54073,7 @@
       "name": "renderTerminalSwitcherOpenRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 195
+      "line": 203
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54081,7 +54081,7 @@
       "name": "renderTerminalSwitcherHistoryRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 222
+      "line": 230
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54089,7 +54089,7 @@
       "name": "setTerminalSwitcherEmptyStackFocus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 262
+      "line": 270
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54097,7 +54097,7 @@
       "name": "activateTerminalSwitcherCell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 279
+      "line": 287
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54105,7 +54105,7 @@
       "name": "clickTerminalSwitcherCell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 314
+      "line": 322
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54113,7 +54113,7 @@
       "name": "closeTerminalFromSwitcher",
       "kind": "method",
       "receiver": "*Root",
-      "line": 330
+      "line": 338
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54121,7 +54121,7 @@
       "name": "removeTerminalHistoryRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 354
+      "line": 362
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54129,7 +54129,7 @@
       "name": "captureTerminalSwitcherKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 379
+      "line": 387
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54137,7 +54137,7 @@
       "name": "closeTerminalSwitcher",
       "kind": "method",
       "receiver": "*Root",
-      "line": 417
+      "line": 425
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54145,7 +54145,7 @@
       "name": "terminalSwitcherSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 425
+      "line": 433
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54153,14 +54153,14 @@
       "name": "terminalStripAnchor",
       "kind": "method",
       "receiver": "*Root",
-      "line": 455
+      "line": 463
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher.go",
       "name": "terminalSwitcherRowLabel",
       "kind": "function",
-      "line": 468
+      "line": 476
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54293,42 +54293,42 @@
       "file": "internal/ui/terminalswitcher_test.go",
       "name": "TestTerminalSwitcherDoesNotDuplicateAnOpenTerminalAsHistory",
       "kind": "function",
-      "line": 408
+      "line": 409
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher_test.go",
       "name": "TestTerminalSwitcherLabelClickOnAHistoryRowConnectsDirectly",
       "kind": "function",
-      "line": 425
+      "line": 426
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher_test.go",
       "name": "TestTerminalSwitcherEditActionOnAHistoryRowOpensThePrefilledDialog",
       "kind": "function",
-      "line": 450
+      "line": 451
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher_test.go",
       "name": "TestTerminalSwitcherCloseActionOnAnOpenRowDisconnectsButKeepsHistory",
       "kind": "function",
-      "line": 474
+      "line": 475
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher_test.go",
       "name": "TestTerminalSwitcherRemoveActionOnAHistoryRowDeletesItOutright",
       "kind": "function",
-      "line": 496
+      "line": 497
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalswitcher_test.go",
       "name": "TestTerminalSwitcherBareDigitReachesAHistoryOnlyRow",
       "kind": "function",
-      "line": 518
+      "line": 519
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -57833,5 +57833,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "82314e34abb26e0a8f9e28734ca21a2b64ed75f499fdbc8514e979461dadf417"
+  "merkle_root": "96e329411b4993cdaac90876b88efa641a4f09bf5733361e9a0b0e95a1c0e387"
 }
