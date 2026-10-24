@@ -21,7 +21,6 @@ import (
 
 	"github.com/rivo/tview"
 
-	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/sshshell"
 	"github.com/jagottsicher/breakthrough/internal/termtab"
@@ -35,14 +34,7 @@ import (
 type shellTab struct {
 	session *termtab.Session
 	view    *termTabView
-	// header is this Terminal's own one-line "connected to" display,
-	// mounted above view whenever this Terminal is the one on screen
-	// (see remountShellView) — per the user's own explicit request,
-	// alongside keeping the panel's own header row visible too (same
-	// function), rather than the terminal content alone filling
-	// panelHost the way the first version of this did.
-	header *tview.TextView
-	conn   remotefs.Connection
+	conn    remotefs.Connection
 	// exited is set once session.Done() fires on its own (see
 	// watchShellExit) — the process is gone, but the tab itself stays
 	// in r.shells and on screen exactly as it was, per the user's own
@@ -96,7 +88,6 @@ func (r *Root) openNewShellEmbedded(conn remotefs.Connection) {
 		return
 	}
 	tab := &shellTab{session: session, view: newTermTabView(session), conn: conn}
-	tab.header = newShellHeader(tab, r.theme)
 	// Only ever actually fires once tab.view.exited is also set (see
 	// watchShellExit) — a live session never reaches isTermLeaveKey's
 	// own check at all (see termtabview.go's own doc comment).
@@ -116,38 +107,20 @@ func (r *Root) openNewShellEmbedded(conn remotefs.Connection) {
 	r.switchToShell(len(r.shells) - 1)
 }
 
-// newShellHeader builds tab's own one-line "connected to" display —
-// colored from theme at construction time (the same as every other
-// dynamically-created, long-lived widget this app builds outside
-// NewRoot — see styleShellHeaders' own doc comment for the
-// applyTheme-side half of keeping it that way across a live scheme
-// switch).
-func newShellHeader(tab *shellTab, theme config.ResolvedTheme) *tview.TextView {
-	header := tview.NewTextView()
-	header.SetWrap(false)
-	header.SetDynamicColors(false)
-	styleShellHeader(header, theme)
-	header.SetText(" " + tab.label() + " ")
-	return header
-}
-
-// styleShellHeader paints header's own colors — InputFocusedBackground/
-// TextColor, the same close-glyph-title-bar pair sshShellTitleBar and
-// the other dialog title bars in this app already use, since this
-// reads the same way: a one-line label sitting above real content.
-// Called once at construction (newShellHeader) and again from
-// applyTheme's own per-shell loop (theme.go) on a live scheme switch.
-func styleShellHeader(header *tview.TextView, theme config.ResolvedTheme) {
-	header.SetBackgroundColor(theme.InputFocusedBackground)
-	header.SetTextColor(theme.TextColor)
-}
-
-// refreshShellHeader re-renders tab's own header text — called once
-// its own exited flag flips (see watchShellExit), so the "(exited)"
-// marker label() now carries shows up live rather than only the next
-// time this Terminal happens to be switched to.
-func refreshShellHeader(tab *shellTab) {
-	tab.header.SetText(" " + tab.label() + " ")
+// refreshShellHeader re-renders the shared connection-status line if
+// tab is the one currently on screen — called once its own exited
+// flag flips (see watchShellExit), so the "(exited)" marker label()
+// now carries shows up live rather than only the next time this
+// Terminal happens to be switched to. A no-op for any other tab: the
+// status line only ever shows whichever Terminal remountShellView
+// most recently put on screen (see its own doc comment) — writing it
+// for a tab that isn't the one currently visible would show the wrong
+// connection's status on top of whatever actually is on screen.
+func (r *Root) refreshShellHeader(tab *shellTab) {
+	if !r.viewingShells || r.shellStatusPanel == nil || r.shells[r.activeShell] != tab {
+		return
+	}
+	r.shellStatusPanel.headerShellStatus.SetText(" " + tab.label() + " ")
 }
 
 // ViewingTerminal reports whether a Terminal is currently on screen —
@@ -226,7 +199,7 @@ func (r *Root) watchShellExit(tab *shellTab) {
 		r.app.QueueUpdateDraw(func() {
 			tab.exited = true
 			tab.view.exited = true
-			refreshShellHeader(tab)
+			r.refreshShellHeader(tab)
 
 			_, exitErr := tab.session.Exited()
 			failed := false
@@ -357,16 +330,27 @@ func (r *Root) viewFiles() {
 
 // remountShellView puts the active shell's own view into panelHost in
 // place of whatever remountPanels would otherwise show there, stacked
-// below r.panel's own header row (path bar, filter, tab/terminal
-// strips) and this Terminal's own one-line "connected to" header (see
-// shellTab.header) — per the user's own explicit request that the top
-// row not simply disappear while a Terminal is on screen, the way the
-// first version of this did. r.panel's header row is reused directly
-// rather than rebuilt: it's already a standalone *tview.Flex field
-// (see NewPanel), and r.panel itself (table included) isn't mounted
-// anywhere else while this is true, so there's no conflict over who
-// draws it. bashConsole's own row still collapses to zero height — a
-// live remote shell has no bash-prompt-editor concept of its own (the
+// below r.panel's own header row (tab/terminal strips, filter, details
+// button) — per the user's own explicit request that the top row not
+// simply disappear while a Terminal is on screen, the way the first
+// version of this did. The path/icon-buttons area within that row
+// (headerPages) makes no sense pointed at a Terminal though, so it's
+// switched to a third page showing this Terminal's own "connected to"
+// status instead — merging what used to be a second, separately
+// mounted one-line header (shellTab.header, removed) into headerRow
+// itself, per a later, explicit user follow-up request ("merge the
+// two lines into one") rather than leaving two stacked rows. r.panel's
+// header row is reused directly rather than rebuilt: it's already a
+// standalone *tview.Flex field (see NewPanel), and r.panel itself
+// (table included) isn't mounted anywhere else while this is true, so
+// there's no conflict over who draws it.
+//
+// r.shellStatusPanel records which panel's own headerPages this was —
+// see its own doc comment on root.go for why remountPanels can't just
+// reset whatever r.panel happens to be when it runs.
+//
+// bashConsole's own row still collapses to zero height — a live
+// remote shell has no bash-prompt-editor concept of its own (the
 // button bar and status bar both stay, per the user's own explicit
 // request: the button bar's own keyboard shortcuts mostly won't reach
 // it while a Shell has focus, but it costs nothing to leave on
@@ -382,8 +366,10 @@ func (r *Root) remountShellView() {
 	r.panelHost.Clear()
 	r.panelHost.SetDirection(tview.FlexRow)
 	tab := r.shells[r.activeShell]
+	r.shellStatusPanel = r.panel
+	r.panel.headerShellStatus.SetText(" " + tab.label() + " ")
+	r.panel.headerPages.SwitchToPage(headerShellStatusPage)
 	r.panelHost.AddItem(r.panel.headerRow, 1, 0, false)
-	r.panelHost.AddItem(tab.header, 1, 0, false)
 	r.panelHost.AddItem(tab.view, 0, 1, true)
 	r.mainLayout.ResizeItem(r.bashConsole, 0, 0)
 }

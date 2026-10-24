@@ -100,20 +100,28 @@ func TestRemountShellViewCollapsesTheBashConsoleAndShowsTheActiveView(t *testing
 	r.openNewShellEmbedded(testShellConn("one"))
 	defer func() { _ = r.shells[0].session.Close() }()
 
-	// Three items: the panel's own header row (kept visible — see
-	// remountShellView's own doc comment), this Terminal's own
-	// one-line header, and the terminal view itself.
-	if got, want := r.panelHost.GetItemCount(), 3; got != want {
+	// Two items: the panel's own header row (kept visible, now showing
+	// connection status in place of the path — see remountShellView's
+	// own doc comment) and the terminal view itself. The two rows this
+	// used to be (headerRow plus a separate one-line shell header) were
+	// merged into headerRow alone per the user's own explicit request.
+	if got, want := r.panelHost.GetItemCount(), 2; got != want {
 		t.Fatalf("panelHost.GetItemCount() = %d, want %d", got, want)
 	}
 	if r.panelHost.GetItem(0) != r.panel.headerRow {
 		t.Error("panelHost's first item isn't the panel's own header row")
 	}
-	if r.panelHost.GetItem(1) != r.shells[0].header {
-		t.Error("panelHost's second item isn't the active shell's own header")
+	if r.panelHost.GetItem(1) != r.shells[0].view {
+		t.Error("panelHost's second item isn't the active shell's own view")
 	}
-	if r.panelHost.GetItem(2) != r.shells[0].view {
-		t.Error("panelHost's third item isn't the active shell's own view")
+	if current, _ := r.panel.headerPages.GetFrontPage(); current != headerShellStatusPage {
+		t.Errorf("headerPages front page = %q, want %q", current, headerShellStatusPage)
+	}
+	if r.shellStatusPanel != r.panel {
+		t.Error("shellStatusPanel doesn't track the panel whose header was repurposed")
+	}
+	if got, want := r.panel.headerShellStatus.GetText(true), " "+r.shells[0].label()+" "; got != want {
+		t.Errorf("headerShellStatus text = %q, want %q", got, want)
 	}
 }
 
@@ -132,6 +140,12 @@ func TestViewFilesLeavesShellViewAndRestoresThePanel(t *testing.T) {
 	if r.panelHost.GetItem(0) != r.panel {
 		t.Error("panelHost's item isn't r.panel after viewFiles")
 	}
+	if current, _ := r.panel.headerPages.GetFrontPage(); current != headerDisplayPage {
+		t.Errorf("headerPages front page after viewFiles = %q, want %q", current, headerDisplayPage)
+	}
+	if r.shellStatusPanel != nil {
+		t.Error("shellStatusPanel still set after viewFiles")
+	}
 }
 
 func TestSwitchingFileTabsLeavesShellViewAutomatically(t *testing.T) {
@@ -140,9 +154,20 @@ func TestSwitchingFileTabsLeavesShellViewAutomatically(t *testing.T) {
 	// contract that every existing caller of it (here: newTab) keeps
 	// working correctly now that Shells exist, without newTab itself
 	// needing to know that.
+	//
+	// newTab is also the one existing path that exercises the subtle
+	// case Root.shellStatusPanel exists for: switchToTab reassigns
+	// r.panel to the newly created tab *before* calling remountPanels,
+	// so by the time remountPanels runs, r.panel is no longer the
+	// original tab whose own headerPages actually got switched to
+	// headerShellStatusPage — only r.shellStatusPanel still points to
+	// it. Resetting whatever r.panel happens to be at that point
+	// instead would leave the original tab's header stuck showing a
+	// stale connection string.
 	r := newTestRootForShells(t)
 	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
 
+	original := r.panel
 	r.openNewShellEmbedded(testShellConn("one"))
 	defer func() { _ = r.shells[0].session.Close() }()
 
@@ -150,6 +175,15 @@ func TestSwitchingFileTabsLeavesShellViewAutomatically(t *testing.T) {
 
 	if r.viewingShells {
 		t.Error("viewingShells still true after opening a new file tab")
+	}
+	if r.panel == original {
+		t.Fatal("setup: newTab didn't switch r.panel to a different tab")
+	}
+	if current, _ := original.headerPages.GetFrontPage(); current != headerDisplayPage {
+		t.Errorf("original tab's headerPages front page = %q, want %q (it was the one actually repurposed)", current, headerDisplayPage)
+	}
+	if r.shellStatusPanel != nil {
+		t.Error("shellStatusPanel still set after leaving shell view")
 	}
 }
 
@@ -294,7 +328,7 @@ func TestExitedTerminalStaysInTheListAndOnScreen(t *testing.T) {
 	// watchShellExit's own callback body, reproduced directly (see
 	// this block's own doc comment).
 	tab.exited = true
-	refreshShellHeader(tab)
+	r.refreshShellHeader(tab)
 
 	if len(r.shells) != 1 {
 		t.Errorf("len(r.shells) = %d after exit, want 1 (still there)", len(r.shells))
@@ -302,7 +336,7 @@ func TestExitedTerminalStaysInTheListAndOnScreen(t *testing.T) {
 	if !r.viewingShells {
 		t.Error("viewingShells = false after exit while it was the one on screen, want true (no auto fallback)")
 	}
-	if r.panelHost.GetItem(2) != tab.view {
+	if r.panelHost.GetItem(1) != tab.view {
 		t.Error("panelHost's view item changed after exit, want the same frozen view still mounted")
 	}
 }
@@ -319,13 +353,13 @@ func TestExitedTerminalLabelAndHeaderShowExited(t *testing.T) {
 	}
 
 	tab.exited = true
-	refreshShellHeader(tab)
+	r.refreshShellHeader(tab)
 
 	wantLabel := tab.conn.Label() + "  (exited)"
 	if got := tab.label(); got != wantLabel {
 		t.Errorf("label() after exit = %q, want %q", got, wantLabel)
 	}
-	if got, want := tab.header.GetText(true), " "+wantLabel+" "; got != want {
+	if got, want := r.panel.headerShellStatus.GetText(true), " "+wantLabel+" "; got != want {
 		t.Errorf("header text after exit = %q, want %q", got, want)
 	}
 }
@@ -347,7 +381,7 @@ func TestExitedTerminalLeaveKeysReturnToFiles(t *testing.T) {
 
 	tab.exited = true
 	tab.view.exited = true
-	refreshShellHeader(tab)
+	r.refreshShellHeader(tab)
 
 	tab.view.InputHandler()(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone), func(tview.Primitive) {})
 
@@ -359,15 +393,13 @@ func TestExitedTerminalLeaveKeysReturnToFiles(t *testing.T) {
 	}
 }
 
-// TestApplyThemeColorsEveryShellHeader is a regression test for the
-// identical real bug TestApplyThemeColorsTheShellsMenu/
-// TestApplyThemeColorsTheSSHShellMenuAndDialog already pin for two
-// earlier widgets in this same feature: a dynamically created widget
-// with no fixed Root field (there can be any number of open
-// Terminals) needs its own loop in applyTheme, not just a styling
-// call at construction time — otherwise a live scheme switch leaves
-// it showing whatever color it was built with.
-func TestApplyThemeColorsEveryShellHeader(t *testing.T) {
+// TestApplyThemeColorsTheShellStatusLine pins that headerShellStatus —
+// a fixed per-Panel field now, not a dynamically created widget with
+// no Root field of its own the way shellTab.header used to be — gets
+// repainted by the ordinary Panel.paintStaticChrome/applyTheme path on
+// a live scheme switch, same as every other fixed widget on the
+// panel.
+func TestApplyThemeColorsTheShellStatusLine(t *testing.T) {
 	r := newTestRootForShells(t)
 	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
 
@@ -377,8 +409,8 @@ func TestApplyThemeColorsEveryShellHeader(t *testing.T) {
 	custom := solarizedTheme().Resolve()
 	r.applyTheme(custom)
 
-	if got := r.shells[0].header.GetBackgroundColor(); got != custom.InputFocusedBackground {
-		t.Errorf("shell header background = %v, want %v", got, custom.InputFocusedBackground)
+	if got := r.panel.headerShellStatus.GetBackgroundColor(); got != custom.InputFocusedBackground {
+		t.Errorf("shell status line background = %v, want %v", got, custom.InputFocusedBackground)
 	}
 }
 
