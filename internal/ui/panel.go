@@ -1129,10 +1129,10 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// field.
 	headerRow.AddItem(p.tabStrip, 0, 0, false)
 	// The Terminal strip goes right after the tab strip, before the
-	// Details button — per the user's own explicit request for that
-	// order (its own "+" first, then its numbers — see
-	// terminalstrip.go's own doc comment on why that's not simply
-	// mirrored from the tab strip's own numbers-then-"+" layout).
+	// Details button — per the user's own explicit request, with its
+	// own numbers-then-"+" layout mirroring the tab strip's own (see
+	// terminalstrip.go's own doc comment on why an earlier version
+	// read the other way around).
 	headerRow.AddItem(p.terminalStrip, 0, 0, false)
 	headerRow.AddItem(p.detailsExpandBtn, headerDetailsExpandWidth, 0, false)
 	p.headerRow = headerRow

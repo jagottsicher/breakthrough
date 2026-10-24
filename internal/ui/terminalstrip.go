@@ -13,13 +13,17 @@ import (
 // The terminal strip is the compact row of Terminal numbers living in the
 // panel's own header row, immediately to the right of the tab strip's own
 // "+" (see tabstrip.go) — per the user's own explicit request for exactly
-// that spot and, just as explicitly, that order: this strip's own "+"
-// comes first, then its numbers, not numbers-then-"+" the way the tab
-// strip reads. Mirrors tabstrip.go's whole design (numbers only, a stable
-// width, the switcher overlay for anything more — see terminalswitcher.go)
-// for the identical reasons given there, with one deliberate difference:
-// colors here are fixed, not theme-derived (see renderTerminalStrip's own
-// doc comment), per the user's own explicit, literal color spec, meant to
+// that spot. Numbers-then-"+", the identical order the tab strip itself
+// reads in: an earlier version put this strip's own "+" first instead
+// (right after the tab strip's own "+", mirroring that button's
+// position), but the user's own later, live report was that reading two
+// "+"s in a row before either strip's own numbers was confusing — this
+// strip's "+" moved to its own trailing spot to match. Mirrors
+// tabstrip.go's whole design otherwise (numbers only, a stable width, the
+// switcher overlay for anything more — see terminalswitcher.go) for the
+// identical reasons given there, with one deliberate difference: colors
+// here are fixed, not theme-derived (see renderTerminalStrip's own doc
+// comment), per the user's own explicit, literal color spec, meant to
 // visually set Terminals apart from Tabs at a glance rather than blend in
 // with whichever theme happens to be active.
 //
@@ -44,7 +48,7 @@ const (
 // identical shape tabStripSpan already establishes.
 //
 // shell is the zero-based open-Terminal index this span selects, or
-// terminalStripSpanNew for the leading "+" button.
+// terminalStripSpanNew for the trailing "+" button.
 type terminalStripSpan struct {
 	start, end int
 	shell      int
@@ -58,8 +62,8 @@ const terminalStripSpanNew = -1
 //
 // Colors are fixed tcell colors, not looked up from theme, per the user's
 // own explicit spec: the "+" and every inactive number render gray-on-
-// white, the active number teal-on-dim-gray — deliberately the same
-// pair of looks regardless of which color scheme is active, so Terminals
+// white, the active number white-on-gray — deliberately the same pair of
+// looks regardless of which color scheme is active, so Terminals
 // read as a visually distinct strip from the themed tab numbers right
 // next to it rather than blending in. styleTerminalStrip (this file)
 // still paints the widget's own idle background from theme, the same as
@@ -70,8 +74,8 @@ func renderTerminalStrip(count, active int) (string, []terminalStripSpan) {
 	const (
 		inactiveFG = tcell.ColorGray
 		inactiveBG = tcell.ColorWhite
-		activeFG   = tcell.ColorTeal
-		activeBG   = tcell.ColorDimGray
+		activeFG   = tcell.ColorWhite
+		activeBG   = tcell.ColorGray
 	)
 
 	var b strings.Builder
@@ -89,11 +93,10 @@ func renderTerminalStrip(count, active int) (string, []terminalStripSpan) {
 		col += len([]rune(s))
 	}
 
-	start := col
-	writeTagged(terminalStripNewLabel, inactiveFG, inactiveBG)
-	spans = append(spans, terminalStripSpan{start: start, end: col, shell: terminalStripSpanNew})
-
 	if count == 0 {
+		start := col
+		writeTagged(terminalStripNewLabel, inactiveFG, inactiveBG)
+		spans = append(spans, terminalStripSpan{start: start, end: col, shell: terminalStripSpanNew})
 		return b.String(), spans
 	}
 	if active < 0 || active >= count {
@@ -102,7 +105,6 @@ func renderTerminalStrip(count, active int) (string, []terminalStripSpan) {
 
 	first, last := terminalStripWindow(count, active)
 
-	write(" ")
 	if first > 0 {
 		write(terminalStripMoreBefore)
 	}
@@ -122,6 +124,11 @@ func renderTerminalStrip(count, active int) (string, []terminalStripSpan) {
 	if last < count-1 {
 		write(terminalStripMoreAfter)
 	}
+
+	write(" ")
+	start := col
+	writeTagged(terminalStripNewLabel, inactiveFG, inactiveBG)
+	spans = append(spans, terminalStripSpan{start: start, end: col, shell: terminalStripSpanNew})
 
 	return b.String(), spans
 }
@@ -182,7 +189,7 @@ func (p *Panel) refreshTerminalStrip() {
 }
 
 // captureTerminalStripMouse mirrors captureTabStripMouse — a click on a
-// number switches to that Terminal, a click on the leading "+" opens
+// number switches to that Terminal, a click on the trailing "+" opens
 // a new one, anywhere else opens the full switcher.
 func (p *Panel) captureTerminalStripMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if !p.terminalStrip.InRect(event.Position()) {

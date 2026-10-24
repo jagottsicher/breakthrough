@@ -2003,8 +2003,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 110934,
-      "sha256": "db512760a8c0898770effb47729602425aa8ea2733755339797c0553d3374f0c"
+      "size": 111010,
+      "sha256": "b528d5db2b4d93a1f6d1511a4f79e07eb31b30d87661d0c894b2302ae5cb2d82"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -2238,8 +2238,8 @@
     },
     {
       "path": "internal/ui/panel.go",
-      "size": 234173,
-      "sha256": "eb19b52c1e83560bbdba0b3b0a4b4a2aa934535c792daacbbca92ccd2893338f"
+      "size": 234155,
+      "sha256": "d27353e4d30d2dc33683c2eb4dfa116ed4787f6f4d744656b5f7c16deee599e5"
     },
     {
       "path": "internal/ui/panel_scrollbar_test.go",
@@ -2543,13 +2543,13 @@
     },
     {
       "path": "internal/ui/terminalstrip.go",
-      "size": 7998,
-      "sha256": "bc7ef567335246cef45dfdeb5ca6adfd25250216fb8dcc8be8181cff0b2b15fd"
+      "size": 8434,
+      "sha256": "eafef36cd1f507abab873cfcf6e6bedc305ebdb9901b486049e58a9d5c29f11a"
     },
     {
       "path": "internal/ui/terminalstrip_test.go",
-      "size": 7414,
-      "sha256": "e645fda114898999ed8891a1faae3ba7e1ce772bb6c174b8f60e0971aa99a58a"
+      "size": 7416,
+      "sha256": "3234b89bd5b02fac8d5838681f94e205246b59e5352248a57d89bfd37529249b"
     },
     {
       "path": "internal/ui/terminalswitcher.go",
@@ -35343,7 +35343,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1802
+      "line": 1803
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35351,7 +35351,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1827
+      "line": 1828
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35359,7 +35359,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1844
+      "line": 1845
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35367,7 +35367,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1860
+      "line": 1861
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35375,7 +35375,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1880
+      "line": 1881
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35383,7 +35383,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1896
+      "line": 1897
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35391,7 +35391,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1922
+      "line": 1923
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35399,7 +35399,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1952
+      "line": 1953
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35407,7 +35407,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1970
+      "line": 1971
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -53810,56 +53810,56 @@
       "file": "internal/ui/terminalstrip.go",
       "name": "terminalStripMaxVisible",
       "kind": "const",
-      "line": 35
+      "line": 39
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalstrip.go",
       "name": "terminalStripNewLabel",
       "kind": "const",
-      "line": 37
+      "line": 41
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalstrip.go",
       "name": "terminalStripMoreBefore",
       "kind": "const",
-      "line": 39
+      "line": 43
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalstrip.go",
       "name": "terminalStripMoreAfter",
       "kind": "const",
-      "line": 40
+      "line": 44
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalstrip.go",
       "name": "terminalStripSpan",
       "kind": "type",
-      "line": 48
+      "line": 52
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalstrip.go",
       "name": "terminalStripSpanNew",
       "kind": "const",
-      "line": 53
+      "line": 57
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalstrip.go",
       "name": "renderTerminalStrip",
       "kind": "function",
-      "line": 69
+      "line": 73
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalstrip.go",
       "name": "terminalStripWindow",
       "kind": "function",
-      "line": 132
+      "line": 139
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -53867,7 +53867,7 @@
       "name": "setTerminals",
       "kind": "method",
       "receiver": "*Panel",
-      "line": 155
+      "line": 162
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -53875,7 +53875,7 @@
       "name": "refreshTerminalStrip",
       "kind": "method",
       "receiver": "*Panel",
-      "line": 167
+      "line": 174
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -53883,7 +53883,7 @@
       "name": "captureTerminalStripMouse",
       "kind": "method",
       "receiver": "*Panel",
-      "line": 187
+      "line": 194
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -53891,7 +53891,7 @@
       "name": "styleTerminalStrip",
       "kind": "method",
       "receiver": "*Panel",
-      "line": 228
+      "line": 235
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -53910,7 +53910,7 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/terminalstrip_test.go",
-      "name": "TestRenderTerminalStripPutsThePlusBeforeTheNumbers",
+      "name": "TestRenderTerminalStripPutsThePlusAfterTheNumbers",
       "kind": "function",
       "line": 38
     },
@@ -57839,5 +57839,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "029fe13340cdb49bc01f3bbc611f6852514d5124d0700f331c517d0c30cfd217"
+  "merkle_root": "8265abb43c0595c8d9d3dcea678ec44d9c8813d8a111bafaf2e6439e7cd7656e"
 }
