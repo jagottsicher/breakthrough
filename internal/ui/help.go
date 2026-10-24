@@ -1350,14 +1350,15 @@ var helpText = strings.TrimLeft(`
   Tabs above, a Terminal has no directory or file list of its own;
   it's a terminal, not a panel.
 
-  The Terminal strip sits right after the tab strip's own "+", in the
-  same header row — its own "+" first (click it for a new Terminal),
-  then a number per currently open one. Deliberately drawn in a fixed
-  gray-on-white look (gray-on-green for whichever one is active) that
-  doesn't change with the color scheme, so it always reads as its own
-  thing next to the themed tab numbers beside it. Click a number to
-  switch, click anywhere else in the strip for the full switcher
-  below.
+  The Terminal strip sits right after the tab strip's own numbers and
+  "+", in the same header row — a number per currently open Terminal,
+  then its own "+" (click it for a new one), the identical
+  numbers-then-"+" order the tab strip itself reads in. Deliberately
+  drawn in a fixed gray-on-white look (teal-on-gray for whichever one
+  is active) that doesn't change with the color scheme, so it always
+  reads as its own thing next to the themed tab numbers beside it.
+  Click a number to switch, click anywhere else in the strip for the
+  full switcher below.
 
   T                  Open the Terminal switcher — only while the panel
                      itself has focus, the same as "t" for Tabs above.

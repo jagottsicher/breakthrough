@@ -35,16 +35,16 @@ func TestRenderTerminalStripAlwaysShowsThePlusEvenWithNoTerminals(t *testing.T) 
 	}
 }
 
-func TestRenderTerminalStripPutsThePlusBeforeTheNumbers(t *testing.T) {
-	if got, want := terminalStripText(3, 0), "+ 1 2 3"; got != want {
-		t.Errorf("renderTerminalStrip(3, 0) = %q, want %q (the + leads, unlike the tab strip)", got, want)
+func TestRenderTerminalStripPutsThePlusAfterTheNumbers(t *testing.T) {
+	if got, want := terminalStripText(3, 0), "1 2 3 +"; got != want {
+		t.Errorf("renderTerminalStrip(3, 0) = %q, want %q (numbers-then-+, the same order the tab strip reads in)", got, want)
 	}
 }
 
 func TestRenderTerminalStripHighlightsOnlyTheActiveTerminal(t *testing.T) {
 	text, _ := renderTerminalStrip(4, 2)
 
-	tag := ":" + colorTag(tcell.ColorDimGray) + "]"
+	tag := ":" + colorTag(tcell.ColorGray) + "]"
 	if got := strings.Count(text, tag); got != 1 {
 		t.Fatalf("found %d gray-background segments in %q, want exactly 1 (the active terminal)", got, text)
 	}
@@ -56,7 +56,7 @@ func TestRenderTerminalStripHighlightsOnlyTheActiveTerminal(t *testing.T) {
 
 func TestRenderTerminalStripNoHighlightWhenNoneIsActive(t *testing.T) {
 	text, _ := renderTerminalStrip(3, -1)
-	tag := ":" + colorTag(tcell.ColorDimGray) + "]"
+	tag := ":" + colorTag(tcell.ColorGray) + "]"
 	if strings.Count(text, tag) != 0 {
 		t.Errorf("renderTerminalStrip(3, -1) = %q, want no active-terminal highlight at all", text)
 	}
@@ -66,23 +66,23 @@ func TestRenderTerminalStripSpansMapClicksToTerminals(t *testing.T) {
 	text, spans := renderTerminalStrip(3, -1)
 	plain := terminalStripText(3, -1)
 
-	if got, want := len(spans), 4; got != want { // "+" plus three terminals
+	if got, want := len(spans), 4; got != want { // three terminals plus "+"
 		t.Fatalf("got %d spans, want %d — %q", got, want, text)
 	}
-	first := spans[0]
-	if first.shell != terminalStripSpanNew {
-		t.Errorf("first span targets %d, want terminalStripSpanNew", first.shell)
-	}
-	if got := plain[first.start:first.end]; got != terminalStripNewLabel {
-		t.Errorf("first span covers %q, want %q", got, terminalStripNewLabel)
-	}
-	for i, span := range spans[1:] {
+	for i, span := range spans[:3] {
 		if span.shell != i {
-			t.Errorf("span %d targets terminal %d, want %d", i+1, span.shell, i)
+			t.Errorf("span %d targets terminal %d, want %d", i, span.shell, i)
 		}
 		if got, want := plain[span.start:span.end], string(rune('1'+i)); got != want {
-			t.Errorf("span %d covers %q, want %q", i+1, got, want)
+			t.Errorf("span %d covers %q, want %q", i, got, want)
 		}
+	}
+	last := spans[3]
+	if last.shell != terminalStripSpanNew {
+		t.Errorf("last span targets %d, want terminalStripSpanNew", last.shell)
+	}
+	if got := plain[last.start:last.end]; got != terminalStripNewLabel {
+		t.Errorf("last span covers %q, want %q", got, terminalStripNewLabel)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestRenderTerminalStripHandlesOutOfRangeActive(t *testing.T) {
 	// guess at the wrong terminal — unlike the tab strip, which always
 	// has a real tab to fall back to.
 	got := terminalStripText(2, 99)
-	if want := "+ 1 2"; got != want {
+	if want := "1 2 +"; got != want {
 		t.Errorf("out-of-range active: %q, want %q", got, want)
 	}
 }
@@ -194,7 +194,7 @@ func TestTerminalStripClickSwitchesTerminals(t *testing.T) {
 	}
 
 	r.panel.terminalStrip.SetRect(0, 0, 20, 1)
-	span := r.panel.terminalStripSpans[1] // terminal 1 (the first one, index 0)
+	span := r.panel.terminalStripSpans[0] // terminal 1 (the first one, index 0)
 	captured, _ := r.panel.captureTerminalStripMouse(
 		tview.MouseLeftClick,
 		tcell.NewEventMouse(span.start, 0, tcell.ButtonNone, 0),
