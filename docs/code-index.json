@@ -2003,8 +2003,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 109667,
-      "sha256": "c11aeeb8c8127b4c0002759422725374b8d0160bd031c232840cdb6359179d44"
+      "size": 109850,
+      "sha256": "81721e617299831c06ee78445dea59a1b5c4e7c378a316789b56184057c85d91"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -35343,7 +35343,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1780
+      "line": 1783
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35351,7 +35351,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1805
+      "line": 1808
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35359,7 +35359,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1822
+      "line": 1825
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35367,7 +35367,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1838
+      "line": 1841
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35375,7 +35375,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1858
+      "line": 1861
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35383,7 +35383,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1874
+      "line": 1877
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35391,7 +35391,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1900
+      "line": 1903
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35399,7 +35399,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1930
+      "line": 1933
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35407,7 +35407,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1948
+      "line": 1951
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -57724,5 +57724,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "3c589c68cf01dd50fbf984cd7da67780aa8bf5c79ff14a05cc83c851ff934238"
+  "merkle_root": "df955b5de1657167cdf110de64697f5d8ec2173bca43a1beb384a8ae456722cd"
 }
