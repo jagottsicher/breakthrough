@@ -936,6 +936,19 @@ type Root struct {
 	terminalSwitcherTitleBar *tview.TextView
 	terminalSwitcherLayout   *tview.Flex
 	terminalSwitcherFilesRow int
+	// terminalSwitcherNewRow is the "+ New terminal…" row's own index
+	// — no longer always len(r.shells) now that history-only rows
+	// (see openTerminalSwitcher's own doc comment) can sit between the
+	// open Terminals and this row.
+	terminalSwitcherNewRow int
+	// terminalSwitcherOpenRows/terminalSwitcherHistRows map a row to
+	// what it actually is: an open (live or exited) Terminal's own
+	// *shellTab, or a history-only connection with no open Terminal of
+	// its own right now. Exactly one of the two ever claims a given
+	// row — see openTerminalSwitcher's own doc comment for why the
+	// list is a merge of both at all.
+	terminalSwitcherOpenRows map[int]*shellTab
+	terminalSwitcherHistRows map[int]remotefs.Connection
 
 	// The tab switcher overlay (see tabswitcher.go) — the same
 	// List/title-bar/Flex split every other overlay here uses, with
@@ -3408,7 +3421,7 @@ func (r *Root) wirePanel(panel *Panel) {
 	// terminalstrip.go's captureTerminalStripMouse) — the identical
 	// shape just above, for the identical reason.
 	panel.onSelectTerminal = r.switchToShell
-	panel.onNewTerminal = r.openNewTerminalDialog
+	panel.onNewTerminal = func() { r.openNewTerminalDialog(remotefs.Connection{}) }
 	panel.onOpenTerminalSwitcher = func() { r.openTerminalSwitcher(r.activeShell) }
 
 	// Right-click context menu and drag-select both live on the panel

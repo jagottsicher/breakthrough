@@ -1366,23 +1366,42 @@ var helpText = strings.TrimLeft(`
                      from inside an open Terminal — the only one of
                      the three that does.
 
-  The switcher itself looks and works exactly like the Tab switcher
-  above: every currently open Terminal, numbered, with "+  New
-  terminal" to start one and, while a Terminal is actually on screen,
-  "Files" to return to the panel. Up/Down picks one, Right steps onto
-  its own "✕" (or Delete from anywhere in the row) to close it, Enter
-  or Space goes there, Escape stays put. A bare digit (no Ctrl or Alt)
-  jumps straight to that numbered Terminal and closes the switcher
-  immediately — only the first ten get a digit this way, the same
-  "...0 is the tenth" numbering Tabs above uses; it's the one thing
-  this switcher has that the Tab switcher doesn't.
+  The switcher looks and works like the Tab switcher above, with one
+  more column: every row — a currently open Terminal and every other
+  connection the shared, disk-persisted connection history remembers
+  (the same one the Connect dialog and the "gs" chord's own dropdown
+  already keep across restarts) — gets a number, a label, an Action
+  cell, and a "✕". What those two right-hand cells do depends on the
+  row:
 
-  "+  New terminal" reuses the exact same "Add new ssh connection"
-  dialog the "gs" chord's own one-off ssh shell already opens — Host/
-  Port/User plus the agent-forwarding/compression/verbose/X11 flags —
-  except this one stays open in its own Terminal afterwards instead
-  of handing the whole terminal over for as long as the connection
-  lasts.
+    An open Terminal (live or exited): the label switches to it; the
+    Action cell reads "⏏" and disconnects it; "✕" does the same — there
+    being nothing else "remove" could mean for something still
+    running. Disconnecting still leaves the connection in history,
+    exactly as reopenable as any other entry there.
+
+    A history-only connection (no open Terminal of its own right now
+    — you closed it, or it's from a previous run entirely): the label
+    opens a new Terminal straight to it, no dialog in between; the
+    Action cell reads "✎" and opens the existing "Add new ssh
+    connection" dialog prefilled, the same Edit the "gs" dropdown's
+    own history already offers; "✕" here does mean delete — it drops
+    the entry from history outright.
+
+  "+  New terminal" opens that same "Add new ssh connection" dialog
+  blank — Host/Port/User plus the agent-forwarding/compression/
+  verbose/X11 flags — and, while a Terminal is actually on screen,
+  "Files" returns to the panel. Up/Down picks a row, Right/Left move
+  between its three columns, Enter or Space activates whichever one's
+  selected, Escape stays put. A bare digit (no Ctrl or Alt) jumps
+  straight to that numbered row's own label action — switching to an
+  open Terminal, or connecting straight to a history-only one — and
+  closes the switcher immediately; only the first ten rows get a
+  digit this way, the same "...0 is the tenth" numbering Tabs above
+  uses. Both the digit jump and reusing the dialog with its submit
+  pointed back here (rather than the "gs" dropdown's own one-off ssh
+  launcher) are the two things this switcher has that the Tab
+  switcher doesn't.
 
   A Terminal fills most of the screen, but not quite all of it: the
   panel's own top row (path bar, filter, the strips themselves) stays

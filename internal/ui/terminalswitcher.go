@@ -5,16 +5,37 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
-// The Terminal switcher: a drop-down list of every open Terminal (see
-// shells.go for the whole background concept, still internally named
-// "Shell" throughout that file and termtab — only the user-facing name
-// changed, per the user's own explicit request), deliberately given the
-// identical look and mechanics tabswitcher.go's own switcher has, right
-// down to anchoring under its own strip rather than centering on screen
-// — the user's own explicit request, after first shipping this as a
-// centered, sshShellMenuTable-style dropdown (see git history).
+// The Terminal switcher: a drop-down list that merges every currently
+// open Terminal (live or exited, from r.shells) with every other
+// connection the shared, disk-persisted connection history
+// (internal/remotefs) remembers but doesn't currently have an open
+// Terminal of its own — the user's own explicit request, after the
+// first few versions of this only ever listed r.shells: a Terminal
+// you've closed, or one from a previous run of the app entirely,
+// should still be one click (or one digit) away from reopening, the
+// same way the "gs" dropdown and the Connect dialog already remember
+// every connection across restarts.
+//
+// A row's own kind decides what its three columns do:
+//   - An open row (r.shells has a tab for it, live or exited): the
+//     label switches to it (or does nothing extra if it's already the
+//     one on screen); the Action column reads "⏏" (disconnect) and
+//     closes it; "✕" closes it too — the same action twice, since
+//     there's nothing else "remove" could mean for something still
+//     running (see closeShell's own doc comment: closing it still
+//     leaves the connection remembered in history, reopenable later).
+//   - A history-only row (no open Terminal): the label opens a new
+//     Terminal straight to that connection, no dialog in between,
+//     since the connection itself is already fully known; the Action
+//     column reads "✎" (edit) and opens the existing "Add new ssh
+//     connection" dialog prefilled, the same Edit flow the "gs"
+//     dropdown's own history already has; "✕" removes the entry from
+//     history outright (remotefs.RemoveFromHistory) — this is the one
+//     place "✕" actually means delete, not just disconnect.
 //
 // Differences from the tab switcher, each one deliberate:
 //   - No split column: there is no split-view concept for Terminals.
@@ -24,18 +45,19 @@ import (
 //     on screen (r.viewingShells), to leave that view — tabs have no
 //     equivalent, since a tab IS the file view.
 //   - A bare, unmodified digit 0-9 jumps straight to that numbered
-//     Terminal and closes the switcher immediately — carried over
-//     unchanged from the first, centered-dropdown version (see
-//     captureTerminalSwitcherKey's own doc comment) — the tab switcher
-//     has nothing like it.
-//   - No close glyph on the title bar: the tab switcher's own title bar
-//     doesn't have one either (Escape/outside-click only), so this
-//     doesn't either, to read as "the same kind of dropdown".
+//     row (open or history-only alike) and closes the switcher
+//     immediately — carried over unchanged from the first, centered-
+//     dropdown version (see captureTerminalSwitcherKey's own doc
+//     comment) — the tab switcher has nothing like it.
+//   - No close glyph on the title bar: the tab switcher's own title
+//     bar doesn't have one either (Escape/outside-click only), so
+//     this doesn't either, to read as "the same kind of dropdown".
 
 const terminalSwitcherPage = "terminal-switcher"
 
 const (
 	terminalSwitcherColLabel = iota
+	terminalSwitcherColAction
 	terminalSwitcherColClose
 )
 
@@ -89,53 +111,71 @@ func (r *Root) newTerminalSwitcherTitleBar() *tview.TextView {
 }
 
 // openTerminalSwitcher shows the switcher with selected preselected —
-// the identical shape openTabSwitcher already establishes, including
-// building its rows inline rather than through a separate render
-// function (closeTerminalFromSwitcher re-opens rather than re-rendering
-// in place, the same as closeTabFromSwitcher).
+// selected is a row index, which for every open Terminal happens to
+// equal its own r.shells index too, since open rows are always built
+// first, in r.shells order (see below) — every existing caller already
+// passes r.activeShell expecting exactly that.
+//
+// Builds its rows inline rather than through a separate render
+// function (closeTerminalFromSwitcher/removeTerminalHistoryRow re-open
+// rather than re-rendering in place, the same as closeTabFromSwitcher).
 func (r *Root) openTerminalSwitcher(selected int) {
-	if selected < 0 || selected >= len(r.shells) {
-		selected = 0
-	}
+	history, _ := remotefs.LoadHistory()
+	matchedHist := make([]bool, len(history))
 
 	r.terminalSwitcher.Clear()
-	for i, tab := range r.shells {
-		row := i
-		label := terminalSwitcherRowLabel(i, tab.label(), i == r.activeShell, r.theme.PlaceholderText)
-		r.terminalSwitcher.SetCell(i, terminalSwitcherColLabel,
-			tview.NewTableCell(label).
-				SetTextColor(r.theme.Text).
-				SetSelectable(true).
-				SetClickedFunc(r.clickTerminalSwitcherCell(row, terminalSwitcherColLabel)))
-		r.terminalSwitcher.SetCell(i, terminalSwitcherColClose,
-			tview.NewTableCell(" "+tabSwitcherCloseGlyph+" ").
-				SetTextColor(r.theme.Text).
-				SetSelectable(true).
-				SetClickedFunc(r.clickTerminalSwitcherCell(row, terminalSwitcherColClose)))
+	r.terminalSwitcherOpenRows = map[int]*shellTab{}
+	r.terminalSwitcherHistRows = map[int]remotefs.Connection{}
+
+	row := 0
+	for _, tab := range r.shells {
+		r.renderTerminalSwitcherOpenRow(row, tab)
+		r.terminalSwitcherOpenRows[row] = tab
+		row++
+		for hi, h := range history {
+			if !matchedHist[hi] && tab.conn.Equal(h.Connection) {
+				matchedHist[hi] = true
+				break
+			}
+		}
+	}
+	for hi, h := range history {
+		if matchedHist[hi] {
+			continue
+		}
+		r.renderTerminalSwitcherHistoryRow(row, h)
+		r.terminalSwitcherHistRows[row] = h.Connection
+		row++
 	}
 
-	newRow := len(r.shells)
-	r.terminalSwitcher.SetCell(newRow, terminalSwitcherColLabel,
+	r.terminalSwitcherNewRow = row
+	r.terminalSwitcher.SetCell(row, terminalSwitcherColLabel,
 		tview.NewTableCell(terminalSwitcherNewRowLabel).
 			SetTextColor(r.theme.Text).
 			SetSelectable(true).
-			SetClickedFunc(r.clickTerminalSwitcherCell(newRow, terminalSwitcherColLabel)))
-	r.terminalSwitcher.SetCell(newRow, terminalSwitcherColClose,
-		tview.NewTableCell(" ").SetSelectable(false))
+			SetClickedFunc(r.clickTerminalSwitcherCell(r.terminalSwitcherNewRow, terminalSwitcherColLabel)))
+	r.terminalSwitcher.SetCell(row, terminalSwitcherColAction, blankConnectionMenuCell())
+	r.terminalSwitcher.SetCell(row, terminalSwitcherColClose, blankConnectionMenuCell())
+	row++
 
-	filesRow := -1
+	r.terminalSwitcherFilesRow = -1
 	if r.viewingShells {
-		filesRow = newRow + 1
-		r.terminalSwitcher.SetCell(filesRow, terminalSwitcherColLabel,
+		r.terminalSwitcherFilesRow = row
+		r.terminalSwitcher.SetCell(row, terminalSwitcherColLabel,
 			tview.NewTableCell(terminalSwitcherFilesRowLabel).
 				SetTextColor(r.theme.Text).
 				SetSelectable(true).
-				SetClickedFunc(r.clickTerminalSwitcherCell(filesRow, terminalSwitcherColLabel)))
-		r.terminalSwitcher.SetCell(filesRow, terminalSwitcherColClose,
-			tview.NewTableCell(" ").SetSelectable(false))
+				SetClickedFunc(r.clickTerminalSwitcherCell(r.terminalSwitcherFilesRow, terminalSwitcherColLabel)))
+		r.terminalSwitcher.SetCell(row, terminalSwitcherColAction, blankConnectionMenuCell())
+		r.terminalSwitcher.SetCell(row, terminalSwitcherColClose, blankConnectionMenuCell())
 	}
-	r.terminalSwitcherFilesRow = filesRow
 
+	if selected < 0 || selected >= r.terminalSwitcherNewRow {
+		selected = 0
+		if len(r.shells) == 0 && len(r.terminalSwitcherHistRows) == 0 {
+			selected = r.terminalSwitcherNewRow
+		}
+	}
 	r.terminalSwitcher.Select(selected, terminalSwitcherColLabel)
 
 	width, height := r.terminalSwitcherSize()
@@ -146,6 +186,60 @@ func (r *Root) openTerminalSwitcher(selected int) {
 	r.terminalSwitcherLayout.SetRect(x, y, width, height)
 	r.showOverlay(terminalSwitcherPage, r.terminalSwitcher)
 	r.setTerminalSwitcherEmptyStackFocus()
+}
+
+// renderTerminalSwitcherOpenRow fills row with tab's own open-Terminal
+// shape — the label switches to it, the Action column disconnects it
+// (the identical action "✕" also performs — see this file's own
+// package doc comment on why neither needs a separate meaning here).
+func (r *Root) renderTerminalSwitcherOpenRow(row int, tab *shellTab) {
+	current := tab == r.shells[r.activeShell] && !tab.exited
+	label := terminalSwitcherRowLabel(row, tab.label(), current, r.theme.PlaceholderText)
+	r.terminalSwitcher.SetCell(row, terminalSwitcherColLabel,
+		tview.NewTableCell(label).
+			SetTextColor(r.theme.Text).
+			SetSelectable(true).
+			SetClickedFunc(r.clickTerminalSwitcherCell(row, terminalSwitcherColLabel)))
+	r.terminalSwitcher.SetCell(row, terminalSwitcherColAction,
+		tview.NewTableCell(" "+connectionHistoryEjectGlyph+" ").
+			SetTextColor(r.theme.MutedTextColor).
+			SetSelectable(true).
+			SetClickedFunc(r.clickTerminalSwitcherCell(row, terminalSwitcherColAction)))
+	r.terminalSwitcher.SetCell(row, terminalSwitcherColClose,
+		tview.NewTableCell(" "+connectionHistoryRemoveGlyph+" ").
+			SetTextColor(r.theme.MutedTextColor).
+			SetSelectable(true).
+			SetClickedFunc(r.clickTerminalSwitcherCell(row, terminalSwitcherColClose)))
+}
+
+// renderTerminalSwitcherHistoryRow fills row with h's own history-only
+// shape — no open Terminal has this connection right now. The label
+// connects straight to it (no dialog, the connection is already fully
+// known); the Action column edits it instead of disconnecting (there's
+// nothing live to disconnect); "✕" removes it from history outright.
+// LastFailed colors the row the identical red renderSSHShellMenu's own
+// history rows already use for the same reason.
+func (r *Root) renderTerminalSwitcherHistoryRow(row int, h remotefs.HistoryEntry) {
+	color := r.theme.Text
+	if h.LastFailed {
+		color = r.theme.CriticalText
+	}
+	label := fmt.Sprintf("%2d  %s%s", row+1, h.Label(), shellFlagsSuffix(h.Connection))
+	r.terminalSwitcher.SetCell(row, terminalSwitcherColLabel,
+		tview.NewTableCell(label).
+			SetTextColor(color).
+			SetSelectable(true).
+			SetClickedFunc(r.clickTerminalSwitcherCell(row, terminalSwitcherColLabel)))
+	r.terminalSwitcher.SetCell(row, terminalSwitcherColAction,
+		tview.NewTableCell(" "+connectionHistoryEditGlyph+" ").
+			SetTextColor(r.theme.MutedTextColor).
+			SetSelectable(true).
+			SetClickedFunc(r.clickTerminalSwitcherCell(row, terminalSwitcherColAction)))
+	r.terminalSwitcher.SetCell(row, terminalSwitcherColClose,
+		tview.NewTableCell(" "+connectionHistoryRemoveGlyph+" ").
+			SetTextColor(r.theme.MutedTextColor).
+			SetSelectable(true).
+			SetClickedFunc(r.clickTerminalSwitcherCell(row, terminalSwitcherColClose)))
 }
 
 // setTerminalSwitcherEmptyStackFocus points the switcher's own,
@@ -176,22 +270,42 @@ func (r *Root) setTerminalSwitcherEmptyStackFocus() {
 	r.overlayStack[len(r.overlayStack)-1].emptyStackFocus = focus
 }
 
-// activateTerminalSwitcherCell is Enter, Space, or a click on one cell —
-// the identical dispatch-by-row/by-column shape activateTabSwitcherCell
-// already establishes, minus the split case (no split column here).
+// activateTerminalSwitcherCell is Enter, Space, or a click on one cell
+// — dispatched by row *kind* (open Terminal, history-only connection,
+// "+ New terminal…", "Files"), not by a fixed row-number range the
+// way the original, r.shells-only version of this could get away with
+// — see this file's own package doc comment for what each kind's own
+// three columns do.
 func (r *Root) activateTerminalSwitcherCell(row, column int) {
-	switch {
-	case row >= 0 && row < len(r.shells):
-		if column == terminalSwitcherColClose {
+	if tab, ok := r.terminalSwitcherOpenRows[row]; ok {
+		if column == terminalSwitcherColAction || column == terminalSwitcherColClose {
 			r.closeTerminalFromSwitcher(row)
 			return
 		}
 		r.hideOverlay()
-		r.switchToShell(row)
-	case row == len(r.shells):
+		if idx := r.shellIndex(tab); idx >= 0 {
+			r.switchToShell(idx)
+		}
+		return
+	}
+	if conn, ok := r.terminalSwitcherHistRows[row]; ok {
+		switch column {
+		case terminalSwitcherColAction:
+			r.hideOverlay()
+			r.openNewTerminalDialog(conn)
+		case terminalSwitcherColClose:
+			r.removeTerminalHistoryRow(row, conn)
+		default:
+			r.hideOverlay()
+			r.openNewShellEmbedded(conn)
+		}
+		return
+	}
+	switch row {
+	case r.terminalSwitcherNewRow:
 		r.hideOverlay()
-		r.openNewTerminalDialog()
-	case row == r.terminalSwitcherFilesRow:
+		r.openNewTerminalDialog(remotefs.Connection{})
+	case r.terminalSwitcherFilesRow:
 		r.hideOverlay()
 		r.viewFiles()
 	}
@@ -204,16 +318,41 @@ func (r *Root) clickTerminalSwitcherCell(row, column int) func() bool {
 	}
 }
 
-// closeTerminalFromSwitcher closes the Terminal on one row and leaves
-// the switcher open, reselecting the row above it — the identical
-// shape closeTabFromSwitcher already establishes, minus its "refuse the
-// first tab" rule: a Terminal can close down to zero, there's nothing
-// here that always has to stay open.
+// closeTerminalFromSwitcher closes the open Terminal on row (the
+// switcher's own "⏏"/"✕" on an open row — see this file's own package
+// doc comment) and leaves the switcher open, reselecting roughly the
+// same spot — the identical shape closeTabFromSwitcher already
+// establishes, minus its "refuse the first tab" rule: a Terminal can
+// close down to zero, there's nothing here that always has to stay
+// open. The closed connection stays in history regardless (see
+// closeShell's own doc comment), so it simply reappears as a
+// history-only row once this reopens.
 func (r *Root) closeTerminalFromSwitcher(row int) {
-	if row < 0 || row >= len(r.shells) {
+	tab, ok := r.terminalSwitcherOpenRows[row]
+	if !ok {
 		return
 	}
-	r.closeShell(row)
+	idx := r.shellIndex(tab)
+	if idx < 0 {
+		return
+	}
+	r.closeShell(idx)
+	next := row - 1
+	if next < 0 {
+		next = 0
+	}
+	r.openTerminalSwitcher(next)
+}
+
+// removeTerminalHistoryRow deletes a history-only row's own connection
+// from the shared, persisted history outright (see
+// remotefs.RemoveFromHistory) — the one path "✕" actually means
+// delete rather than disconnect (see this file's own package doc
+// comment) — and leaves the switcher open, reselecting roughly the
+// same spot, the identical shape closeTerminalFromSwitcher already
+// establishes for an open row.
+func (r *Root) removeTerminalHistoryRow(row int, conn remotefs.Connection) {
+	r.showError(remotefs.RemoveFromHistory(conn))
 	next := row - 1
 	if next < 0 {
 		next = 0
@@ -231,10 +370,12 @@ func (r *Root) closeTerminalFromSwitcher(row int) {
 // unlike the Ctrl/Alt+digit combinations already spoken for elsewhere in
 // this app (see cmd/breakthrough's own SwitchToTabShortcut wiring) — the
 // same prefix-then-digit convention tmux's own window-switching already
-// relies on. Only the first ten Terminals get a digit this way; digit 0
-// is the tenth, matching renderTerminalStrip's own "i+1, no wraparound"
-// numbering for anything beyond that, and the identical "...0 is the
-// tenth" convention SwitchToTabShortcut already uses for file tabs.
+// relies on. Dispatches through activateTerminalSwitcherCell on the
+// label column, the same as Enter would on that row, so a digit reaches
+// an open row (switches to it) or a history-only one (connects to it)
+// identically — only the first ten rows get a digit this way; digit 0
+// is the tenth, the identical "...0 is the tenth" convention
+// SwitchToTabShortcut already uses for file tabs.
 func (r *Root) captureTerminalSwitcherKey(event *tcell.EventKey) *tcell.EventKey {
 	row, column := r.terminalSwitcher.GetSelection()
 
@@ -247,7 +388,11 @@ func (r *Root) captureTerminalSwitcherKey(event *tcell.EventKey) *tcell.EventKey
 		r.activateTerminalSwitcherCell(row, column)
 		return nil
 	case event.Key() == tcell.KeyDelete:
-		r.closeTerminalFromSwitcher(row)
+		if _, ok := r.terminalSwitcherOpenRows[row]; ok {
+			r.closeTerminalFromSwitcher(row)
+		} else if conn, ok := r.terminalSwitcherHistRows[row]; ok {
+			r.removeTerminalHistoryRow(row, conn)
+		}
 		return nil
 	}
 
@@ -255,11 +400,10 @@ func (r *Root) captureTerminalSwitcherKey(event *tcell.EventKey) *tcell.EventKey
 		digit := int(event.Rune() - '0')
 		index := digit - 1
 		if digit == 0 {
-			index = 9 // "0" is the tenth Terminal
+			index = 9 // "0" is the tenth row
 		}
-		if index >= 0 && index < len(r.shells) {
-			r.hideOverlay()
-			r.switchToShell(index)
+		if index >= 0 && index < r.terminalSwitcherNewRow {
+			r.activateTerminalSwitcherCell(index, terminalSwitcherColLabel)
 			return nil
 		}
 	}
@@ -275,8 +419,9 @@ func (r *Root) closeTerminalSwitcher() {
 }
 
 // terminalSwitcherSize is the overlay's own size — the identical
-// per-column measurement tabSwitcherSize already establishes, minus the
-// split column.
+// per-column measurement tabSwitcherSize already establishes, with one
+// more column than it has (Action, see this file's own package doc
+// comment on what it's for).
 func (r *Root) terminalSwitcherSize() (width, height int) {
 	table := r.terminalSwitcher
 	rows := table.GetRowCount()
@@ -316,14 +461,14 @@ func (r *Root) terminalStripAnchor() (right, y int) {
 	return sx + sw, sy + 1
 }
 
-// terminalSwitcherRowLabel mirrors tabSwitcherRowLabel — the Terminal's
-// own number, then its connection label, with the active one dimmed and
-// marked "(current)" the identical way the tab switcher already marks
-// the tab you're currently on.
-func terminalSwitcherRowLabel(i int, label string, current bool, dim tcell.Color) string {
-	row := fmt.Sprintf("%2d  %s", i+1, label)
+// terminalSwitcherRowLabel mirrors tabSwitcherRowLabel — the row's own
+// number, then its connection label, with the active live one dimmed
+// and marked "(current)" the identical way the tab switcher already
+// marks the tab you're currently on.
+func terminalSwitcherRowLabel(row int, label string, current bool, dim tcell.Color) string {
+	text := fmt.Sprintf("%2d  %s", row+1, label)
 	if current {
-		return fmt.Sprintf("[%s]%s  (current)[-]", colorTag(dim), row)
+		return fmt.Sprintf("[%s]%s  (current)[-]", colorTag(dim), text)
 	}
-	return row
+	return text
 }

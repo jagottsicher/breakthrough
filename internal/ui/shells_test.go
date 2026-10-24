@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"os/exec"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
+	"github.com/jagottsicher/breakthrough/internal/sshshell"
 	"github.com/jagottsicher/breakthrough/internal/termtab"
 )
 
@@ -397,5 +399,135 @@ func TestClosingAnExitedTerminalStillRemovesIt(t *testing.T) {
 
 	if len(r.shells) != 0 {
 		t.Errorf("len(r.shells) = %d after explicitly closing an exited terminal, want 0", len(r.shells))
+	}
+}
+
+// The tests below pin the user's own explicit request: a Terminal's
+// own connection is remembered in the shared, disk-persisted history
+// (internal/remotefs) — the same one the Connect dialog and "gs"
+// dropdown already use — not just for the lifetime of r.shells, so it
+// can be reopened later, including after a real restart.
+
+func TestOpenNewShellEmbeddedSavesToHistoryAsUntested(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	conn := testShellConn("histone")
+	r.openNewShellEmbedded(conn)
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("len(history) = %d, want 1", len(history))
+	}
+	if !history[0].Equal(conn) {
+		t.Errorf("history[0].Connection = %+v, want %+v", history[0].Connection, conn)
+	}
+	if !history[0].Untested {
+		t.Error("history[0].Untested = false, want true — the outcome isn't known yet")
+	}
+}
+
+func TestWatchShellExitRecordsASuccessfulConnection(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "exit 0") })
+
+	conn := testShellConn("histsuccess")
+	r.openNewShellEmbedded(conn)
+	tab := r.shells[0]
+
+	// watchShellExit's own callback body, reproduced directly — see
+	// this file's own earlier doc comment on why (QueueUpdateDraw
+	// needs a real running event loop no test here starts).
+	<-tab.session.Done()
+	_, exitErr := tab.session.Exited()
+	failed := false
+	var ee *exec.ExitError
+	if errors.As(exitErr, &ee) {
+		failed = ee.ExitCode() == sshshell.ConnectionFailedExitCode
+	}
+	_ = remotefs.RecordAttempt(tab.conn, failed)
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("len(history) = %d, want 1", len(history))
+	}
+	if history[0].Untested {
+		t.Error("history[0].Untested = true, want false — a real outcome is now known")
+	}
+	if history[0].LastFailed {
+		t.Error("history[0].LastFailed = true, want false — an ordinary exit isn't a connection failure")
+	}
+}
+
+func TestWatchShellExitRecordsAFailedConnectionOnExitCode255(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "exit 255") })
+
+	conn := testShellConn("histfailed")
+	r.openNewShellEmbedded(conn)
+	tab := r.shells[0]
+
+	<-tab.session.Done()
+	_, exitErr := tab.session.Exited()
+	failed := false
+	var ee *exec.ExitError
+	if errors.As(exitErr, &ee) {
+		failed = ee.ExitCode() == sshshell.ConnectionFailedExitCode
+	}
+	_ = remotefs.RecordAttempt(tab.conn, failed)
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 1 || !history[0].LastFailed {
+		t.Fatalf("history = %+v, want exactly 1 entry marked LastFailed", history)
+	}
+}
+
+// TestTerminalHistorySurvivesACleanRestart pins the actual, user-facing
+// point of all this: a second, independent Root sharing the same
+// config directory (standing in for "the app restarted") sees the
+// connection a first run already made.
+func TestTerminalHistorySurvivesACleanRestart(t *testing.T) {
+	withTestConfigHome(t) // deliberately once — both Roots below share it
+	dir := t.TempDir()
+
+	r1, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot (first run): %v", err)
+	}
+	orig := startShellSession
+	startShellSession = func(conn remotefs.Connection, opts termtab.StartOptions) (*termtab.Session, error) {
+		opts.Command = func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") }
+		return termtab.Start(conn, opts)
+	}
+	t.Cleanup(func() { startShellSession = orig })
+
+	conn := testShellConn("restarted")
+	r1.openNewShellEmbedded(conn)
+	_ = r1.shells[0].session.Close()
+
+	r2, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot (second run): %v", err)
+	}
+	if len(r2.shells) != 0 {
+		t.Fatalf("the second run's own r.shells = %v, want empty — it never opened anything itself", r2.shells)
+	}
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 1 || !history[0].Equal(conn) {
+		t.Fatalf("history after \"restart\" = %+v, want the first run's own connection still there", history)
 	}
 }
