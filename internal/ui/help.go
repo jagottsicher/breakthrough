@@ -1383,8 +1383,12 @@ var helpText = strings.TrimLeft(`
   connection the shared, disk-persisted connection history remembers
   (the same one the Connect dialog and the "gs" chord's own dropdown
   already keep across restarts) — gets a number, a label, an Action
-  cell, and a "✕". What those two right-hand cells do depends on the
-  row:
+  cell, and a "✕". A row's own label is colored the identical way the
+  "@" connections menu above already colors its own rows: green if
+  reached successfully before (a brighter green for whichever one is
+  currently connected), red if the last attempt failed, plain white
+  if it's never actually been dialed through yet. What those two
+  right-hand cells do depends on the row:
 
     An open Terminal (live or exited): the label switches to it; the
     Action cell reads "⏏" and disconnects it; "✕" does the same — there

@@ -92,6 +92,141 @@ func TestTerminalSwitcherOmitsFilesRowWhenNotViewingATerminal(t *testing.T) {
 	}
 }
 
+// The tests below pin the same red/green/white split
+// TestConnectionHistoryColorForEveryStateCombination already proves
+// for connectionHistoryColor itself (connectionmenu_test.go) — here
+// end to end, for both an open-Terminal row and a history-only row,
+// per the user's own explicit request that the Terminal switcher
+// color its rows exactly the way the "@" connections menu already
+// does.
+
+func TestTerminalSwitcherColorsTheCurrentTerminalGreenRegardlessOfHistory(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	conn := testShellConn("alpha")
+	r.openNewShellEmbedded(conn)
+	defer func() { _ = r.shells[0].session.Close() }()
+	if err := remotefs.RecordAttempt(conn, true); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	r.openTerminalSwitcher(0)
+
+	got := cellTextColor(r.terminalSwitcher.GetCell(0, terminalSwitcherColLabel))
+	if got != r.theme.EntryExecutable {
+		t.Errorf("current terminal's row color = %v, want %v (theme.EntryExecutable) even with a failed history entry", got, r.theme.EntryExecutable)
+	}
+}
+
+func TestTerminalSwitcherColorsAnUntestedOpenTerminalPlain(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("alpha"))
+	r.openNewShellEmbedded(testShellConn("beta")) // not current: alpha is
+	defer func() {
+		for _, tab := range r.shells {
+			_ = tab.session.Close()
+		}
+	}()
+
+	r.openTerminalSwitcher(1)
+
+	got := cellTextColor(r.terminalSwitcher.GetCell(0, terminalSwitcherColLabel))
+	if got != r.theme.Text {
+		t.Errorf("never-dialed-through terminal's row color = %v, want theme.Text %v", got, r.theme.Text)
+	}
+}
+
+func TestTerminalSwitcherColorsAPreviouslySuccessfulNonCurrentTerminalMutedGreen(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	alpha := testShellConn("alpha")
+	r.openNewShellEmbedded(alpha)
+	r.openNewShellEmbedded(testShellConn("beta")) // not current: alpha is
+	defer func() {
+		for _, tab := range r.shells {
+			_ = tab.session.Close()
+		}
+	}()
+	if err := remotefs.RecordAttempt(alpha, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	r.openTerminalSwitcher(1)
+
+	got := cellTextColor(r.terminalSwitcher.GetCell(0, terminalSwitcherColLabel))
+	want := blendToward(r.theme.EntryExecutable, r.theme.MutedTextColor, connectionHistorySuccessBlend)
+	if got != want {
+		t.Errorf("previously-successful, non-current terminal's row color = %v, want the muted-green blend %v", got, want)
+	}
+}
+
+func TestTerminalSwitcherColorsAFailedNonCurrentTerminalRed(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	alpha := testShellConn("alpha")
+	r.openNewShellEmbedded(alpha)
+	r.openNewShellEmbedded(testShellConn("beta")) // not current: alpha is
+	defer func() {
+		for _, tab := range r.shells {
+			_ = tab.session.Close()
+		}
+	}()
+	if err := remotefs.RecordAttempt(alpha, true); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	r.openTerminalSwitcher(1)
+
+	got := cellTextColor(r.terminalSwitcher.GetCell(0, terminalSwitcherColLabel))
+	if got != r.theme.CriticalText {
+		t.Errorf("failed, non-current terminal's row color = %v, want theme.CriticalText %v", got, r.theme.CriticalText)
+	}
+}
+
+func TestTerminalSwitcherColorsAFailedHistoryRowRed(t *testing.T) {
+	r := newTestRootForShells(t)
+	conn := remotefs.Connection{Host: "unreachable.example.com", User: "nobody"}
+	// RecordAttempt's own "never tried, never added" rule (history.go)
+	// drops a brand-new connection's very first failed attempt outright
+	// rather than cluttering history with it — a real entry has to
+	// exist first, the same way a real "this host used to work, now it
+	// doesn't" ever actually happens.
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt (seed): %v", err)
+	}
+	if err := remotefs.RecordAttempt(conn, true); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	r.openTerminalSwitcher(-1)
+
+	got := cellTextColor(r.terminalSwitcher.GetCell(0, terminalSwitcherColLabel))
+	if got != r.theme.CriticalText {
+		t.Errorf("failed history row color = %v, want theme.CriticalText %v", got, r.theme.CriticalText)
+	}
+}
+
+func TestTerminalSwitcherColorsASuccessfulHistoryRowMutedGreen(t *testing.T) {
+	r := newTestRootForShells(t)
+	conn := remotefs.Connection{Host: "reachable.example.com", User: "nobody"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	r.openTerminalSwitcher(-1)
+
+	got := cellTextColor(r.terminalSwitcher.GetCell(0, terminalSwitcherColLabel))
+	want := blendToward(r.theme.EntryExecutable, r.theme.MutedTextColor, connectionHistorySuccessBlend)
+	if got != want {
+		t.Errorf("successful history row color = %v, want the muted-green blend %v", got, want)
+	}
+}
+
 func TestTerminalSwitcherMarksTheCurrentTerminal(t *testing.T) {
 	r := newTestRootForShells(t)
 	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
