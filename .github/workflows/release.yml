@@ -124,17 +124,34 @@ jobs:
           done
 
       - name: Update rpm repository
+        # Maps each .goreleaser.yaml nfpm arch suffix to the RPM repo
+        # directory name real distros expect (armhfp is Fedora/RHEL's
+        # own convention for 32-bit ARM hardfloat, matching x86_64/
+        # aarch64's own upstream naming, not an arbitrary choice) — a
+        # loop over this table instead of one hardcoded glob per arch,
+        # so a v0.87.19-style silent drop (linux_armv7.rpm matched
+        # neither *_amd64.rpm nor *_arm64.rpm and was never copied in,
+        # even though the equivalent .deb made it into the apt repo
+        # fine) can't happen again the same way for a future arch.
         run: |
           cd pkg-repo
-          for f in ../assets/*_amd64.rpm; do
-            cp "$f" rpm/stable/x86_64/
+          declare -A rpm_dirs=(
+            [amd64]=x86_64
+            [arm64]=aarch64
+            [armv7]=armhfp
+          )
+          for suffix in "${!rpm_dirs[@]}"; do
+            dir="rpm/stable/${rpm_dirs[$suffix]}"
+            mkdir -p "$dir"
+            for f in ../assets/*_"$suffix".rpm; do
+              [ -e "$f" ] || continue
+              cp "$f" "$dir/"
+            done
           done
-          for f in ../assets/*_arm64.rpm; do
-            cp "$f" rpm/stable/aarch64/
+          rpm --addsign rpm/stable/*/*.rpm
+          for dir in rpm/stable/*/; do
+            createrepo_c --update "$dir"
           done
-          rpm --addsign rpm/stable/x86_64/*.rpm rpm/stable/aarch64/*.rpm
-          createrepo_c --update rpm/stable/x86_64
-          createrepo_c --update rpm/stable/aarch64
 
       - name: Commit and push
         run: |
