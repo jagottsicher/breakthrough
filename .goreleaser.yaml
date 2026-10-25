@@ -63,11 +63,11 @@ builds:
       - arm64
       - arm
     goarm:
-      # Both 32-bit ARM ABIs that actually occur in the wild (older
-      # Raspberry Pis, embedded ARM boxes) — v5 (ARMv5, no hardware
-      # float) is deliberately left out, it's effectively extinct on
-      # anything running a modern Linux userspace.
-      - "6"
+      # goarm7 only here — see the separate "breakthrough-armv6" build
+      # below (archive-only, no .deb/.rpm) for why goarm6 isn't part of
+      # this one. v5 (no hardware float) is deliberately left out
+      # entirely, it's effectively extinct on anything running a
+      # modern Linux userspace.
       - "7"
     ignore:
       # freebsd/arm64 is deliberately not a target (this project's own
@@ -86,6 +86,32 @@ builds:
         goarch: arm
       - goos: netbsd
         goarch: arm
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+
+  - id: breakthrough-armv6
+    # ARMv6 (original Raspberry Pi / Pi Zero) gets a plain archive, but
+    # deliberately no .deb/.rpm: Debian's own package-architecture
+    # naming has exactly one 32-bit ARM identity, "armhf", regardless
+    # of GOARM — a goarm6 .deb and a goarm7 .deb both claim to be
+    # "armhf" and collide in the apt/rpm repo (reprepro refuses the
+    # second one outright, a real release failure this project hit).
+    # linux only — FreeBSD/OpenBSD/NetBSD on genuinely ARMv6-only
+    # hardware isn't a real scenario the way an original Pi/Pi Zero is.
+    main: ./cmd/breakthrough
+    binary: breakthrough
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - arm
+    goarm:
+      - "6"
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -127,6 +153,11 @@ checksum:
 # only, matching the formats themselves.
 nfpms:
   - id: breakthrough
+    # Restricted to the main build only — excludes the
+    # "breakthrough-armv6" build above (archive-only, no .deb/.rpm; see
+    # its own comment on why).
+    ids:
+      - breakthrough
     package_name: breakthrough
     # Same goarm 6/7 collision as the archives' own name_template above.
     file_name_template: >-
