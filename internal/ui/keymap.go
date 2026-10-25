@@ -175,7 +175,7 @@ func plainCommands() []plainCommand {
 		// reachable while the panel itself has focus (same as every
 		// other plain-letter binding — see acceptsPlainKeyCommand), so
 		// this alone can't get anyone back out of an open Terminal;
-		// Alt+S (cmd/breakthrough) and Ctrl+\ (same file, Terminal-only)
+		// Alt+T (cmd/breakthrough) and Ctrl+\ (same file, Terminal-only)
 		// both still work regardless of focus for that.
 		{key: 'T', label: "Terminal switcher", quick: true, short: "Term", action: func(r *Root) { r.openTerminalSwitcher(r.activeShell) }},
 		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},

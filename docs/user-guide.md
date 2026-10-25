@@ -12,6 +12,7 @@ material, always matching the version you are actually running.
 - [Selecting files](#selecting-files)
 - [Tabs](#tabs)
 - [Split view](#split-view)
+- [Terminals](#terminals)
 - [The context menu](#the-context-menu)
 - [New file and New dir](#new-file-and-new-dir)
 - [Multiply](#multiply)
@@ -70,6 +71,7 @@ dialog open.
 | `G` | Go to the last row | `q` | Quit | `h` | Compute hashes |
 | `k` | Directory size | `M` | Image metadata | `?` | This help |
 | `:` | Bash command line | `C` | Compare | `R` | Rsync |
+| `T` | [Terminal switcher](#terminals) | | | | |
 
 A capital letter is the bigger sibling of its own lowercase one
 wherever both exist: `d` is reversible (the Trash), `D` asks first and
@@ -97,7 +99,7 @@ bar becomes that chord's own legend:
 
 | Chord | Members |
 |---|---|
-| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gm` [Messages](#notifications) · `ge` [Email](#email) |
+| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gs` Direct SSH shell… (see [Terminals vs. "gs"](#terminals-vs-gs)) · `gT` [Terminal switcher](#terminals) · `gm` [Messages](#notifications) · `ge` [Email](#email) · `g:` Bash command line (same as plain `:`) |
 | `p` — permissions | `pm` chmod · `po` chown |
 | `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mw` [Open with…](#open-with) · `mt` `tail -f` · `ma` Select all · `mA` Deselect all · `mc` Clear clipboard · `mV` Cancel Paste (same as `Ctrl+C` while one is running, does nothing otherwise) · `mR` Cancel Rsync (asks: current job only, or current plus its own queue) · `mC` Cancel Compress/Extract (same question) — `mR`/`mC` never touch each other or Paste |
 | `z` — display | `zs` size format · `zt` time format · `zi` Nerd Font icons (needs a terminal font that actually has them — off by default) · `zl` label (opens a quick picker to set/clear one of 9 colors on the focused row, or every checked row at once — the one member here that mutates state rather than just toggling a display) · `zo` split orientation · `zw` swap panes · `zr` reload |
@@ -415,6 +417,102 @@ column width for long filenames.
 The split itself is saved and restored along with the tabs. If one
 pane's directory has disappeared by the next start, breakthrough opens
 single-pane rather than restoring half a layout.
+
+## Terminals
+
+A separate, independent collection of embedded remote terminals — not
+file tabs, and deliberately kept apart from them. Each one is a real
+background process the moment it opens: switching to a file tab, a
+different Terminal, or back never pauses it, which is the whole point
+of this over the "gs" chord's own one-off `ssh` shell (see
+[below](#terminals-vs-gs)) — that one blocks the entire application
+for as long as it runs.
+
+| Key | Action |
+|---|---|
+| `T` | open the switcher — only while the panel itself has focus |
+| `Alt`+`T` | open the switcher from anywhere, including from inside an open Terminal — where it instead leaves straight back to the panel, since there's nothing else for it to switch to from there without leaving first anyway |
+| `gT` | the same action as `T`, through the `g` chord |
+| `Ctrl`+`\` | leave a Terminal, reachable from anywhere a Terminal is on screen — the fallback for a keyboard/terminal app that doesn't deliver `Alt`+`T`'s own equivalent (`Option`+`T` on some) at all |
+| `Ctrl`+`C` / `Escape` / `Tab` | leave a Terminal, but only once its own process has already exited on its own — while it's still live, these go straight to the remote side instead, exactly as typing them over a real `ssh` session would |
+
+**Opening one.** The terminal strip's own trailing `+` (next to the
+tab strip's own, in the same header row), the plain `T`/`gT`/`Alt`+`T`
+switcher's own "+ New terminal" row, or clicking anywhere in the strip
+that isn't a number — all three open the same "Add new ssh connection"
+dialog "gs" also uses: Host, Port, User, plus the agent-forwarding
+(`-A`), compression (`-C`), verbose (`-v`), and X11 forwarding (`-X`)
+one-off flags. Submitting it starts the embedded terminal straight
+away and switches to it.
+
+**The strip.** Numbers, then a trailing `+`, drawn in a fixed
+gray-on-white look (white-on-gray for whichever one is active) that
+doesn't change with the color scheme, so it always reads as its own
+thing next to the themed tab numbers right beside it. Click a number
+to switch, click anywhere else in the strip for the full switcher.
+
+**The switcher** looks and works like the Tab switcher, with one more
+column, and merges two different kinds of row into one list: every
+currently open Terminal (live or exited), and every other connection
+the shared, disk-persisted connection history remembers but doesn't
+currently have an open Terminal of its own — the exact same history
+"gs"'s own dropdown and the Connect dialog already keep across
+restarts, so a host saved from any of them shows up in all three.
+Colored the identical way the "@" connections menu already colors its
+own rows: a brighter green for whichever one is currently connected, a
+dimmer green for one that has worked before but isn't active right
+now, red for one whose last attempt failed, plain white for one that's
+never actually been dialed through yet.
+
+Each row gets a number, a label, an Action cell, and a `✕` — what the
+last two do depends on the row:
+
+- An open Terminal (live or exited): the label switches to it; the
+  Action cell reads `⏏` and disconnects it; `✕` does the same —
+  nothing else "remove" could mean for something still running.
+  Disconnecting still leaves the connection in history, exactly as
+  reopenable as any other entry there.
+- A history-only connection (no open Terminal right now — closed, or
+  from a previous run entirely): the label opens a new Terminal
+  straight to it, no dialog in between; the Action cell reads `✎` and
+  opens the same "Add new ssh connection" dialog prefilled, the same
+  Edit flow "gs"'s own history already offers; `✕` here does mean
+  delete — it drops the entry from history outright.
+
+"+ New terminal" opens that same dialog blank. "Go to file view",
+shown only while a Terminal is actually on screen, leaves back to the
+panel — named for the destination, not a direction ("Back"/"Return"),
+since a Terminal isn't reached by leaving one single, particular file
+view to begin with. A bare digit (no modifier) jumps straight to that
+numbered row's own label action and closes the switcher immediately —
+the same "...0 is the tenth" numbering Tabs use, and, unlike the Tab
+switcher, works for a history-only row too.
+
+**While viewing one.** The panel's own header row stays visible above
+it — tab/terminal strips, filter button, Details button — with the
+path bar's own spot repurposed to show this Terminal's connection
+status instead, one merged row rather than a path that no longer means
+anything plus a second line underneath it. If the remote process ends
+on its own — the connection drops, you log out on the far side —
+nothing happens automatically: the screen keeps showing whatever was
+last on it, the entry stays in the strip and the switcher marked
+"(exited)", and nothing about it disappears until `✕`/Delete actually
+closes it.
+
+### Terminals vs. "gs"
+
+Both reach a real, interactive `ssh` session, read and write the
+identical shared connection history, and open through the same dialog
+— but they serve opposite needs. "gs" (see [Remote connections
+(SFTP)](#remote-connections-sftp) and [Sessions](#sessions) for its
+own neighbors on the `g` chord) suspends breakthrough itself and hands
+the whole terminal to one real, blocking `ssh` process — one
+connection, no switching away and back, exactly like running `ssh`
+directly from a shell. Terminals instead keep breakthrough running and
+the connection alive in the background for as long as it's open,
+switchable at will, any number at once — the trade is one more layer
+(the switcher, the strip) in exchange for never having to choose
+between browsing files and keeping a remote shell open.
 
 ## The context menu
 
@@ -1229,10 +1327,11 @@ the arrow keys and press `Enter`/`Space`):
   either way. Clicking a row's own Name/Backend/Status cell does the
   same thing; it's the row's own obvious action, so it needs no
   separate cell of its own.
-- **⇶ Attach in new window** — not implemented yet. Needs a real,
-  embedded PTY/ANSI terminal inside breakthrough itself, which doesn't
-  exist yet either; pressing it shows a notice that clears itself after
-  a few seconds.
+- **⇶ Attach in new window** — not implemented yet. The embedded PTY
+  primitive this would need now exists ([Terminals](#terminals)), but
+  wiring this specific action to reuse it for an existing local
+  screen/tmux/Zellij session hasn't been done; pressing it shows a
+  notice that clears itself after a few seconds.
 - **✕ Close** — ends the session outright (`screen -X quit` / `tmux
   kill-session` / `zellij kill-session`), asking first, the same as
   Remove. `x` or `Delete` does the same for the currently selected
@@ -2603,6 +2702,8 @@ already open; `Ctrl`+`Delete` regardless of terminal support).
 | `Ctrl`+`1`…`0`, `Alt`+`1`…`0` | Jump to a tab | |
 | `Ctrl`+`T` | Tab switcher; also walks to the next tab while the switcher is already open, which `t` alone can't | `t` |
 | `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` | Step through tabs | |
+| `Alt`+`T` | [Terminal switcher](#terminals); leaves an open Terminal instead if one is already on screen | `T` |
+| `Ctrl`+`\` | Leave a Terminal — the one reachable from anywhere a Terminal is on screen, regardless of focus | |
 
 `Enter` on a `.zip`, `.tar`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.7z`, or
 `.rar` file opens a browsable listing of its own contents right here in

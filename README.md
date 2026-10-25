@@ -152,8 +152,10 @@ terminal.
   path. `t`/`^T` opens the same switcher without moving, and works
   everywhere the others might not. A
   compact numbered strip sits beside the filter — numbers rather than paths, so
-  the header row's width stays put as you navigate — and shrinks to just
-  a "+" while only one tab is open. The layout is saved on exit, but a
+  the header row's width stays put as you navigate — a real, clickable
+  number even with only one tab open, so there's still a way back to it
+  while something else (a Terminal, see below) covers the screen. The
+  layout is saved on exit, but a
   bare `breakthrough` opens in the current directory rather than
   reopening it — set `restore_tabs = true` to resume your last layout
   instead. A directory named on the command line always wins regardless
@@ -172,6 +174,25 @@ terminal.
   replaces only the pane you're in — the panes never swap sides. The
   split is saved and reopened alongside the tabs. See
   [docs/user-guide.md](docs/user-guide.md#split-view) for the details.
+- Terminals (`T`/`Alt+T`/`gT`): a separate, independent collection of
+  embedded remote `ssh` terminals, deliberately kept apart from file
+  tabs — each one a real background process from the moment it opens,
+  so switching away and back (to a file tab, a different Terminal, or
+  out to the panel) never pauses it. Opened through the same "Add new
+  ssh connection" dialog the `gs` chord's own one-off shell uses — but
+  unlike that one, which suspends breakthrough itself for as long as it
+  runs, a Terminal keeps the connection alive in the background,
+  switchable at will, any number at once. Its own numbered strip sits
+  right beside the tab strip, drawn in a fixed gray/white look that
+  doesn't change with the color scheme; the switcher merges every open
+  Terminal with the same shared, disk-persisted connection history `gs`
+  and the Connect dropdown already keep, colored the identical
+  green/red/white the "@" connections menu uses. `Alt+T` opens the
+  switcher from anywhere, including from inside an open Terminal —
+  where it instead leaves straight back to the panel, one key out; a
+  Terminal whose own remote process ends on its own stays exactly where
+  it was, marked "(exited)", until explicitly closed. See
+  [docs/user-guide.md](docs/user-guide.md#terminals) for the details.
 - A primary keyboard layer of plain letters — `c`/`x`/`v` copy/cut/paste,
   `d`/`D` Trash/remove permanently, `r` rename, `i`/`I` Properties/
   Details, `s`/`S` split/swap panes, and more — active only while the
@@ -943,7 +964,10 @@ side-by-side view (`v`) — a Sessions screen (`js`) listing local GNU screen, t
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once
-you detach or it ends), an SSH Keys screen (`jk`) inventorying local key
+you detach or it ends), embedded remote Terminals (`T`/`Alt+T`/`gT`) —
+a separate, backgroundable, switchable collection of real `ssh`
+sessions, distinct from the `gs` chord's own one-off blocking shell —
+an SSH Keys screen (`jk`) inventorying local key
 pairs under `~/.ssh` — algorithm/size, passphrase protection, file
 permissions, and whether each is currently loaded in the running
 ssh-agent — plus a Generate key form (`a`) that builds the exact

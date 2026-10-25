@@ -3,7 +3,7 @@
 // Session + termTabView, Phases 1/2), deliberately NOT merged into
 // r.tabs/r.panel (see that same section's own doc comment on why a true
 // unification would mean turning r.panel from a concrete *Panel into an
-// interface, touching most of this package, for a win Alt+S's own
+// interface, touching most of this package, for a win Alt+T's own
 // separate switcher gets without that risk).
 //
 // A Shell runs as a real background process the moment it's opened,
@@ -132,14 +132,15 @@ func (r *Root) ViewingTerminal() bool {
 	return r.viewingShells
 }
 
-// ExitTerminalViewShortcut is Ctrl+\ (see cmd/breakthrough's own global
-// SetInputCapture) — the one way out of a Terminal when neither Alt+S
-// nor the switcher's own Escape is reachable (a real iPad-keyboard
-// report: Option+S, Alt+S's own equivalent there, never reached the
-// app at all). Reserved exclusively while a Terminal is actually on
-// screen; reports false otherwise so the global handler lets the
-// keystroke fall through unconsumed rather than swallowing a
-// combination that means nothing here.
+// ExitTerminalViewShortcut is Ctrl+\, and (as of Alt+T's own toggle
+// behavior, cmd/breakthrough) the second half of what Alt+T does once
+// a Terminal is already on screen. Ctrl+\ itself stays reserved for
+// the one real case Alt+T can't cover: a real iPad-keyboard report
+// where Option+T (Alt+T's own equivalent there) never reaches the app
+// at all — the same problem Option+S had before Alt+S was renamed to
+// Alt+T. Reports false while no Terminal is on screen, so the global
+// handler lets the keystroke fall through unconsumed rather than
+// swallowing a combination that means nothing here.
 //
 // Closes any overlay stacked on top first (the terminal switcher
 // itself, most likely) rather than only ever working with none open:
