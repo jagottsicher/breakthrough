@@ -257,7 +257,16 @@ func logAuditTimelineBuildText(counts []int, severity []logview.Level, startLabe
 		case c > 0:
 			color = theme.Text
 		}
-		attr := ""
+		// Always an explicit attrs field (never a bare "[color]") —
+		// tview's own tag syntax treats an omitted field as "leave it
+		// unchanged from whatever came before", not "reset to none"
+		// (confirmed live: a real, reported bug where selecting any
+		// bucket made every bucket after it in the string look
+		// selected too, since nothing ever explicitly cleared the "::r"
+		// one bucket back had set). "::-" is the explicit "no special
+		// attribute" state, matching this file's own "[-:-:-]" reset
+		// convention used around the start/end labels.
+		attr := "::-"
 		if selStart >= 0 && i >= selStart && i <= selEnd {
 			attr = "::r"
 		}

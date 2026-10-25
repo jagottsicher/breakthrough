@@ -46,6 +46,16 @@ var absoluteLayouts = []string{
 	"2006-01-02 15:04:05",
 	"2006-01-02 15:04",
 	"2006-01-02",
+	// "2026-10" — per the user's own explicit request for a more
+	// tolerant input, alongside the existing "2026-09-01 14:30" (no
+	// seconds) and "2026-09-01" (no time) layouts above already
+	// defaulting their own omitted lower-order fields the same way.
+	// Go's own time.ParseInLocation defaults every field this layout
+	// doesn't mention to its calendar-sane zero value — day 1,
+	// midnight — not a parse error, confirmed directly
+	// (time.ParseInLocation("2006-01", "2026-10", time.Local) ==
+	// 2026-10-01 00:00:00), not assumed from the stdlib docs alone.
+	"2006-01",
 }
 
 // MtimeFilter is a parsed modified-time expression — see ParseMtime.

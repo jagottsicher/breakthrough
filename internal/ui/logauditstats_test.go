@@ -108,6 +108,30 @@ func TestLogAuditTimelineTextColorsErrorBucketRed(t *testing.T) {
 	}
 }
 
+// TestLogAuditTimelineBuildTextSelectionDoesNotBleedToLaterBuckets pins
+// a real, reported bug: tview's own tag syntax treats an omitted
+// attrs field as "leave it unchanged from before", not "reset to
+// none", so a bare "[color]" tag on every non-selected bucket let the
+// "::r" reverse attribute one selected bucket set bleed forward into
+// every bucket rendered after it in the same string — moving the
+// keyboard selection made the entire rest of the bar past that point
+// look selected too, not just the one bucket actually under the
+// cursor.
+func TestLogAuditTimelineBuildTextSelectionDoesNotBleedToLaterBuckets(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	counts := []int{1, 1, 1, 1, 1}
+	severity := []logview.Level{logview.LevelInfo, logview.LevelInfo, logview.LevelInfo, logview.LevelInfo, logview.LevelInfo}
+
+	got := logAuditTimelineBuildText(counts, severity, "start", "end", theme, 2, 2)
+
+	if n := strings.Count(got, "::r"); n != 1 {
+		t.Errorf("text = %q, want exactly one \"::r\" tag (the single selected bucket), got %d", got, n)
+	}
+	if !strings.Contains(got, "::-") {
+		t.Errorf("text = %q, want every non-selected bucket to explicitly reset its own attrs with \"::-\", not merely omit the field", got)
+	}
+}
+
 // TestLogAuditTimelineTextIncludesStartAndEndLabels pins the user's
 // own explicit report: the density bar alone said nothing about what
 // time range or scale it actually covered, confusing on a sparse log

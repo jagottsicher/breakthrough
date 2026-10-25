@@ -127,6 +127,24 @@ func TestParseMtimeAbsoluteWithTime(t *testing.T) {
 	}
 }
 
+// TestParseMtimeYearMonthDefaultsToTheFirstOfTheMonth pins the user's
+// own explicit request for more tolerant input: "2026-10" alone,
+// without a day, should mean "2026-10-01 00:00:00", the same way
+// "2026-09-01" (no time) already defaults to midnight and "2026-09-01
+// 14:30" (no seconds) already defaults to :00 seconds.
+func TestParseMtimeYearMonthDefaultsToTheFirstOfTheMonth(t *testing.T) {
+	f, err := ParseMtime("after 2026-10", mtimeTestNow)
+	if err != nil {
+		t.Fatalf("ParseMtime: %v", err)
+	}
+	if !f.Match(time.Date(2026, 10, 1, 0, 0, 1, 0, time.Local)) {
+		t.Error("one second into October 1st should already be after 2026-10 (midnight on the 1st)")
+	}
+	if f.Match(time.Date(2026, 9, 30, 23, 59, 59, 0, time.Local)) {
+		t.Error("the last second of September should not be after 2026-10")
+	}
+}
+
 func TestParseMtimeMonthsAndYearsAreApproximate(t *testing.T) {
 	f, err := ParseMtime("1 year", mtimeTestNow)
 	if err != nil {

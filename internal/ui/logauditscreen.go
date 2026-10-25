@@ -172,8 +172,20 @@ func (r *Root) newLogAuditViewerScreen() {
 	// moments joined by "and", unlike "last"/"after" which take just
 	// one.
 	r.logAuditTimeField.SetPlaceholder(`last 7 days, after 2026-09-01, between 2026-09-01 and 2026-09-30`)
-	r.logAuditTimeField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
+	// Deliberately NOT a live SetChangedFunc the way Keyword/Level have
+	// — per the user's own explicit report, re-bucketing the timeline
+	// (and re-filtering the table) on every single keystroke made
+	// typing into this field noticeably sluggish, unlike a keyword
+	// substring match or a level-threshold compare, both cheap per
+	// character. A date/time expression only means anything once it's
+	// finished anyway (a half-typed "between 2026-09-0" doesn't parse),
+	// so applying it on Enter/Tab/Backtab (SetDoneFunc below) or
+	// whenever focus moves on to something else entirely (see
+	// restyleLogAuditFocusTargets's own "focused != logAuditTimeField"
+	// render) is both cheaper and more correct than live re-filtering
+	// ever was here.
 	r.logAuditTimeField.SetDoneFunc(func(key tcell.Key) {
+		r.renderLogAuditViewer()
 		r.logAuditViewerFieldDone(key, r.logAuditLevelField, r.logAuditKeywordField)
 	})
 	r.logAuditTimeField.SetFocusFunc(func() { r.restyleLogAuditFocusTargets(r.logAuditTimeField) })
@@ -222,7 +234,28 @@ func (r *Root) newLogAuditViewerScreen() {
 	// applyLogAuditTheme's own refresh), none of which call back into
 	// the same widget they're styling.
 	r.logAuditTimelineView.SetFocusFunc(func() {
+		// logAuditTimelineFocused = true comes FIRST, deliberately,
+		// before the possible renderLogAuditViewer call below: that
+		// render's own freeze-while-focused guard (renderLogAuditTimeline's
+		// own doc comment) is what keeps it from calling SetText on this
+		// same TextView from inside this very Focus() callback — the
+		// identical self-deadlock the rest of this FocusFunc already
+		// works around by skipping repaintLogAuditTimeline entirely.
+		// Setting it after would let that one render slip through
+		// unfrozen and hit the same lock. The table still updates
+		// either way (renderLogAuditViewer's other half, a different
+		// widget); only this one widget's own repaint stays deferred to
+		// the next key or mouse event, same as always while frozen.
 		r.logAuditTimelineFocused = true
+		// Same timeFieldWasFocused check restyleLogAuditFocusTargets
+		// itself does (see its own doc comment) — needed here too since
+		// a mouse click can jump straight from the Time field to the
+		// Timeline, skipping Level (the only stop restyleLogAuditFocusTargets
+		// would otherwise have caught this transition through).
+		if r.logAuditTimeFieldFocused {
+			r.logAuditTimeFieldFocused = false
+			r.renderLogAuditViewer()
+		}
 		r.logAuditTimelineView.SetBackgroundColor(r.theme.InputFocusedBackground)
 		for _, f := range r.logAuditFilterFields() {
 			styleInput(f, r.theme, false)
@@ -598,8 +631,24 @@ func (r *Root) logAuditFilterFields() []*tview.InputField {
 // known-broken one for InputField) — not one of the five callers below
 // registers a BlurFunc of its own at all.
 func (r *Root) restyleLogAuditFocusTargets(focused tview.Primitive) {
+	// timeFieldWasFocused, not r.logAuditTimeField.HasFocus(): the
+	// latter is exactly the unreliable signal this function's own doc
+	// comment already explains tview never updates on a mouse-driven
+	// focus change away from an InputField (Blur fires on its embedded
+	// TextArea, never forwarded back to the InputField's own Box) — own
+	// bookkeeping, updated on every call here (which, unlike Blur, this
+	// function always reliably is, driven by the next target's own
+	// Focus event), is what correctly detects "the Time field just lost
+	// focus" so its own debounced render (see its own SetDoneFunc
+	// comment on why Time isn't live like Keyword/Level) still applies
+	// when the user leaves it with a mouse click rather than Tab.
+	timeFieldWasFocused := r.logAuditTimeFieldFocused
 	for _, f := range r.logAuditFilterFields() {
 		styleInput(f, r.theme, tview.Primitive(f) == focused)
+	}
+	r.logAuditTimeFieldFocused = focused == r.logAuditTimeField
+	if timeFieldWasFocused && !r.logAuditTimeFieldFocused {
+		r.renderLogAuditViewer()
 	}
 	r.logAuditTimelineFocused = focused == r.logAuditTimelineView
 	background := r.theme.PopupBackground

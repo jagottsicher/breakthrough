@@ -689,6 +689,18 @@ type Root struct {
 	logAuditTimelineAnchor   int
 	logAuditTimelineCursor   int
 	logAuditTimelineDragging bool
+	// logAuditTimeFieldFocused is restyleLogAuditFocusTargets' own
+	// tracked state of whether the Time field (not the timeline) has
+	// focus — kept explicitly rather than queried via
+	// logAuditTimeField.HasFocus(), which the exact same tview gap
+	// restyleLogAuditFocusTargets's own doc comment already documents
+	// (Blur never forwards from InputField's embedded TextArea on a
+	// mouse-driven focus change) makes just as unreliable for this as
+	// it is for styling. Used to apply the Time field's own debounced
+	// filter (see its own SetDoneFunc comment on why it isn't live)
+	// once focus actually leaves it, including via a mouse click that
+	// skips straight past every other field.
+	logAuditTimeFieldFocused bool
 	// logAuditFocusIndicator fills the row between logAuditTimelineView
 	// and logAuditViewerTable's own header — previously just the
 	// table's own blank top border-padding, repurposed per the user's

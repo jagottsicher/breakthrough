@@ -670,6 +670,62 @@ func TestOpenLogAuditDetailShowsRawOnlyWhenDifferentFromMessage(t *testing.T) {
 	}
 }
 
+// TestLogAuditTimeFieldDoesNotFilterLiveButDoesOnEnterOrLeave pins the
+// user's own explicit report: re-rendering the table and re-bucketing
+// the timeline on every single keystroke made typing into the Time
+// field noticeably sluggish, unlike Keyword/Level (cheap per
+// character) — a date/time expression only means anything once
+// finished typing anyway, so it should apply on Enter, Tab/Backtab, or
+// whenever focus moves on, never live.
+func TestLogAuditTimeFieldDoesNotFilterLiveButDoesOnEnterOrLeave(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	allRows := r.logAuditViewerTable.GetRowCount()
+	if allRows <= 1 {
+		t.Fatalf("setup: table has %d rows, want more than just the header", allRows)
+	}
+
+	// A filter that excludes every one of the fixture's 20 entries
+	// (all in October 2026) — typing it should change nothing yet.
+	r.logAuditTimeField.SetText("after 2030-01-01")
+	if got := r.logAuditViewerTable.GetRowCount(); got != allRows {
+		t.Errorf("row count = %d after merely setting the Time field's text, want unchanged %d (no live filtering)", got, allRows)
+	}
+
+	r.logAuditTimeField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	// 2, not 1: header row + the table's own "No entries match the
+	// current filter." row, not just a bare header.
+	if got := r.logAuditViewerTable.GetRowCount(); got != 2 {
+		t.Errorf("row count = %d after Enter, want 2 (header + the no-match row — the filter excludes everything)", got)
+	}
+}
+
+// TestLogAuditTimeFieldAppliesOnLeavingViaMouseClick pins the other
+// half: tview never reliably forwards Blur from an InputField's own
+// embedded TextArea on a mouse-driven focus change (the same
+// documented gap restyleLogAuditFocusTargets's own doc comment covers
+// for styling), so applying the Time filter can't wait for the Time
+// field's own Blur — it has to come from whichever *other* target's
+// Focus actually fires next, which this drives through the real
+// MouseHandler chain (clickPrimitive), not a direct SetFocus call,
+// specifically so it exercises that real gap rather than bypassing it.
+func TestLogAuditTimeFieldAppliesOnLeavingViaMouseClick(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	allRows := r.logAuditViewerTable.GetRowCount()
+
+	clickPrimitive(r, r.logAuditTimeField)
+	r.logAuditTimeField.SetText("after 2030-01-01")
+	if got := r.logAuditViewerTable.GetRowCount(); got != allRows {
+		t.Fatalf("setup: row count = %d after setting the Time field's text, want unchanged %d", got, allRows)
+	}
+
+	clickPrimitive(r, r.logAuditKeywordField)
+	// 2, not 1: header row + the table's own "No entries match the
+	// current filter." row, not just a bare header.
+	if got := r.logAuditViewerTable.GetRowCount(); got != 2 {
+		t.Errorf("row count = %d after clicking away to Keyword, want 2 (header + no-match row — the Time filter should now be applied)", got)
+	}
+}
+
 // writeLogAuditTimelineFixture writes 20 JSON-Lines entries, one per
 // second, all on the same calendar day — predictable enough to drive
 // the interactive timeline without hand-computing bucket boundaries:
