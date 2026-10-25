@@ -357,6 +357,11 @@ func (r *Root) switchToShell(i int) {
 	r.remountShellView()
 	r.app.SetFocus(r.shells[i].view)
 	r.refreshTerminalStrips()
+	// Switching between two already-open Terminals re-enters this same
+	// function too, not just the first time — refreshButtonBar is cheap
+	// enough to call unconditionally rather than tracking whether
+	// viewingShells was already true.
+	r.refreshButtonBar()
 }
 
 // viewFiles leaves "viewing shells" mode, returning to whichever

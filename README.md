@@ -191,7 +191,11 @@ terminal.
   switcher from anywhere, including from inside an open Terminal —
   where it instead leaves straight back to the panel, one key out; a
   Terminal whose own remote process ends on its own stays exactly where
-  it was, marked "(exited)", until explicitly closed. See
+  it was, marked "(exited)", until explicitly closed. The button bar
+  swaps too, to the few keys that actually still reach breakthrough
+  from inside a Terminal — the ordinary Copy/Cut/Tabs/chord-family
+  legend would be actively misleading there, since every one of those
+  keys goes straight to the remote side instead. See
   [docs/user-guide.md](docs/user-guide.md#terminals) for the details.
 - A primary keyboard layer of plain letters — `c`/`x`/`v` copy/cut/paste,
   `d`/`D` Trash/remove permanently, `r` rename, `i`/`I` Properties/
