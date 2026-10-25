@@ -78,13 +78,19 @@ const terminalSwitcherNewRowLabel = " +  New terminal"
 // misleading.
 const terminalSwitcherFilesRowLabel = " Go to file view"
 
-// OpenTerminalSwitcherShortcut is the half of Alt+T's own toggle that
-// runs while no Terminal is on screen (see cmd/breakthrough's own
-// global SetInputCapture — ExitTerminalViewShortcut, shells.go, is the
-// other half) — but also plain "T"'s own target (keymap.go), which
-// unlike Alt+T is gated on the panel having focus in the first place
-// (acceptsPlainKeyCommand, upstream of this ever being called) and so
-// never reaches here while a Terminal is on screen at all. Gated on
+// OpenTerminalSwitcherShortcut is Alt+T (see cmd/breakthrough's own
+// global SetInputCapture) — always opens the switcher, regardless of
+// whether a Terminal already has focus, per the user's own explicit
+// request: an earlier version toggled instead (leaving a Terminal
+// outright once one was on screen), but that left no single key
+// reaching the switcher *from inside* an open Terminal at all — e.g.
+// to switch straight to a different one, or reach its own "Go to file
+// view" row — since Ctrl+\ (ExitTerminalViewShortcut, shells.go) only
+// ever leaves outright. Also plain "T"'s own target (keymap.go),
+// which unlike Alt+T is gated on the panel having focus in the first
+// place (acceptsPlainKeyCommand, upstream of this ever being called)
+// and so never reaches here while a Terminal is on screen at all —
+// Alt+T is the only one of the three (T/Alt+T/gT) that does. Gated on
 // acceptsGlobalShortcutEvenInATerminal, not the stricter
 // acceptsGlobalShortcut every other Shortcut method in this package
 // uses — see that function's own doc comment for why this one caller

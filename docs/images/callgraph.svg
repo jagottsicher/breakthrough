@@ -367,7 +367,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir -->
 <g id="node3" class="node">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir</title>
-<g id="a_node3"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir | defined in main.go:601&#10;at main.go:603: calling [strings.HasPrefix]">
+<g id="a_node3"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir | defined in main.go:598&#10;at main.go:600: calling [strings.HasPrefix]">
 <path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M1476.5884,-176.2C1476.5884,-176.2 1389.4116,-176.2 1389.4116,-176.2 1383.4116,-176.2 1377.4116,-170.2 1377.4116,-164.2 1377.4116,-164.2 1377.4116,-152.2 1377.4116,-152.2 1377.4116,-146.2 1383.4116,-140.2 1389.4116,-140.2 1389.4116,-140.2 1476.5884,-140.2 1476.5884,-140.2 1482.5884,-140.2 1488.5884,-146.2 1488.5884,-152.2 1488.5884,-152.2 1488.5884,-164.2 1488.5884,-164.2 1488.5884,-170.2 1482.5884,-176.2 1476.5884,-176.2"/>
 <text text-anchor="middle" x="1433" y="-154" font-family="Verdana" font-size="14.00" fill="#000000">explicitStartDir</text>
 </a>
@@ -385,7 +385,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir&#45;&gt;strings.HasPrefix -->
 <g id="edge15" class="edge">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir&#45;&gt;strings.HasPrefix</title>
-<g id="a_edge15"><a xlink:title="at main.go:603: calling [strings.HasPrefix]">
+<g id="a_edge15"><a xlink:title="at main.go:600: calling [strings.HasPrefix]">
 <path fill="none" stroke="#8b4513" d="M1433,-140.0438C1433,-121.3688 1433,-92.0225 1433,-70.2986"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="1436.5001,-70.0287 1433,-60.0288 1429.5001,-70.0288 1436.5001,-70.0287"/>
 </a>
@@ -430,7 +430,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler -->
 <g id="node6" class="node">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler</title>
-<g id="a_node6"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler | defined in main.go:537&#10;at main.go:540: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1]&#10;at main.go:539: calling [os/signal.Notify]">
+<g id="a_node6"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler | defined in main.go:534&#10;at main.go:537: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1]&#10;at main.go:536: calling [os/signal.Notify]">
 <path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M143.587,-292.4C143.587,-292.4 28.413,-292.4 28.413,-292.4 22.413,-292.4 16.413,-286.4 16.413,-280.4 16.413,-280.4 16.413,-268.4 16.413,-268.4 16.413,-262.4 22.413,-256.4 28.413,-256.4 28.413,-256.4 143.587,-256.4 143.587,-256.4 149.587,-256.4 155.587,-262.4 155.587,-268.4 155.587,-268.4 155.587,-280.4 155.587,-280.4 155.587,-286.4 149.587,-292.4 143.587,-292.4"/>
 <text text-anchor="middle" x="86" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">installSignalHandler</text>
 </a>
@@ -439,7 +439,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1 -->
 <g id="node7" class="node">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1</title>
-<g id="a_node7"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1 | defined in main.go:540&#10;at main.go:542: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.shouldStop]">
+<g id="a_node7"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1 | defined in main.go:537&#10;at main.go:539: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.shouldStop]">
 <polygon fill="#add8e6" stroke="#000000" stroke-dasharray="1,5" points="264.587,-176.2 111.413,-176.2 111.413,-140.2 264.587,-140.2 264.587,-176.2"/>
 <text text-anchor="middle" x="188" y="-154" font-family="Verdana" font-size="14.00" fill="#000000">installSignalHandler$1</text>
 </a>
@@ -448,7 +448,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler&#45;&gt;github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1 -->
 <g id="edge18" class="edge">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler&#45;&gt;github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1</title>
-<g id="a_edge18"><a xlink:title="at main.go:540: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1]">
+<g id="a_edge18"><a xlink:title="at main.go:537: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1]">
 <path fill="none" stroke="#000000" d="M101.9375,-256.2438C116.6087,-239.5301 138.7829,-214.2689 156.9487,-193.5742"/>
 <polygon fill="#000000" stroke="#000000" points="168.2078,-186.053 172.1744,-176.2288 162.9471,-181.4352 168.2078,-186.053"/>
 <polyline fill="none" stroke="#000000" points="165.5775,-183.7441 162.279,-187.5018 "/>
@@ -468,7 +468,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler&#45;&gt;os/signal.Notify -->
 <g id="edge19" class="edge">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler&#45;&gt;os/signal.Notify</title>
-<g id="a_edge19"><a xlink:title="at main.go:539: calling [os/signal.Notify]">
+<g id="a_edge19"><a xlink:title="at main.go:536: calling [os/signal.Notify]">
 <path fill="none" stroke="#8b4513" d="M81.3125,-256.2438C76.4691,-237.4835 68.8453,-207.9543 63.2293,-186.2015"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="66.5433,-185.0363 60.6546,-176.2288 59.7656,-186.7862 66.5433,-185.0363"/>
 </a>
@@ -477,7 +477,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.shouldStop -->
 <g id="node12" class="node">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.shouldStop</title>
-<g id="a_node12"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.shouldStop | defined in main.go:558">
+<g id="a_node12"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.shouldStop | defined in main.go:555">
 <path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M219.5084,-60C219.5084,-60 156.4916,-60 156.4916,-60 150.4916,-60 144.4916,-54 144.4916,-48 144.4916,-48 144.4916,-36 144.4916,-36 144.4916,-30 150.4916,-24 156.4916,-24 156.4916,-24 219.5084,-24 219.5084,-24 225.5084,-24 231.5084,-30 231.5084,-36 231.5084,-36 231.5084,-48 231.5084,-48 231.5084,-54 225.5084,-60 219.5084,-60"/>
 <text text-anchor="middle" x="188" y="-37.8" font-family="Verdana" font-size="14.00" fill="#000000">shouldStop</text>
 </a>
@@ -486,7 +486,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1&#45;&gt;github.com/jagottsicher/breakthrough/cmd/breakthrough.shouldStop -->
 <g id="edge20" class="edge">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler$1&#45;&gt;github.com/jagottsicher/breakthrough/cmd/breakthrough.shouldStop</title>
-<g id="a_edge20"><a xlink:title="at main.go:542: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.shouldStop]">
+<g id="a_edge20"><a xlink:title="at main.go:539: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.shouldStop]">
 <path fill="none" stroke="#000000" d="M188,-140.0438C188,-121.3688 188,-92.0225 188,-70.2986"/>
 <polygon fill="#000000" stroke="#000000" points="191.5001,-70.0287 188,-60.0288 184.5001,-70.0288 191.5001,-70.0287"/>
 </a>
@@ -533,7 +533,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.run -->
 <g id="node11" class="node">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.run</title>
-<g id="a_node11"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.run | defined in main.go:109&#10;at main.go:475: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler]&#10;at main.go:110: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.startDir]&#10;at main.go:114: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.startDirWasGiven]&#10;at main.go:126: calling [github.com/jagottsicher/breakthrough/internal/ui.NewRoot]&#10;at main.go:124: calling [github.com/rivo/tview.NewApplication]&#10;at main.go:142: calling [(*github.com/jagottsicher/breakthrough/internal/ui.Root).RestoreSavedTabs]&#10;at main.go:133: calling [(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo]&#10;at main.go:148: calling [(*github.com/jagottsicher/breakthrough/internal/ui.Root).StartClock]&#10;at main.go:154: calling [(*github.com/jagottsicher/breakthrough/internal/ui.Root).StartMailImapPoll]&#10;at main.go:124: calling [(*github.com/rivo/tview.Application).EnableMouse]&#10;at main.go:124: calling [(*github.com/rivo/tview.Application).EnablePaste]&#10;at main.go:477: calling [(*github.com/rivo/tview.Application).Run]&#10;at main.go:207: calling [(*github.com/rivo/tview.Application).SetInputCapture]&#10;at main.go:477: calling [(*github.com/rivo/tview.Application).SetRoot]">
+<g id="a_node11"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.run | defined in main.go:109&#10;at main.go:472: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler]&#10;at main.go:110: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.startDir]&#10;at main.go:114: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.startDirWasGiven]&#10;at main.go:126: calling [github.com/jagottsicher/breakthrough/internal/ui.NewRoot]&#10;at main.go:124: calling [github.com/rivo/tview.NewApplication]&#10;at main.go:142: calling [(*github.com/jagottsicher/breakthrough/internal/ui.Root).RestoreSavedTabs]&#10;at main.go:133: calling [(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo]&#10;at main.go:148: calling [(*github.com/jagottsicher/breakthrough/internal/ui.Root).StartClock]&#10;at main.go:154: calling [(*github.com/jagottsicher/breakthrough/internal/ui.Root).StartMailImapPoll]&#10;at main.go:124: calling [(*github.com/rivo/tview.Application).EnableMouse]&#10;at main.go:124: calling [(*github.com/rivo/tview.Application).EnablePaste]&#10;at main.go:474: calling [(*github.com/rivo/tview.Application).Run]&#10;at main.go:207: calling [(*github.com/rivo/tview.Application).SetInputCapture]&#10;at main.go:474: calling [(*github.com/rivo/tview.Application).SetRoot]">
 <path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M1342,-408.6C1342,-408.6 1312,-408.6 1312,-408.6 1306,-408.6 1300,-402.6 1300,-396.6 1300,-396.6 1300,-384.6 1300,-384.6 1300,-378.6 1306,-372.6 1312,-372.6 1312,-372.6 1342,-372.6 1342,-372.6 1348,-372.6 1354,-378.6 1354,-384.6 1354,-384.6 1354,-396.6 1354,-396.6 1354,-402.6 1348,-408.6 1342,-408.6"/>
 <text text-anchor="middle" x="1327" y="-386.4" font-family="Verdana" font-size="14.00" fill="#000000">run</text>
 </a>
@@ -686,7 +686,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.run&#45;&gt;github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler -->
 <g id="edge42" class="edge">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.run&#45;&gt;github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler</title>
-<g id="a_edge42"><a xlink:title="at main.go:475: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler]">
+<g id="a_edge42"><a xlink:title="at main.go:472: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.installSignalHandler]">
 <path fill="none" stroke="#000000" d="M1299.9676,-389.9655C1136.0741,-386.0084 278.8302,-363.703 168,-327.6 148.9818,-321.4048 130.0935,-309.6368 115.247,-298.7408"/>
 <polygon fill="#000000" stroke="#000000" points="117.0818,-295.7392 107.0023,-292.475 112.8462,-301.3124 117.0818,-295.7392"/>
 </a>
@@ -695,7 +695,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.startDir -->
 <g id="node13" class="node">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.startDir</title>
-<g id="a_node13"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.startDir | defined in main.go:578&#10;at main.go:579: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir]&#10;at main.go:582: calling [os.Getwd]">
+<g id="a_node13"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.startDir | defined in main.go:575&#10;at main.go:576: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir]&#10;at main.go:579: calling [os.Getwd]">
 <path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M2570.2592,-292.4C2570.2592,-292.4 2527.7408,-292.4 2527.7408,-292.4 2521.7408,-292.4 2515.7408,-286.4 2515.7408,-280.4 2515.7408,-280.4 2515.7408,-268.4 2515.7408,-268.4 2515.7408,-262.4 2521.7408,-256.4 2527.7408,-256.4 2527.7408,-256.4 2570.2592,-256.4 2570.2592,-256.4 2576.2592,-256.4 2582.2592,-262.4 2582.2592,-268.4 2582.2592,-268.4 2582.2592,-280.4 2582.2592,-280.4 2582.2592,-286.4 2576.2592,-292.4 2570.2592,-292.4"/>
 <text text-anchor="middle" x="2549" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">startDir</text>
 </a>
@@ -713,7 +713,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.startDirWasGiven -->
 <g id="node14" class="node">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.startDirWasGiven</title>
-<g id="a_node14"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.startDirWasGiven | defined in main.go:594&#10;at main.go:595: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir]">
+<g id="a_node14"><a xlink:title="github.com/jagottsicher/breakthrough/cmd/breakthrough.startDirWasGiven | defined in main.go:591&#10;at main.go:592: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir]">
 <path fill="#add8e6" stroke="#000000" stroke-width=".5" d="M293.8445,-292.4C293.8445,-292.4 192.1555,-292.4 192.1555,-292.4 186.1555,-292.4 180.1555,-286.4 180.1555,-280.4 180.1555,-280.4 180.1555,-268.4 180.1555,-268.4 180.1555,-262.4 186.1555,-256.4 192.1555,-256.4 192.1555,-256.4 293.8445,-256.4 293.8445,-256.4 299.8445,-256.4 305.8445,-262.4 305.8445,-268.4 305.8445,-268.4 305.8445,-280.4 305.8445,-280.4 305.8445,-286.4 299.8445,-292.4 293.8445,-292.4"/>
 <text text-anchor="middle" x="243" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">startDirWasGiven</text>
 </a>
@@ -767,7 +767,7 @@
 <!-- (*github.com/jagottsicher/breakthrough/internal/ui.Root).StartClock -->
 <g id="node22" class="node">
 <title>(*github.com/jagottsicher/breakthrough/internal/ui.Root).StartClock</title>
-<g id="a_node22"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).StartClock | defined in bottombar.go:1801">
+<g id="a_node22"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).StartClock | defined in bottombar.go:1868">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M1753.4292,-292.4C1753.4292,-292.4 1646.5708,-292.4 1646.5708,-292.4 1640.5708,-292.4 1634.5708,-286.4 1634.5708,-280.4 1634.5708,-280.4 1634.5708,-268.4 1634.5708,-268.4 1634.5708,-262.4 1640.5708,-256.4 1646.5708,-256.4 1646.5708,-256.4 1753.4292,-256.4 1753.4292,-256.4 1759.4292,-256.4 1765.4292,-262.4 1765.4292,-268.4 1765.4292,-268.4 1765.4292,-280.4 1765.4292,-280.4 1765.4292,-286.4 1759.4292,-292.4 1753.4292,-292.4"/>
 <text text-anchor="middle" x="1700" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">(*Root).StartClock</text>
 </a>
@@ -866,7 +866,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.run&#45;&gt;(*github.com/rivo/tview.Application).Run -->
 <g id="edge39" class="edge">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.run&#45;&gt;(*github.com/rivo/tview.Application).Run</title>
-<g id="a_edge39"><a xlink:title="at main.go:477: calling [(*github.com/rivo/tview.Application).Run]">
+<g id="a_edge39"><a xlink:title="at main.go:474: calling [(*github.com/rivo/tview.Application).Run]">
 <path fill="none" stroke="#8b4513" d="M1299.6907,-376.2081C1276.5724,-363.8277 1242.7117,-345.2282 1214,-327.6 1198.9466,-318.3576 1182.6998,-307.5648 1168.8771,-298.1249"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="1170.8399,-295.2271 1160.616,-292.4481 1166.8754,-300.9962 1170.8399,-295.2271"/>
 </a>
@@ -902,7 +902,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.run&#45;&gt;(*github.com/rivo/tview.Application).SetRoot -->
 <g id="edge41" class="edge">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.run&#45;&gt;(*github.com/rivo/tview.Application).SetRoot</title>
-<g id="a_edge41"><a xlink:title="at main.go:477: calling [(*github.com/rivo/tview.Application).SetRoot]">
+<g id="a_edge41"><a xlink:title="at main.go:474: calling [(*github.com/rivo/tview.Application).SetRoot]">
 <path fill="none" stroke="#8b4513" d="M1299.8733,-390.1893C1174.7343,-388.0439 652.7216,-376.2851 498,-327.6 477.5481,-321.1646 456.8081,-309.3411 440.4003,-298.4721"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="441.992,-295.3208 431.7598,-292.5722 438.0446,-301.1018 441.992,-295.3208"/>
 </a>
@@ -929,7 +929,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.startDir&#45;&gt;github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir -->
 <g id="edge47" class="edge">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.startDir&#45;&gt;github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir</title>
-<g id="a_edge47"><a xlink:title="at main.go:579: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir]">
+<g id="a_edge47"><a xlink:title="at main.go:576: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir]">
 <path fill="none" stroke="#000000" d="M2522.4412,-256.1584C2516.8882,-253.0871 2510.9172,-250.2878 2505,-248.4 2315.8979,-188.0701 1701.7976,-165.7406 1498.8064,-159.8991"/>
 <polygon fill="#000000" stroke="#000000" points="1498.6908,-156.3945 1488.5955,-159.6093 1498.4921,-163.3917 1498.6908,-156.3945"/>
 </a>
@@ -947,7 +947,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.startDir&#45;&gt;os.Getwd -->
 <g id="edge48" class="edge">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.startDir&#45;&gt;os.Getwd</title>
-<g id="a_edge48"><a xlink:title="at main.go:582: calling [os.Getwd]">
+<g id="a_edge48"><a xlink:title="at main.go:579: calling [os.Getwd]">
 <path fill="none" stroke="#8b4513" d="M2576.1181,-256.1424C2581.5277,-253.1517 2587.3027,-250.3862 2593,-248.4 2706.5389,-208.8174 2759.32,-275.5799 2861,-211.4 2870.8479,-205.184 2878.5174,-195.0763 2884.1337,-185.3319"/>
 <polygon fill="#8b4513" stroke="#8b4513" points="2887.3564,-186.7223 2888.8935,-176.2396 2881.1548,-183.4758 2887.3564,-186.7223"/>
 </a>
@@ -956,7 +956,7 @@
 <!-- github.com/jagottsicher/breakthrough/cmd/breakthrough.startDirWasGiven&#45;&gt;github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir -->
 <g id="edge49" class="edge">
 <title>github.com/jagottsicher/breakthrough/cmd/breakthrough.startDirWasGiven&#45;&gt;github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir</title>
-<g id="a_edge49"><a xlink:title="at main.go:595: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir]">
+<g id="a_edge49"><a xlink:title="at main.go:592: calling [github.com/jagottsicher/breakthrough/cmd/breakthrough.explicitStartDir]">
 <path fill="none" stroke="#000000" d="M288.0284,-256.2977C297.1618,-253.215 306.7922,-250.3757 316,-248.4 518.8508,-204.874 1158.977,-171.267 1366.9962,-161.2616"/>
 <polygon fill="#000000" stroke="#000000" points="1367.3367,-164.7494 1377.1578,-160.7751 1367.0018,-157.7574 1367.3367,-164.7494"/>
 </a>

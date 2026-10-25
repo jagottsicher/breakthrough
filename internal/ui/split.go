@@ -87,6 +87,11 @@ func (r *Root) remountPanels() {
 			r.shellStatusPanel.headerPages.SwitchToPage(headerDisplayPage)
 			r.shellStatusPanel = nil
 		}
+		// The terminal-mode button bar (buildTerminalButtonBar) needs to
+		// go back to the ordinary file-browsing one the moment this
+		// flips — refreshButtonBar is what actually picks between them,
+		// based on this same field.
+		r.refreshButtonBar()
 	}
 
 	r.panelHost.Clear()

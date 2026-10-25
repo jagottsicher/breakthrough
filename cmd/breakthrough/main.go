@@ -393,27 +393,24 @@ func run() error {
 			// user's own explicit report: "S" carried no mnemonic
 			// connection to "Terminal" at all, unlike Ctrl+T for Tabs,
 			// which the user already found intuitive by comparison.
-			// Toggling rather than always opening the switcher (the
-			// user's own explicit choice between the two, after being
-			// asked) is what actually answers their second complaint —
-			// leaving a Terminal felt like too many steps: one key,
-			// not "open switcher, then navigate out." The plain "T"
-			// key (keymap.go) still only ever opens the switcher, never
-			// leaves — it's gated on the panel having focus in the
-			// first place, so it's never reachable from inside an open
-			// Terminal to begin with.
 			//
-			// Ctrl+\ (below) is deliberately NOT removed by this
-			// toggle: its own documented reason (a real iPad-keyboard
-			// report where Option+T, like Option+S before it, never
-			// reaches the app at all) is unaffected by which letter
-			// Alt+_ uses, so it stays as the guaranteed fallback.
+			// Always opens the switcher, regardless of whether a
+			// Terminal already has focus — this briefly toggled
+			// instead (leaving a Terminal outright once one was
+			// already on screen), but the user's own later, explicit
+			// report reversed that: Ctrl+\ already covers "one key to
+			// leave," and Alt+T toggling meant there was no single key
+			// left to reach the switcher *from inside* an open
+			// Terminal at all — e.g. to switch straight to a
+			// *different* one, or to reach "Go to file view" there
+			// rather than only via Ctrl+\'s own unconditional leave.
+			// The plain "T" key (keymap.go) still only ever opens the
+			// switcher too, but is gated on the panel having focus in
+			// the first place, so it was never reachable from inside
+			// an open Terminal to begin with — Alt+T is the only one
+			// of the three that is.
 			if event.Modifiers()&tcell.ModAlt != 0 && event.Rune() == 't' {
-				if root.ViewingTerminal() {
-					root.ExitTerminalViewShortcut()
-				} else {
-					root.OpenTerminalSwitcherShortcut()
-				}
+				root.OpenTerminalSwitcherShortcut()
 				return nil
 			}
 			return event

@@ -127,6 +127,12 @@ button reaches it with the mouse too. Every other key still works
 exactly the same whether or not it's shown there; `?` documents all of
 them.
 
+This legend swaps to a different one entirely while a [Terminal](#terminals)
+has focus: none of these keys reach breakthrough itself there (every
+one of them goes straight to the remote side instead), so showing them
+would be actively misleading — see that section's own "While viewing
+one" paragraph for what the bar shows instead.
+
 **No function keys anywhere in the application.** Every F-key is free
 for your terminal or window manager to use however it likes. A handful
 of Ctrl-letter shortcuts remain, documented section by section below,
@@ -431,7 +437,7 @@ for as long as it runs.
 | Key | Action |
 |---|---|
 | `T` | open the switcher — only while the panel itself has focus |
-| `Alt`+`T` | open the switcher from anywhere, including from inside an open Terminal — where it instead leaves straight back to the panel, since there's nothing else for it to switch to from there without leaving first anyway |
+| `Alt`+`T` | open the switcher from anywhere, including from inside an open Terminal — the only one of the three that does, so it's also the way to switch straight to a different open Terminal or reach "Go to file view" without leaving first |
 | `gT` | the same action as `T`, through the `g` chord |
 | `Ctrl`+`\` | leave a Terminal, reachable from anywhere a Terminal is on screen — the fallback for a keyboard/terminal app that doesn't deliver `Alt`+`T`'s own equivalent (`Option`+`T` on some) at all |
 | `Ctrl`+`C` / `Escape` / `Tab` | leave a Terminal, but only once its own process has already exited on its own — while it's still live, these go straight to the remote side instead, exactly as typing them over a real `ssh` session would |
@@ -498,6 +504,17 @@ nothing happens automatically: the screen keeps showing whatever was
 last on it, the entry stays in the strip and the switcher marked
 "(exited)", and nothing about it disappears until `✕`/Delete actually
 closes it.
+
+The button bar below the command line swaps too, to a short, different
+legend: `Alt+T` ("Switcher" — opens it, see its own entry above),
+`Ctrl+\` ("Leave" — the one dedicated key to leave outright), `Ctrl+C`
+("Forward / Leave once exited" — no single click action fits, since
+its real effect depends on whether the Terminal has already exited),
+`Ctrl+Q` (Quit), and a reminder that the terminal strip's own numbers
+still switch between open Terminals with the mouse. The ordinary file-browsing legend (Copy, Cut, Tabs, the
+chord families, ...) would be actively misleading here — none of those
+keys reach breakthrough itself while a Terminal has focus, every one
+of them goes straight to the remote side instead.
 
 ### Terminals vs. "gs"
 
@@ -2702,7 +2719,7 @@ already open; `Ctrl`+`Delete` regardless of terminal support).
 | `Ctrl`+`1`…`0`, `Alt`+`1`…`0` | Jump to a tab | |
 | `Ctrl`+`T` | Tab switcher; also walks to the next tab while the switcher is already open, which `t` alone can't | `t` |
 | `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` | Step through tabs | |
-| `Alt`+`T` | [Terminal switcher](#terminals); leaves an open Terminal instead if one is already on screen | `T` |
+| `Alt`+`T` | [Terminal switcher](#terminals); the only one of the three that reaches it from inside an open Terminal too | `T` |
 | `Ctrl`+`\` | Leave a Terminal — the one reachable from anywhere a Terminal is on screen, regardless of focus | |
 
 `Enter` on a `.zip`, `.tar`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.7z`, or

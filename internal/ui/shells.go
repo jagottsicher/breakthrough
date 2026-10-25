@@ -133,15 +133,19 @@ func (r *Root) ViewingTerminal() bool {
 	return r.viewingShells
 }
 
-// ExitTerminalViewShortcut is Ctrl+\, and (as of Alt+T's own toggle
-// behavior, cmd/breakthrough) the second half of what Alt+T does once
-// a Terminal is already on screen. Ctrl+\ itself stays reserved for
-// the one real case Alt+T can't cover: a real iPad-keyboard report
-// where Option+T (Alt+T's own equivalent there) never reaches the app
-// at all — the same problem Option+S had before Alt+S was renamed to
-// Alt+T. Reports false while no Terminal is on screen, so the global
-// handler lets the keystroke fall through unconsumed rather than
-// swallowing a combination that means nothing here.
+// ExitTerminalViewShortcut is Ctrl+\ (see cmd/breakthrough's own
+// global SetInputCapture) — the one key dedicated to leaving a
+// Terminal outright, reserved for the one real case Alt+T can't
+// cover: a real iPad-keyboard report where Option+T (Alt+T's own
+// equivalent there) never reaches the app at all — the same problem
+// Option+S had before Alt+S was renamed to Alt+T. Alt+T itself always
+// opens the switcher instead, even from inside an open Terminal — see
+// OpenTerminalSwitcherShortcut's own doc comment for why that's the
+// one key reaching the switcher from there at all, and this one's own
+// for staying the single-key way to leave outright. Reports false
+// while no Terminal is on screen, so the global handler lets the
+// keystroke fall through unconsumed rather than swallowing a
+// combination that means nothing here.
 //
 // Closes any overlay stacked on top first (the terminal switcher
 // itself, most likely) rather than only ever working with none open:
@@ -357,6 +361,11 @@ func (r *Root) switchToShell(i int) {
 	r.remountShellView()
 	r.app.SetFocus(r.shells[i].view)
 	r.refreshTerminalStrips()
+	// Switching between two already-open Terminals re-enters this same
+	// function too, not just the first time — refreshButtonBar is cheap
+	// enough to call unconditionally rather than tracking whether
+	// viewingShells was already true.
+	r.refreshButtonBar()
 }
 
 // viewFiles leaves "viewing shells" mode, returning to whichever
