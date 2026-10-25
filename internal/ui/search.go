@@ -1091,12 +1091,32 @@ func (r *Root) renderSearchTitleBar(width int) {
 // moveProperties/resizeProperties' own size-vs-position split to worry
 // about: one function covers both the initial open and every drag move.
 func (r *Root) moveSearch(x, y int) {
-	_, _, width, height := r.searchPages.GetRect()
+	oldX, oldY, width, height := r.searchPages.GetRect()
 	x, y, width, height = r.clampToScreen(x, y, width, height)
 
 	r.searchPages.SetRect(x, y, width, height)
 	r.searchTitleBar.SetRect(x, y, width, 1)
 	r.renderSearchTitleBar(width)
+
+	// The inline edit field's own "editfield" page is deliberately
+	// resize=false (see newSearchDialog's AddPage("editfield", ...)
+	// call) — unlike every other page nested under searchPages, its
+	// rect is never recalculated for free by tview's own Pages.Draw
+	// cascade (see resizeSearchPages's own doc comment), so without
+	// this it stayed fixed at its pre-drag screen position while the
+	// rest of the dialog moved out from under it — a real reported bug
+	// ("the input fields have absolute values and don't move along").
+	// Shifting by the same delta the dialog itself just moved by
+	// (rather than recomputing from span.widget.GetInnerRect() the way
+	// activateSearchTextField does) deliberately doesn't depend on
+	// searchLeft/searchRight's own rect already reflecting the new
+	// position — those only update lazily, on the next real Draw call
+	// (see openSearch's own ForceDraw comment), which hasn't happened
+	// yet at this point mid-drag.
+	if front, _ := r.searchFieldsPages.GetFrontPage(); front == "editfield" {
+		ex, ey, ew, eh := r.searchEditField.GetRect()
+		r.searchEditField.SetRect(ex+x-oldX, ey+y-oldY, ew, eh)
+	}
 }
 
 // dragSearchMouseCapture makes the search dialog's own title bar
