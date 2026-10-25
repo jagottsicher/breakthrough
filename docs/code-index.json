@@ -58,8 +58,8 @@
     },
     {
       "path": ".goreleaser.yaml",
-      "size": 12382,
-      "sha256": "87819a9fd28c062ca6c51b948668f3dbcb130dba60b3abb03714b3bdf032950b"
+      "size": 12813,
+      "sha256": "2f86fd237fb7102e63fec6931b66af496b0c647f675caea36c71ebd73c7816cf"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -57975,5 +57975,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "93204b192e5d418a70e4f4895a7925f006be43d762df3c44f28f990081855301"
+  "merkle_root": "21c3ea2e3fa3d7e94dd2a82cf71c9d455ce00e635ce1061e5d3866fa94ef3d17"
 }
