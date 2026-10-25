@@ -40,6 +40,284 @@ It is explicitly not an attempt to rebuild Midnight Commander — the goal is
 its own UX philosophy, closer to classic GUI file managers, just in the
 terminal.
 
+## Status
+
+Actively developed and usable day to day. Everything described in
+[Features](#features) below is built and tested: browsing, tabs, split view, the trash, Find, Look,
+archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
+covering every setting breakthrough recognizes, a Toolbox screen of
+built-in networking and hardware tools with its own Network Tools
+(`jn`) and Hardware Tools (`jh`) screens, a Mounts
+screen (`jm`) showing what's currently mounted and whether it survives a
+reboot, a Firewall screen (`jf`) showing this host's own actual
+firewall rules (UFW, nftables, or iptables — whichever one really
+governs traffic), including which rules shadow each other, plus an
+Add-rule form (`a`, UFW/iptables only) that builds the exact command
+for a new rule, confirms it before running it via sudo, and
+automatically reverts an SSH-relevant rule if it isn't explicitly kept
+within 30 seconds, a Simulate form (`t`, every backend including
+nftables) that reports which rule, if any, decides a hypothetical
+request, an Action
+Log screen (`jl`) browsing the real activity log with keyword/time
+filtering, a Log Audit screen (`jL`) reading and merging *other* log
+files found in whichever directory the active panel currently shows,
+a Git breach dashboard (`jg`) for staging, committing, and diffing the
+local git repository containing the active panel's own current
+directory — its own diff pane toggles between a unified pager and a
+side-by-side view (`v`) — a Sessions screen (`js`) listing local GNU screen, tmux, and
+Zellij sessions side by side with per-row Attach/Close actions (Attach
+hands the real terminal to the session — screen `-D -r`, tmux `attach
+-d`, or `zellij attach` — and returns to breakthrough automatically once
+you detach or it ends), embedded remote Terminals (`T`/`Alt+T`/`gT`) —
+a separate, backgroundable, switchable collection of real `ssh`
+sessions, distinct from the `gs` chord's own one-off blocking shell —
+an SSH Keys screen (`jk`) inventorying local key
+pairs under `~/.ssh` — algorithm/size, passphrase protection, file
+permissions, and whether each is currently loaded in the running
+ssh-agent — plus a Generate key form (`a`) that builds the exact
+`ssh-keygen` command for a new pair and runs it through a real
+terminal, deliberately with no passphrase field of its own (`ssh-keygen`
+prompts for one interactively instead, so it never sits in a process
+argument list or shell history), a Copy to server form (`c`, the same
+end result `ssh-copy-id` produces — never a duplicate, existing
+`authorized_keys` backed up first, strict permissions set explicitly —
+followed automatically by a non-interactive check that the new key
+alone now actually works passwordless), real
+Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz,
+zstd, 7z, and (extract-only) RAR, and a notification system for
+background jobs finishing while
+you're looking elsewhere (a backgrounded Rsync run, the paste/move
+queue, the Firewall screen's own self-lockout rollback) — a transient
+status-bar toast, a persistent unread badge, and a full Messages screen
+(`gm`) with dwell-based auto-read, persisted across restarts as plain
+JSON, and an Email launcher (`ge`) for whichever terminal mail client
+is installed (neomutt, aerc, himalaya, mail, or mailx — configurable
+under Options when more than one is present), plus a status-bar mail
+badge ("Email") showing an unread count from a configured Maildir or mbox
+mailbox, or the current user's own system mailbox (`/var/mail`),
+auto-detected. Progress bars for long-running file operations are
+what's planned next — see
+[docs/whitepaper.md](docs/whitepaper.md) for the full concept and
+vision, and follow along or join in on
+[Discussions](https://github.com/jagottsicher/breakthrough/discussions).
+
+## Architecture
+
+The current package and function relationships are shown in the generated
+callgraph below. It is regenerated with `go-callvis` for changes merged into
+`develop` and for tagged releases.
+
+![breakthrough callgraph](docs/images/callgraph.svg)
+
+## Color schemes
+
+breakthrough ships with one built-in scheme ("Default") and reads
+further ones from `colorschemes/*.json` in either config tier —
+`/etc/breakthrough/colorschemes/` for system-wide schemes,
+`~/.config/breakthrough/colorschemes/` (or `$XDG_CONFIG_HOME/breakthrough/colorschemes/`
+if set) for your own; a user file with the same name replaces a system
+one. Switch between whatever's found via the Options screen (the `o`
+chord's own `oo`) — the pick applies immediately and is saved to your
+own `~/.config/breakthrough/config`.
+
+The `.deb`/`.rpm` packages (see [Installing](#installing)) create
+`/etc/breakthrough/config` and `/etc/breakthrough/colorschemes/` for
+you — the config file already fully documented and commented out, ready
+for a system administrator to uncomment and edit — so a package install
+gives you a real, discoverable starting point rather than a path that
+simply doesn't exist yet. A plain `.tar.gz` install has no installer to
+do that for it; the Options screen's own "Edit config file" button
+creates your *user* config the same way, on first use, if you'd rather
+start from that tier instead.
+
+Two ready-made examples ship in [`examples/colorschemes/`](examples/colorschemes/)
+— a dark Solarized-based scheme and a light one:
+
+```sh
+mkdir -p ~/.config/breakthrough/colorschemes
+cp examples/colorschemes/*.json ~/.config/breakthrough/colorschemes/
+```
+
+A scheme file only needs to set the fields it actually wants to change —
+anything left out falls back to the Default scheme's own value. Each
+color is either a `#rrggbb` hex value or a
+[W3C color name](https://pkg.go.dev/github.com/gdamore/tcell/v2#pkg-variables)
+(e.g. `"darkslategray"`). See
+[`examples/colorschemes/solarized.json`](examples/colorschemes/solarized.json)
+for every field a scheme can set. The semantic UI roles are
+`surface_background` for normal content, `popup_background` for menus and
+dropdowns, `input_background`/`input_focused_background`/
+`input_disabled_background` for input states, `selection_background` for
+selected rows, and `button_background`/`button_focused_background` for
+buttons. `text_color`, `muted_text_color`, and `border_color` provide the
+corresponding foreground and chrome roles. The older `accent_background`,
+`focused_background`, `editable_background`, `text`, and `placeholder_text`
+fields remain supported as compatibility fallbacks for existing schemes.
+
+## Installing
+
+Every release ships prebuilt binaries for all supported platforms on the
+[Releases page](https://github.com/jagottsicher/breakthrough/releases).
+No runtime dependencies: breakthrough is a single static Go binary built
+with `CGO_ENABLED=0`, so there is nothing to install alongside it and
+nothing to break on a libc upgrade.
+
+### Which build do I need?
+
+| Your system | Architecture | Download |
+|---|---|---|
+| Linux, ordinary PC/server | x86_64 / amd64 | `breakthrough_<version>_linux_amd64.*` |
+| Linux, Raspberry Pi 4/5 (64-bit), ARM servers, AWS Graviton | aarch64 / arm64 | `breakthrough_<version>_linux_arm64.*` |
+| macOS, Intel | x86_64 | `breakthrough_<version>_darwin_amd64.tar.gz` |
+| macOS, Apple Silicon (M1–M4) | arm64 | `breakthrough_<version>_darwin_arm64.tar.gz` |
+| FreeBSD | x86_64 / amd64 | `breakthrough_<version>_freebsd_amd64.tar.gz` |
+
+Not sure which one you're on? `uname -sm` answers both questions at
+once — `Linux x86_64` means linux/amd64, `Linux aarch64` means
+linux/arm64, `Darwin arm64` means Apple Silicon.
+
+32-bit builds (i386, armv6/armv7) are deliberately not published. If you
+need one, it cross-compiles from source in one command — see
+[Building from source](#building-from-source) below.
+
+### Debian, Ubuntu, Linux Mint, Raspberry Pi OS (`.deb`)
+
+```sh
+VERSION=0.18.0                     # or whatever the latest release is
+ARCH=$(dpkg --print-architecture)  # amd64 or arm64
+curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${ARCH}.deb"
+sudo apt install "./breakthrough_${VERSION}_linux_${ARCH}.deb"
+```
+
+`apt install ./file.deb` rather than `dpkg -i` so any dependency
+resolution is handled for you. Upgrade by installing a newer `.deb` the
+same way; remove with `sudo apt remove breakthrough`.
+
+### Fedora, RHEL, AlmaLinux, Rocky, openSUSE (`.rpm`)
+
+```sh
+VERSION=0.18.0
+ARCH=$(uname -m)                   # x86_64 or aarch64
+case "$ARCH" in x86_64) PKG=amd64 ;; aarch64) PKG=arm64 ;; esac
+curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${PKG}.rpm"
+sudo dnf install "./breakthrough_${VERSION}_linux_${PKG}.rpm"   # or: sudo zypper install ./...
+```
+
+Both packages also install `brk` as a short alias for `breakthrough` — the
+same binary, invoked under either name.
+
+Both packages also create `/etc/breakthrough/config` — fully documented,
+every setting listed and commented out — and `/etc/breakthrough/colorschemes/`,
+so a system administrator has a real starting point for machine-wide
+defaults (see [Color schemes](#color-schemes)). Your own edits to that
+file survive a package upgrade: it's registered as a conffile on Debian
+and `%config(noreplace)` on RPM.
+
+### Any Linux, macOS, or FreeBSD (`.tar.gz`)
+
+Works on any distribution, with or without root:
+
+```sh
+VERSION=0.18.0
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')          # linux, darwin, freebsd
+case "$(uname -m)" in
+  x86_64|amd64) ARCH=amd64 ;;
+  aarch64|arm64) ARCH=arm64 ;;
+esac
+
+curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
+tar xzf "breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
+sudo install -m 0755 breakthrough /usr/local/bin/breakthrough
+sudo install -m 0644 breakthrough.1.gz /usr/local/share/man/man1/
+sudo ln -sf breakthrough /usr/local/bin/brk
+```
+
+Without root, drop it somewhere on your own `PATH` instead:
+
+```sh
+mkdir -p ~/.local/bin && install -m 0755 breakthrough ~/.local/bin/
+mkdir -p ~/.local/share/man/man1 && install -m 0644 breakthrough.1.gz ~/.local/share/man/man1/
+ln -sf breakthrough ~/.local/bin/brk
+```
+
+(The `.deb`/`.rpm` packages install the man page and the `brk` alias
+automatically — no separate step needed there; see `man breakthrough`
+once installed.)
+
+On macOS, Gatekeeper quarantines anything downloaded with a browser. If
+you get "cannot be opened because the developer cannot be verified",
+clear the quarantine flag once:
+
+```sh
+xattr -d com.apple.quarantine /usr/local/bin/breakthrough
+```
+
+Downloading with `curl`, as above, avoids that entirely.
+
+### Verifying a download
+
+Every release includes a `checksums.txt` covering all its artifacts:
+
+```sh
+curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/checksums.txt"
+sha256sum --ignore-missing -c checksums.txt      # shasum -a 256 on macOS/FreeBSD
+```
+
+### Building from source
+
+Needs only a current Go toolchain — no C compiler, no system libraries:
+
+```sh
+git clone https://github.com/jagottsicher/breakthrough.git
+cd breakthrough
+go build ./cmd/breakthrough
+```
+
+Cross-compiling for another machine is a matter of two environment
+variables, which is also how to get an architecture the releases don't
+cover:
+
+```sh
+GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build ./cmd/breakthrough   # 32-bit Raspberry Pi
+GOOS=linux GOARCH=386        CGO_ENABLED=0 go build ./cmd/breakthrough   # 32-bit x86
+GOOS=openbsd GOARCH=amd64    CGO_ENABLED=0 go build ./cmd/breakthrough   # OpenBSD
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup,
+and [docs/installation.md](docs/installation.md) for terminal
+requirements, the files breakthrough creates on your system, and
+uninstall instructions.
+
+## Documentation
+
+- **[docs/user-guide.md](docs/user-guide.md)** — every feature in
+  detail, the complete settings reference, and a full keyboard map.
+  `?` inside the application shows a condensed version of the same
+  thing, always matching the build you're running.
+- **[docs/installation.md](docs/installation.md)** — terminal
+  requirements, exactly which files land where, optional external
+  tools, system-wide rollout for administrators, upgrading,
+  uninstalling, and troubleshooting.
+- **[docs/whitepaper.md](docs/whitepaper.md)** — the concept and the
+  reasoning behind the project.
+- **[docs/code-index.json](docs/code-index.json)** — a generated,
+  deterministic source index with file hashes, a Merkle root, Go package
+  imports, and declared symbols for tooling and architecture work.
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — local setup and the branch
+  workflow.
+
+## Contributing
+
+Contributions are very welcome — this is an ambitious project for one
+person alone. See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, the
+branch workflow, and code style expectations.
+
+## Support
+
+The best way to support breakthrough is to participate and contribute. If
+you'd like to leave a tip instead, you can send a few Satoshis via the
+Lightning Network ⚡️ using the sponsor button above.
+
 ## Features
 
 - Panel-based directory browsing: arrow-key and mouse navigation, a
@@ -838,7 +1116,7 @@ terminal.
   recommendation for an external tool that can (`chafa`, or `pixterm`
   if you'd rather stick to Go-only tooling) — matched to whichever
   package manager your system actually has. Set `pager = external` in
-  your config instead (see [Color schemes](#color-schemes) below for
+  your config instead (see [Color schemes](#color-schemes) above for
   the file itself) to open `bat`/`batcat`, `$PAGER`, or `less`/`more`
   in your real terminal for text. "Tail -f", right next to Look in the
   context menu, follows a growing log live via the real `tail -f`.
@@ -941,280 +1219,3 @@ terminal.
   currently staged. Local working trees only — there is no
   command-execution channel to run git against a remote session.
 
-## Status
-
-Actively developed and usable day to day. Everything described above is
-built and tested: browsing, tabs, split view, the trash, Find, Look,
-archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
-covering every setting breakthrough recognizes, a Toolbox screen of
-built-in networking and hardware tools with its own Network Tools
-(`jn`) and Hardware Tools (`jh`) screens, a Mounts
-screen (`jm`) showing what's currently mounted and whether it survives a
-reboot, a Firewall screen (`jf`) showing this host's own actual
-firewall rules (UFW, nftables, or iptables — whichever one really
-governs traffic), including which rules shadow each other, plus an
-Add-rule form (`a`, UFW/iptables only) that builds the exact command
-for a new rule, confirms it before running it via sudo, and
-automatically reverts an SSH-relevant rule if it isn't explicitly kept
-within 30 seconds, a Simulate form (`t`, every backend including
-nftables) that reports which rule, if any, decides a hypothetical
-request, an Action
-Log screen (`jl`) browsing the real activity log with keyword/time
-filtering, a Log Audit screen (`jL`) reading and merging *other* log
-files found in whichever directory the active panel currently shows,
-a Git breach dashboard (`jg`) for staging, committing, and diffing the
-local git repository containing the active panel's own current
-directory — its own diff pane toggles between a unified pager and a
-side-by-side view (`v`) — a Sessions screen (`js`) listing local GNU screen, tmux, and
-Zellij sessions side by side with per-row Attach/Close actions (Attach
-hands the real terminal to the session — screen `-D -r`, tmux `attach
--d`, or `zellij attach` — and returns to breakthrough automatically once
-you detach or it ends), embedded remote Terminals (`T`/`Alt+T`/`gT`) —
-a separate, backgroundable, switchable collection of real `ssh`
-sessions, distinct from the `gs` chord's own one-off blocking shell —
-an SSH Keys screen (`jk`) inventorying local key
-pairs under `~/.ssh` — algorithm/size, passphrase protection, file
-permissions, and whether each is currently loaded in the running
-ssh-agent — plus a Generate key form (`a`) that builds the exact
-`ssh-keygen` command for a new pair and runs it through a real
-terminal, deliberately with no passphrase field of its own (`ssh-keygen`
-prompts for one interactively instead, so it never sits in a process
-argument list or shell history), a Copy to server form (`c`, the same
-end result `ssh-copy-id` produces — never a duplicate, existing
-`authorized_keys` backed up first, strict permissions set explicitly —
-followed automatically by a non-interactive check that the new key
-alone now actually works passwordless), real
-Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz,
-zstd, 7z, and (extract-only) RAR, and a notification system for
-background jobs finishing while
-you're looking elsewhere (a backgrounded Rsync run, the paste/move
-queue, the Firewall screen's own self-lockout rollback) — a transient
-status-bar toast, a persistent unread badge, and a full Messages screen
-(`gm`) with dwell-based auto-read, persisted across restarts as plain
-JSON, and an Email launcher (`ge`) for whichever terminal mail client
-is installed (neomutt, aerc, himalaya, mail, or mailx — configurable
-under Options when more than one is present), plus a status-bar mail
-badge ("Email") showing an unread count from a configured Maildir or mbox
-mailbox, or the current user's own system mailbox (`/var/mail`),
-auto-detected. Progress bars for long-running file operations are
-what's planned next — see
-[docs/whitepaper.md](docs/whitepaper.md) for the full concept and
-vision, and follow along or join in on
-[Discussions](https://github.com/jagottsicher/breakthrough/discussions).
-
-## Architecture
-
-The current package and function relationships are shown in the generated
-callgraph below. It is regenerated with `go-callvis` for changes merged into
-`develop` and for tagged releases.
-
-![breakthrough callgraph](docs/images/callgraph.svg)
-
-## Color schemes
-
-breakthrough ships with one built-in scheme ("Default") and reads
-further ones from `colorschemes/*.json` in either config tier —
-`/etc/breakthrough/colorschemes/` for system-wide schemes,
-`~/.config/breakthrough/colorschemes/` (or `$XDG_CONFIG_HOME/breakthrough/colorschemes/`
-if set) for your own; a user file with the same name replaces a system
-one. Switch between whatever's found via the Options screen (the `o`
-chord's own `oo`) — the pick applies immediately and is saved to your
-own `~/.config/breakthrough/config`.
-
-The `.deb`/`.rpm` packages (see [Installing](#installing)) create
-`/etc/breakthrough/config` and `/etc/breakthrough/colorschemes/` for
-you — the config file already fully documented and commented out, ready
-for a system administrator to uncomment and edit — so a package install
-gives you a real, discoverable starting point rather than a path that
-simply doesn't exist yet. A plain `.tar.gz` install has no installer to
-do that for it; the Options screen's own "Edit config file" button
-creates your *user* config the same way, on first use, if you'd rather
-start from that tier instead.
-
-Two ready-made examples ship in [`examples/colorschemes/`](examples/colorschemes/)
-— a dark Solarized-based scheme and a light one:
-
-```sh
-mkdir -p ~/.config/breakthrough/colorschemes
-cp examples/colorschemes/*.json ~/.config/breakthrough/colorschemes/
-```
-
-A scheme file only needs to set the fields it actually wants to change —
-anything left out falls back to the Default scheme's own value. Each
-color is either a `#rrggbb` hex value or a
-[W3C color name](https://pkg.go.dev/github.com/gdamore/tcell/v2#pkg-variables)
-(e.g. `"darkslategray"`). See
-[`examples/colorschemes/solarized.json`](examples/colorschemes/solarized.json)
-for every field a scheme can set. The semantic UI roles are
-`surface_background` for normal content, `popup_background` for menus and
-dropdowns, `input_background`/`input_focused_background`/
-`input_disabled_background` for input states, `selection_background` for
-selected rows, and `button_background`/`button_focused_background` for
-buttons. `text_color`, `muted_text_color`, and `border_color` provide the
-corresponding foreground and chrome roles. The older `accent_background`,
-`focused_background`, `editable_background`, `text`, and `placeholder_text`
-fields remain supported as compatibility fallbacks for existing schemes.
-
-## Installing
-
-Every release ships prebuilt binaries for all supported platforms on the
-[Releases page](https://github.com/jagottsicher/breakthrough/releases).
-No runtime dependencies: breakthrough is a single static Go binary built
-with `CGO_ENABLED=0`, so there is nothing to install alongside it and
-nothing to break on a libc upgrade.
-
-### Which build do I need?
-
-| Your system | Architecture | Download |
-|---|---|---|
-| Linux, ordinary PC/server | x86_64 / amd64 | `breakthrough_<version>_linux_amd64.*` |
-| Linux, Raspberry Pi 4/5 (64-bit), ARM servers, AWS Graviton | aarch64 / arm64 | `breakthrough_<version>_linux_arm64.*` |
-| macOS, Intel | x86_64 | `breakthrough_<version>_darwin_amd64.tar.gz` |
-| macOS, Apple Silicon (M1–M4) | arm64 | `breakthrough_<version>_darwin_arm64.tar.gz` |
-| FreeBSD | x86_64 / amd64 | `breakthrough_<version>_freebsd_amd64.tar.gz` |
-
-Not sure which one you're on? `uname -sm` answers both questions at
-once — `Linux x86_64` means linux/amd64, `Linux aarch64` means
-linux/arm64, `Darwin arm64` means Apple Silicon.
-
-32-bit builds (i386, armv6/armv7) are deliberately not published. If you
-need one, it cross-compiles from source in one command — see
-[Building from source](#building-from-source) below.
-
-### Debian, Ubuntu, Linux Mint, Raspberry Pi OS (`.deb`)
-
-```sh
-VERSION=0.18.0                     # or whatever the latest release is
-ARCH=$(dpkg --print-architecture)  # amd64 or arm64
-curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${ARCH}.deb"
-sudo apt install "./breakthrough_${VERSION}_linux_${ARCH}.deb"
-```
-
-`apt install ./file.deb` rather than `dpkg -i` so any dependency
-resolution is handled for you. Upgrade by installing a newer `.deb` the
-same way; remove with `sudo apt remove breakthrough`.
-
-### Fedora, RHEL, AlmaLinux, Rocky, openSUSE (`.rpm`)
-
-```sh
-VERSION=0.18.0
-ARCH=$(uname -m)                   # x86_64 or aarch64
-case "$ARCH" in x86_64) PKG=amd64 ;; aarch64) PKG=arm64 ;; esac
-curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${PKG}.rpm"
-sudo dnf install "./breakthrough_${VERSION}_linux_${PKG}.rpm"   # or: sudo zypper install ./...
-```
-
-Both packages also install `brk` as a short alias for `breakthrough` — the
-same binary, invoked under either name.
-
-Both packages also create `/etc/breakthrough/config` — fully documented,
-every setting listed and commented out — and `/etc/breakthrough/colorschemes/`,
-so a system administrator has a real starting point for machine-wide
-defaults (see [Color schemes](#color-schemes)). Your own edits to that
-file survive a package upgrade: it's registered as a conffile on Debian
-and `%config(noreplace)` on RPM.
-
-### Any Linux, macOS, or FreeBSD (`.tar.gz`)
-
-Works on any distribution, with or without root:
-
-```sh
-VERSION=0.18.0
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')          # linux, darwin, freebsd
-case "$(uname -m)" in
-  x86_64|amd64) ARCH=amd64 ;;
-  aarch64|arm64) ARCH=arm64 ;;
-esac
-
-curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
-tar xzf "breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
-sudo install -m 0755 breakthrough /usr/local/bin/breakthrough
-sudo install -m 0644 breakthrough.1.gz /usr/local/share/man/man1/
-sudo ln -sf breakthrough /usr/local/bin/brk
-```
-
-Without root, drop it somewhere on your own `PATH` instead:
-
-```sh
-mkdir -p ~/.local/bin && install -m 0755 breakthrough ~/.local/bin/
-mkdir -p ~/.local/share/man/man1 && install -m 0644 breakthrough.1.gz ~/.local/share/man/man1/
-ln -sf breakthrough ~/.local/bin/brk
-```
-
-(The `.deb`/`.rpm` packages install the man page and the `brk` alias
-automatically — no separate step needed there; see `man breakthrough`
-once installed.)
-
-On macOS, Gatekeeper quarantines anything downloaded with a browser. If
-you get "cannot be opened because the developer cannot be verified",
-clear the quarantine flag once:
-
-```sh
-xattr -d com.apple.quarantine /usr/local/bin/breakthrough
-```
-
-Downloading with `curl`, as above, avoids that entirely.
-
-### Verifying a download
-
-Every release includes a `checksums.txt` covering all its artifacts:
-
-```sh
-curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/checksums.txt"
-sha256sum --ignore-missing -c checksums.txt      # shasum -a 256 on macOS/FreeBSD
-```
-
-### Building from source
-
-Needs only a current Go toolchain — no C compiler, no system libraries:
-
-```sh
-git clone https://github.com/jagottsicher/breakthrough.git
-cd breakthrough
-go build ./cmd/breakthrough
-```
-
-Cross-compiling for another machine is a matter of two environment
-variables, which is also how to get an architecture the releases don't
-cover:
-
-```sh
-GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build ./cmd/breakthrough   # 32-bit Raspberry Pi
-GOOS=linux GOARCH=386        CGO_ENABLED=0 go build ./cmd/breakthrough   # 32-bit x86
-GOOS=openbsd GOARCH=amd64    CGO_ENABLED=0 go build ./cmd/breakthrough   # OpenBSD
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup,
-and [docs/installation.md](docs/installation.md) for terminal
-requirements, the files breakthrough creates on your system, and
-uninstall instructions.
-
-## Documentation
-
-- **[docs/user-guide.md](docs/user-guide.md)** — every feature in
-  detail, the complete settings reference, and a full keyboard map.
-  `?` inside the application shows a condensed version of the same
-  thing, always matching the build you're running.
-- **[docs/installation.md](docs/installation.md)** — terminal
-  requirements, exactly which files land where, optional external
-  tools, system-wide rollout for administrators, upgrading,
-  uninstalling, and troubleshooting.
-- **[docs/whitepaper.md](docs/whitepaper.md)** — the concept and the
-  reasoning behind the project.
-- **[docs/code-index.json](docs/code-index.json)** — a generated,
-  deterministic source index with file hashes, a Merkle root, Go package
-  imports, and declared symbols for tooling and architecture work.
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — local setup and the branch
-  workflow.
-
-## Contributing
-
-Contributions are very welcome — this is an ambitious project for one
-person alone. See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, the
-branch workflow, and code style expectations.
-
-## Support
-
-The best way to support breakthrough is to participate and contribute. If
-you'd like to leave a tip instead, you can send a few Satoshis via the
-Lightning Network ⚡️ using the sponsor button above.
