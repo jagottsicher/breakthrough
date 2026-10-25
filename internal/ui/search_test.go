@@ -2103,6 +2103,48 @@ func TestSearchDragCanMoveUpAndLeft(t *testing.T) {
 	}
 }
 
+// TestSearchDragMovesTheOpenInlineEditField pins a real reported bug:
+// the inline edit field (searchEditField, shared across Filename/
+// Content/Start-at/Ignored dirs) sat at an absolute screen position set
+// once by activateSearchTextField, and dragging the dialog's title bar
+// left it behind instead of moving along with the rest of the dialog —
+// unlike every other child, its own "editfield" page is deliberately
+// resize=false (see newSearchDialog's AddPage("editfield", ...) call),
+// so nothing else recomputed its rect during a drag. See moveSearch's
+// own doc comment for the fix (shift by the same delta the dialog
+// itself just moved by).
+func TestSearchDragMovesTheOpenInlineEditField(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 300, 40)
+	r.openSearch() // activates the Filename field's inline edit immediately
+
+	startX, startY, _, _ := r.searchPages.GetRect()
+	editX, editY, editW, editH := r.searchEditField.GetRect()
+
+	r.dragSearchMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
+	if !r.searchDragging {
+		t.Fatal("setup: pressing the title bar should have started a drag")
+	}
+
+	const dx, dy = 5, 3
+	newX, newY := startX+dx, startY+dy
+	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(newX+2, newY, tcell.ButtonPrimary, 0))
+	r.captureOutsideClick(tview.MouseLeftUp, tcell.NewEventMouse(newX+2, newY, tcell.ButtonNone, 0))
+
+	gotX, gotY, gotW, gotH := r.searchEditField.GetRect()
+	wantX, wantY := editX+dx, editY+dy
+	if gotX != wantX || gotY != wantY {
+		t.Errorf("edit field rect = (%d,%d), want (%d,%d) — it must move along with the dialog during a drag", gotX, gotY, wantX, wantY)
+	}
+	if gotW != editW || gotH != editH {
+		t.Errorf("edit field size changed during a pure move: (%d,%d) -> (%d,%d), want unchanged", editW, editH, gotW, gotH)
+	}
+}
+
 // TestSearchDragStopsOnStrayButtonRelease mirrors
 // TestPropertiesDragStopsOnStrayButtonRelease: a MouseMove arriving
 // with the button no longer held (released somewhere this code's own
