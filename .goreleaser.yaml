@@ -56,14 +56,36 @@ builds:
       - linux
       - darwin
       - freebsd
+      - openbsd
+      - netbsd
     goarch:
       - amd64
       - arm64
+      - arm
+    goarm:
+      # Both 32-bit ARM ABIs that actually occur in the wild (older
+      # Raspberry Pis, embedded ARM boxes) — v5 (ARMv5, no hardware
+      # float) is deliberately left out, it's effectively extinct on
+      # anything running a modern Linux userspace.
+      - "6"
+      - "7"
     ignore:
       # freebsd/arm64 is deliberately not a target (this project's own
       # platform list) — only freebsd/amd64 is.
       - goos: freebsd
         goarch: arm64
+      # darwin/arm (32-bit) was never a real thing — Apple's own ARM
+      # Macs are arm64 only, and macOS dropped 32-bit app support
+      # entirely well before any ARM Mac existed.
+      - goos: darwin
+        goarch: arm
+      # openbsd/netbsd on 32-bit ARM: no reasonably current, still-
+      # supported release of either actually ships a 32-bit ARM userland
+      # admins would run breakthrough on — amd64/arm64 only there.
+      - goos: openbsd
+        goarch: arm
+      - goos: netbsd
+        goarch: arm
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
