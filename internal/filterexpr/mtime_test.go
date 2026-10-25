@@ -127,6 +127,49 @@ func TestParseMtimeAbsoluteWithTime(t *testing.T) {
 	}
 }
 
+// TestParseMtimeYearMonthDefaultsToTheFirstOfTheMonth pins the user's
+// own explicit request for more tolerant input: "2026-10" alone,
+// without a day, should mean "2026-10-01 00:00:00", the same way
+// "2026-09-01" (no time) already defaults to midnight and "2026-09-01
+// 14:30" (no seconds) already defaults to :00 seconds.
+func TestParseMtimeYearMonthDefaultsToTheFirstOfTheMonth(t *testing.T) {
+	f, err := ParseMtime("after 2026-10", mtimeTestNow)
+	if err != nil {
+		t.Fatalf("ParseMtime: %v", err)
+	}
+	if !f.Match(time.Date(2026, 10, 1, 0, 0, 1, 0, time.Local)) {
+		t.Error("one second into October 1st should already be after 2026-10 (midnight on the 1st)")
+	}
+	if f.Match(time.Date(2026, 9, 30, 23, 59, 59, 0, time.Local)) {
+		t.Error("the last second of September should not be after 2026-10")
+	}
+}
+
+// TestParseMtimeToleratesMissingLeadingZeros pins the user's own
+// explicit request: "2012-1-4 18:5:4" (single-digit month, day, hour,
+// minute, second) should parse exactly the way "2012-01-04 18:05:04"
+// does — correctly, as 18 hours, 5 minutes, 4 seconds — never a
+// scrambled "18:50:40" the way a naive "just insert a zero somewhere"
+// string transform could get wrong (checked directly, not assumed).
+func TestParseMtimeToleratesMissingLeadingZeros(t *testing.T) {
+	f, err := ParseMtime("after 2012-1-4 18:5:4", mtimeTestNow)
+	if err != nil {
+		t.Fatalf("ParseMtime: %v", err)
+	}
+	if !f.Match(time.Date(2012, 1, 4, 18, 5, 5, 0, time.Local)) {
+		t.Error("one second later (18:05:05) should be after 2012-1-4 18:5:4")
+	}
+	if f.Match(time.Date(2012, 1, 4, 18, 5, 3, 0, time.Local)) {
+		t.Error("one second earlier (18:05:03) should not be after 2012-1-4 18:5:4")
+	}
+	// Specifically rules out the "50:40" scramble: if minute/second got
+	// misread as 50/40 instead of 05/04, this moment would wrongly
+	// still be "before" the parsed value.
+	if !f.Match(time.Date(2012, 1, 4, 18, 6, 0, 0, time.Local)) {
+		t.Error("18:06:00 should be after 18:05:04 — if this fails, minute/second were probably scrambled to 50/40 instead of parsed as 05/04")
+	}
+}
+
 func TestParseMtimeMonthsAndYearsAreApproximate(t *testing.T) {
 	f, err := ParseMtime("1 year", mtimeTestNow)
 	if err != nil {

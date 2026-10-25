@@ -846,7 +846,7 @@ var helpText = strings.TrimLeft(`
   one chronological stream, opening with the list itself already
   focused (the row just above its header turns the same color as a
   focused input field while it is — Tab/Shift+Tab move focus to
-  Filter/Time/Level instead, see below).
+  Filter/Time/Level/the timeline instead, see below).
   The format of each file is detected automatically: JSON Lines;
   syslog RFC 3164/5424 (a classic "Mon _2 HH:MM:SS" or modern
   rsyslog's own ISO8601 timestamp, either one); Apache/nginx/CUPS's
@@ -882,6 +882,22 @@ var helpText = strings.TrimLeft(`
   whichever Filter/Time/Level filters are active), not the family's
   full, unfiltered range.
 
+  The timeline is its own Tab stop, right between Level and the list,
+  and is itself interactive: click a single bar, or drag across
+  several (either direction), to select a time range; with the
+  keyboard, Tab onto it and use Left/Right to move one bucket at a
+  time, Shift+Left/Right to extend the selection from wherever it
+  started. Enter, Space, or simply releasing the mouse applies the
+  current selection — writes "between <start> and <end>" straight into
+  the Time field above, the same expression you could type by hand,
+  which immediately narrows (and re-draws) the timeline to that range.
+  Clear the Time field to go back to the full span. While follow mode
+  is re-reading in the background, the timeline's own display freezes
+  for as long as it holds keyboard focus or a drag is in progress —
+  the list keeps updating live regardless, only the bar visibly pauses
+  so an in-progress selection never has its buckets shift out from
+  under it.
+
     Filter          A boolean query over Source and Message, narrowing
                      the list live and highlighting every positively-
                      matching term (never one whose own absence is what
@@ -911,7 +927,8 @@ var helpText = strings.TrimLeft(`
                      everything worse — ERROR, FATAL — not just exact
                      WARN matches); an entry with no recognized level
                      never passes this filter, even "trace"
-    Tab / Shift+Tab Move between Filter, Time, Level, and the list
+    Tab / Shift+Tab Move between Filter, Time, Level, the timeline, and
+                     the list
     e               Jump to the next error (wraps around)
     w               Jump to the next warning (wraps around)
     Enter           Show this entry's full text, with the current

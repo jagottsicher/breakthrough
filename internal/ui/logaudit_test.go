@@ -11,6 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -371,7 +372,7 @@ func clickPrimitive(root *Root, p tview.Primitive) {
 }
 
 // TestRestyleLogAuditFilterFieldsFixesStuckFocusColorOnMouseClick pins
-// a real, confirmed tview gap (see restyleLogAuditFilterFields' own
+// a real, confirmed tview gap (see restyleLogAuditFocusTargets' own
 // doc comment, logauditscreen.go, for the full mechanism): tview's
 // InputField forwards its embedded TextArea's Focus event back out to
 // the InputField's own FocusFunc, but never forwards Blur — so a mouse
@@ -666,5 +667,375 @@ func TestOpenLogAuditDetailShowsRawOnlyWhenDifferentFromMessage(t *testing.T) {
 	r2.openLogAuditDetail(1)
 	if got := r2.logAuditDetailView.GetText(true); strings.Contains(got, "Raw:") {
 		t.Errorf("detail view for a FormatPlain entry = %q, want no redundant Raw: section", got)
+	}
+}
+
+// TestLogAuditTimeFieldDoesNotFilterLiveButDoesOnEnterOrLeave pins the
+// user's own explicit report: re-rendering the table and re-bucketing
+// the timeline on every single keystroke made typing into the Time
+// field noticeably sluggish, unlike Keyword/Level (cheap per
+// character) — a date/time expression only means anything once
+// finished typing anyway, so it should apply on Enter, Tab/Backtab, or
+// whenever focus moves on, never live.
+func TestLogAuditTimeFieldDoesNotFilterLiveButDoesOnEnterOrLeave(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	allRows := r.logAuditViewerTable.GetRowCount()
+	if allRows <= 1 {
+		t.Fatalf("setup: table has %d rows, want more than just the header", allRows)
+	}
+
+	// A filter that excludes every one of the fixture's 20 entries
+	// (all in October 2026) — typing it should change nothing yet.
+	r.logAuditTimeField.SetText("after 2030-01-01")
+	if got := r.logAuditViewerTable.GetRowCount(); got != allRows {
+		t.Errorf("row count = %d after merely setting the Time field's text, want unchanged %d (no live filtering)", got, allRows)
+	}
+
+	r.logAuditTimeField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	// 2, not 1: header row + the table's own "No entries match the
+	// current filter." row, not just a bare header.
+	if got := r.logAuditViewerTable.GetRowCount(); got != 2 {
+		t.Errorf("row count = %d after Enter, want 2 (header + the no-match row — the filter excludes everything)", got)
+	}
+}
+
+// TestLogAuditTimeFieldAppliesOnLeavingViaMouseClick pins the other
+// half: tview never reliably forwards Blur from an InputField's own
+// embedded TextArea on a mouse-driven focus change (the same
+// documented gap restyleLogAuditFocusTargets's own doc comment covers
+// for styling), so applying the Time filter can't wait for the Time
+// field's own Blur — it has to come from whichever *other* target's
+// Focus actually fires next, which this drives through the real
+// MouseHandler chain (clickPrimitive), not a direct SetFocus call,
+// specifically so it exercises that real gap rather than bypassing it.
+func TestLogAuditTimeFieldAppliesOnLeavingViaMouseClick(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	allRows := r.logAuditViewerTable.GetRowCount()
+
+	clickPrimitive(r, r.logAuditTimeField)
+	r.logAuditTimeField.SetText("after 2030-01-01")
+	if got := r.logAuditViewerTable.GetRowCount(); got != allRows {
+		t.Fatalf("setup: row count = %d after setting the Time field's text, want unchanged %d", got, allRows)
+	}
+
+	clickPrimitive(r, r.logAuditKeywordField)
+	// 2, not 1: header row + the table's own "No entries match the
+	// current filter." row, not just a bare header.
+	if got := r.logAuditViewerTable.GetRowCount(); got != 2 {
+		t.Errorf("row count = %d after clicking away to Keyword, want 2 (header + no-match row — the Time filter should now be applied)", got)
+	}
+}
+
+// writeLogAuditTimelineFixture writes 20 JSON-Lines entries, one per
+// second, all on the same calendar day — predictable enough to drive
+// the interactive timeline without hand-computing bucket boundaries:
+// tests read back whatever logAuditTimelineBucketCount/MinT/MaxT the
+// real render actually produced (see openLogAuditTimelineViewer) and
+// build their own expectations from that, the same "don't predict the
+// rendering pipeline's width math by hand" approach logAuditBucketTimeRange's
+// own unit tests already take one level down.
+func writeLogAuditTimelineFixture(t *testing.T, dir string) {
+	t.Helper()
+	var b strings.Builder
+	base := time.Date(2026, 10, 7, 10, 0, 0, 0, time.UTC)
+	for i := 0; i < 20; i++ {
+		fmt.Fprintf(&b, `{"time":%q,"level":"info","msg":"entry %d","service":"app"}`+"\n",
+			base.Add(time.Duration(i)*time.Second).Format(time.RFC3339), i)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "app.log"), []byte(b.String()), 0o644); err != nil {
+		t.Fatalf("WriteFile app.log: %v", err)
+	}
+}
+
+// openLogAuditTimelineViewer opens the viewer on writeLogAuditTimelineFixture's
+// own single group, draws it at width x height (a real Draw pass is
+// what gives logAuditTimelineView a real, non-zero rect — see
+// logAuditTimelineUnlaidOutWidth's own doc comment), and fails the
+// test outright if that didn't leave at least 2 buckets: every test
+// using this helper needs room to select a sub-range, not just one
+// single all-or-nothing bucket.
+func openLogAuditTimelineViewer(t *testing.T, width, height int) *Root {
+	t.Helper()
+	dir := t.TempDir()
+	writeLogAuditTimelineFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	drawRoot(t, r, width, height)
+	if r.logAuditTimelineBucketCount < 2 {
+		t.Fatalf("setup: bucketCount = %d at %dx%d, want at least 2 — widen the test's own draw size", r.logAuditTimelineBucketCount, width, height)
+	}
+	return r
+}
+
+func TestLogAuditTimelineArrowKeysMoveAndCollapseSelection(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	r.app.SetFocus(r.logAuditTimelineView)
+	if !r.logAuditTimelineFocused {
+		t.Fatal("setup: focusing the timeline should set logAuditTimelineFocused")
+	}
+	if r.logAuditTimelineAnchor != 0 || r.logAuditTimelineCursor != 0 {
+		t.Fatalf("setup: anchor,cursor = %d,%d, want 0,0 on a fresh render", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	}
+
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	if r.logAuditTimelineAnchor != 2 || r.logAuditTimelineCursor != 2 {
+		t.Errorf("after two plain Rights: anchor,cursor = %d,%d, want 2,2 (collapsed)", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	}
+
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
+	if r.logAuditTimelineAnchor != 1 || r.logAuditTimelineCursor != 1 {
+		t.Errorf("after a plain Left: anchor,cursor = %d,%d, want 1,1", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	}
+}
+
+func TestLogAuditTimelineCursorClampsAtBothEnds(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	r.app.SetFocus(r.logAuditTimelineView)
+
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
+	if r.logAuditTimelineCursor != 0 {
+		t.Errorf("Left at the very first bucket: cursor = %d, want clamped to 0", r.logAuditTimelineCursor)
+	}
+
+	last := r.logAuditTimelineBucketCount - 1
+	for i := 0; i < r.logAuditTimelineBucketCount+3; i++ {
+		r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	}
+	if r.logAuditTimelineCursor != last {
+		t.Errorf("Right past the last bucket repeatedly: cursor = %d, want clamped to %d", r.logAuditTimelineCursor, last)
+	}
+}
+
+func TestLogAuditTimelineShiftArrowExtendsFromTheFixedAnchor(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	r.app.SetFocus(r.logAuditTimelineView)
+
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	if r.logAuditTimelineCursor != 2 {
+		t.Fatalf("setup: cursor = %d, want 2", r.logAuditTimelineCursor)
+	}
+
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+	if r.logAuditTimelineAnchor != 2 {
+		t.Errorf("anchor = %d after three Shift+Right, want 2 (unchanged — it must stay at the pre-Shift cursor position)", r.logAuditTimelineAnchor)
+	}
+	if r.logAuditTimelineCursor != 5 {
+		t.Errorf("cursor = %d after three Shift+Right from 2, want 5", r.logAuditTimelineCursor)
+	}
+
+	// A plain arrow (Shift released) must collapse the just-built range.
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	if r.logAuditTimelineAnchor != 6 || r.logAuditTimelineCursor != 6 {
+		t.Errorf("anchor,cursor = %d,%d after a plain Right, want 6,6 (collapsed)", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	}
+}
+
+func TestLogAuditTimelineShiftArrowSelectsLeftwardJustAsWell(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	r.app.SetFocus(r.logAuditTimelineView)
+	for i := 0; i < 5; i++ {
+		r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	}
+	if r.logAuditTimelineCursor != 5 {
+		t.Fatalf("setup: cursor = %d, want 5", r.logAuditTimelineCursor)
+	}
+
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModShift))
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModShift))
+	if r.logAuditTimelineAnchor != 5 || r.logAuditTimelineCursor != 3 {
+		t.Fatalf("anchor,cursor = %d,%d after two Shift+Left from 5, want 5,3", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	}
+
+	start := min(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	end := max(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	if start != 3 || end != 5 {
+		t.Errorf("selection range = [%d,%d], want [3,5] regardless of having been built leftward", start, end)
+	}
+}
+
+// TestLogAuditTimelineEnterCommitsSelectionToTimeField pins the actual
+// product behavior: committing writes "between <from> and <to>" into
+// the Time field using filterexpr.ParseMtime's own accepted grammar,
+// and moves focus there — see commitLogAuditTimelineSelection's own
+// doc comment on why focus has to move *before* SetText, not after
+// (lifting the freeze-while-focused guard before the resulting
+// re-bucket needs to run).
+func TestLogAuditTimelineEnterCommitsSelectionToTimeField(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	r.app.SetFocus(r.logAuditTimelineView)
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
+
+	wantFrom, _ := logAuditBucketTimeRange(r.logAuditTimelineMinT, r.logAuditTimelineMaxT, r.logAuditTimelineBucketCount, 1)
+	_, wantTo := logAuditBucketTimeRange(r.logAuditTimelineMinT, r.logAuditTimelineMaxT, r.logAuditTimelineBucketCount, 2)
+
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+
+	if !r.logAuditTimeField.HasFocus() {
+		t.Error("committing should move focus to the Time field")
+	}
+	if r.logAuditTimelineFocused {
+		t.Error("committing should clear logAuditTimelineFocused (focus moved away)")
+	}
+	got := r.logAuditTimeField.GetText()
+	wantPrefix := "between " + wantFrom.Truncate(time.Second).Format("2006-01-02 15:04:05")
+	if !strings.HasPrefix(got, wantPrefix) {
+		t.Errorf("Time field = %q, want it to start with %q", got, wantPrefix)
+	}
+	if !strings.Contains(got, wantTo.Format("2006-01-02 15:04")) {
+		t.Errorf("Time field = %q, want it to mention the selection's own end %v", got, wantTo)
+	}
+
+	if _, err := filterexpr.ParseMtime(got, time.Now()); err != nil {
+		t.Errorf("committed text %q does not parse as a valid mtime expression: %v", got, err)
+	}
+
+	// Per the user's own explicit report: having to press Enter a
+	// second time after an already-deliberate selection was pure
+	// friction. The commit above narrowed the filter to just buckets
+	// 1-2 out of the fixture's 20 one-second-apart entries — the table
+	// must already reflect that right now, not only after some further
+	// Enter.
+	if got := r.logAuditViewerTable.GetRowCount(); got >= 21 {
+		t.Errorf("row count = %d right after committing, want it already narrowed (fixture has 20 entries + header = 21 unfiltered)", got)
+	}
+}
+
+func TestLogAuditTimelineSpaceAlsoCommits(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	r.app.SetFocus(r.logAuditTimelineView)
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+	if r.logAuditTimeField.GetText() == "" {
+		t.Error("Space should commit the current (single-bucket) selection, same as Enter")
+	}
+}
+
+func TestLogAuditTimelineTabOrderBetweenLevelFieldAndTable(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+
+	r.app.SetFocus(r.logAuditLevelField)
+	r.logAuditLevelField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
+	if !r.logAuditTimelineView.HasFocus() {
+		t.Error("Tab from the Level field should land on the Timeline, not the table directly")
+	}
+
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+	if !r.logAuditViewerTable.HasFocus() {
+		t.Error("Tab from the Timeline should land on the table")
+	}
+
+	r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+	if !r.logAuditTimelineView.HasFocus() {
+		t.Error("Backtab from the table should land back on the Timeline")
+	}
+
+	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+	if !r.logAuditLevelField.HasFocus() {
+		t.Error("Backtab from the Timeline should land on the Level field")
+	}
+}
+
+func TestLogAuditTimelineMouseClickSelectsSingleBucket(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	viewX, viewY, _, _ := r.logAuditTimelineView.GetInnerRect()
+	clickCol := viewX + r.logAuditTimelineBarCol + 3
+
+	r.captureLogAuditTimelineMouse(tview.MouseLeftDown, tcell.NewEventMouse(clickCol, viewY, tcell.Button1, 0))
+	if !r.logAuditTimelineView.HasFocus() {
+		t.Error("clicking a bucket should give the timeline keyboard focus")
+	}
+	if r.logAuditTimelineAnchor != 3 || r.logAuditTimelineCursor != 3 {
+		t.Errorf("anchor,cursor = %d,%d after clicking bucket 3, want 3,3", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	}
+
+	r.captureLogAuditTimelineMouse(tview.MouseLeftUp, tcell.NewEventMouse(clickCol, viewY, tcell.ButtonNone, 0))
+	if r.logAuditTimelineDragging {
+		t.Error("MouseLeftUp should end the drag")
+	}
+	if r.logAuditTimeField.GetText() == "" {
+		t.Error("releasing on the same bucket should still commit a (single-bucket) selection")
+	}
+}
+
+// TestLogAuditTimelineMouseDragSelectsRangeRegardlessOfDirection pins
+// the user's own explicit requirement: dragging leftward must select
+// exactly the same way dragging rightward does — always from the
+// leftmost to the rightmost bucket actually dragged over, independent
+// of which edge the drag started from.
+func TestLogAuditTimelineMouseDragSelectsRangeRegardlessOfDirection(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	viewX, viewY, _, _ := r.logAuditTimelineView.GetInnerRect()
+	col := func(bucket int) int { return viewX + r.logAuditTimelineBarCol + bucket }
+
+	r.captureLogAuditTimelineMouse(tview.MouseLeftDown, tcell.NewEventMouse(col(6), viewY, tcell.Button1, 0))
+	r.captureLogAuditTimelineMouse(tview.MouseMove, tcell.NewEventMouse(col(2), viewY, tcell.Button1, 0))
+	if !r.logAuditTimelineDragging {
+		t.Fatal("setup: should still be dragging")
+	}
+	start := min(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	end := max(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	if start != 2 || end != 6 {
+		t.Fatalf("mid-drag selection = [%d,%d], want [2,6] (dragged from 6 to 2)", start, end)
+	}
+
+	r.captureLogAuditTimelineMouse(tview.MouseLeftUp, tcell.NewEventMouse(col(2), viewY, tcell.ButtonNone, 0))
+	if r.logAuditTimelineDragging {
+		t.Error("MouseLeftUp should end the drag")
+	}
+	if r.logAuditTimeField.GetText() == "" {
+		t.Error("releasing after a leftward drag should still commit a selection")
+	}
+}
+
+func TestLogAuditTimelineMouseMoveStrayReleaseStillCommits(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	viewX, viewY, _, _ := r.logAuditTimelineView.GetInnerRect()
+	col := func(bucket int) int { return viewX + r.logAuditTimelineBarCol + bucket }
+
+	r.captureLogAuditTimelineMouse(tview.MouseLeftDown, tcell.NewEventMouse(col(1), viewY, tcell.Button1, 0))
+	r.captureLogAuditTimelineMouse(tview.MouseMove, tcell.NewEventMouse(col(4), viewY, tcell.ButtonNone, 0))
+
+	if r.logAuditTimelineDragging {
+		t.Error("a MouseMove with no button held should end the drag, same as a real MouseLeftUp")
+	}
+	if r.logAuditTimeField.GetText() == "" {
+		t.Error("a stray button-released move should still commit, not silently drop the selection")
+	}
+}
+
+// TestLogAuditTimelineFreezesWhileFocused pins the follow-mode
+// decision: renderLogAuditTimeline must not re-bucket (and so must not
+// change what's displayed) while the timeline holds focus — a
+// follow-mode tick is the only realistic way this function gets called
+// in that state (see its own doc comment) — even though the table
+// (not exercised here) keeps updating independently via the rest of
+// renderLogAuditViewer.
+func TestLogAuditTimelineFreezesWhileFocused(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	before := r.logAuditTimelineView.GetText(true)
+	beforeCount := r.logAuditTimelineBucketCount
+
+	r.app.SetFocus(r.logAuditTimelineView)
+
+	moreEntries := append([]logview.Entry{}, r.logAuditAllEntries...)
+	moreEntries = append(moreEntries, logview.Entry{Time: r.logAuditTimelineMaxT.Add(time.Hour), Message: "later"})
+	r.renderLogAuditTimeline(moreEntries)
+
+	if got := r.logAuditTimelineView.GetText(true); got != before {
+		t.Errorf("timeline text changed while focused, want it frozen: before=%q after=%q", before, got)
+	}
+	if r.logAuditTimelineBucketCount != beforeCount {
+		t.Errorf("bucketCount changed while focused: %d -> %d, want unchanged (frozen)", beforeCount, r.logAuditTimelineBucketCount)
+	}
+
+	r.app.SetFocus(r.logAuditViewerTable)
+	r.renderLogAuditTimeline(moreEntries)
+	if got := r.logAuditTimelineView.GetText(true); got == before {
+		t.Error("after focus leaves, the timeline should resume reflecting new entries, not stay frozen forever")
 	}
 }
