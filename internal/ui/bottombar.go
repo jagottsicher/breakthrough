@@ -1474,7 +1474,28 @@ func (r *Root) renameRow(row int) {
 // default handling ever saw it, silently defeating both that and the
 // muscle memory this line is explicitly meant to feel like bash — hence
 // checking this first and no-op'ing instead.
+//
+// !r.viewingShells is the second line of defense against the same bug
+// class ui.TerminalReservedKey exists to fix at its one real call site
+// (cmd/breakthrough's own SetInputCapture, which already falls through
+// before ever reaching a Shortcut method that checks this): a Terminal
+// view is neither an overlay (activePage stays "") nor bashLine, so
+// without this, Delete reaching a live Terminal still opened the Trash
+// confirm instead — a real, reported bug — for any caller that reaches
+// a Shortcut method some other way than that one switch.
 func (r *Root) acceptsGlobalShortcut() bool {
+	return r.activePage == "" && !r.bashLine.HasFocus() && !r.viewingShells
+}
+
+// acceptsGlobalShortcutEvenInATerminal is acceptsGlobalShortcut minus
+// its own !viewingShells exclusion just above — OpenTerminalSwitcherShortcut's
+// own gate (terminalswitcher.go), the one caller that must keep firing
+// from inside an open Terminal: reaching the switcher from there is
+// exactly what Alt+T's own "regardless of focus" promise means (see
+// its own doc comment), not a case this file's usual "a Terminal view
+// isn't a real overlay or bashLine, so it needs its own exclusion"
+// reasoning applies to.
+func (r *Root) acceptsGlobalShortcutEvenInATerminal() bool {
 	return r.activePage == "" && !r.bashLine.HasFocus()
 }
 

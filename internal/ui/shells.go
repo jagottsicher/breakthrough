@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -153,6 +154,40 @@ func (r *Root) ExitTerminalViewShortcut() bool {
 	r.closeAllOverlays()
 	r.viewFiles()
 	return true
+}
+
+// TerminalReservedKey reports whether event is one of the small, fixed
+// set of keys that still reach cmd/breakthrough's own global dispatch
+// even while a Terminal has focus — Ctrl+Q (quit), Ctrl+C (forwarded
+// to a live session, or treated as "leave" once it has exited — see
+// termtabview.go's own isTermLeaveKey), Ctrl+\ (leave,
+// ExitTerminalViewShortcut above), and Alt+T (toggle open/leave,
+// OpenTerminalSwitcherShortcut/ExitTerminalViewShortcut).
+//
+// cmd/breakthrough's own SetInputCapture is the one caller: everything
+// NOT in this list must fall straight through to the Terminal's own
+// InputHandler unconsumed while ViewingTerminal() is true, rather than
+// a global shortcut silently stealing it the way Ctrl+C once did (a
+// real, live-diagnosed bug, fixed by name there) and Delete did too —
+// a real, user-reported one, where pressing it opened the Trash
+// confirm instead of reaching the remote side, with a live file at
+// risk if the user didn't notice in time. Both were fixed by adding a
+// guard to that one case; this function exists so the next key added
+// to cmd/breakthrough's switch (Ctrl+T, Ctrl+Tab, Ctrl+Shift+Tab,
+// Ctrl+/Alt+digit — none of which had any ViewingTerminal guard at all
+// before this, each silently stealing its own keystroke too) is safe
+// by default instead of broken by default: a single deny-by-default
+// check against this whitelist, not one more per-case guard someone
+// has to remember to add.
+func TerminalReservedKey(event *tcell.EventKey) bool {
+	switch event.Key() {
+	case tcell.KeyCtrlQ, tcell.KeyCtrlC, tcell.KeyCtrlBackslash:
+		return true
+	case tcell.KeyRune:
+		return event.Modifiers()&tcell.ModAlt != 0 && event.Rune() == 't'
+	default:
+		return false
+	}
 }
 
 // openNewTerminalDialog opens the existing "Add new ssh connection"
@@ -303,10 +338,21 @@ func (r *Root) removeShell(tab *shellTab) {
 // terminal strip, since this is the one place r.activeShell actually
 // moves (removeShell's own index-only-adjustment branch is the lone
 // exception, and calls refreshTerminalStrips itself).
+//
+// cancelChord first: a chord started in the panel (e.g. a lone "g",
+// waiting on its second key) can still be pending if whatever got you
+// here was a mouse click rather than a key — HandlePlainKey resolves a
+// pending chord before any focus check of its own, so without this,
+// the first real keystroke typed into the Terminal just opened would
+// be swallowed as that chord's own second letter instead of reaching
+// it. Every path into a Terminal goes through here (openNewShellEmbedded,
+// the switcher's label click/digit jump, the strip's own click), so
+// one call here closes the gap regardless of how it was reached.
 func (r *Root) switchToShell(i int) {
 	if i < 0 || i >= len(r.shells) {
 		return
 	}
+	r.cancelChord()
 	r.activeShell = i
 	r.remountShellView()
 	r.app.SetFocus(r.shells[i].view)

@@ -596,3 +596,79 @@ func TestGTChordOpensTerminalSwitcher(t *testing.T) {
 		t.Errorf("activePage = %q, want %q", r.activePage, terminalSwitcherPage)
 	}
 }
+
+// TestTerminalReservedKey pins the whitelist cmd/breakthrough's own
+// SetInputCapture checks before ever reaching its switch while a
+// Terminal has focus — see TerminalReservedKey's own doc comment for
+// why this exists: Delete, Ctrl+T, Ctrl+Tab, Ctrl+Shift+Tab, and
+// Ctrl+/Alt+digit each silently stole their own keystroke from a live
+// Terminal before this, with no guard of their own catching it.
+func TestTerminalReservedKey(t *testing.T) {
+	cases := []struct {
+		name  string
+		event *tcell.EventKey
+		want  bool
+	}{
+		{"Ctrl+Q", tcell.NewEventKey(tcell.KeyCtrlQ, 0, tcell.ModCtrl), true},
+		{"Ctrl+C", tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModCtrl), true},
+		{"Ctrl+\\", tcell.NewEventKey(tcell.KeyCtrlBackslash, 0, tcell.ModCtrl), true},
+		{"Alt+T", tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModAlt), true},
+		{"plain t (no Alt)", tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone), false},
+		{"Alt+s (not t)", tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModAlt), false},
+		{"Delete", tcell.NewEventKey(tcell.KeyDelete, 0, tcell.ModNone), false},
+		{"Ctrl+T", tcell.NewEventKey(tcell.KeyCtrlT, 0, tcell.ModCtrl), false},
+		{"Ctrl+Tab", tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModCtrl), false},
+		{"Ctrl+Shift+Tab", tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModCtrl), false},
+		{"plain Tab", tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), false},
+		{"Escape", tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), false},
+		{"Ctrl+1 (digit jump)", tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModCtrl), false},
+		{"Alt+1 (digit jump)", tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModAlt), false},
+	}
+	for _, c := range cases {
+		if got := TerminalReservedKey(c.event); got != c.want {
+			t.Errorf("%s: TerminalReservedKey() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestAcceptsGlobalShortcutFalseWhileViewingTerminal is the second
+// line of defense's own regression test — see acceptsGlobalShortcut's
+// own doc comment on why this matters for any caller that reaches a
+// Shortcut method some other way than cmd/breakthrough's switch.
+func TestAcceptsGlobalShortcutFalseWhileViewingTerminal(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	if !r.AcceptsGlobalShortcut() {
+		t.Fatal("setup: AcceptsGlobalShortcut() = false before any Terminal is open")
+	}
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	if r.AcceptsGlobalShortcut() {
+		t.Error("AcceptsGlobalShortcut() = true while viewing a Terminal, want false")
+	}
+}
+
+// TestSwitchToShellCancelsAPendingChord reproduces the gap the advisor
+// flagged: HandlePlainKey resolves a pending chord before any focus
+// check of its own, so a chord started in the panel (e.g. a lone "g")
+// and left pending while a *mouse* click (not a key) switches into a
+// Terminal would otherwise still be sitting there — the first real
+// keystroke meant for the remote side would be swallowed as the
+// chord's own second letter instead. switchToShell is the one place
+// every path into a Terminal goes through, so cancelling it there
+// closes the gap regardless of how a Terminal was reached.
+func TestSwitchToShellCancelsAPendingChord(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.pendingChord = 'g'
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	if r.pendingChord != 0 {
+		t.Errorf("pendingChord = %q after switching to a Terminal, want cleared", string(r.pendingChord))
+	}
+}
