@@ -96,8 +96,12 @@ builds:
 archives:
   - id: breakthrough
     formats: ["tar.gz"]
+    # {{ if .Arm }}v{{ .Arm }}{{ end }}: without it, goarm 6 and 7 both
+    # resolve to the same "_arm.tar.gz" name and GoReleaser refuses the
+    # second one as a duplicate archive — a real release failure (v0.87.19),
+    # not a hypothetical one, once 32-bit ARM became a build target.
     name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}
     files:
       - LICENSE
       - NOTICE
@@ -124,8 +128,9 @@ checksum:
 nfpms:
   - id: breakthrough
     package_name: breakthrough
+    # Same goarm 6/7 collision as the archives' own name_template above.
     file_name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}
     maintainer: jagottsicher <jagottsicher@gmx.net>
     homepage: https://github.com/jagottsicher/breakthrough
     description: >-
