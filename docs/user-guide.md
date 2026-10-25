@@ -2583,14 +2583,27 @@ shows running counts (events/files/skipped/errors/warnings).
 A mini-timeline above the table shows the matching entries' own
 density over time — one block per time bucket, colored red if that
 bucket contains an error, the app's own warning color if it contains a
-warning but nothing worse.
+warning but nothing worse. It's its own Tab stop, between the Level
+field and the list, and is interactive: click a bucket, or drag across
+several (either direction), to select a time range; `Tab` onto it and
+use `Left`/`Right` to move one bucket at a time, `Shift+Left`/`Right`
+to extend the selection, and `Enter`/`Space` (or simply releasing the
+mouse) to apply it — writes `between <start> and <end>` straight into
+the Time field above, the exact same expression you could type by
+hand. Applying a selection re-buckets the timeline over just that
+narrower range (a drill-down); clear the Time field to go back to
+seeing the whole span. While follow mode is re-reading in the
+background, the timeline's own display freezes for as long as it has
+keyboard focus or a drag is in progress, so an in-progress selection
+never has the buckets shift out from under it — the list keeps
+updating live regardless.
 
 | Key | Action |
 |---|---|
 | Filter field | Case-insensitive substring over Source and Message, narrowing the list live and highlighting every match |
 | Time field | Same `before`/`after`/`between ... and ...`/relative expressions the Action Log's own Time field already accepts |
 | Level field (`>=`) | A *minimum* severity ("warn" shows WARN and everything worse — ERROR, FATAL — not just exact matches); an entry with no recognized level never passes this filter, even "trace" |
-| `Tab` / `Shift+Tab` | Move between Filter, Time, Level, and the list |
+| `Tab` / `Shift+Tab` | Move between Filter, Time, Level, the timeline, and the list |
 | `e` | Jump to the next error (wraps around) |
 | `w` | Jump to the next warning (wraps around) |
 | `Enter` | Show this entry's full text, with the current filter still highlighted, plus a Raw section with the original, unparsed line — shown only when it actually differs from the extracted message |

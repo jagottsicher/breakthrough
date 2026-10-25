@@ -96,6 +96,28 @@ func logAuditTimelineBuckets(entries []logview.Entry, bucketCount int) (counts [
 	return counts, severity, minT, maxT, true
 }
 
+// logAuditBucketTimeRange returns the half-open-except-the-last-bucket
+// time span bucket i covers, out of bucketCount equal-width buckets
+// spanning [minT, maxT] — the same division logAuditTimelineBuckets
+// itself uses to assign entries to buckets, kept here as its own pure,
+// screen-free function so the interactive timeline's mouse/keyboard
+// selection can turn a bucket index back into a real time range without
+// duplicating that arithmetic. The last bucket's own "to" is maxT
+// exactly, not the arithmetically rounded upper edge
+// (minT + (i+1)*span/bucketCount) — logAuditTimelineBuckets clamps an
+// entry at exactly maxT into bucket bucketCount-1 (see its own idx
+// clamp), so this must agree or a selection of the last bucket would
+// silently exclude the one entry that defines its own upper edge.
+func logAuditBucketTimeRange(minT, maxT time.Time, bucketCount, i int) (from, to time.Time) {
+	span := maxT.Sub(minT)
+	from = minT.Add(time.Duration(float64(i) / float64(bucketCount) * float64(span)))
+	if i == bucketCount-1 {
+		return from, maxT
+	}
+	to = minT.Add(time.Duration(float64(i+1) / float64(bucketCount) * float64(span)))
+	return from, to
+}
+
 // logAuditTimelineLabel renders t for the timeline's own start/end
 // labels — just the time ("15:04:05") when both endpoints fall on the
 // same calendar day (the common case: following one service's own
@@ -122,6 +144,28 @@ func logAuditTimelineLabel(t time.Time, sameDay bool) string {
 // leaves the line blank rather than drawing an empty, misleadingly
 // flat bar).
 func logAuditTimelineText(entries []logview.Entry, width int, theme config.ResolvedTheme) string {
+	counts, severity, startLabel, endLabel, _, _, _, _, ok := logAuditTimelineLayout(entries, width)
+	if !ok {
+		return ""
+	}
+	return logAuditTimelineBuildText(counts, severity, startLabel, endLabel, theme, -1, -1)
+}
+
+// logAuditTimelineLayout is the entries-scanning half of what used to
+// be one function: finding the real time span, picking a label format,
+// and bucketing — everything up to (but not including) building the
+// final colored string. Split out so the interactive timeline can
+// re-render a selection change against the SAME already-computed
+// counts/severity (via logAuditTimelineBuildText below) without
+// re-scanning entries — load-bearing for renderLogAuditTimeline's own
+// freeze-while-focused behavior (root.go's own doc comment on
+// logAuditTimelineFocused): the entries scan is what gets frozen, not
+// the text-building step, so a moved cursor still repaints instantly.
+// barCol is the bar's own first column relative to this view's inner
+// rect (len(startLabel) plus the one separating space) — persisted by
+// the caller for mouse hit-testing, never independently recomputed
+// from the final string (see that caller's own doc comment on why).
+func logAuditTimelineLayout(entries []logview.Entry, width int) (counts []int, severity []logview.Level, startLabel, endLabel string, barCol, bucketCount int, minT, maxT time.Time, ok bool) {
 	if width < 10 {
 		width = 10
 	}
@@ -134,13 +178,13 @@ func logAuditTimelineText(entries []logview.Entry, width int, theme config.Resol
 	// itself is cheap (one pass over entries), and the label width has
 	// to be known before the second, real call below can know how many
 	// buckets actually fit in what's left of width.
-	_, _, minT, maxT, ok := logAuditTimelineBuckets(entries, 1)
+	_, _, minT, maxT, ok = logAuditTimelineBuckets(entries, 1)
 	if !ok {
-		return ""
+		return nil, nil, "", "", 0, 0, time.Time{}, time.Time{}, false
 	}
 	sameDay := minT.Year() == maxT.Year() && minT.YearDay() == maxT.YearDay()
-	startLabel := logAuditTimelineLabel(minT, sameDay)
-	endLabel := logAuditTimelineLabel(maxT, sameDay)
+	startLabel = logAuditTimelineLabel(minT, sameDay)
+	endLabel = logAuditTimelineLabel(maxT, sameDay)
 
 	barWidth := width - len(startLabel) - len(endLabel) - 2 // 2 separating spaces
 	if barWidth < 10 {
@@ -152,11 +196,38 @@ func logAuditTimelineText(entries []logview.Entry, width int, theme config.Resol
 		barWidth = 10
 	}
 
-	counts, severity, _, _, ok := logAuditTimelineBuckets(entries, barWidth)
+	counts, severity, minT, maxT, ok = logAuditTimelineBuckets(entries, barWidth)
 	if !ok {
-		return ""
+		return nil, nil, "", "", 0, 0, time.Time{}, time.Time{}, false
 	}
 
+	maxCount := 0
+	for _, c := range counts {
+		if c > maxCount {
+			maxCount = c
+		}
+	}
+	if maxCount == 0 {
+		return nil, nil, "", "", 0, 0, time.Time{}, time.Time{}, false
+	}
+
+	return counts, severity, startLabel, endLabel, len(startLabel) + 1, len(counts), minT, maxT, true
+}
+
+// logAuditTimelineBuildText is the pure text-building half (see
+// logAuditTimelineLayout's own doc comment on the split): turns
+// already-computed buckets into the final colored string, optionally
+// highlighting an inclusive selStart..selEnd bucket range (either
+// negative means "no selection"). The highlight composes with each
+// bucket's own existing severity color via the "::r" reverse-video
+// attribute — already an established tag idiom in this codebase (see
+// gitbreachdiffsplit.go's own "[%s::b]") — rather than replacing the
+// foreground color outright, so a selected Error/Fatal bucket doesn't
+// lose the very severity signal the timeline exists to show.
+func logAuditTimelineBuildText(counts []int, severity []logview.Level, startLabel, endLabel string, theme config.ResolvedTheme, selStart, selEnd int) string {
+	if len(counts) == 0 {
+		return ""
+	}
 	maxCount := 0
 	for _, c := range counts {
 		if c > maxCount {
@@ -186,7 +257,20 @@ func logAuditTimelineText(entries []logview.Entry, width int, theme config.Resol
 		case c > 0:
 			color = theme.Text
 		}
-		fmt.Fprintf(&b, "[%s]%c", colorTag(color), timelineBlocks[level])
+		// Always an explicit attrs field (never a bare "[color]") —
+		// tview's own tag syntax treats an omitted field as "leave it
+		// unchanged from whatever came before", not "reset to none"
+		// (confirmed live: a real, reported bug where selecting any
+		// bucket made every bucket after it in the string look
+		// selected too, since nothing ever explicitly cleared the "::r"
+		// one bucket back had set). "::-" is the explicit "no special
+		// attribute" state, matching this file's own "[-:-:-]" reset
+		// convention used around the start/end labels.
+		attr := "::-"
+		if selStart >= 0 && i >= selStart && i <= selEnd {
+			attr = "::r"
+		}
+		fmt.Fprintf(&b, "[%s%s]%c", colorTag(color), attr, timelineBlocks[level])
 	}
 	fmt.Fprintf(&b, "[%s] %s[-:-:-]", colorTag(theme.MutedTextColor), endLabel)
 	return b.String()
@@ -222,6 +306,22 @@ const logAuditTimelineUnlaidOutWidth = 15
 // past logAuditTimelineUnlaidOutWidth — see its own doc comment), else
 // the whole screen's width as a reasonable first guess.
 func (r *Root) renderLogAuditTimeline(entries []logview.Entry) {
+	if r.logAuditTimelineFocused || r.logAuditTimelineDragging {
+		// Frozen. The only way this runs while the timeline itself
+		// holds focus or a mouse drag is in progress is a follow-mode
+		// tick (renderLogAuditViewer's own caller) — never a filter
+		// field's ChangedFunc, since typing into a field requires that
+		// field, not the timeline, to have focus. Re-bucketing against
+		// freshly tailed entries here would shift the buckets out from
+		// under an in-progress selection; the table (renderLogAuditViewer's
+		// other half) keeps updating live regardless, only this one
+		// line visually freezes until focus leaves or the drag ends —
+		// see commitLogAuditTimelineSelection's own doc comment on why
+		// a commit itself is never blocked by this (it moves focus off
+		// the timeline first).
+		return
+	}
+
 	_, _, width, _ := r.logAuditTimelineView.GetRect()
 	if width <= logAuditTimelineUnlaidOutWidth {
 		if _, _, screenWidth, _ := r.GetRect(); screenWidth > 4 {
@@ -230,7 +330,52 @@ func (r *Root) renderLogAuditTimeline(entries []logview.Entry) {
 			width = 60
 		}
 	}
-	r.logAuditTimelineView.SetText(logAuditTimelineText(entries, width, r.theme))
+
+	counts, severity, startLabel, endLabel, barCol, bucketCount, minT, maxT, ok := logAuditTimelineLayout(entries, width)
+	if !ok {
+		r.logAuditTimelineCounts = nil
+		r.logAuditTimelineSeverity = nil
+		r.logAuditTimelineBucketCount = 0
+		r.logAuditTimelineView.SetText("")
+		return
+	}
+
+	if bucketCount != r.logAuditTimelineBucketCount || !minT.Equal(r.logAuditTimelineMinT) || !maxT.Equal(r.logAuditTimelineMaxT) {
+		// Geometry changed since the last render (new filter, resize,
+		// or simply the first render ever) — any previously selected
+		// bucket index may no longer even exist at this size. Reset
+		// rather than clamp: a clamped-but-silently-different selection
+		// after a commit would be harder to make sense of than no
+		// selection at all.
+		r.logAuditTimelineAnchor = 0
+		r.logAuditTimelineCursor = 0
+	}
+	r.logAuditTimelineCounts = counts
+	r.logAuditTimelineSeverity = severity
+	r.logAuditTimelineStartLabel = startLabel
+	r.logAuditTimelineEndLabel = endLabel
+	r.logAuditTimelineBarCol = barCol
+	r.logAuditTimelineBucketCount = bucketCount
+	r.logAuditTimelineMinT = minT
+	r.logAuditTimelineMaxT = maxT
+
+	r.repaintLogAuditTimeline()
+}
+
+// repaintLogAuditTimeline redraws the timeline from the buckets
+// renderLogAuditTimeline last actually computed, plus whatever the
+// current selection is — no entries re-scan, safe (and meant) to call
+// on every keyboard/mouse selection change, including while frozen
+// (see renderLogAuditTimeline's own doc comment): moving the cursor
+// must never itself be what silently un-freezes a frozen timeline.
+func (r *Root) repaintLogAuditTimeline() {
+	selStart, selEnd := -1, -1
+	if r.logAuditTimelineFocused || r.logAuditTimelineDragging {
+		selStart = min(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+		selEnd = max(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	}
+	text := logAuditTimelineBuildText(r.logAuditTimelineCounts, r.logAuditTimelineSeverity, r.logAuditTimelineStartLabel, r.logAuditTimelineEndLabel, r.theme, selStart, selEnd)
+	r.logAuditTimelineView.SetText(text)
 }
 
 // logAuditLevelCount/logAuditSourceCount are logAuditCountsByLevel/
