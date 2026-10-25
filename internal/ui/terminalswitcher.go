@@ -137,15 +137,19 @@ func (r *Root) openTerminalSwitcher(selected int) {
 
 	row := 0
 	for _, tab := range r.shells {
-		r.renderTerminalSwitcherOpenRow(row, tab)
-		r.terminalSwitcherOpenRows[row] = tab
-		row++
+		var hist remotefs.HistoryEntry
+		known := false
 		for hi, h := range history {
 			if !matchedHist[hi] && tab.conn.Equal(h.Connection) {
 				matchedHist[hi] = true
+				hist = h
+				known = true
 				break
 			}
 		}
+		r.renderTerminalSwitcherOpenRow(row, tab, hist, known)
+		r.terminalSwitcherOpenRows[row] = tab
+		row++
 	}
 	for hi, h := range history {
 		if matchedHist[hi] {
@@ -200,12 +204,18 @@ func (r *Root) openTerminalSwitcher(selected int) {
 // shape — the label switches to it, the Action column disconnects it
 // (the identical action "✕" also performs — see this file's own
 // package doc comment on why neither needs a separate meaning here).
-func (r *Root) renderTerminalSwitcherOpenRow(row int, tab *shellTab) {
+// hist/known are the matching shared-history entry, if openTerminalSwitcher
+// found one — tab.conn might not have one at all (e.g. SaveConnection
+// failed to write when this Terminal opened), in which case known is
+// false and this renders the same as a genuinely never-tried
+// connection (see connectionHistoryColor's own doc comment).
+func (r *Root) renderTerminalSwitcherOpenRow(row int, tab *shellTab, hist remotefs.HistoryEntry, known bool) {
 	current := tab == r.shells[r.activeShell] && !tab.exited
+	color := connectionHistoryColor(r.theme, current, known && hist.LastFailed, !known || hist.Untested)
 	label := terminalSwitcherRowLabel(row, tab.label(), current, r.theme.PlaceholderText)
 	r.terminalSwitcher.SetCell(row, terminalSwitcherColLabel,
 		tview.NewTableCell(label).
-			SetTextColor(r.theme.Text).
+			SetTextColor(color).
 			SetSelectable(true).
 			SetClickedFunc(r.clickTerminalSwitcherCell(row, terminalSwitcherColLabel)))
 	r.terminalSwitcher.SetCell(row, terminalSwitcherColAction,
@@ -225,13 +235,12 @@ func (r *Root) renderTerminalSwitcherOpenRow(row int, tab *shellTab) {
 // connects straight to it (no dialog, the connection is already fully
 // known); the Action column edits it instead of disconnecting (there's
 // nothing live to disconnect); "✕" removes it from history outright.
-// LastFailed colors the row the identical red renderSSHShellMenu's own
-// history rows already use for the same reason.
+// Colored the identical red/green/white connectionHistoryColor already
+// gives the "@" connections menu's own history rows — never isActive
+// here, since a history-only row has no open Terminal to be the
+// currently active one.
 func (r *Root) renderTerminalSwitcherHistoryRow(row int, h remotefs.HistoryEntry) {
-	color := r.theme.Text
-	if h.LastFailed {
-		color = r.theme.CriticalText
-	}
+	color := connectionHistoryColor(r.theme, false, h.LastFailed, h.Untested)
 	label := fmt.Sprintf("%2d  %s%s", row+1, h.Label(), shellFlagsSuffix(h.Connection))
 	r.terminalSwitcher.SetCell(row, terminalSwitcherColLabel,
 		tview.NewTableCell(label).
