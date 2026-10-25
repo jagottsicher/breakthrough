@@ -940,7 +940,7 @@ type Root struct {
 	shellStatusPanel *Panel
 
 	// The Terminal switcher overlay (see terminalswitcher.go) — opened
-	// by Alt+S or the plain "T" key, modeled directly on
+	// by Alt+T or the plain "T" key, modeled directly on
 	// tabSwitcher/tabSwitcherPage's own pattern just below, anchored
 	// under the terminal strip (terminalstrip.go) rather than centered
 	// — the user's own explicit request, after this first shipped as a
@@ -2887,7 +2887,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.sshShellMenuTitleBar = r.newSSHShellMenuTitleBar()
 	r.sshShellMenuLayout = r.newSSHShellMenuLayout()
 
-	// The Terminal switcher (Alt+S/"T" — see terminalswitcher.go), the
+	// The Terminal switcher (Alt+T/"T" — see terminalswitcher.go), the
 	// same two-pieces shape tabSwitcher's own construction below uses.
 	r.activeShell = -1
 	r.terminalSwitcher = r.newTerminalSwitcher()
