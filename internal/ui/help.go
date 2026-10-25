@@ -1373,15 +1373,11 @@ var helpText = strings.TrimLeft(`
   gT                 The same action again, reachable through the "g"
                      chord (see Chords above) — a second, mnemonic
                      path to this one switcher, not a separate one.
-  Alt+T              Toggles, and reaches regardless of where the
-                     keyboard focus currently is: opens the same
-                     switcher everywhere else, but leaves straight
-                     back to the panel instead once a Terminal is
-                     already on screen — one key out, a deliberate
-                     trade against jumping straight from one open
-                     Terminal to another: that now takes leaving first
-                     (Alt+T), then opening the switcher again (Alt+T,
-                     "T", or "gT") to pick the other one.
+  Alt+T              The same switcher, but reaches it regardless of
+                     where the keyboard focus currently is — including
+                     from inside an open Terminal, to switch straight
+                     to a different one or reach "Go to file view"
+                     there — the only one of the three that does.
 
   The switcher looks and works like the Tab switcher above, with one
   more column: every row — a currently open Terminal and every other
@@ -1446,11 +1442,11 @@ var helpText = strings.TrimLeft(`
 
   While a Terminal has focus, nearly every keystroke goes straight to
   the remote side, exactly as if you'd ssh'd in from a bare terminal —
-  with two deliberate exceptions: Alt+T (above, leaving instead of
-  opening the switcher once a Terminal is already on screen — see
-  its own entry above) and Ctrl+\, reserved exclusively while a
-  Terminal is on screen as a guaranteed way back out even when
-  neither Alt+T nor the switcher's own Escape reaches the app (a
+  with two deliberate exceptions: Alt+T (above, always opening the
+  switcher instead, even from inside the Terminal itself) and Ctrl+\,
+  reserved exclusively while a Terminal is on screen as the one
+  dedicated key to leave it outright — a guaranteed way back out even
+  when neither Alt+T nor the switcher's own Escape reaches the app (a
   real report: some keyboards/terminal apps never deliver Option+T,
   Alt+T's own equivalent there, at all — the identical problem
   Option+S had before Alt+S was renamed to Alt+T). The same classic

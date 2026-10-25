@@ -2472,7 +2472,13 @@ func TestRefreshButtonBarRestoresFileBarAfterLeavingShells(t *testing.T) {
 // actually runs ExitTerminalViewShortcut when clicked — not just that
 // its label says "Leave" (TestRefreshButtonBarSwitchesToTerminalBarWhileViewingShells
 // already covers the text).
-func TestBuildTerminalButtonBarAltTSpanLeaves(t *testing.T) {
+// TestBuildTerminalButtonBarAltTSpanOpensTheSwitcher pins that the
+// Alt+T button actually opens the switcher when clicked — even from
+// inside an open Terminal, per the user's own explicit request that
+// Alt+T always reach the switcher there, never leave outright (that's
+// Ctrl+\'s own job — see TestBuildTerminalButtonBarCtrlBackslashSpanLeaves
+// just below).
+func TestBuildTerminalButtonBarAltTSpanOpensTheSwitcher(t *testing.T) {
 	r := newTestRootForShells(t)
 	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
 
@@ -2485,8 +2491,31 @@ func TestBuildTerminalButtonBarAltTSpanLeaves(t *testing.T) {
 	}
 	spans[0].run(r)
 
+	if r.activePage != terminalSwitcherPage {
+		t.Errorf("activePage after running the Alt+T button's own span = %q, want %q", r.activePage, terminalSwitcherPage)
+	}
+	if !r.viewingShells {
+		t.Error("viewingShells = false after opening the switcher from inside a Terminal, want it to still be viewing")
+	}
+}
+
+// TestBuildTerminalButtonBarCtrlBackslashSpanLeaves pins that Ctrl+\
+// remains the one button that actually leaves outright.
+func TestBuildTerminalButtonBarCtrlBackslashSpanLeaves(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	_, spans := r.buildTerminalButtonBar()
+	if len(spans) < 2 || spans[1].run == nil {
+		t.Fatal("setup: no runnable span for the Ctrl+\\ button")
+	}
+	spans[1].run(r)
+
 	if r.viewingShells {
-		t.Error("viewingShells still true after running the Alt+T button's own span, want it to have left")
+		t.Error("viewingShells still true after running the Ctrl+\\ button's own span, want it to have left")
 	}
 }
 

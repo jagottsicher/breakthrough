@@ -286,17 +286,16 @@ func (r *Root) buildTerminalButtonBar() (text string, spans []buttonBarSpan) {
 		label string
 		run   func(r *Root)
 	}
-	// Alt+T and Ctrl+\ both read "Leave" here, not "Switch/Leave": from
-	// inside a Terminal (the only state this bar ever shows in). Alt+T
-	// always means leave, not open the switcher — see cmd/breakthrough's
-	// own dispatch, the toggle's other half only runs while no Terminal
-	// is on screen. Ctrl+\ is the documented fallback for a
-	// keyboard/terminal app that never delivers Alt+T's own equivalent
-	// at all (see ExitTerminalViewShortcut's own doc comment) — both
-	// buttons doing the identical thing right now is the honest
-	// reflection of that, not redundancy to clean up.
+	// Alt+T reads "Switcher" here, not "Leave": per the user's own
+	// explicit request, it always opens the Terminal switcher, even
+	// from inside an open Terminal (see OpenTerminalSwitcherShortcut's
+	// own doc comment for why — a dedicated single key to reach it
+	// from there, since Ctrl+\ already covers "one key to leave"
+	// outright). Clicking it runs the exact same global shortcut
+	// method the real key does, not a direct openTerminalSwitcher
+	// call, so a click can never do something the key itself wouldn't.
 	buttons := []buttonSpec{
-		{highlightKey("Alt+T") + "Leave", func(r *Root) { r.ExitTerminalViewShortcut() }},
+		{highlightKey("Alt+T") + "Switcher", func(r *Root) { r.OpenTerminalSwitcherShortcut() }},
 		{highlightKey("Ctrl+\\") + "Leave", func(r *Root) { r.ExitTerminalViewShortcut() }},
 		{highlightKey("Ctrl+C") + "Forward / Leave once exited", nil},
 		{highlightKey("Ctrl+Q") + "Quit", func(r *Root) { r.RequestQuit() }},

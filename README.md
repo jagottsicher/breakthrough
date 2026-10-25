@@ -188,8 +188,9 @@ terminal.
   Terminal with the same shared, disk-persisted connection history `gs`
   and the Connect dropdown already keep, colored the identical
   green/red/white the "@" connections menu uses. `Alt+T` opens the
-  switcher from anywhere, including from inside an open Terminal —
-  where it instead leaves straight back to the panel, one key out; a
+  switcher from anywhere, including from inside an open Terminal — the
+  only one of the three that does, so it's also the way to switch
+  straight to a different open Terminal without leaving first; a
   Terminal whose own remote process ends on its own stays exactly where
   it was, marked "(exited)", until explicitly closed. The button bar
   swaps too, to the few keys that actually still reach breakthrough
