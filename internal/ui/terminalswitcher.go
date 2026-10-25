@@ -217,7 +217,23 @@ func (r *Root) openTerminalSwitcher(selected int) {
 // connection (see connectionHistoryColor's own doc comment).
 func (r *Root) renderTerminalSwitcherOpenRow(row int, tab *shellTab, hist remotefs.HistoryEntry, known bool) {
 	current := tab == r.shells[r.activeShell] && !tab.exited
-	color := connectionHistoryColor(r.theme, current, known && hist.LastFailed, !known || hist.Untested)
+
+	// A live, not-yet-exited tab is demonstrably connected right now,
+	// regardless of what the shared history says — it only learns a
+	// real outcome once the session actually ends (watchShellExit's
+	// own RecordAttempt call), so hist/known still reads "Untested"
+	// for as long as it keeps running, even on a real, working
+	// connection. Consulting the recorded outcome here instead of
+	// liveness itself showed a live-but-not-current Terminal as plain
+	// white ("never tried") rather than green ("connected") — a real,
+	// user-reported bug. Only an exited tab still needs the recorded
+	// outcome, since by then it's the only signal left of how it went.
+	var color tcell.Color
+	if tab.exited {
+		color = connectionHistoryColor(r.theme, current, known && hist.LastFailed, !known || hist.Untested)
+	} else {
+		color = connectionHistoryColor(r.theme, current, false, false)
+	}
 	label := terminalSwitcherRowLabel(row, tab.label(), current, r.theme.PlaceholderText)
 	r.terminalSwitcher.SetCell(row, terminalSwitcherColLabel,
 		tview.NewTableCell(label).

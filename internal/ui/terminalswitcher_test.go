@@ -119,7 +119,14 @@ func TestTerminalSwitcherColorsTheCurrentTerminalGreenRegardlessOfHistory(t *tes
 	}
 }
 
-func TestTerminalSwitcherColorsAnUntestedOpenTerminalPlain(t *testing.T) {
+// TestTerminalSwitcherColorsALiveOpenTerminalGreenEvenIfHistoryIsUntested
+// pins the user's own explicit, real-world report: a live, not-yet-
+// exited Terminal is demonstrably connected right now, regardless of
+// what the shared history says — it only learns a real outcome once
+// the session actually ends (watchShellExit's own RecordAttempt call),
+// so a Terminal opened moments ago and never recorded as a success
+// yet still reads as connected, not "never tried."
+func TestTerminalSwitcherColorsALiveOpenTerminalGreenEvenIfHistoryIsUntested(t *testing.T) {
 	r := newTestRootForShells(t)
 	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
 
@@ -134,8 +141,9 @@ func TestTerminalSwitcherColorsAnUntestedOpenTerminalPlain(t *testing.T) {
 	r.openTerminalSwitcher(1)
 
 	got := cellTextColor(r.terminalSwitcher.GetCell(0, terminalSwitcherColLabel))
-	if got != r.theme.Text {
-		t.Errorf("never-dialed-through terminal's row color = %v, want theme.Text %v", got, r.theme.Text)
+	want := blendToward(r.theme.EntryExecutable, r.theme.MutedTextColor, connectionHistorySuccessBlend)
+	if got != want {
+		t.Errorf("live, non-current terminal's row color = %v, want the muted-green blend %v", got, want)
 	}
 }
 
@@ -164,7 +172,18 @@ func TestTerminalSwitcherColorsAPreviouslySuccessfulNonCurrentTerminalMutedGreen
 	}
 }
 
-func TestTerminalSwitcherColorsAFailedNonCurrentTerminalRed(t *testing.T) {
+// TestTerminalSwitcherColorsAnExitedFailedTerminalRed covers the
+// realistic failed-connection case: a live tab can't carry a real
+// LastFailed outcome in the shared history at all (watchShellExit
+// only records one once the session actually ends — see
+// renderTerminalSwitcherOpenRow's own doc comment), so this reproduces
+// that callback's own body directly, the same convention
+// TestExitedTerminalStaysInTheListAndOnScreen (shells_test.go) already
+// establishes, rather than asserting red for a still-live tab (which
+// would mean trusting a stale history record over what's actually
+// happening right now — exactly the bug the user reported, just the
+// opposite color).
+func TestTerminalSwitcherColorsAnExitedFailedTerminalRed(t *testing.T) {
 	r := newTestRootForShells(t)
 	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
 
@@ -176,6 +195,10 @@ func TestTerminalSwitcherColorsAFailedNonCurrentTerminalRed(t *testing.T) {
 			_ = tab.session.Close()
 		}
 	}()
+
+	tab := r.shells[0]
+	tab.exited = true
+	r.refreshShellHeader(tab)
 	if err := remotefs.RecordAttempt(alpha, true); err != nil {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
@@ -184,7 +207,7 @@ func TestTerminalSwitcherColorsAFailedNonCurrentTerminalRed(t *testing.T) {
 
 	got := cellTextColor(r.terminalSwitcher.GetCell(0, terminalSwitcherColLabel))
 	if got != r.theme.CriticalText {
-		t.Errorf("failed, non-current terminal's row color = %v, want theme.CriticalText %v", got, r.theme.CriticalText)
+		t.Errorf("exited, failed terminal's row color = %v, want theme.CriticalText %v", got, r.theme.CriticalText)
 	}
 }
 
