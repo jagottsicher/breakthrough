@@ -28,8 +28,9 @@ import (
 )
 
 const (
-	headerDisplayPage = "display"
-	headerEditPage    = "edit"
+	headerDisplayPage     = "display"
+	headerEditPage        = "edit"
+	headerShellStatusPage = "shell-status"
 )
 
 // Table columns — colSize/colModified are also mirrored, cell for cell,
@@ -115,6 +116,15 @@ type Panel struct {
 	headerPages *tview.Pages
 	header      *tview.TextView   // display mode: buttons + path breadcrumbs
 	headerEdit  *tview.InputField // edit mode: raw, freely editable path
+	// headerShellStatus is the third headerPages page, shown in place of
+	// header while this panel's own headerRow is the one reused for a
+	// Terminal (see shells.go's remountShellView) — the merged
+	// replacement for what used to be a separate one-line "connected
+	// to" row stacked below headerRow entirely (shellTab.header,
+	// removed). Root.shellStatusPanel, not r.panel, tracks which
+	// panel's copy is actually showing this at any moment — see its
+	// own doc comment on root.go for why that distinction matters.
+	headerShellStatus *tview.TextView
 
 	// filterField and filterRegexBtn back the glob/regex filter — a
 	// live narrow-the-listing box, and the toggle between its two
@@ -326,6 +336,20 @@ type Panel struct {
 	onSelectTab       func(int)
 	onNewTab          func()
 	onOpenTabSwitcher func()
+
+	// terminalStrip is the Terminal-number strip sitting right after
+	// tabStrip, before detailsExpandBtn (see terminalstrip.go for the
+	// whole design, and NewPanel for the header row it's added to).
+	// Mirrors tabStrip's own fields one for one; terminalActive of -1
+	// means no Terminal is currently active (possible here, unlike a
+	// tab, since a session can have zero open Terminals).
+	terminalStrip          *tview.TextView
+	terminalStripSpans     []terminalStripSpan
+	terminalCount          int
+	terminalActive         int
+	onSelectTerminal       func(int)
+	onNewTerminal          func()
+	onOpenTerminalSwitcher func()
 
 	// columnHeader is a second, single-row table sitting between the path
 	// bar and the data table (table) — its own doc comment (see
@@ -858,6 +882,13 @@ const (
 	// reading as part of it — a second real report, this time about the
 	// fix for the first one.
 	headerTabStripGap = 1
+
+	// headerTerminalStripGap is the terminal strip's own one-column
+	// lead-in, drawn as part of its own text the same way
+	// headerTabStripGap is — see that constant's own doc comment for
+	// why (a separate blank Flex item has no background color of its
+	// own to paint, leaving a visibly different-colored seam).
+	headerTerminalStripGap = 1
 )
 
 // Theme/App satisfy scrollbarHost (scrollbar.go) — Panel already has
@@ -933,9 +964,14 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// constant rather than a literal repeated here.
 	p.headerEdit.SetLabel(headerButtonPrefix)
 
+	p.headerShellStatus = tview.NewTextView()
+	p.headerShellStatus.SetWrap(false)
+	p.headerShellStatus.SetDynamicColors(false)
+
 	p.headerPages = tview.NewPages()
 	p.headerPages.AddPage(headerDisplayPage, p.header, true, true)
 	p.headerPages.AddPage(headerEditPage, p.headerEdit, true, false)
+	p.headerPages.AddPage(headerShellStatusPage, p.headerShellStatus, true, false)
 
 	p.filterRegexBtn = tview.NewButton(filterModeLabel(false))
 	p.filterRegexBtn.SetSelectedFunc(func() {
@@ -1042,6 +1078,15 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	p.tabStrip.SetDynamicColors(true) // the active tab's own highlight is a color tag
 	p.tabStrip.SetMouseCapture(p.captureTabStripMouse)
 
+	// The Terminal strip — see terminalstrip.go. Starts empty, showing
+	// only its own leading "+" (never fully hidden — see that file's
+	// own doc comment).
+	p.terminalActive = -1
+	p.terminalStrip = tview.NewTextView()
+	p.terminalStrip.SetWrap(false)
+	p.terminalStrip.SetDynamicColors(true)
+	p.terminalStrip.SetMouseCapture(p.captureTerminalStripMouse)
+
 	// "<" expands the Details sidebar — see detailsExpandBtn's own doc
 	// comment on the struct.
 	p.detailsExpandBtn = tview.NewButton("<")
@@ -1098,6 +1143,12 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// itself as tabs come and go, which is why headerRow is kept as a
 	// field.
 	headerRow.AddItem(p.tabStrip, 0, 0, false)
+	// The Terminal strip goes right after the tab strip, before the
+	// Details button — per the user's own explicit request, with its
+	// own numbers-then-"+" layout mirroring the tab strip's own (see
+	// terminalstrip.go's own doc comment on why an earlier version
+	// read the other way around).
+	headerRow.AddItem(p.terminalStrip, 0, 0, false)
 	headerRow.AddItem(p.detailsExpandBtn, headerDetailsExpandWidth, 0, false)
 	p.headerRow = headerRow
 
@@ -1138,6 +1189,15 @@ func (p *Panel) paintStaticChrome() {
 	p.header.SetTextColor(p.theme.TextColor)
 	p.header.SetBackgroundColor(p.theme.SurfaceBackground)
 
+	// InputFocusedBackground/TextColor — the same close-glyph-title-bar
+	// pair sshShellTitleBar and the other dialog title bars in this app
+	// already use, since this reads the same way: a one-line label
+	// sitting above real content (formerly shellTab.header's own
+	// styleShellHeader, folded in here once that became one of
+	// headerPages' own pages instead of a separately mounted widget).
+	p.headerShellStatus.SetBackgroundColor(p.theme.InputFocusedBackground)
+	p.headerShellStatus.SetTextColor(p.theme.TextColor)
+
 	// filterMenuBtn's own "Nx" prefix (and the padding filling out
 	// whatever's left of filterMenuBtnWidth — see renderFilterMenuBtn)
 	// carries no color tag of its own, unlike its own trailing " Y "
@@ -1165,6 +1225,14 @@ func (p *Panel) paintStaticChrome() {
 	// is baked into the text as a color tag (see renderTabStrip), so a
 	// live scheme switch has to rebuild the text to pick up the new one.
 	p.refreshTabStrip()
+
+	p.styleTerminalStrip(p.theme)
+	// Re-render for the identical reason refreshTabStrip is called just
+	// above — styleTerminalStrip only repaints the strip's own idle
+	// background (AccentBackground), not the fixed gray/white/green
+	// glyph colors baked into the text itself, but AccentBackground
+	// itself can still change with the scheme.
+	p.refreshTerminalStrip()
 
 	// Unlike headerEdit above, filterField DOES have a real "sometimes
 	// focused, sometimes not" cycle — it sits permanently in the header

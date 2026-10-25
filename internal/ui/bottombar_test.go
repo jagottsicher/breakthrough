@@ -511,6 +511,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		's': " s Split",
 		'@': " @ Conn",
 		't': " t Tabs",
+		'T': " T Term",
 	}
 	found := map[rune]bool{}
 	for _, s := range spans {
@@ -2419,5 +2420,127 @@ func TestBuildStatusBarLabelIsSecondSegmentWithClipboardActive(t *testing.T) {
 	userIdx := strings.Index(got, r.currentUser)
 	if userIdx >= 0 && labelIdx > userIdx {
 		t.Errorf("label at %d, username at %d — want the label still ahead of username, just behind the clipboard indicator", labelIdx, userIdx)
+	}
+}
+
+// TestRefreshButtonBarSwitchesToTerminalBarWhileViewingShells pins the
+// user's own explicit report: the file-browsing legend (c Copy, x Cut,
+// t Tabs, ...) made no sense once a Terminal had focus, since every
+// one of those keys goes straight to the remote side instead — see
+// buildTerminalButtonBar's own doc comment.
+func TestRefreshButtonBarSwitchesToTerminalBarWhileViewingShells(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	got := r.buttonBar.GetText(true)
+	if !strings.Contains(got, "Leave") {
+		t.Errorf("button bar while viewing a Terminal = %q, want it to contain the Terminal bar's own \"Leave\"", got)
+	}
+	for _, stale := range []string{"Copy", "Tabs", "Split"} {
+		if strings.Contains(got, stale) {
+			t.Errorf("button bar while viewing a Terminal = %q, want it to NOT contain the file-browsing bar's own %q", got, stale)
+		}
+	}
+}
+
+// TestRefreshButtonBarRestoresFileBarAfterLeavingShells is the other
+// half: leaving a Terminal (any path through remountPanels) must put
+// the ordinary file-browsing legend back, not leave the Terminal one
+// showing over the panel it no longer describes.
+func TestRefreshButtonBarRestoresFileBarAfterLeavingShells(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	r.viewFiles()
+
+	got := r.buttonBar.GetText(true)
+	if strings.Contains(got, "Leave") {
+		t.Errorf("button bar after viewFiles = %q, want the Terminal bar's own \"Leave\" gone", got)
+	}
+	if !strings.Contains(got, "Copy") {
+		t.Errorf("button bar after viewFiles = %q, want the ordinary file-browsing bar back", got)
+	}
+}
+
+// TestBuildTerminalButtonBarAltTSpanLeaves pins that the Alt+T button
+// actually runs ExitTerminalViewShortcut when clicked — not just that
+// its label says "Leave" (TestRefreshButtonBarSwitchesToTerminalBarWhileViewingShells
+// already covers the text).
+// TestBuildTerminalButtonBarAltTSpanOpensTheSwitcher pins that the
+// Alt+T button actually opens the switcher when clicked — even from
+// inside an open Terminal, per the user's own explicit request that
+// Alt+T always reach the switcher there, never leave outright (that's
+// Ctrl+\'s own job — see TestBuildTerminalButtonBarCtrlBackslashSpanLeaves
+// just below).
+func TestBuildTerminalButtonBarAltTSpanOpensTheSwitcher(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	_, spans := r.buildTerminalButtonBar()
+	if len(spans) == 0 || spans[0].run == nil {
+		t.Fatal("setup: no runnable span for the Alt+T button")
+	}
+	spans[0].run(r)
+
+	if r.activePage != terminalSwitcherPage {
+		t.Errorf("activePage after running the Alt+T button's own span = %q, want %q", r.activePage, terminalSwitcherPage)
+	}
+	if !r.viewingShells {
+		t.Error("viewingShells = false after opening the switcher from inside a Terminal, want it to still be viewing")
+	}
+}
+
+// TestBuildTerminalButtonBarCtrlBackslashSpanLeaves pins that Ctrl+\
+// remains the one button that actually leaves outright.
+func TestBuildTerminalButtonBarCtrlBackslashSpanLeaves(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	_, spans := r.buildTerminalButtonBar()
+	if len(spans) < 2 || spans[1].run == nil {
+		t.Fatal("setup: no runnable span for the Ctrl+\\ button")
+	}
+	spans[1].run(r)
+
+	if r.viewingShells {
+		t.Error("viewingShells still true after running the Ctrl+\\ button's own span, want it to have left")
+	}
+}
+
+// TestBuildTerminalButtonBarCtrlCHasNoRun pins that Ctrl+C's own entry
+// is informational only — there's no single action a click could mean
+// for a key whose real effect depends on whether the Terminal has
+// already exited (see cmd/breakthrough's own dispatch).
+func TestBuildTerminalButtonBarCtrlCHasNoRun(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	text, spans := r.buildTerminalButtonBar()
+	found := false
+	for _, s := range spans {
+		if strings.Contains(renderedTextAt(t, r, s.startCol, s.endCol), "Ctrl+C") {
+			found = true
+			if s.run != nil {
+				t.Error("Ctrl+C's own span has a run func, want nil — there's no single click action for it")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no Ctrl+C span found in %q", text)
 	}
 }

@@ -215,11 +215,53 @@ func run() error {
 			return nil
 		}
 
+		// Deny-by-default while a Terminal has focus: everything not
+		// named in ui.TerminalReservedKey falls straight through to its
+		// own InputHandler unconsumed, rather than reaching the switch
+		// below at all — see that function's own doc comment for why
+		// this replaced a per-case guard added only once a specific key
+		// was reported broken (Ctrl+C, then Delete, each a real bug
+		// before this existed; Delete's own could delete a real file).
+		if root.ViewingTerminal() && !ui.TerminalReservedKey(event) {
+			return event
+		}
+
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
 			root.RequestQuit()
 			return nil
 		case tcell.KeyCtrlC:
+			// Falls through unconsumed while a Terminal is on screen —
+			// a real, live-tested bug this would otherwise be: Ctrl+C
+			// is a remote shell's own interrupt signal, arguably the
+			// single most essential keystroke a terminal has to
+			// forward, and this global case ran unconditionally before
+			// the fix, swallowing it every time regardless of focus.
+			// termTabView's own InputHandler is what actually receives
+			// it from here on — writes byte 0x03 to a live session
+			// (termKeyBytes), or, once that session has exited on its
+			// own, calls onLeave instead (see termtabview.go's own
+			// isTermLeaveKey) — the one case Ctrl+C still means "leave"
+			// rather than "forward", per the user's own explicit
+			// request.
+			if root.ViewingTerminal() {
+				// Not a bare `return event`: tview's own Application.Run
+				// has a hardcoded fallback — "Ctrl-C closes the
+				// application" — that fires whenever the event coming
+				// back from this very capture is the *same* object it
+				// was called with (event == originalEvent, checked by
+				// pointer), on the theory that an unmodified passthrough
+				// means nothing claimed it. Found by instrumenting both
+				// ends of this path live: this case's own code ran
+				// (confirmed), but termTabView's own InputHandler never
+				// did — tview's Stop() fired first and the whole
+				// process exited, taking the rest of this file's own
+				// explanation of "falls through to the focused widget"
+				// with it. A new EventKey carrying the identical key/
+				// rune/modifiers sidesteps that fallback while still
+				// reaching termTabView exactly the same way.
+				return tcell.NewEventKey(event.Key(), event.Rune(), event.Modifiers())
+			}
 			root.RequestCancel()
 			return nil
 		case tcell.KeyCtrlT:
@@ -323,8 +365,7 @@ func run() error {
 			// Whichever modifier a given terminal can't report, the
 			// bound one simply never matches this case at all and falls
 			// through exactly as before — which is why binding both
-			// costs nothing where neither is supported. F4 above is the
-			// always-available way to the same feature regardless.
+			// costs nothing where neither is supported.
 			if event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt) != 0 && event.Rune() >= '0' && event.Rune() <= '9' {
 				n := int(event.Rune() - '0')
 				if n == 0 {
@@ -333,8 +374,8 @@ func run() error {
 				root.SwitchToTabShortcut(n)
 				return nil
 			}
-			// Alt+S opens the Shells overlay (see internal/ui/shellsmenu.go)
-			// — a single modifier, deliberately not Alt+0..9's own
+			// Alt+T toggles the Terminal switcher/leaving a Terminal —
+			// a single modifier, deliberately not Alt+0..9's own
 			// Ctrl-or-Alt pairing above: those two are already taken,
 			// permanently, by the existing tab-switch fallback just
 			// above, and Ctrl+Shift+digit was ruled out as commonly
@@ -342,13 +383,52 @@ func run() error {
 			// reaching this app (GNOME Terminal, iTerm2, Windows
 			// Terminal, Konsole all reserve it for their own tab
 			// switching). Always intercepted globally for now; a
-			// planned Options toggle (mirroring the existing "Mouse on/
-			// off" setting) will let this be disabled later so Alt+S
-			// can instead reach an embedded remote shell that wants it
-			// for its own purposes (Emacs' M-s isearch prefix being the
-			// one real, accepted collision).
-			if event.Modifiers()&tcell.ModAlt != 0 && event.Rune() == 's' {
-				root.OpenShellsMenuShortcut()
+			// planned Options toggle (mirroring the existing "Mouse
+			// on/off" setting) will let this be disabled later so
+			// Alt+T can instead reach an embedded remote terminal that
+			// wants it for its own purposes.
+			//
+			// Renamed from Alt+S (same mechanism, same ESC-prefixed
+			// Meta encoding, verified live the identical way) per the
+			// user's own explicit report: "S" carried no mnemonic
+			// connection to "Terminal" at all, unlike Ctrl+T for Tabs,
+			// which the user already found intuitive by comparison.
+			//
+			// Always opens the switcher, regardless of whether a
+			// Terminal already has focus — this briefly toggled
+			// instead (leaving a Terminal outright once one was
+			// already on screen), but the user's own later, explicit
+			// report reversed that: Ctrl+\ already covers "one key to
+			// leave," and Alt+T toggling meant there was no single key
+			// left to reach the switcher *from inside* an open
+			// Terminal at all — e.g. to switch straight to a
+			// *different* one, or to reach "Go to file view" there
+			// rather than only via Ctrl+\'s own unconditional leave.
+			// The plain "T" key (keymap.go) still only ever opens the
+			// switcher too, but is gated on the panel having focus in
+			// the first place, so it was never reachable from inside
+			// an open Terminal to begin with — Alt+T is the only one
+			// of the three that is.
+			if event.Modifiers()&tcell.ModAlt != 0 && event.Rune() == 't' {
+				root.OpenTerminalSwitcherShortcut()
+				return nil
+			}
+			return event
+		case tcell.KeyCtrlBackslash:
+			// The one way out of a Terminal when neither Alt+T nor the
+			// terminal switcher's own Escape is reachable — the same
+			// real iPad report just above. Reserved exclusively while a
+			// Terminal is actually on screen (ExitTerminalViewShortcut's
+			// own guard), the user's own explicit choice among the
+			// classic rare-control-character "detach"/"escape"
+			// conventions telnet and tmux/screen already use for the
+			// identical problem (a key that's otherwise almost never
+			// typed deliberately into a real shell session) — Ctrl+]
+			// was the other candidate offered. Falls through unconsumed
+			// whenever no Terminal is showing, so it never takes this
+			// combination away from bashLine or anything else that
+			// might one day want it.
+			if root.ExitTerminalViewShortcut() {
 				return nil
 			}
 			return event

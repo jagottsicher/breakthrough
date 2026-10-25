@@ -59,7 +59,6 @@ const (
 	// shell instead of mounting an SFTP panel.
 	sshShellMenuPage   = "ssh-shell-menu"
 	sshShellDialogPage = "ssh-shell-dialog"
-	shellsMenuPage     = "shells-menu"
 	// pasteConflictPage's own dialog is built in pasteconflict.go
 	// (newPasteConflictDialog), not here — kept in this block anyway,
 	// like every other page name, so cmd/breakthrough and tests never
@@ -927,18 +926,42 @@ type Root struct {
 	activeShell   int
 	viewingShells bool
 
-	// The Shells menu overlay (see shellsmenu.go) — opened by Alt+S,
-	// modeled directly on the sshShellMenuTable/sshShellMenuPage
-	// pattern just below, with its own page constant and widgets.
-	// shellsMenuRows maps a row to the open-shell index it names (the
-	// "+ New shell…" and "Files" rows are deliberately left out of it
-	// — see renderShellsMenu).
-	shellsMenuTable    *tview.Table
-	shellsMenuTitleBar *tview.TextView
-	shellsMenuLayout   *tview.Flex
-	shellsMenuRows     map[int]int
-	shellsMenuNewRow   int
-	shellsMenuFilesRow int
+	// shellStatusPanel is whichever Panel's own headerRow/headerPages
+	// got repurposed to show a Terminal's connection status in place of
+	// its path (see shells.go's remountShellView) — not necessarily
+	// r.panel any more by the time remountPanels (split.go) runs its
+	// own reset, since clicking a different tab number while a
+	// Terminal covers the screen (the always-numbered tab strip's own
+	// point — see tabstrip.go) reassigns r.panel to the new target
+	// *before* remountPanels runs. Resetting whatever r.panel currently
+	// is at that point would leave the actually-repurposed panel's
+	// header stuck on the stale connection string forever. nil once no
+	// panel's header is currently repurposed.
+	shellStatusPanel *Panel
+
+	// The Terminal switcher overlay (see terminalswitcher.go) — opened
+	// by Alt+T or the plain "T" key, modeled directly on
+	// tabSwitcher/tabSwitcherPage's own pattern just below, anchored
+	// under the terminal strip (terminalstrip.go) rather than centered
+	// — the user's own explicit request, after this first shipped as a
+	// centered dropdown.
+	terminalSwitcher         *tview.Table
+	terminalSwitcherTitleBar *tview.TextView
+	terminalSwitcherLayout   *tview.Flex
+	terminalSwitcherFilesRow int
+	// terminalSwitcherNewRow is the "+ New terminal…" row's own index
+	// — no longer always len(r.shells) now that history-only rows
+	// (see openTerminalSwitcher's own doc comment) can sit between the
+	// open Terminals and this row.
+	terminalSwitcherNewRow int
+	// terminalSwitcherOpenRows/terminalSwitcherHistRows map a row to
+	// what it actually is: an open (live or exited) Terminal's own
+	// *shellTab, or a history-only connection with no open Terminal of
+	// its own right now. Exactly one of the two ever claims a given
+	// row — see openTerminalSwitcher's own doc comment for why the
+	// list is a merge of both at all.
+	terminalSwitcherOpenRows map[int]*shellTab
+	terminalSwitcherHistRows map[int]remotefs.Connection
 
 	// The tab switcher overlay (see tabswitcher.go) — the same
 	// List/title-bar/Flex split every other overlay here uses, with
@@ -2864,12 +2887,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.sshShellMenuTitleBar = r.newSSHShellMenuTitleBar()
 	r.sshShellMenuLayout = r.newSSHShellMenuLayout()
 
-	// The Shells overlay (Alt+S — see shellsmenu.go), the same two-
-	// pieces shape as the "gs" dropdown just above.
+	// The Terminal switcher (Alt+T/"T" — see terminalswitcher.go), the
+	// same two-pieces shape tabSwitcher's own construction below uses.
 	r.activeShell = -1
-	r.shellsMenuTable = r.newShellsMenuTable()
-	r.shellsMenuTitleBar = r.newShellsMenuTitleBar()
-	r.shellsMenuLayout = r.newShellsMenuLayout()
+	r.terminalSwitcher = r.newTerminalSwitcher()
+	r.terminalSwitcherTitleBar = r.newTerminalSwitcherTitleBar()
+	r.terminalSwitcherLayout = r.newTerminalSwitcherLayout()
 
 	// The Batch Rename screen (see batchrename.go) — built once here,
 	// the same as the Options screen just below; only its contents are
@@ -3072,6 +3095,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.activeTab = 0
 	r.splitPanes = [2]int{-1, -1} // no pair chosen yet; see splitPanes' own doc comment
 	r.remountPanels()
+	// panel's own tabCount/tabActive otherwise stay at their Go zero
+	// values (0, 0) until some later tab-related event happens to call
+	// this — invisible so far only because renderTabStrip's own former
+	// "count < 2" special case rendered 0 and 1 identically. Now that a
+	// single tab gets a real, clickable number (see tabstrip.go's own
+	// doc comment), that zero value would show as a bare "+" with no
+	// number at all until the first tab-related event ran.
+	r.refreshTabStrips()
+	r.refreshTerminalStrips() // defensive symmetry; terminalCount already correctly starts at 0
 
 	r.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
 	r.mainLayout.AddItem(r.panelHost, 0, 1, true)
@@ -3185,7 +3217,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
 	r.AddPage(sshShellDialogPage, r.sshShellLayout, false, false)
 	r.AddPage(sshShellMenuPage, r.sshShellMenuLayout, false, false)
-	r.AddPage(shellsMenuPage, r.shellsMenuLayout, false, false)
+	r.AddPage(terminalSwitcherPage, r.terminalSwitcherLayout, false, false)
 	// resize=true: the hidden Easter egg overlay fills the whole
 	// terminal too, the same reasoning every other full-screen catalog's
 	// own comment above gives.
@@ -3397,6 +3429,13 @@ func (r *Root) wirePanel(panel *Panel) {
 	panel.onSelectTab = r.switchToTab
 	panel.onNewTab = r.newTabHere
 	panel.onOpenTabSwitcher = func() { r.openTabSwitcher(r.activeTab) }
+
+	// The Terminal strip's own three click targets (see
+	// terminalstrip.go's captureTerminalStripMouse) — the identical
+	// shape just above, for the identical reason.
+	panel.onSelectTerminal = r.switchToShell
+	panel.onNewTerminal = func() { r.openNewTerminalDialog(remotefs.Connection{}) }
+	panel.onOpenTerminalSwitcher = func() { r.openTerminalSwitcher(r.activeShell) }
 
 	// Right-click context menu and drag-select both live on the panel
 	// itself, so each tab needs its own (only one SetMouseCapture slot

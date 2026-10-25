@@ -130,9 +130,17 @@ func (r *Root) refreshStatusBar() {
 // since buildButtonBar's own output now depends on the panel's current
 // directory (in/out of the trash — see inTrash) as well as its
 // showHidden flag, both of which a navigation, toggleHidden's own
-// reload, or a trash operation's reloadPanel can change.
+// reload, or a trash operation's reloadPanel can change. Also called
+// from switchToShell/remountPanels (shells.go/split.go) whenever
+// r.viewingShells flips, since that's what actually picks between this
+// and buildTerminalButtonBar below — the file-browsing legend makes no
+// sense once a Terminal has focus.
 func (r *Root) refreshButtonBar() {
-	text, spans := r.buildButtonBar()
+	build := r.buildButtonBar
+	if r.viewingShells {
+		build = r.buildTerminalButtonBar
+	}
+	text, spans := build()
 	r.buttonBarSpans = spans
 	r.buttonBar.SetText(text)
 }
@@ -250,6 +258,65 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		write(bt.label)
 		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, key: bt.key, run: bt.run})
 	}
+
+	return b.String(), spans
+}
+
+// buildTerminalButtonBar replaces buildButtonBar's own file-browsing
+// legend (c Copy, x Cut, t Tabs, g… goto, ...) while a Terminal has
+// focus — every one of those keys goes straight to the remote side
+// instead once a Terminal is on screen (see ui.TerminalReservedKey,
+// cmd/breakthrough's own dispatch), so showing it unconditionally was
+// actively misleading about what pressing any of those letters
+// actually does — a real user report, not a cosmetic nitpick ("das
+// Menü für Tabs ist im Terminal Mode total falsch"). Shows only the
+// small, fixed set of keys that still reach breakthrough itself from
+// inside a Terminal, plus a reminder that the terminal strip's own
+// numbers (mouse only — there's no keyboard equivalent while a
+// Terminal has focus, see terminalstrip.go) still switch between open
+// Terminals. refreshButtonBar is what actually picks between this and
+// buildButtonBar, based on r.viewingShells.
+func (r *Root) buildTerminalButtonBar() (text string, spans []buttonBarSpan) {
+	keyBG := colorTag(r.theme.ButtonBackground)
+	highlightKey := func(label string) string {
+		return fmt.Sprintf("[:%s:] %s [-:-:-]", keyBG, label)
+	}
+
+	type buttonSpec struct {
+		label string
+		run   func(r *Root)
+	}
+	// Alt+T reads "Switcher" here, not "Leave": per the user's own
+	// explicit request, it always opens the Terminal switcher, even
+	// from inside an open Terminal (see OpenTerminalSwitcherShortcut's
+	// own doc comment for why — a dedicated single key to reach it
+	// from there, since Ctrl+\ already covers "one key to leave"
+	// outright). Clicking it runs the exact same global shortcut
+	// method the real key does, not a direct openTerminalSwitcher
+	// call, so a click can never do something the key itself wouldn't.
+	buttons := []buttonSpec{
+		{highlightKey("Alt+T") + "Switcher", func(r *Root) { r.OpenTerminalSwitcherShortcut() }},
+		{highlightKey("Ctrl+\\") + "Leave", func(r *Root) { r.ExitTerminalViewShortcut() }},
+		{highlightKey("Ctrl+C") + "Forward / Leave once exited", nil},
+		{highlightKey("Ctrl+Q") + "Quit", func(r *Root) { r.RequestQuit() }},
+	}
+
+	const sep = " "
+	var b strings.Builder
+	col := 0
+	write := func(s string) {
+		b.WriteString(s)
+		col += tview.TaggedStringWidth(s)
+	}
+	for i, bt := range buttons {
+		if i > 0 {
+			write(sep)
+		}
+		start := col
+		write(bt.label)
+		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, run: bt.run})
+	}
+	write(sep + "— strip numbers (mouse) switch between open Terminals")
 
 	return b.String(), spans
 }
@@ -1474,7 +1541,28 @@ func (r *Root) renameRow(row int) {
 // default handling ever saw it, silently defeating both that and the
 // muscle memory this line is explicitly meant to feel like bash — hence
 // checking this first and no-op'ing instead.
+//
+// !r.viewingShells is the second line of defense against the same bug
+// class ui.TerminalReservedKey exists to fix at its one real call site
+// (cmd/breakthrough's own SetInputCapture, which already falls through
+// before ever reaching a Shortcut method that checks this): a Terminal
+// view is neither an overlay (activePage stays "") nor bashLine, so
+// without this, Delete reaching a live Terminal still opened the Trash
+// confirm instead — a real, reported bug — for any caller that reaches
+// a Shortcut method some other way than that one switch.
 func (r *Root) acceptsGlobalShortcut() bool {
+	return r.activePage == "" && !r.bashLine.HasFocus() && !r.viewingShells
+}
+
+// acceptsGlobalShortcutEvenInATerminal is acceptsGlobalShortcut minus
+// its own !viewingShells exclusion just above — OpenTerminalSwitcherShortcut's
+// own gate (terminalswitcher.go), the one caller that must keep firing
+// from inside an open Terminal: reaching the switcher from there is
+// exactly what Alt+T's own "regardless of focus" promise means (see
+// its own doc comment), not a case this file's usual "a Terminal view
+// isn't a real overlay or bashLine, so it needs its own exclusion"
+// reasoning applies to.
+func (r *Root) acceptsGlobalShortcutEvenInATerminal() bool {
 	return r.activePage == "" && !r.bashLine.HasFocus()
 }
 

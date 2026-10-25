@@ -26,6 +26,17 @@ import (
 // The active tab is the only one painted with a background, using the
 // same FocusedBackground the rest of this app already means "this is the
 // thing you're on" with — not a tab-strip-specific color invented here.
+//
+// Always numbered, even with a single tab open — an earlier version
+// drew just the "+" then, on the reasoning that numbering one tab says
+// nothing useful. That held until Terminals (terminalstrip.go) could
+// cover the screen entirely: with no number to click, there was no way
+// back to the one tab at all once a Terminal was showing, and
+// switchToTab's own early return (tabs.go) skipped it even when
+// clicked, since the active tab index never actually changes going
+// from a Terminal back to itself. The real fix needed both: a real
+// number here, and switchToTab treating "same tab, but viewing a
+// Terminal" as a real switch, not a no-op.
 const (
 	// tabStripMaxVisible caps how many tab numbers are drawn at once.
 	// Beyond that the strip shows a window around the active tab with
@@ -78,16 +89,6 @@ const tabStripSpanNew = -1
 // are multi-byte runes that still occupy exactly one column each, so
 // spans are advanced by rune width throughout.
 func renderTabStrip(count, active int, textColor, activeBackground tcell.Color) (string, []tabStripSpan) {
-	if count < 2 {
-		// Numbering a single tab says nothing useful, but the "+" itself
-		// still has to be somewhere — it's the only way to create a
-		// second tab at all, and hiding it entirely (an earlier version
-		// of this did exactly that) turned out to hide the whole feature
-		// along with it: nothing in the header row hinted that tabs
-		// existed, per a real user report. One button, not the full
-		// strip, is the smallest fix that still leaves an entry point.
-		return tabStripNewLabel, []tabStripSpan{{start: 0, end: len([]rune(tabStripNewLabel)), tab: tabStripSpanNew}}
-	}
 	if active < 0 || active >= count {
 		active = 0
 	}
@@ -198,15 +199,10 @@ func (p *Panel) setTabs(count, active int) {
 // refreshTabStrip redraws the strip from p.tabCount/p.tabActive and
 // resizes its slot in the header row to match.
 //
-// With a single tab, renderTabStrip draws just the "+" — no numbers (one
-// tab has nothing to number against) but not nothing either: an earlier
-// version of this hid the whole strip down to zero width whenever there
-// was only one tab, on the reasoning that tabs are opt-in and shouldn't
-// cost header room nobody's using. In practice that hid the feature's
-// only discoverable entry point along with it — a user who doesn't
-// already know a keyboard shortcut exists has no way to find it (a real
-// report caught this within minutes of testing). One small button is a
-// far cheaper cost than that.
+// With a single tab, renderTabStrip still draws its own real number
+// ("1 +") rather than hiding it the way an even earlier version did —
+// see renderTabStrip's own doc comment on why that number has to be a
+// real, clickable target now, not just the "+".
 func (p *Panel) refreshTabStrip() {
 	if p.tabStrip == nil || p.headerRow == nil {
 		return // not built yet (a Panel mid-construction) — nothing to draw on
@@ -227,9 +223,12 @@ func (p *Panel) refreshTabStrip() {
 		spans[i].end += headerTabStripGap
 	}
 	p.tabStripSpans = spans
-	// One trailing column of breathing room before the Details "<"
-	// button, so the "+" doesn't sit flush against it.
-	p.headerRow.ResizeItem(p.tabStrip, headerTabStripGap+tview.TaggedStringWidth(text)+1, 0)
+	// No trailing padding column here any more — the terminal strip
+	// sits directly after this one now (see NewPanel's own headerRow
+	// order) and carries its own leading gap, which is what used to
+	// sit here when this strip was the one directly before the
+	// Details "<" button.
+	p.headerRow.ResizeItem(p.tabStrip, headerTabStripGap+tview.TaggedStringWidth(text), 0)
 }
 
 // captureTabStripMouse turns a click on a tab number into a switch, and a

@@ -1,13 +1,17 @@
 package ui
 
 import (
+	"errors"
 	"os/exec"
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
+
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
+	"github.com/jagottsicher/breakthrough/internal/sshshell"
 	"github.com/jagottsicher/breakthrough/internal/termtab"
 )
 
@@ -96,11 +100,28 @@ func TestRemountShellViewCollapsesTheBashConsoleAndShowsTheActiveView(t *testing
 	r.openNewShellEmbedded(testShellConn("one"))
 	defer func() { _ = r.shells[0].session.Close() }()
 
-	if r.panelHost.GetItemCount() != 1 {
-		t.Fatalf("panelHost.GetItemCount() = %d, want 1", r.panelHost.GetItemCount())
+	// Two items: the panel's own header row (kept visible, now showing
+	// connection status in place of the path — see remountShellView's
+	// own doc comment) and the terminal view itself. The two rows this
+	// used to be (headerRow plus a separate one-line shell header) were
+	// merged into headerRow alone per the user's own explicit request.
+	if got, want := r.panelHost.GetItemCount(), 2; got != want {
+		t.Fatalf("panelHost.GetItemCount() = %d, want %d", got, want)
 	}
-	if r.panelHost.GetItem(0) != r.shells[0].view {
-		t.Error("panelHost's only item isn't the active shell's own view")
+	if r.panelHost.GetItem(0) != r.panel.headerRow {
+		t.Error("panelHost's first item isn't the panel's own header row")
+	}
+	if r.panelHost.GetItem(1) != r.shells[0].view {
+		t.Error("panelHost's second item isn't the active shell's own view")
+	}
+	if current, _ := r.panel.headerPages.GetFrontPage(); current != headerShellStatusPage {
+		t.Errorf("headerPages front page = %q, want %q", current, headerShellStatusPage)
+	}
+	if r.shellStatusPanel != r.panel {
+		t.Error("shellStatusPanel doesn't track the panel whose header was repurposed")
+	}
+	if got, want := r.panel.headerShellStatus.GetText(true), " "+r.shells[0].label()+" "; got != want {
+		t.Errorf("headerShellStatus text = %q, want %q", got, want)
 	}
 }
 
@@ -119,6 +140,12 @@ func TestViewFilesLeavesShellViewAndRestoresThePanel(t *testing.T) {
 	if r.panelHost.GetItem(0) != r.panel {
 		t.Error("panelHost's item isn't r.panel after viewFiles")
 	}
+	if current, _ := r.panel.headerPages.GetFrontPage(); current != headerDisplayPage {
+		t.Errorf("headerPages front page after viewFiles = %q, want %q", current, headerDisplayPage)
+	}
+	if r.shellStatusPanel != nil {
+		t.Error("shellStatusPanel still set after viewFiles")
+	}
 }
 
 func TestSwitchingFileTabsLeavesShellViewAutomatically(t *testing.T) {
@@ -127,9 +154,20 @@ func TestSwitchingFileTabsLeavesShellViewAutomatically(t *testing.T) {
 	// contract that every existing caller of it (here: newTab) keeps
 	// working correctly now that Shells exist, without newTab itself
 	// needing to know that.
+	//
+	// newTab is also the one existing path that exercises the subtle
+	// case Root.shellStatusPanel exists for: switchToTab reassigns
+	// r.panel to the newly created tab *before* calling remountPanels,
+	// so by the time remountPanels runs, r.panel is no longer the
+	// original tab whose own headerPages actually got switched to
+	// headerShellStatusPage — only r.shellStatusPanel still points to
+	// it. Resetting whatever r.panel happens to be at that point
+	// instead would leave the original tab's header stuck showing a
+	// stale connection string.
 	r := newTestRootForShells(t)
 	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
 
+	original := r.panel
 	r.openNewShellEmbedded(testShellConn("one"))
 	defer func() { _ = r.shells[0].session.Close() }()
 
@@ -137,6 +175,15 @@ func TestSwitchingFileTabsLeavesShellViewAutomatically(t *testing.T) {
 
 	if r.viewingShells {
 		t.Error("viewingShells still true after opening a new file tab")
+	}
+	if r.panel == original {
+		t.Fatal("setup: newTab didn't switch r.panel to a different tab")
+	}
+	if current, _ := original.headerPages.GetFrontPage(); current != headerDisplayPage {
+		t.Errorf("original tab's headerPages front page = %q, want %q (it was the one actually repurposed)", current, headerDisplayPage)
+	}
+	if r.shellStatusPanel != nil {
+		t.Error("shellStatusPanel still set after leaving shell view")
 	}
 }
 
@@ -256,5 +303,372 @@ func TestCloseShellClosesTheUnderlyingSession(t *testing.T) {
 	case <-tab.session.Done():
 	case <-time.After(2 * time.Second):
 		t.Fatal("session.Done() never fired after closeShell")
+	}
+}
+
+// The tests below pin the user's own explicit request: a Terminal
+// whose own process exits on its own stays exactly where it was — in
+// r.shells, in the strip, in the switcher, and on screen if it was the
+// one showing — rather than disappearing or falling back to the
+// panel. watchShellExit itself only ever runs inside an
+// r.app.QueueUpdateDraw callback (see shells.go's own doc comment on
+// why that needs a real running Application event loop no test here
+// starts — the same reasoning TestRemoveShellFallsBackToTheNextOne...
+// already established for removeShell). These tests therefore reproduce
+// that callback's own body directly, the same convention
+// finishCompressJob's own tests already establish.
+
+func TestExitedTerminalStaysInTheListAndOnScreen(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	tab := r.shells[0]
+
+	// watchShellExit's own callback body, reproduced directly (see
+	// this block's own doc comment).
+	tab.exited = true
+	r.refreshShellHeader(tab)
+
+	if len(r.shells) != 1 {
+		t.Errorf("len(r.shells) = %d after exit, want 1 (still there)", len(r.shells))
+	}
+	if !r.viewingShells {
+		t.Error("viewingShells = false after exit while it was the one on screen, want true (no auto fallback)")
+	}
+	if r.panelHost.GetItem(1) != tab.view {
+		t.Error("panelHost's view item changed after exit, want the same frozen view still mounted")
+	}
+}
+
+func TestExitedTerminalLabelAndHeaderShowExited(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	tab := r.shells[0]
+
+	if got := tab.label(); got == tab.conn.Label()+"  (exited)" {
+		t.Fatalf("label already marked exited before the process exited: %q", got)
+	}
+
+	tab.exited = true
+	r.refreshShellHeader(tab)
+
+	wantLabel := tab.conn.Label() + "  (exited)"
+	if got := tab.label(); got != wantLabel {
+		t.Errorf("label() after exit = %q, want %q", got, wantLabel)
+	}
+	if got, want := r.panel.headerShellStatus.GetText(true), " "+wantLabel+" "; got != want {
+		t.Errorf("header text after exit = %q, want %q", got, want)
+	}
+}
+
+// TestExitedTerminalLeaveKeysReturnToFiles pins the full, wired-up
+// path a real exit goes through — not just termtabview.go's own
+// isolated InputHandler tests: watchShellExit's own callback body
+// (reproduced directly, see this file's own doc comment on why) sets
+// tab.view.exited, and openNewShellEmbedded wired tab.view.onLeave to
+// ExitTerminalViewShortcut — so once exited, Ctrl+C/Escape/Tab on the
+// actual mounted view really do leave Terminal view, the user's own
+// explicit request ("mit Aktivierung des äußeren breakthrough").
+func TestExitedTerminalLeaveKeysReturnToFiles(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	tab := r.shells[0]
+
+	tab.exited = true
+	tab.view.exited = true
+	r.refreshShellHeader(tab)
+
+	tab.view.InputHandler()(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.viewingShells {
+		t.Error("viewingShells still true after Ctrl+C on an exited terminal's own view")
+	}
+	if r.panel == nil || r.app.GetFocus() != r.panel.table {
+		t.Error("focus didn't return to the panel after leaving an exited terminal")
+	}
+}
+
+// TestApplyThemeColorsTheShellStatusLine pins that headerShellStatus —
+// a fixed per-Panel field now, not a dynamically created widget with
+// no Root field of its own the way shellTab.header used to be — gets
+// repainted by the ordinary Panel.paintStaticChrome/applyTheme path on
+// a live scheme switch, same as every other fixed widget on the
+// panel.
+func TestApplyThemeColorsTheShellStatusLine(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	custom := solarizedTheme().Resolve()
+	r.applyTheme(custom)
+
+	if got := r.panel.headerShellStatus.GetBackgroundColor(); got != custom.InputFocusedBackground {
+		t.Errorf("shell status line background = %v, want %v", got, custom.InputFocusedBackground)
+	}
+}
+
+func TestClosingAnExitedTerminalStillRemovesIt(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "exit 0") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	tab := r.shells[0]
+	select {
+	case <-tab.session.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("the stub process never exited")
+	}
+	tab.exited = true
+
+	r.closeShell(0)
+
+	if len(r.shells) != 0 {
+		t.Errorf("len(r.shells) = %d after explicitly closing an exited terminal, want 0", len(r.shells))
+	}
+}
+
+// The tests below pin the user's own explicit request: a Terminal's
+// own connection is remembered in the shared, disk-persisted history
+// (internal/remotefs) — the same one the Connect dialog and "gs"
+// dropdown already use — not just for the lifetime of r.shells, so it
+// can be reopened later, including after a real restart.
+
+func TestOpenNewShellEmbeddedSavesToHistoryAsUntested(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	conn := testShellConn("histone")
+	r.openNewShellEmbedded(conn)
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("len(history) = %d, want 1", len(history))
+	}
+	if !history[0].Equal(conn) {
+		t.Errorf("history[0].Connection = %+v, want %+v", history[0].Connection, conn)
+	}
+	if !history[0].Untested {
+		t.Error("history[0].Untested = false, want true — the outcome isn't known yet")
+	}
+}
+
+func TestWatchShellExitRecordsASuccessfulConnection(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "exit 0") })
+
+	conn := testShellConn("histsuccess")
+	r.openNewShellEmbedded(conn)
+	tab := r.shells[0]
+
+	// watchShellExit's own callback body, reproduced directly — see
+	// this file's own earlier doc comment on why (QueueUpdateDraw
+	// needs a real running event loop no test here starts).
+	<-tab.session.Done()
+	_, exitErr := tab.session.Exited()
+	failed := false
+	var ee *exec.ExitError
+	if errors.As(exitErr, &ee) {
+		failed = ee.ExitCode() == sshshell.ConnectionFailedExitCode
+	}
+	_ = remotefs.RecordAttempt(tab.conn, failed)
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 1 {
+		t.Fatalf("len(history) = %d, want 1", len(history))
+	}
+	if history[0].Untested {
+		t.Error("history[0].Untested = true, want false — a real outcome is now known")
+	}
+	if history[0].LastFailed {
+		t.Error("history[0].LastFailed = true, want false — an ordinary exit isn't a connection failure")
+	}
+}
+
+func TestWatchShellExitRecordsAFailedConnectionOnExitCode255(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "exit 255") })
+
+	conn := testShellConn("histfailed")
+	r.openNewShellEmbedded(conn)
+	tab := r.shells[0]
+
+	<-tab.session.Done()
+	_, exitErr := tab.session.Exited()
+	failed := false
+	var ee *exec.ExitError
+	if errors.As(exitErr, &ee) {
+		failed = ee.ExitCode() == sshshell.ConnectionFailedExitCode
+	}
+	_ = remotefs.RecordAttempt(tab.conn, failed)
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 1 || !history[0].LastFailed {
+		t.Fatalf("history = %+v, want exactly 1 entry marked LastFailed", history)
+	}
+}
+
+// TestTerminalHistorySurvivesACleanRestart pins the actual, user-facing
+// point of all this: a second, independent Root sharing the same
+// config directory (standing in for "the app restarted") sees the
+// connection a first run already made.
+func TestTerminalHistorySurvivesACleanRestart(t *testing.T) {
+	withTestConfigHome(t) // deliberately once — both Roots below share it
+	dir := t.TempDir()
+
+	r1, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot (first run): %v", err)
+	}
+	orig := startShellSession
+	startShellSession = func(conn remotefs.Connection, opts termtab.StartOptions) (*termtab.Session, error) {
+		opts.Command = func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") }
+		return termtab.Start(conn, opts)
+	}
+	t.Cleanup(func() { startShellSession = orig })
+
+	conn := testShellConn("restarted")
+	r1.openNewShellEmbedded(conn)
+	_ = r1.shells[0].session.Close()
+
+	r2, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot (second run): %v", err)
+	}
+	if len(r2.shells) != 0 {
+		t.Fatalf("the second run's own r.shells = %v, want empty — it never opened anything itself", r2.shells)
+	}
+
+	history, err := remotefs.LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(history) != 1 || !history[0].Equal(conn) {
+		t.Fatalf("history after \"restart\" = %+v, want the first run's own connection still there", history)
+	}
+}
+
+// TestGTChordOpensTerminalSwitcher pins the "gT" chord binding itself
+// (see keymap.go's own "g" family) — the identical shape
+// TestGSChordOpensSSHShellMenu (sshshell_test.go) already establishes
+// for its neighboring "gs" member: a dedicated key, not a stand-in for
+// plain "T" elsewhere, wired to the same destination that one reaches.
+func TestGTChordOpensTerminalSwitcher(t *testing.T) {
+	family, ok := chordFamilyFor('g')
+	if !ok {
+		t.Fatal("no \"g\" chord family")
+	}
+	var action func(r *Root)
+	for _, m := range family.members {
+		if m.key == 'T' {
+			action = m.action
+		}
+	}
+	if action == nil {
+		t.Fatal("\"g\" family has no \"T\" member")
+	}
+
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	action(r)
+
+	if r.activePage != terminalSwitcherPage {
+		t.Errorf("activePage = %q, want %q", r.activePage, terminalSwitcherPage)
+	}
+}
+
+// TestTerminalReservedKey pins the whitelist cmd/breakthrough's own
+// SetInputCapture checks before ever reaching its switch while a
+// Terminal has focus — see TerminalReservedKey's own doc comment for
+// why this exists: Delete, Ctrl+T, Ctrl+Tab, Ctrl+Shift+Tab, and
+// Ctrl+/Alt+digit each silently stole their own keystroke from a live
+// Terminal before this, with no guard of their own catching it.
+func TestTerminalReservedKey(t *testing.T) {
+	cases := []struct {
+		name  string
+		event *tcell.EventKey
+		want  bool
+	}{
+		{"Ctrl+Q", tcell.NewEventKey(tcell.KeyCtrlQ, 0, tcell.ModCtrl), true},
+		{"Ctrl+C", tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModCtrl), true},
+		{"Ctrl+\\", tcell.NewEventKey(tcell.KeyCtrlBackslash, 0, tcell.ModCtrl), true},
+		{"Alt+T", tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModAlt), true},
+		{"plain t (no Alt)", tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone), false},
+		{"Alt+s (not t)", tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModAlt), false},
+		{"Delete", tcell.NewEventKey(tcell.KeyDelete, 0, tcell.ModNone), false},
+		{"Ctrl+T", tcell.NewEventKey(tcell.KeyCtrlT, 0, tcell.ModCtrl), false},
+		{"Ctrl+Tab", tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModCtrl), false},
+		{"Ctrl+Shift+Tab", tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModCtrl), false},
+		{"plain Tab", tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), false},
+		{"Escape", tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), false},
+		{"Ctrl+1 (digit jump)", tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModCtrl), false},
+		{"Alt+1 (digit jump)", tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModAlt), false},
+	}
+	for _, c := range cases {
+		if got := TerminalReservedKey(c.event); got != c.want {
+			t.Errorf("%s: TerminalReservedKey() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestAcceptsGlobalShortcutFalseWhileViewingTerminal is the second
+// line of defense's own regression test — see acceptsGlobalShortcut's
+// own doc comment on why this matters for any caller that reaches a
+// Shortcut method some other way than cmd/breakthrough's switch.
+func TestAcceptsGlobalShortcutFalseWhileViewingTerminal(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	if !r.AcceptsGlobalShortcut() {
+		t.Fatal("setup: AcceptsGlobalShortcut() = false before any Terminal is open")
+	}
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	if r.AcceptsGlobalShortcut() {
+		t.Error("AcceptsGlobalShortcut() = true while viewing a Terminal, want false")
+	}
+}
+
+// TestSwitchToShellCancelsAPendingChord reproduces the gap the advisor
+// flagged: HandlePlainKey resolves a pending chord before any focus
+// check of its own, so a chord started in the panel (e.g. a lone "g")
+// and left pending while a *mouse* click (not a key) switches into a
+// Terminal would otherwise still be sitting there — the first real
+// keystroke meant for the remote side would be swallowed as the
+// chord's own second letter instead. switchToShell is the one place
+// every path into a Terminal goes through, so cancelling it there
+// closes the gap regardless of how a Terminal was reached.
+func TestSwitchToShellCancelsAPendingChord(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.pendingChord = 'g'
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	if r.pendingChord != 0 {
+		t.Errorf("pendingChord = %q after switching to a Terminal, want cleared", string(r.pendingChord))
 	}
 }

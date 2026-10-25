@@ -91,11 +91,13 @@ var helpText = strings.TrimLeft(`
   4000ms by default:
 
     g  goto     gg top · gh home · gu up · gp back · gn forward ·
-                gr / (root) · gb Trashbin · gc Connect… · gs SSH shell…
-                (a real interactive remote shell, same connection list
-                as gc) · gm Flareup · ge Email (launches neomutt/aerc/
-                himalaya/mail/mailx, whichever is installed —
-                configurable under Options) ·
+                gr / (root) · gb Trashbin · gc Connect… · gs Direct
+                SSH shell… (a real, blocking interactive remote shell,
+                same connection list as gc) · gT Terminal (same as
+                plain "T" — a persistent, embedded one instead) ·
+                gm Flareup · ge Email (launches neomutt/aerc/himalaya/
+                mail/mailx, whichever is installed — configurable
+                under Options) ·
                 g: Bash prompt (same as plain ":")
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
@@ -366,13 +368,19 @@ var helpText = strings.TrimLeft(`
   Compare Faultline, Batch rename, Sed Replace, and Properties as a whole still
   refuse outright for now.
 
-  "gs" opens a second dropdown ("Open shell to"), shaped like the one
-  above but for a real interactive SSH shell instead of mounting a
-  panel — reads and writes the exact same connection history, so a
-  host saved from either one shows up in both. Picking a row launches
-  a real ssh process with the whole terminal handed over (same Suspend
-  mechanism Email above uses), so a remote "sudo -i"/"su -" identity
-  switch just works, the same as typing it at any other real shell.
+  "gs" ("Direct SSH shell…") opens a second dropdown ("Open shell
+  to"), shaped like the one above but for a real interactive SSH
+  shell instead of mounting a panel — reads and writes the exact same
+  connection history, so a host saved from either one shows up in
+  both. Picking a row launches a real ssh process with the whole
+  terminal handed over (same Suspend mechanism Email above uses), so
+  a remote "sudo -i"/"su -" identity switch just works, the same as
+  typing it at any other real shell. "Direct" is what tells this
+  apart from the Terminal feature below (plain "T"/"gT"): this one
+  suspends breakthrough itself for as long as the remote shell runs,
+  one process, no switching away and back — the Terminal feature is
+  the one to reach for instead whenever a connection should keep
+  running in the background.
   "+ New connection" (or "✎" on an existing row) opens "Add new ssh
   connection": Host/Port/User plus four one-off flags — Agent forwarding (-A),
   Compression (-C), Verbose (-v), X11 forwarding (-X) — no password
@@ -1342,38 +1350,112 @@ var helpText = strings.TrimLeft(`
   strip, and the context menu all work regardless of what your terminal
   can report.
 
-[::b]Shells[::-]
+[::b]Terminals[::-]
 
   A separate, independent set of live embedded remote terminals — one
   per open connection, each a real background process that keeps
   running whether or not it's the one on screen right now. Unlike
-  Tabs above, a Shell has no directory or file list of its own; it's
-  a terminal, not a panel.
+  Tabs above, a Terminal has no directory or file list of its own;
+  it's a terminal, not a panel.
 
-  Alt+S              Open the Shells overlay: every currently open
-                     Shell, numbered, plus "+ New shell…" to start one
-                     and, while a Shell is on screen, "Files" to
-                     return to the panel.
+  The Terminal strip sits right after the tab strip's own numbers and
+  "+", in the same header row — a number per currently open Terminal,
+  then its own "+" (click it for a new one), the identical
+  numbers-then-"+" order the tab strip itself reads in. Deliberately
+  drawn in a fixed gray-on-white look (white-on-gray for whichever one
+  is active) that doesn't change with the color scheme, so it always
+  reads as its own thing next to the themed tab numbers beside it.
+  Click a number to switch, click anywhere else in the strip for the
+  full switcher below.
 
-  In the overlay: a bare digit (no Ctrl or Alt) jumps straight to that
-  numbered Shell — only the first ten get a digit of their own, the
-  same "...0 is the tenth" numbering Tabs above uses. Enter or Space
-  on a row switches to it; "✕" (or "x"/Delete from anywhere in the
-  row) closes that Shell outright. Escape closes the overlay without
-  changing anything.
+  T                  Open the Terminal switcher — only while the panel
+                     itself has focus, the same as "t" for Tabs above.
+  gT                 The same action again, reachable through the "g"
+                     chord (see Chords above) — a second, mnemonic
+                     path to this one switcher, not a separate one.
+  Alt+T              The same switcher, but reaches it regardless of
+                     where the keyboard focus currently is — including
+                     from inside an open Terminal, to switch straight
+                     to a different one or reach "Go to file view"
+                     there — the only one of the three that does.
 
-  "+ New shell…" reuses the exact same "Add new ssh connection" dialog
-  the "gs" chord's own one-off ssh shell already opens — Host/Port/
-  User plus the agent-forwarding/compression/verbose/X11 flags —
-  except this one stays open in its own Shell afterwards instead of
-  handing the whole terminal over for as long as the connection lasts.
+  The switcher looks and works like the Tab switcher above, with one
+  more column: every row — a currently open Terminal and every other
+  connection the shared, disk-persisted connection history remembers
+  (the same one the Connect dialog and the "gs" chord's own dropdown
+  already keep across restarts) — gets a number, a label, an Action
+  cell, and a "✕". A row's own label is colored the identical way the
+  "@" connections menu above already colors its own rows: green if
+  reached successfully before (a brighter green for whichever one is
+  currently connected), red if the last attempt failed, plain white
+  if it's never actually been dialed through yet. What those two
+  right-hand cells do depends on the row:
 
-  While a Shell has focus, nearly every keystroke goes straight to the
-  remote side, exactly as if you'd ssh'd in from a bare terminal — with
-  one deliberate exception: Alt+S itself is always caught here first,
-  even then, so there's always a way back to this overlay. A later
-  Options setting is planned to let that interception be turned off,
-  for the rare remote program that wants Alt+S for its own purposes.
+    An open Terminal (live or exited): the label switches to it; the
+    Action cell reads "⏏" and disconnects it; "✕" does the same — there
+    being nothing else "remove" could mean for something still
+    running. Disconnecting still leaves the connection in history,
+    exactly as reopenable as any other entry there.
+
+    A history-only connection (no open Terminal of its own right now
+    — you closed it, or it's from a previous run entirely): the label
+    opens a new Terminal straight to it, no dialog in between; the
+    Action cell reads "✎" and opens the existing "Add new ssh
+    connection" dialog prefilled, the same Edit the "gs" dropdown's
+    own history already offers; "✕" here does mean delete — it drops
+    the entry from history outright.
+
+  "+  New terminal" opens that same "Add new ssh connection" dialog
+  blank — Host/Port/User plus the agent-forwarding/compression/
+  verbose/X11 flags — and, while a Terminal is actually on screen,
+  "Go to file view" returns to the panel. Up/Down picks a row,
+  Right/Left move between its three columns, Enter or Space
+  activates whichever one's selected, Escape stays put. A bare
+  digit (no Ctrl or Alt) jumps
+  straight to that numbered row's own label action — switching to an
+  open Terminal, or connecting straight to a history-only one — and
+  closes the switcher immediately; only the first ten rows get a
+  digit this way, the same "...0 is the tenth" numbering Tabs above
+  uses. Both the digit jump and reusing the dialog with its submit
+  pointed back here (rather than the "gs" dropdown's own one-off ssh
+  launcher) are the two things this switcher has that the Tab
+  switcher doesn't.
+
+  A Terminal fills most of the screen, but not quite all of it: the
+  panel's own top row stays visible above it (filter, the strips
+  themselves), with the path bar's own spot repurposed to name which
+  connection this particular Terminal is open to instead — one merged
+  row, not a path that no longer means anything plus a separate line
+  underneath it, so the screen while viewing a Terminal still looks
+  like part of the same app, not a bare takeover.
+
+  If a Terminal's own remote process ends on its own — the connection
+  drops, you log out on the far side — nothing happens here
+  automatically: the screen keeps showing whatever was last on it, the
+  entry stays in the strip and the switcher (now marked "(exited)"),
+  and leaving is exactly the same as for a live one — switch to a tab,
+  open the switcher, Ctrl+\, or close it outright with "✕"/Delete.
+  Once it has actually exited, Ctrl+C, Escape, and Tab leave it too —
+  there's nothing left to send those to on the other end at that
+  point, so this app takes them back instead. Nothing about an ended
+  Terminal disappears until you tell it to.
+
+  While a Terminal has focus, nearly every keystroke goes straight to
+  the remote side, exactly as if you'd ssh'd in from a bare terminal —
+  with two deliberate exceptions: Alt+T (above, always opening the
+  switcher instead, even from inside the Terminal itself) and Ctrl+\,
+  reserved exclusively while a Terminal is on screen as the one
+  dedicated key to leave it outright — a guaranteed way back out even
+  when neither Alt+T nor the switcher's own Escape reaches the app (a
+  real report: some keyboards/terminal apps never deliver Option+T,
+  Alt+T's own equivalent there, at all — the identical problem
+  Option+S had before Alt+S was renamed to Alt+T). The same classic
+  rare-control-character "detach" convention telnet and tmux/screen
+  already use for the identical problem — a key that's otherwise
+  almost never typed deliberately into a real shell session. A later
+  Options setting is planned to let Alt+T's own interception be
+  turned off, for the rare remote program that wants it for its own
+  purposes.
 
   The open tabs are saved when you quit, but a bare "breakthrough"
   opens in the current directory rather than reopening them; setting

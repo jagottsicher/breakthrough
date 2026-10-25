@@ -170,6 +170,14 @@ func plainCommands() []plainCommand {
 		// three ways to reach it.
 		{key: '@', label: "Connect…", quick: true, short: "Conn", action: func(r *Root) { r.openConnectionMenu() }},
 		{key: 't', label: "Tab switcher", quick: true, short: "Tabs", action: func(r *Root) { r.openTabSwitcher(r.activeTab) }},
+		// Shift+t, right next to plain "t" above — the same key, Shift
+		// tells apart file tabs from embedded remote Terminals. Only
+		// reachable while the panel itself has focus (same as every
+		// other plain-letter binding — see acceptsPlainKeyCommand), so
+		// this alone can't get anyone back out of an open Terminal;
+		// Alt+T (cmd/breakthrough) and Ctrl+\ (same file, Terminal-only)
+		// both still work regardless of focus for that.
+		{key: 'T', label: "Terminal switcher", quick: true, short: "Term", action: func(r *Root) { r.openTerminalSwitcher(r.activeShell) }},
 		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
 		{key: '?', label: "Help", quick: true, short: "Help", action: func(r *Root) { r.openHelp() }},
 		{key: 'n', label: "New tab", action: func(r *Root) { r.newTabHere() }},
@@ -350,19 +358,48 @@ func chordFamilies() []chordFamily {
 			// header's own "@" button (see buildHeaderSpans) is this
 			// same action's mouse equivalent.
 			{'c', "Connect…", func(r *Root) { r.openConnectionMenu() }},
-			// "SSH shell…" ("go ssh"), right after Connect: the same
-			// "go to a whole further place" role, just landing in a
-			// real interactive remote shell (Suspend + exec ssh, see
+			// "Direct SSH shell…" ("go ssh"), right after Connect: the
+			// same "go to a whole further place" role, just landing in
+			// a real interactive remote shell (Suspend + exec ssh, see
 			// sshshell.go) instead of mounting an SFTP panel. Reuses
 			// the exact same connections.json history gc/"@" already
 			// read and write — per the user's own explicit request —
 			// so a host saved from either one shows up in both.
-			{'s', "SSH shell…", func(r *Root) { r.openSSHShellMenu() }},
-			// "Flareup" (Messages), after gr/gb/gc/gs: the status bar's
-			// own badge (bottombar.go) is this same action's mouse
-			// equivalent, the same "gehe zu einem ganzen weiteren Ort"
-			// role gb/gc already have — see feature_ideas.txt's own "3a.
-			// Benachrichtigungen".
+			//
+			// Relabeled from the original, shorter "SSH shell…" once
+			// "gT" (below) added a second, visually similar entry to
+			// this same family for the embedded Terminal feature
+			// (shells.go) — plain "SSH shell…" no longer said which of
+			// the two this was. "Direct" names the one thing this
+			// still does that the Terminal feature deliberately
+			// doesn't: suspend breakthrough itself and hand the whole
+			// terminal to one real, blocking ssh process — no
+			// persistent tab, no switching away and back, no running
+			// in the background. The more literal, codebase-internal
+			// "Suspend+exec" wording (see sshshell.go) was considered
+			// and rejected for this label specifically — it describes
+			// the mechanism, not what it means for someone reading the
+			// chord hint bar.
+			{'s', "Direct SSH shell…", func(r *Root) { r.openSSHShellMenu() }},
+			// "Terminal…" ("go Terminal") — a second, mnemonic path to
+			// the exact same action plain "T" already reaches (see
+			// plainCommands' own "Terminal switcher" entry), the
+			// identical "g:" reasoning just below gives for mirroring
+			// an existing plain key. Placed right after "gs" rather
+			// than elsewhere in the family: both land in a remote
+			// shell of some kind, "go to a whole further place" the
+			// same way gc/gs already do, just a persistent, embedded
+			// one instead of a single blocking process. Not "T Terminal"
+			// as its own label text — chordHintBar already shows this
+			// member's own key as a separate, highlighted box before
+			// the label, so repeating it inside the label itself would
+			// be the one member in this whole family doing that.
+			{'T', "Terminal…", func(r *Root) { r.openTerminalSwitcher(r.activeShell) }},
+			// "Flareup" (Messages), after gr/gb/gc/gs/gT: the status
+			// bar's own badge (bottombar.go) is this same action's
+			// mouse equivalent, the same "gehe zu einem ganzen weiteren
+			// Ort" role gb/gc already have — see feature_ideas.txt's
+			// own "3a. Benachrichtigungen".
 			{'m', "Flareup", func(r *Root) { r.openMessages() }},
 			// "Email" ("go email") — launches whichever terminal mail
 			// client is configured/detected (internal/mail), Suspend +
