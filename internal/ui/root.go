@@ -651,6 +651,44 @@ type Root struct {
 	// user's own explicit report flagged.
 	logAuditFilterRow    *tview.Flex
 	logAuditTimelineView *tview.TextView
+	// logAuditTimelineBarCol/BucketCount/MinT/MaxT are the geometry
+	// renderLogAuditTimeline itself actually drew last — persisted
+	// rather than re-derived, since logAuditTimelineText's own internal
+	// width clamping means a second, independent recomputation can
+	// disagree with the real drawn string on a narrow terminal (see its
+	// own doc comment on the barWidth floor). Every bucket-index
+	// hit-test (mouse) and bucket-to-time lookup (keyboard commit) goes
+	// through these, never through a fresh call to
+	// logAuditTimelineBuckets.
+	logAuditTimelineBarCol      int
+	logAuditTimelineBucketCount int
+	logAuditTimelineMinT        time.Time
+	logAuditTimelineMaxT        time.Time
+	// logAuditTimelineCounts/Severity/StartLabel/EndLabel are the
+	// bucket data the last successful (non-frozen) render actually
+	// computed — repaintLogAuditTimeline rebuilds the displayed text
+	// from these on every selection change instead of re-scanning
+	// logAuditAllEntries, so a moved cursor is never the thing that
+	// quietly un-freezes a frozen timeline.
+	logAuditTimelineCounts     []int
+	logAuditTimelineSeverity   []logview.Level
+	logAuditTimelineStartLabel string
+	logAuditTimelineEndLabel   string
+	// logAuditTimelineFocused/Anchor/Cursor/Dragging are the Timeline's
+	// own selection state — anchor+cursor is the same "text selection"
+	// shape searchFocusedIdx's own span-based focus uses, just with a
+	// range instead of a single index: a plain Left/Right collapses the
+	// selection (anchor = cursor), Shift+Left/Right extends it, and the
+	// visible/committed range is always [min(anchor,cursor),
+	// max(anchor,cursor)] regardless of which direction it was built in.
+	// Reset (not clamped) to zero whenever the geometry fields above
+	// change (bucketCount/minT/maxT) — see renderLogAuditTimeline note —
+	// since a stale index into a bucket count that no longer exists is
+	// worse than losing the selection.
+	logAuditTimelineFocused  bool
+	logAuditTimelineAnchor   int
+	logAuditTimelineCursor   int
+	logAuditTimelineDragging bool
 	// logAuditFocusIndicator fills the row between logAuditTimelineView
 	// and logAuditViewerTable's own header — previously just the
 	// table's own blank top border-padding, repurposed per the user's
@@ -3807,6 +3845,17 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// own check exists to prevent.
 	if r.searchDragging {
 		return r.dragSearchMouseCapture(action, event)
+	}
+
+	// A Log Audit timeline drag in progress — same reasoning as
+	// searchDragging/propertiesDragging just above: the bar is a
+	// single thin row, so a drag that so much as jitters one pixel up
+	// or down off it would otherwise fall through to ordinary
+	// position-based dispatch mid-drag, leaving logAuditTimelineDragging
+	// stuck true forever (and the timeline frozen forever with it — see
+	// renderLogAuditTimeline's own doc comment on that field).
+	if r.logAuditTimelineDragging {
+		return r.captureLogAuditTimelineMouse(action, event)
 	}
 
 	if r.activePage == "" {

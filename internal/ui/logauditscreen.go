@@ -156,8 +156,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditKeywordField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditTimeField, r.logAuditViewerTable)
 	})
-	r.logAuditKeywordField.SetFocusFunc(func() { r.restyleLogAuditFilterFields(r.logAuditKeywordField) })
-	r.logAuditKeywordField.SetBlurFunc(func() { styleInput(r.logAuditKeywordField, r.theme, false) })
+	r.logAuditKeywordField.SetFocusFunc(func() { r.restyleLogAuditFocusTargets(r.logAuditKeywordField) })
 
 	// Time reuses filterexpr.ParseMtime verbatim (see
 	// logAuditEntryVisible) — the exact same "before"/"after"/
@@ -177,8 +176,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditTimeField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditLevelField, r.logAuditKeywordField)
 	})
-	r.logAuditTimeField.SetFocusFunc(func() { r.restyleLogAuditFilterFields(r.logAuditTimeField) })
-	r.logAuditTimeField.SetBlurFunc(func() { styleInput(r.logAuditTimeField, r.theme, false) })
+	r.logAuditTimeField.SetFocusFunc(func() { r.restyleLogAuditFocusTargets(r.logAuditTimeField) })
 
 	// Level is a *minimum* severity ("warn" shows WARN and everything
 	// above it — ERROR, FATAL — not only exact WARN matches), the same
@@ -190,10 +188,12 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditLevelField.SetPlaceholder("warn")
 	r.logAuditLevelField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
 	r.logAuditLevelField.SetDoneFunc(func(key tcell.Key) {
-		r.logAuditViewerFieldDone(key, r.logAuditViewerTable, r.logAuditTimeField)
+		// next is the timeline, not the table directly — see
+		// captureLogAuditTimelineKey's own doc comment on the Tab
+		// chain this is now one link of.
+		r.logAuditViewerFieldDone(key, r.logAuditTimelineView, r.logAuditTimeField)
 	})
-	r.logAuditLevelField.SetFocusFunc(func() { r.restyleLogAuditFilterFields(r.logAuditLevelField) })
-	r.logAuditLevelField.SetBlurFunc(func() { styleInput(r.logAuditLevelField, r.theme, false) })
+	r.logAuditLevelField.SetFocusFunc(func() { r.restyleLogAuditFocusTargets(r.logAuditLevelField) })
 
 	r.logAuditFilterRow = tview.NewFlex().
 		AddItem(r.logAuditKeywordField, 0, 2, true).
@@ -203,6 +203,32 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditTimelineView = tview.NewTextView()
 	r.logAuditTimelineView.SetWrap(false)
 	r.logAuditTimelineView.SetDynamicColors(true)
+	r.logAuditTimelineView.SetInputCapture(r.captureLogAuditTimelineKey)
+	r.logAuditTimelineView.SetMouseCapture(r.captureLogAuditTimelineMouse)
+	// Can't route this one through restyleLogAuditFocusTargets:
+	// *tview.TextView.Focus (verified directly against tview's own
+	// textview.go) does "t.Lock(); defer t.Unlock()" *before* invoking
+	// this very FocusFunc, and repaintLogAuditTimeline calls SetText on
+	// this same TextView, which also locks it — a real, confirmed
+	// self-deadlock on tview's own non-reentrant mutex, not a
+	// hypothetical one (it hung TestLogAuditTimelineArrowKeysMoveAndCollapseSelection
+	// outright before this was found). SetBackgroundColor is safe here
+	// (Box's own override, never locks), so the focused look still
+	// applies immediately; the selection highlight itself first appears
+	// on whichever key or mouse event comes next — both already call
+	// repaintLogAuditTimeline themselves, safely, from outside this
+	// lock. restyleLogAuditFocusTargets itself stays the right function
+	// for every other caller (the three fields, the table, and
+	// applyLogAuditTheme's own refresh), none of which call back into
+	// the same widget they're styling.
+	r.logAuditTimelineView.SetFocusFunc(func() {
+		r.logAuditTimelineFocused = true
+		r.logAuditTimelineView.SetBackgroundColor(r.theme.InputFocusedBackground)
+		for _, f := range r.logAuditFilterFields() {
+			styleInput(f, r.theme, false)
+		}
+		r.renderLogAuditFocusIndicator(false)
+	})
 
 	// logAuditFocusIndicator takes over the row the table's own top
 	// border padding used to leave blank (padding dropped to 0 below) —
@@ -220,11 +246,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditViewerTable.SetFixed(1, 0)
 	r.logAuditViewerTable.SetInputCapture(r.captureLogAuditViewerTableKey)
 	r.logAuditViewerTable.SetSelectedFunc(func(row, col int) { r.openLogAuditDetail(row) })
-	r.logAuditViewerTable.SetFocusFunc(func() {
-		r.renderLogAuditFocusIndicator(true)
-		r.restyleLogAuditFilterFields(nil)
-	})
-	r.logAuditViewerTable.SetBlurFunc(func() { r.renderLogAuditFocusIndicator(false) })
+	r.logAuditViewerTable.SetFocusFunc(func() { r.restyleLogAuditFocusTargets(r.logAuditViewerTable) })
 
 	r.logAuditViewerHint = tview.NewTextView()
 	r.logAuditViewerHint.SetWrap(false)
@@ -540,38 +562,78 @@ func (r *Root) logAuditFilterFields() []*tview.InputField {
 	return []*tview.InputField{r.logAuditKeywordField, r.logAuditTimeField, r.logAuditLevelField}
 }
 
-// restyleLogAuditFilterFields re-styles every Log Audit filter field,
-// highlighting only focused (styleInput's own InputFocusedBackground)
-// and graying out every other one (InputBackground) — nil highlights
-// none, used when focus moves to the list instead of any field.
+// restyleLogAuditFocusTargets re-styles every focusable stop on this
+// screen's filter row (the three fields, the timeline, and the table's
+// own focus indicator) from one shared place, given whichever one
+// (identified by interface identity, not type — they don't share one
+// beyond tview.Primitive) actually just gained focus: highlighting
+// that one and graying out every other. One function instead of each
+// of the five FocusFunc callbacks separately remembering to also
+// unstyle the other four — the Timeline's own addition is exactly the
+// kind of thing a scattered version would have been easy to forget at
+// one of the other four call sites.
 //
 // Works around a real, confirmed tview gap rather than a bug in our
-// own BlurFunc wiring: NewInputField's own constructor (verified
-// directly against inputfield.go) forwards its embedded TextArea's
-// Focus event to the InputField's own registered FocusFunc —
-// "// Forward focus event to the input field." — but never adds the
-// matching Blur forwarder. A Tab-driven focus change still blurs the
-// *InputField itself (Root's own code calls r.app.SetFocus on the
-// InputField value directly — see logAuditViewerFieldDone), so that
-// path's own SetBlurFunc call still fires correctly. A mouse click,
-// though, is handled by TextArea.MouseHandler (see its own
-// MouseLeftDown case), which hands focus to the TextArea *value*, not
-// the InputField wrapping it — so from that point on, Application's
-// own a.focus.Blur() blurs the TextArea, which has no corresponding
-// forwarder back out to the InputField's own BlurFunc, and the field
-// stays visually "focused" forever after even once real focus has
-// long since moved elsewhere — confirmed directly against a
-// tcell.SimulationScreen with instrumented Focus/Blur callbacks and
-// app.GetFocus() printed before/after each click, not assumed from
-// reading tview's source alone. Reusing styleInput's existing Blur
-// path as the single source of "which look applies" means a user-
-// visible freshness check (the known-forwarded Focus event) rather
-// than depending on the known-broken Blur chain is what each field's
-// own FocusFunc now calls instead of styleInput directly.
-func (r *Root) restyleLogAuditFilterFields(focused *tview.InputField) {
+// own BlurFunc wiring, for the three *tview.InputField targets
+// specifically: NewInputField's own constructor (verified directly
+// against inputfield.go) forwards its embedded TextArea's Focus event
+// to the InputField's own registered FocusFunc — "// Forward focus
+// event to the input field." — but never adds the matching Blur
+// forwarder. A Tab-driven focus change still blurs the *InputField
+// itself (Root's own code calls r.app.SetFocus on the InputField value
+// directly — see logAuditViewerFieldDone), so that path's own blur
+// would still fire correctly if anything were still listening for it.
+// A mouse click, though, is handled by TextArea.MouseHandler (see its
+// own MouseLeftDown case), which hands focus to the TextArea *value*,
+// not the InputField wrapping it — so from that point on,
+// Application's own a.focus.Blur() blurs the TextArea, which has no
+// corresponding forwarder back out to the InputField's own BlurFunc,
+// and a Blur-driven restyle would stay visually "focused" forever
+// after even once real focus has long since moved elsewhere —
+// confirmed directly against a tcell.SimulationScreen with
+// instrumented Focus/Blur callbacks and app.GetFocus() printed
+// before/after each click, not assumed from reading tview's source
+// alone. This is exactly why every restyle here happens from a
+// FocusFunc (the known-forwarded event) rather than any BlurFunc (the
+// known-broken one for InputField) — not one of the five callers below
+// registers a BlurFunc of its own at all.
+func (r *Root) restyleLogAuditFocusTargets(focused tview.Primitive) {
 	for _, f := range r.logAuditFilterFields() {
-		styleInput(f, r.theme, f == focused)
+		styleInput(f, r.theme, tview.Primitive(f) == focused)
 	}
+	r.logAuditTimelineFocused = focused == r.logAuditTimelineView
+	background := r.theme.PopupBackground
+	if r.logAuditTimelineFocused {
+		background = r.theme.InputFocusedBackground
+	}
+	r.logAuditTimelineView.SetBackgroundColor(background)
+	r.repaintLogAuditTimeline()
+	r.renderLogAuditFocusIndicator(focused == r.logAuditViewerTable)
+}
+
+// logAuditCurrentlyFocused reports whichever of the five
+// restyleLogAuditFocusTargets stops (three fields, the timeline, or
+// the table) currently has real keyboard focus, or nil if none do
+// (e.g. a different overlay entirely). Only applyLogAuditTheme needs
+// this — every focus *transition* already knows which target it is
+// without asking (see each SetFocusFunc above), the same "pass the
+// known state in, don't re-derive it" shape renderLogAuditFocusIndicator's
+// own doc comment already establishes; a theme refresh is the one case
+// that isn't itself a transition and has nothing else to go on.
+func (r *Root) logAuditCurrentlyFocused() tview.Primitive {
+	switch {
+	case r.logAuditKeywordField.HasFocus():
+		return r.logAuditKeywordField
+	case r.logAuditTimeField.HasFocus():
+		return r.logAuditTimeField
+	case r.logAuditLevelField.HasFocus():
+		return r.logAuditLevelField
+	case r.logAuditTimelineView.HasFocus():
+		return r.logAuditTimelineView
+	case r.logAuditViewerTable.HasFocus():
+		return r.logAuditViewerTable
+	}
+	return nil
 }
 
 // renderLogAuditFocusIndicator paints the row itself in
@@ -889,11 +951,12 @@ func (r *Root) logAuditViewerFieldDone(key tcell.Key, next, prev tview.Primitive
 }
 
 // captureLogAuditViewerTableKey: Tab returns focus to the Keyword
-// field (restarting the three-field cycle), Backtab to Level (the
-// field right before the table in that cycle) — "e"/"w" jump to the
-// next error/warning, "r" re-reads the same files, "f" toggles follow,
-// "s" opens the Statistics modal, Escape closes the viewer (back to
-// the selection screen, see closeLogAuditViewer/pushOverlay).
+// field (restarting the Keyword→Time→Level→Timeline→Table cycle),
+// Backtab to the Timeline (the stop right before the table in that
+// cycle — see captureLogAuditTimelineKey) — "e"/"w" jump to the next
+// error/warning, "r" re-reads the same files, "f" toggles follow, "s"
+// opens the Statistics modal, Escape closes the viewer (back to the
+// selection screen, see closeLogAuditViewer/pushOverlay).
 func (r *Root) captureLogAuditViewerTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeLogAuditViewer()
@@ -904,7 +967,7 @@ func (r *Root) captureLogAuditViewerTableKey(event *tcell.EventKey) *tcell.Event
 		return nil
 	}
 	if event.Key() == tcell.KeyBacktab {
-		r.app.SetFocus(r.logAuditLevelField)
+		r.app.SetFocus(r.logAuditTimelineView)
 		return nil
 	}
 	if event.Key() == tcell.KeyRune {
@@ -927,6 +990,195 @@ func (r *Root) captureLogAuditViewerTableKey(event *tcell.EventKey) *tcell.Event
 		}
 	}
 	return event
+}
+
+// captureLogAuditTimelineKey handles keyboard interaction once the
+// Timeline itself holds focus: Left/Right move the cursor one bucket
+// and collapse the selection (anchor = cursor); Shift+Left/Right
+// extend it — leaving the anchor exactly where it already was, never
+// re-seeding it on "the first Shift press", since every *plain* move
+// already keeps anchor and cursor equal, so whatever anchor was
+// holding from the last plain move is already the correct start point
+// the moment a Shift sequence begins (see moveLogAuditTimelineCursor).
+// Enter/Space commit the current selection (single bucket or range)
+// into the Time field, the same as a mouse release after a drag (see
+// commitLogAuditTimelineSelection). Tab/Backtab move on to the table/
+// Level field respectively — logAuditTimelineView is a
+// *tview.TextView, not an *tview.InputField, so neither key routes
+// through SetDoneFunc the way the three fields above it do; this is
+// the only place either is handled at all for this widget. Escape
+// closes the whole viewer, matching every other stop on this screen.
+func (r *Root) captureLogAuditTimelineKey(event *tcell.EventKey) *tcell.EventKey {
+	switch event.Key() {
+	case tcell.KeyEscape:
+		r.closeLogAuditViewer()
+		return nil
+	case tcell.KeyTab:
+		r.app.SetFocus(r.logAuditViewerTable)
+		return nil
+	case tcell.KeyBacktab:
+		r.app.SetFocus(r.logAuditLevelField)
+		return nil
+	case tcell.KeyEnter:
+		r.commitLogAuditTimelineSelection()
+		return nil
+	case tcell.KeyLeft:
+		r.moveLogAuditTimelineCursor(-1, event.Modifiers()&tcell.ModShift != 0)
+		return nil
+	case tcell.KeyRight:
+		r.moveLogAuditTimelineCursor(1, event.Modifiers()&tcell.ModShift != 0)
+		return nil
+	case tcell.KeyRune:
+		if event.Rune() == ' ' {
+			r.commitLogAuditTimelineSelection()
+			return nil
+		}
+	}
+	return event
+}
+
+// moveLogAuditTimelineCursor moves the cursor by delta (±1 bucket),
+// clamped to [0, bucketCount-1]. extend=false (a plain arrow)
+// collapses the selection onto the new position (anchor = cursor);
+// extend=true (Shift held) leaves the anchor untouched, so repeated
+// Shift+arrow presses keep extending the same range from the same
+// starting point.
+func (r *Root) moveLogAuditTimelineCursor(delta int, extend bool) {
+	n := r.logAuditTimelineBucketCount
+	if n == 0 {
+		return
+	}
+	c := r.logAuditTimelineCursor + delta
+	if c < 0 {
+		c = 0
+	}
+	if c >= n {
+		c = n - 1
+	}
+	r.logAuditTimelineCursor = c
+	if !extend {
+		r.logAuditTimelineAnchor = c
+	}
+	r.repaintLogAuditTimeline()
+}
+
+// logAuditTimelineBucketAt maps an absolute screen column (as a mouse
+// event reports it) to a bucket index, using the bar's own column
+// logAuditTimelineLayout actually computed at the last unfrozen render
+// (see logAuditTimelineBarCol's own doc comment on root.go) — never
+// re-derived from the rendered string itself. ok is false for a column
+// before the bar's own start, past its end, or while there's nothing
+// to select at all (bucketCount == 0, e.g. the "no meaningful span"
+// case).
+func (r *Root) logAuditTimelineBucketAt(x int) (bucket int, ok bool) {
+	if r.logAuditTimelineBucketCount == 0 {
+		return 0, false
+	}
+	viewX, _, _, _ := r.logAuditTimelineView.GetInnerRect()
+	col := x - viewX - r.logAuditTimelineBarCol
+	if col < 0 || col >= r.logAuditTimelineBucketCount {
+		return 0, false
+	}
+	return col, true
+}
+
+// captureLogAuditTimelineMouse drives the Timeline's own click/drag
+// selection. MouseLeftDown on a bucket gives the Timeline real
+// keyboard focus (a click alone doesn't otherwise move it there — the
+// same gap dragSearchMouseCapture's own click-to-focus handling closes
+// for the Find dialog) and starts a new single-bucket selection.
+// MouseMove while a drag is in progress only moves the cursor and
+// repaints the highlight — no commit, no re-bucketing, so the
+// selection can be dragged leftward just as freely as rightward and
+// the timeline never shifts under the cursor mid-drag (see
+// logAuditTimelineDragging's own doc comment on root.go). MouseLeftUp,
+// or a stray MouseMove that arrives with the button already released
+// (the drag ended somewhere this capture never saw the button go up,
+// e.g. outside the terminal's own reported bounds), both commit —
+// mirroring Enter/Space — via commitLogAuditTimelineSelection, which
+// is also what turns logAuditTimelineDragging back off.
+func (r *Root) captureLogAuditTimelineMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	x, y := event.Position()
+
+	if r.logAuditTimelineDragging {
+		switch action {
+		case tview.MouseMove:
+			if event.Buttons()&tcell.ButtonPrimary == 0 {
+				r.commitLogAuditTimelineSelection()
+				return tview.MouseConsumed, nil
+			}
+			if b, ok := r.logAuditTimelineBucketAt(x); ok {
+				r.logAuditTimelineCursor = b
+				r.repaintLogAuditTimeline()
+			}
+			return tview.MouseConsumed, nil
+		case tview.MouseLeftUp:
+			r.commitLogAuditTimelineSelection()
+			return tview.MouseConsumed, nil
+		}
+		return tview.MouseConsumed, nil // swallow everything else for the duration of the drag
+	}
+
+	if action == tview.MouseLeftDown {
+		_, viewY, _, _ := r.logAuditTimelineView.GetInnerRect()
+		if y != viewY {
+			return action, event
+		}
+		b, ok := r.logAuditTimelineBucketAt(x)
+		if !ok {
+			return action, event
+		}
+		r.app.SetFocus(r.logAuditTimelineView)
+		r.logAuditTimelineDragging = true
+		r.logAuditTimelineAnchor = b
+		r.logAuditTimelineCursor = b
+		r.repaintLogAuditTimeline()
+		return tview.MouseConsumed, nil
+	}
+
+	return action, event
+}
+
+// commitLogAuditTimelineSelection writes the current selection
+// ([min(anchor,cursor), max(anchor,cursor)], always direction-
+// independent regardless of which direction it was built in) into the
+// Time field
+// as "between <von> and <bis>" — the exact grammar
+// filterexpr.ParseMtime already accepts elsewhere on this screen (see
+// logAuditTimeField's own placeholder), with both ends floored/ceiled
+// to the whole second: ParseMtime's own "between" is inclusive on both
+// ends already (!t.Before(start) && !t.After(end)), but a bucket
+// boundary can fall mid-second while every real timestamp here is
+// second-granular, so rounding outward is what actually guarantees no
+// entry at the edge is excluded regardless.
+//
+// Moves focus to the Time field *before* setting its text, not after:
+// that fires the Timeline's own BlurFunc-equivalent (restyleLogAuditFocusTargets
+// clears logAuditTimelineFocused) before SetText's ChangedFunc runs
+// renderLogAuditViewer, so the timeline's own freeze-while-focused
+// check (renderLogAuditTimeline) is already lifted by the time the
+// newly-narrowed range needs to re-bucket and zoom in — a commit must
+// never be blocked by the same freeze that protects an in-progress
+// selection from follow mode.
+func (r *Root) commitLogAuditTimelineSelection() {
+	r.logAuditTimelineDragging = false
+	if r.logAuditTimelineBucketCount == 0 {
+		return
+	}
+	start := min(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	end := max(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	from, _ := logAuditBucketTimeRange(r.logAuditTimelineMinT, r.logAuditTimelineMaxT, r.logAuditTimelineBucketCount, start)
+	_, to := logAuditBucketTimeRange(r.logAuditTimelineMinT, r.logAuditTimelineMaxT, r.logAuditTimelineBucketCount, end)
+	from = from.Truncate(time.Second)
+	if toFloor := to.Truncate(time.Second); !toFloor.Equal(to) {
+		to = toFloor.Add(time.Second)
+	} else {
+		to = toFloor
+	}
+
+	r.app.SetFocus(r.logAuditTimeField)
+	r.logAuditTimeField.SetText(fmt.Sprintf("between %s and %s",
+		from.Format("2006-01-02 15:04:05"), to.Format("2006-01-02 15:04:05")))
 }
 
 // captureLogAuditDetailKey: Escape is the only key this modal itself
@@ -984,26 +1236,21 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	// the visual mismatch this fixes.
 	r.logAuditFilterRow.SetBackgroundColor(theme.PanelBackground)
 	// logAuditTimelineView deliberately does NOT match SurfaceBackground
-	// — per the user's own explicit report, a density strip that reads
-	// as part of the same surface as the list below it is confusing;
-	// it needs its own, visibly different tone. PopupBackground is
-	// reused here rather than a plain hardcoded color: it is already
-	// this app's own "distinct secondary surface" role (the Detail/
-	// Statistics modals both use it — see applyLogAuditTheme below),
-	// and darker than SurfaceBackground in the default scheme, fixing
-	// the user's second report ("zu hell") in the same change.
-	r.logAuditTimelineView.SetBackgroundColor(theme.PopupBackground)
-	// logAuditFocusIndicator's own background comes entirely from
-	// renderLogAuditFocusIndicator (SurfaceBackground or
-	// InputFocusedBackground, depending on the list's current focus) —
-	// no separate line needed here.
-	r.renderLogAuditFocusIndicator(r.logAuditViewerTable.HasFocus())
-	// Label color and background both come from styleInput itself —
-	// see its own doc comment (theme.go) on the background mismatch
-	// this used to leave in place.
-	styleInput(r.logAuditKeywordField, theme, r.logAuditKeywordField.HasFocus())
-	styleInput(r.logAuditTimeField, theme, r.logAuditTimeField.HasFocus())
-	styleInput(r.logAuditLevelField, theme, r.logAuditLevelField.HasFocus())
+	// while unfocused — per the user's own explicit report, a density
+	// strip that reads as part of the same surface as the list below it
+	// is confusing; it needs its own, visibly different tone.
+	// PopupBackground is reused here rather than a plain hardcoded
+	// color: it is already this app's own "distinct secondary surface"
+	// role (the Detail/Statistics modals both use it — see
+	// applyLogAuditTheme below), and darker than SurfaceBackground in
+	// the default scheme, fixing the user's second report ("zu hell")
+	// in the same change. Focused/unfocused styling for all five stops
+	// (three fields, the timeline, the table's own focus indicator) now
+	// goes through one shared place — restyleLogAuditFocusTargets — fed
+	// here with whichever one actually has focus right now, the one
+	// case that isn't itself a focus transition and so has nothing else
+	// to pass in (see logAuditCurrentlyFocused's own doc comment).
+	r.restyleLogAuditFocusTargets(r.logAuditCurrentlyFocused())
 	// SurfaceBackground/TextColor, matching the main screen's own
 	// buttonBar/statusBar — see mountsHint's own identical comment.
 	r.logAuditViewerHint.SetBackgroundColor(theme.SurfaceBackground)

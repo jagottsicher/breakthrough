@@ -44,6 +44,54 @@ func TestLogAuditTimelineBucketsSpreadsAcrossRange(t *testing.T) {
 	}
 }
 
+func TestLogAuditBucketTimeRangeDividesSpanEvenly(t *testing.T) {
+	minT := time.Date(2026, 10, 7, 16, 0, 0, 0, time.UTC)
+	maxT := minT.Add(100 * time.Second)
+
+	from, to := logAuditBucketTimeRange(minT, maxT, 10, 0)
+	if !from.Equal(minT) {
+		t.Errorf("bucket 0 from = %v, want minT %v", from, minT)
+	}
+	if want := minT.Add(10 * time.Second); !to.Equal(want) {
+		t.Errorf("bucket 0 to = %v, want %v", to, want)
+	}
+
+	from, to = logAuditBucketTimeRange(minT, maxT, 10, 5)
+	if want := minT.Add(50 * time.Second); !from.Equal(want) {
+		t.Errorf("bucket 5 from = %v, want %v", from, want)
+	}
+	if want := minT.Add(60 * time.Second); !to.Equal(want) {
+		t.Errorf("bucket 5 to = %v, want %v", to, want)
+	}
+}
+
+// TestLogAuditBucketTimeRangeLastBucketClosesAtMaxT pins the one case
+// that must never drift from logAuditTimelineBuckets' own clamp: an
+// entry at exactly maxT lands in the last bucket (idx clamped to
+// bucketCount-1), so the last bucket's own range must close exactly at
+// maxT, not at the arithmetically rounded minT+bucketCount*span/bucketCount
+// — floating-point division could otherwise land a hair short of maxT
+// and exclude the very entry that defines it.
+func TestLogAuditBucketTimeRangeLastBucketClosesAtMaxT(t *testing.T) {
+	minT := time.Date(2026, 10, 7, 16, 0, 0, 0, time.UTC)
+	maxT := minT.Add(7 * time.Second) // deliberately not evenly divisible by bucketCount
+
+	_, to := logAuditBucketTimeRange(minT, maxT, 3, 2)
+	if !to.Equal(maxT) {
+		t.Errorf("last bucket's to = %v, want exactly maxT %v", to, maxT)
+	}
+}
+
+func TestLogAuditBucketTimeRangeSingleBucketSpansWholeRange(t *testing.T) {
+	minT := time.Date(2026, 10, 7, 16, 0, 0, 0, time.UTC)
+	maxT := minT.Add(42 * time.Second)
+
+	from, to := logAuditBucketTimeRange(minT, maxT, 1, 0)
+	if !from.Equal(minT) || !to.Equal(maxT) {
+		t.Errorf("from,to = %v,%v, want minT,maxT %v,%v", from, to, minT, maxT)
+	}
+}
+
 func TestLogAuditTimelineTextColorsErrorBucketRed(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	base := time.Date(2026, 10, 7, 16, 0, 0, 0, time.UTC)
