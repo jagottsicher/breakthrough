@@ -56,6 +56,25 @@ var absoluteLayouts = []string{
 	// (time.ParseInLocation("2006-01", "2026-10", time.Local) ==
 	// 2026-10-01 00:00:00), not assumed from the stdlib docs alone.
 	"2006-01",
+	// Lenient, non-zero-padded variants of every layout above — per
+	// the user's own explicit request, "2012-1-4 18:5:4" (single-digit
+	// month/day/hour/minute/second, any mix) should parse the same as
+	// "2012-01-04 18:05:04", not be rejected just for missing leading
+	// zeros. Go's own reference-time layout already does this exactly
+	// right with "1"/"2"/"15"/"4"/"5" (no leading zero in the layout
+	// itself) instead of "01"/"02"/"15"/"04"/"05": it accepts EITHER a
+	// bare "5" or a zero-padded "05" for that field, confirmed directly
+	// (time.ParseInLocation("2006-1-2 15:4:5", "2012-1-4 18:5:4", ...)
+	// == 2012-01-04 18:05:04 — not "18:50:40" the way a naive "just
+	// insert a zero somewhere" string transform could get wrong) —
+	// never assumed from the stdlib docs alone. These come last and
+	// only add tolerance for missing zeros; they never change what an
+	// already-correctly-zero-padded input above would have matched.
+	"2006-1",
+	"2006-1-2",
+	"2006-1-2T15:4:5",
+	"2006-1-2 15:4:5",
+	"2006-1-2 15:4",
 }
 
 // MtimeFilter is a parsed modified-time expression — see ParseMtime.

@@ -1202,13 +1202,19 @@ func (r *Root) captureLogAuditTimelineMouse(action tview.MouseAction, event *tce
 // entry at the edge is excluded regardless.
 //
 // Moves focus to the Time field *before* setting its text, not after:
-// that fires the Timeline's own BlurFunc-equivalent (restyleLogAuditFocusTargets
-// clears logAuditTimelineFocused) before SetText's ChangedFunc runs
-// renderLogAuditViewer, so the timeline's own freeze-while-focused
-// check (renderLogAuditTimeline) is already lifted by the time the
-// newly-narrowed range needs to re-bucket and zoom in — a commit must
-// never be blocked by the same freeze that protects an in-progress
-// selection from follow mode.
+// that fires restyleLogAuditFocusTargets (clearing logAuditTimelineFocused)
+// before the explicit renderLogAuditViewer call below runs, so the
+// timeline's own freeze-while-focused check (renderLogAuditTimeline)
+// is already lifted by the time the newly-narrowed range needs to
+// re-bucket and zoom in — a commit must never be blocked by the same
+// freeze that protects an in-progress selection from follow mode.
+//
+// Renders immediately, unlike ordinary typing into this same field
+// (see its own SetDoneFunc comment on why Time isn't live) — per the
+// user's own explicit report that having to press Enter a second time
+// after an already-deliberate mouse/keyboard selection was pure
+// friction: a commit is already the equivalent of "done editing", the
+// same one-shot action Enter itself is, not a partial keystroke.
 func (r *Root) commitLogAuditTimelineSelection() {
 	r.logAuditTimelineDragging = false
 	if r.logAuditTimelineBucketCount == 0 {
@@ -1228,6 +1234,7 @@ func (r *Root) commitLogAuditTimelineSelection() {
 	r.app.SetFocus(r.logAuditTimeField)
 	r.logAuditTimeField.SetText(fmt.Sprintf("between %s and %s",
 		from.Format("2006-01-02 15:04:05"), to.Format("2006-01-02 15:04:05")))
+	r.renderLogAuditViewer()
 }
 
 // captureLogAuditDetailKey: Escape is the only key this modal itself

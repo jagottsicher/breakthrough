@@ -894,6 +894,16 @@ func TestLogAuditTimelineEnterCommitsSelectionToTimeField(t *testing.T) {
 	if _, err := filterexpr.ParseMtime(got, time.Now()); err != nil {
 		t.Errorf("committed text %q does not parse as a valid mtime expression: %v", got, err)
 	}
+
+	// Per the user's own explicit report: having to press Enter a
+	// second time after an already-deliberate selection was pure
+	// friction. The commit above narrowed the filter to just buckets
+	// 1-2 out of the fixture's 20 one-second-apart entries — the table
+	// must already reflect that right now, not only after some further
+	// Enter.
+	if got := r.logAuditViewerTable.GetRowCount(); got >= 21 {
+		t.Errorf("row count = %d right after committing, want it already narrowed (fixture has 20 entries + header = 21 unfiltered)", got)
+	}
 }
 
 func TestLogAuditTimelineSpaceAlsoCommits(t *testing.T) {

@@ -598,13 +598,13 @@
     },
     {
       "path": "internal/filterexpr/mtime.go",
-      "size": 7148,
-      "sha256": "54042cddb0397b3d2da048bda7ee6b404543a326996d20e1d4a13a1f60f82910"
+      "size": 8181,
+      "sha256": "e96ccd0af27836fbfe50ceda8fd2e12d90bc7f04aedf8a2901f27272638a8a0e"
     },
     {
       "path": "internal/filterexpr/mtime_test.go",
-      "size": 6331,
-      "sha256": "ff00f4b3ea2c7bc97cd29d0e6b0b444a0e101d7ae49bfe1fab4a57cf91aae9e3"
+      "size": 7593,
+      "sha256": "d471e0ee40a19e0c18c9bc9fae73f07d40ad6a3c6ce840107302428d639b7380"
     },
     {
       "path": "internal/filterexpr/query.go",
@@ -2088,13 +2088,13 @@
     },
     {
       "path": "internal/ui/logaudit_test.go",
-      "size": 43762,
-      "sha256": "5c3543c7e9d9ed06ae0cc3a1392c8c84ced1e600215c4d41a9f43ed5b7a5d856"
+      "size": 44304,
+      "sha256": "b43903712afcebb0a682821574d71a63ac5b1fe605326b24f34cad90d5403604"
     },
     {
       "path": "internal/ui/logauditscreen.go",
-      "size": 56956,
-      "sha256": "9906f84adf3de17910436fa5c336cdaffc40b6134fd713e7219d3d8210a76b57"
+      "size": 57360,
+      "sha256": "3ce93664dd2cd61994a152ed2c40d7564b63ae741893c96158bec390a43e00ff"
     },
     {
       "path": "internal/ui/logauditsource.go",
@@ -9507,7 +9507,7 @@
       "file": "internal/filterexpr/mtime.go",
       "name": "MtimeFilter",
       "kind": "type",
-      "line": 62
+      "line": 81
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
@@ -9515,21 +9515,21 @@
       "name": "Match",
       "kind": "method",
       "receiver": "MtimeFilter",
-      "line": 68
+      "line": 87
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
       "file": "internal/filterexpr/mtime.go",
       "name": "ParseMtime",
       "kind": "function",
-      "line": 91
+      "line": 110
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
       "file": "internal/filterexpr/mtime.go",
       "name": "parseMoment",
       "kind": "function",
-      "line": 151
+      "line": 170
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
@@ -9604,37 +9604,44 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
       "file": "internal/filterexpr/mtime_test.go",
+      "name": "TestParseMtimeToleratesMissingLeadingZeros",
+      "kind": "function",
+      "line": 154
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/mtime_test.go",
       "name": "TestParseMtimeMonthsAndYearsAreApproximate",
-      "kind": "function",
-      "line": 148
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
-      "file": "internal/filterexpr/mtime_test.go",
-      "name": "TestParseMtimeRejectsEmptyExpression",
-      "kind": "function",
-      "line": 161
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
-      "file": "internal/filterexpr/mtime_test.go",
-      "name": "TestParseMtimeRejectsGarbage",
-      "kind": "function",
-      "line": 167
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
-      "file": "internal/filterexpr/mtime_test.go",
-      "name": "TestParseMtimeRejectsMalformedBetween",
       "kind": "function",
       "line": 173
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
       "file": "internal/filterexpr/mtime_test.go",
+      "name": "TestParseMtimeRejectsEmptyExpression",
+      "kind": "function",
+      "line": 186
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/mtime_test.go",
+      "name": "TestParseMtimeRejectsGarbage",
+      "kind": "function",
+      "line": 192
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/mtime_test.go",
+      "name": "TestParseMtimeRejectsMalformedBetween",
+      "kind": "function",
+      "line": 198
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
+      "file": "internal/filterexpr/mtime_test.go",
       "name": "TestParseMtimeKeywordsCaseInsensitive",
       "kind": "function",
-      "line": 182
+      "line": 207
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
@@ -35384,14 +35391,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -37119,42 +37126,42 @@
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditTimelineSpaceAlsoCommits",
       "kind": "function",
-      "line": 899
+      "line": 909
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditTimelineTabOrderBetweenLevelFieldAndTable",
       "kind": "function",
-      "line": 908
+      "line": 918
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditTimelineMouseClickSelectsSingleBucket",
       "kind": "function",
-      "line": 933
+      "line": 943
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditTimelineMouseDragSelectsRangeRegardlessOfDirection",
       "kind": "function",
-      "line": 960
+      "line": 970
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditTimelineMouseMoveStrayReleaseStillCommits",
       "kind": "function",
-      "line": 985
+      "line": 995
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logaudit_test.go",
       "name": "TestLogAuditTimelineFreezesWhileFocused",
       "kind": "function",
-      "line": 1008
+      "line": 1018
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37491,7 +37498,7 @@
       "name": "commitLogAuditTimelineSelection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1212
+      "line": 1218
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37499,7 +37506,7 @@
       "name": "captureLogAuditDetailKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1235
+      "line": 1242
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37507,7 +37514,7 @@
       "name": "applyLogAuditTheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1245
+      "line": 1252
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -58192,5 +58199,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "db1e4f9df27f4acc00be9c932a7d4030194b3b804a0ec1f73577d4f193bd33d7"
+  "merkle_root": "67212cd43ed9bc6b0d2647f56402196ba3a9138df0b8341c51d98fc55fbc8811"
 }
