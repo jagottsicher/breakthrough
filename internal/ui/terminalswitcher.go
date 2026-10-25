@@ -81,10 +81,16 @@ const terminalSwitcherFilesRowLabel = " Go to file view"
 // OpenTerminalSwitcherShortcut is the half of Alt+T's own toggle that
 // runs while no Terminal is on screen (see cmd/breakthrough's own
 // global SetInputCapture — ExitTerminalViewShortcut, shells.go, is the
-// other half) — gated the same way every other Shortcut method in
-// this package is (see acceptsGlobalShortcut's own doc comment).
+// other half) — but also plain "T"'s own target (keymap.go), which
+// unlike Alt+T is gated on the panel having focus in the first place
+// (acceptsPlainKeyCommand, upstream of this ever being called) and so
+// never reaches here while a Terminal is on screen at all. Gated on
+// acceptsGlobalShortcutEvenInATerminal, not the stricter
+// acceptsGlobalShortcut every other Shortcut method in this package
+// uses — see that function's own doc comment for why this one caller
+// is the exception.
 func (r *Root) OpenTerminalSwitcherShortcut() {
-	if !r.acceptsGlobalShortcut() {
+	if !r.acceptsGlobalShortcutEvenInATerminal() {
 		return
 	}
 	r.openTerminalSwitcher(r.activeShell)

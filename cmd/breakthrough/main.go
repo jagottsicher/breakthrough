@@ -215,6 +215,17 @@ func run() error {
 			return nil
 		}
 
+		// Deny-by-default while a Terminal has focus: everything not
+		// named in ui.TerminalReservedKey falls straight through to its
+		// own InputHandler unconsumed, rather than reaching the switch
+		// below at all — see that function's own doc comment for why
+		// this replaced a per-case guard added only once a specific key
+		// was reported broken (Ctrl+C, then Delete, each a real bug
+		// before this existed; Delete's own could delete a real file).
+		if root.ViewingTerminal() && !ui.TerminalReservedKey(event) {
+			return event
+		}
+
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
 			root.RequestQuit()
