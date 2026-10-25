@@ -563,3 +563,36 @@ func TestTerminalHistorySurvivesACleanRestart(t *testing.T) {
 		t.Fatalf("history after \"restart\" = %+v, want the first run's own connection still there", history)
 	}
 }
+
+// TestGTChordOpensTerminalSwitcher pins the "gT" chord binding itself
+// (see keymap.go's own "g" family) — the identical shape
+// TestGSChordOpensSSHShellMenu (sshshell_test.go) already establishes
+// for its neighboring "gs" member: a dedicated key, not a stand-in for
+// plain "T" elsewhere, wired to the same destination that one reaches.
+func TestGTChordOpensTerminalSwitcher(t *testing.T) {
+	family, ok := chordFamilyFor('g')
+	if !ok {
+		t.Fatal("no \"g\" chord family")
+	}
+	var action func(r *Root)
+	for _, m := range family.members {
+		if m.key == 'T' {
+			action = m.action
+		}
+	}
+	if action == nil {
+		t.Fatal("\"g\" family has no \"T\" member")
+	}
+
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+
+	r.openNewShellEmbedded(testShellConn("one"))
+	defer func() { _ = r.shells[0].session.Close() }()
+
+	action(r)
+
+	if r.activePage != terminalSwitcherPage {
+		t.Errorf("activePage = %q, want %q", r.activePage, terminalSwitcherPage)
+	}
+}
