@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hinshun/vt10x"
+
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
@@ -136,6 +138,57 @@ func TestWriteInputReachesTheRemoteProcess(t *testing.T) {
 	// that echoed newline already advanced the cursor, lands on row 1
 	// instead.
 	waitForCellRow(t, s, 1, "got:hello", 2*time.Second)
+}
+
+// waitForMode polls (same reasoning as waitForCellRow: parseLoop runs
+// concurrently, so the mode bit set by the remote program's own
+// escape sequence isn't necessarily applied the instant printf
+// returns) until s.Mode()&want == want, or fails after timeout.
+func waitForMode(t *testing.T, s *Session, want vt10x.ModeFlag, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var got vt10x.ModeFlag
+	for time.Now().Before(deadline) {
+		got = s.Mode()
+		if got&want == want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("Mode() = %v after %s, want %v set", got, timeout, want)
+}
+
+func TestModeReflectsMouseReportingTurnedOnByTheRemoteProgram(t *testing.T) {
+	s, err := Start(connNoop(), StartOptions{
+		Cols: 20, Rows: 5,
+		// "\x1b[?1000h\x1b[?1006h" is exactly what a real program
+		// (mc, vim, tmux, ...) writes to turn on button-event mouse
+		// reporting with SGR extended coordinates — the same two
+		// private modes a direct, non-embedded ssh connection's own
+		// terminal would also see and act on.
+		Command: shCommand(`printf '\033[?1000h\033[?1006h'`),
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	waitForMode(t, s, vt10x.ModeMouseButton|vt10x.ModeMouseSgr, 2*time.Second)
+}
+
+func TestModeHasNoMouseBitsBeforeAnyProgramAsksForReporting(t *testing.T) {
+	s, err := Start(connNoop(), StartOptions{
+		Cols: 20, Rows: 5,
+		Command: shCommand(`sleep 5`),
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	if got := s.Mode() & vt10x.ModeMouseMask; got != 0 {
+		t.Errorf("Mode()&ModeMouseMask = %v before any program ran, want 0", got)
+	}
 }
 
 func TestExitedReportsCleanExit(t *testing.T) {
