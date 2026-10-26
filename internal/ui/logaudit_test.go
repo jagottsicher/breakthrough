@@ -1039,3 +1039,97 @@ func TestLogAuditTimelineFreezesWhileFocused(t *testing.T) {
 		t.Error("after focus leaves, the timeline should resume reflecting new entries, not stay frozen forever")
 	}
 }
+
+// TestGCReachesAIConsigliereFromEveryLogAuditCapture pins "gC" reaching
+// the AI Consigliere from inside Log Audit — see startConsigliereChord's
+// own doc comment in consigliere.go. acceptsPlainKeyCommand (see
+// keymap.go) never passes while Log Audit is the active full-screen
+// overlay, so "g" alone could never have started the chord without
+// each of these InputCapture functions explicitly doing it; this
+// exercises that for all four, including the one real trade-off
+// (captureLogAuditDetailKey's own case, which gives up tview's
+// built-in vi-style "g" = scroll-to-top on that specific TextView —
+// see its own doc comment).
+func TestGCReachesAIConsigliereFromEveryLogAuditCapture(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+
+	for _, tc := range []struct {
+		name  string
+		setup func(r *Root) func(*tcell.EventKey) *tcell.EventKey
+	}{
+		{"Selection", func(r *Root) func(*tcell.EventKey) *tcell.EventKey {
+			return r.captureLogAuditSelectionTableKey
+		}},
+		{"Viewer", func(r *Root) func(*tcell.EventKey) *tcell.EventKey {
+			r.logAuditTable.Select(1, 0)
+			r.openLogAuditViewer()
+			return r.captureLogAuditViewerTableKey
+		}},
+		{"Timeline", func(r *Root) func(*tcell.EventKey) *tcell.EventKey {
+			r.logAuditTable.Select(1, 0)
+			r.openLogAuditViewer()
+			return r.captureLogAuditTimelineKey
+		}},
+		{"Detail", func(r *Root) func(*tcell.EventKey) *tcell.EventKey {
+			r.logAuditTable.Select(1, 0)
+			r.openLogAuditViewer()
+			r.openLogAuditDetail(1)
+			return r.captureLogAuditDetailKey
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newTestRootForLogAudit(t, dir)
+			capture := tc.setup(r)
+
+			if got := capture(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone)); got != nil {
+				t.Fatalf("capture('g') = %v, want nil (consumed, chord started)", got)
+			}
+			if r.pendingChord != 'g' {
+				t.Fatalf("pendingChord = %q, want 'g'", string(r.pendingChord))
+			}
+
+			if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
+				t.Fatal("the resolving 'C' should have been consumed")
+			}
+			if !r.consigliereVisible {
+				t.Error("\"gC\" should have opened the AI Consigliere sidebar")
+			}
+		})
+	}
+}
+
+// TestGCInLogAuditDoesNotReachOtherGotoMembers pins the actual bug
+// pendingChordFamily (see its own doc comment in root.go) exists to
+// fix: before it, resolveChord re-derived whatever family was pending
+// by its prefix rune alone, so starting the chord from inside Log
+// Audit on a bare 'g' would have resolved against the real "goto"
+// family (chordFamilies' own 'g' entry) — making gg/gh/gu/gb/... all
+// reachable here too, silently acting on the hidden file panel
+// underneath. Only 'C' may resolve; anything else must report "not a
+// command", not run some other goto member.
+func TestGCInLogAuditDoesNotReachOtherGotoMembers(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	beforePath := r.panel.path
+
+	r.captureLogAuditSelectionTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
+	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'b', tcell.ModNone)) {
+		t.Fatal("the resolving 'b' should still have been consumed (even though it's unbound here)")
+	}
+
+	if r.consigliereVisible {
+		t.Error("'b' is not 'C' — this must not have opened the AI Consigliere")
+	}
+	// The real goto family's own "gb" navigates the panel straight to
+	// the Trash directory (openTrash) — no overlay of its own, so the
+	// panel's own path is the one reliable signal that it never ran.
+	// (The expected "not a command" transient error this resolves to
+	// instead is itself a real, if short-lived, overlay — asserting
+	// activePage stayed completely unchanged would be a false
+	// negative, not a stronger check.)
+	if r.panel.path != beforePath {
+		t.Errorf("panel.path changed to %q, want unchanged %q — no goto-family member should have touched the hidden panel", r.panel.path, beforePath)
+	}
+}

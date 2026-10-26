@@ -2375,3 +2375,52 @@ func TestGitBreachDiffCommentColorStaysReadableOnA256ColorTerminal(t *testing.T)
 		t.Errorf("degraded comment color vs degraded removed background = %.2f, want >= %.1f", got, minContrast)
 	}
 }
+
+// TestGCReachesAIConsigliereFromEveryGitBreachPane pins "gC" reaching
+// the AI Consigliere from inside Git Breach — see startConsigliereChord's
+// own doc comment in consigliere.go. acceptsPlainKeyCommand (see
+// keymap.go) never passes while Git Breach is the active full-screen
+// overlay, so "g" alone could never have started the chord without
+// each pane's own InputCapture explicitly doing it; this exercises
+// that for every pane, not just one.
+func TestGCReachesAIConsigliereFromEveryGitBreachPane(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	for _, tc := range []struct {
+		name    string
+		focus   func(r *Root) tview.Primitive
+		capture func(r *Root) func(*tcell.EventKey) *tcell.EventKey
+	}{
+		{"Files", func(r *Root) tview.Primitive { return r.gitBreachFilesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachFilesTableKey }},
+		{"Branches", func(r *Root) tview.Primitive { return r.gitBreachBranchesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachBranchesTableKey }},
+		{"Commits", func(r *Root) tview.Primitive { return r.gitBreachCommitsTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachCommitsTableKey }},
+		{"Stash", func(r *Root) tview.Primitive { return r.gitBreachStashTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachStashTableKey }},
+		{"Main", func(r *Root) tview.Primitive { return r.gitBreachDiffView }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachMainKey }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newTestRootForGitBreachDir(t, dir)
+			r.openGitBreach()
+			r.app.SetFocus(tc.focus(r))
+
+			if got := tc.capture(r)(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone)); got != nil {
+				t.Fatalf("capture('g') = %v, want nil (consumed, chord started)", got)
+			}
+			if r.pendingChord != 'g' {
+				t.Fatalf("pendingChord = %q, want 'g'", string(r.pendingChord))
+			}
+
+			if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
+				t.Fatal("the resolving 'C' should have been consumed")
+			}
+			if !r.consigliereVisible {
+				t.Error("\"gC\" should have opened the AI Consigliere sidebar")
+			}
+		})
+	}
+}

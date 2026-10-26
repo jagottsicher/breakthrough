@@ -28,6 +28,37 @@ import (
 
 const consiglierePage = "consigliere"
 
+// consigliereChordFamily is a one-member stand-in for the real "goto"
+// family (chordFamilies' own 'g' entry in keymap.go), started from
+// inside a full-screen modal (Log Audit, Git Breach, ...) on a bare
+// 'g' key press that screen's own InputCapture would otherwise leave
+// unclaimed — see startConsigliereChord's own doc comment for why this
+// needs to be its own family rather than just reusing the real one by
+// prefix. Reached the exact same way the main panel's own "gC" is
+// (startChord -> resolveChord -> this family's own single member), so
+// "gC" behaves identically everywhere it works at all; the only
+// per-screen cost is the three-line case that starts it.
+var consigliereChordFamily = chordFamily{
+	prefix: 'g',
+	name:   "AI Consigliere",
+	members: []chordMember{
+		{'C', "AI Consigliere", func(r *Root) { r.ConsigliereShortcut() }},
+	},
+}
+
+// startConsigliereChord is what a full-screen modal's own InputCapture
+// calls on a bare 'g' it doesn't otherwise claim, to make "gC" reach
+// the AI Consigliere from there too. Calling startChord directly with
+// this same family would already be correct by itself — the point of
+// wrapping it here is just a single, named, grep-able call site every
+// screen's own "case 'g':" can share, rather than each repeating the
+// same comment about why it has to be this specific family and not
+// chordFamilyFor('g')'s real "goto" one (see pendingChordFamily's own
+// doc comment in root.go for that part).
+func (r *Root) startConsigliereChord() {
+	r.startChord(consigliereChordFamily)
+}
+
 // consigliereMinWidth is consigliereSize's own floor on a terminal too
 // narrow for a genuine one-third share to still be usable — the same
 // floor detailsSidebarMinWidth already establishes for the sidebar

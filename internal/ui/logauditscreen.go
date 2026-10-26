@@ -975,9 +975,21 @@ func (r *Root) captureLogAuditSelectionTableKey(event *tcell.EventKey) *tcell.Ev
 		r.closeLogAuditSelection()
 		return nil
 	}
-	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
-		r.reloadLogAuditDiscovery()
-		return nil
+	if event.Key() == tcell.KeyRune {
+		switch event.Rune() {
+		case 'r':
+			r.reloadLogAuditDiscovery()
+			return nil
+		case 'g':
+			// "gC" reaches the AI Consigliere from here too — see
+			// startConsigliereChord's own doc comment in
+			// consigliere.go. logAuditTable is a *tview.Table, which
+			// (unlike a *tview.TextView) has no built-in meaning for a
+			// bare 'g' to begin with, so nothing existing is lost by
+			// claiming it here.
+			r.startConsigliereChord()
+			return nil
+		}
 	}
 	return event
 }
@@ -1036,6 +1048,15 @@ func (r *Root) captureLogAuditViewerTableKey(event *tcell.EventKey) *tcell.Event
 		case 's':
 			r.openLogAuditStats()
 			return nil
+		case 'g':
+			// "gC" reaches the AI Consigliere — see
+			// startConsigliereChord's own doc comment in
+			// consigliere.go. logAuditViewerTable is a *tview.Table,
+			// unaffected by the TextView-only vi-style "g" (Home)
+			// binding captureLogAuditDetailKey's own case below has to
+			// account for.
+			r.startConsigliereChord()
+			return nil
 		}
 	}
 	return event
@@ -1078,8 +1099,21 @@ func (r *Root) captureLogAuditTimelineKey(event *tcell.EventKey) *tcell.EventKey
 		r.moveLogAuditTimelineCursor(1, event.Modifiers()&tcell.ModShift != 0)
 		return nil
 	case tcell.KeyRune:
-		if event.Rune() == ' ' {
+		switch event.Rune() {
+		case ' ':
 			r.commitLogAuditTimelineSelection()
+			return nil
+		case 'g':
+			// "gC" reaches the AI Consigliere — see
+			// startConsigliereChord's own doc comment in
+			// consigliere.go. logAuditTimelineView is a *tview.TextView,
+			// but every key this bar cares about (bucket selection via
+			// Left/Right/Space/Enter above) is already fully custom —
+			// tview's own built-in vi-style "g" (Home) would only ever
+			// have scrolled a one-line visual bar with nothing
+			// meaningful to scroll to, unlike captureLogAuditDetailKey's
+			// own case below.
+			r.startConsigliereChord()
 			return nil
 		}
 	}
@@ -1242,6 +1276,20 @@ func (r *Root) commitLogAuditTimelineSelection() {
 func (r *Root) captureLogAuditDetailKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeLogAuditDetail()
+		return nil
+	}
+	if event.Key() == tcell.KeyRune && event.Rune() == 'g' {
+		// "gC" reaches the AI Consigliere — see startConsigliereChord's
+		// own doc comment in consigliere.go. Deliberate trade-off, not
+		// an oversight: logAuditDetailView is a genuinely scrollable
+		// *tview.TextView (a full entry can run well past one screen),
+		// and tview's own built-in vi-style bindings (textview.go) map
+		// bare 'g' to "scroll to the very top" — claiming it here for
+		// the chord loses that one specific jump. 'G' (scroll to the
+		// very bottom), 'j'/'k'/'h'/'l', the arrow keys, and PageUp/
+		// PageDown/Home/End are all a different rune or tcell.Key, so
+		// none of them are affected.
+		r.startConsigliereChord()
 		return nil
 	}
 	return event

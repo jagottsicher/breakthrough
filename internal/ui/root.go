@@ -2246,6 +2246,24 @@ type Root struct {
 	chordDeadline time.Time
 	chordCancel   context.CancelFunc
 
+	// pendingChordFamily is exactly the chordFamily startChord was
+	// called with — read back directly by resolveChord/
+	// refreshChordHintBar instead of either one re-deriving it from
+	// pendingChord via chordFamilyFor's own global-by-prefix lookup
+	// (which only ever finds one of the families already registered in
+	// chordFamilies()). That distinction only matters for an ad-hoc
+	// family started from outside the main panel — see
+	// consigliereChordFamily in consigliere.go: calling startChord with
+	// it while pendingChord happens to be 'g' must resolve against that
+	// one-member family, not the real "goto" family chordFamilyFor('g')
+	// would otherwise still find, which would make gg/gh/gu/... etc. all
+	// reachable (and silently acting on the hidden file panel) from
+	// wherever this was actually started. Every existing caller already
+	// passes chordFamilyFor's own result straight through, so this
+	// changes nothing for them — only a family that doesn't share its
+	// own prefix's single registered identity needs it.
+	pendingChordFamily chordFamily
+
 	// bashLineCompletingPick is true only for the moment openCompletionPicker
 	// moves focus away from bashLine to the completion picker it opens —
 	// a deliberate, momentary transition, not the user leaving the

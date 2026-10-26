@@ -824,13 +824,15 @@ func (r *Root) deactivateGitBreachMain() {
 // context-dependent exception, since here it's "back out of the diff",
 // not "close the dashboard"), Tab/Backtab continue the ring from the
 // owning box's own position, "c"/"r" keep working here too since both
-// are already documented as focus-independent. Everything else
-// (Up/Down/PgUp/PgDn/Right/Home/End and TextView's own vim-style
-// h/j/k/l/g/G) is left untouched and falls through to
-// tview.TextView's own already-correct scrolling — no forwarding hack
-// needed now that Main can be the real focus target directly (compare
-// the pre-focus-model approach this superseded, scrollGitBreachDiff,
-// now removed entirely).
+// are already documented as focus-independent, and "g" starts the AI
+// Consigliere chord (see below — a deliberate exception to the
+// paragraph that follows, not an oversight). Everything else
+// (Up/Down/PgUp/PgDn/Right/Home/End, "G", and TextView's own vim-style
+// h/j/k/l) is left untouched and falls through to tview.TextView's own
+// already-correct scrolling — no forwarding hack needed now that Main
+// can be the real focus target directly (compare the pre-focus-model
+// approach this superseded, scrollGitBreachDiff, now removed
+// entirely).
 func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEscape, tcell.KeyEnter, tcell.KeyLeft:
@@ -857,6 +859,19 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case 'v':
 			r.toggleGitBreachDiffSplit()
+			return nil
+		case 'g':
+			// "gC" reaches the AI Consigliere — see
+			// startConsigliereChord's own doc comment in
+			// consigliere.go. A genuine, deliberate trade-off here, not
+			// a free win the way it is on every pure *tview.Table pane
+			// in this file: tview's own built-in vi-style bare "g"
+			// jumps to the very top of a potentially long diff, and
+			// this capture's own comment above used to document that as
+			// correct, valued behavior. "G" (bottom) and every other
+			// scroll key are untouched — only this one jump is the
+			// price.
+			r.startConsigliereChord()
 			return nil
 		}
 	}
@@ -891,6 +906,16 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 	}
 	if event.Key() == tcell.KeyRune {
 		switch event.Rune() {
+		case 'g':
+			// "gC" reaches the AI Consigliere — see
+			// startConsigliereChord's own doc comment in
+			// consigliere.go. gitBreachFilesTable is a *tview.Table,
+			// which has no built-in meaning for a bare 'g' (unlike
+			// Main's own *tview.TextView — see
+			// captureGitBreachMainKey's own case), so nothing existing
+			// is lost by claiming it here.
+			r.startConsigliereChord()
+			return nil
 		case ' ':
 			r.toggleGitBreachStage()
 			return nil
@@ -937,6 +962,14 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			return nil
 		case 'd':
 			r.openGitBreachDeleteBranch()
+			return nil
+		case 'g':
+			// "gC" reaches the AI Consigliere — see
+			// startConsigliereChord's own doc comment in
+			// consigliere.go and captureGitBreachFilesTableKey's own
+			// identical case (gitBreachBranchesTable is also a plain
+			// *tview.Table).
+			r.startConsigliereChord()
 			return nil
 		}
 	}
@@ -994,6 +1027,14 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 		case 'c':
 			r.openGitBreachCommitPrompt()
 			return nil
+		case 'g':
+			// "gC" reaches the AI Consigliere — see
+			// startConsigliereChord's own doc comment in
+			// consigliere.go and captureGitBreachFilesTableKey's own
+			// identical case (gitBreachCommitsTable is also a plain
+			// *tview.Table).
+			r.startConsigliereChord()
+			return nil
 		}
 	}
 	return event
@@ -1045,6 +1086,14 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 			return nil
 		case 'd':
 			r.openGitBreachStashDrop()
+			return nil
+		case 'g':
+			// "gC" reaches the AI Consigliere — see
+			// startConsigliereChord's own doc comment in
+			// consigliere.go and captureGitBreachFilesTableKey's own
+			// identical case (gitBreachStashTable is also a plain
+			// *tview.Table).
+			r.startConsigliereChord()
 			return nil
 		}
 	}
