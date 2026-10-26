@@ -2573,13 +2573,13 @@
     },
     {
       "path": "internal/ui/termtabkeys.go",
-      "size": 1965,
-      "sha256": "322a9239c4252b2b6937d4c63ec3fee2f2ded05bf752920d43642ecd5d174d24"
+      "size": 3250,
+      "sha256": "9cf0ae9d1d808a63f5c4e37ae5f0ecdeb1e9019f9d06dd232d84e294792b9242"
     },
     {
       "path": "internal/ui/termtabkeys_test.go",
-      "size": 2500,
-      "sha256": "423cc255868424fd92de8abd20a4a04daee51d140c18e2a70ded3e3389e6f691"
+      "size": 3773,
+      "sha256": "d98325d73ec8d868cf5d82fde542fc8b3b62b4fa8c73c789d6fb3a5145e48133"
     },
     {
       "path": "internal/ui/termtabview.go",
@@ -54771,7 +54771,7 @@
       "file": "internal/ui/termtabkeys.go",
       "name": "termKeyBytes",
       "kind": "function",
-      "line": 26
+      "line": 34
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -54804,16 +54804,30 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabkeys_test.go",
-      "name": "TestTermKeyBytesUnmappedKeyReturnsNil",
+      "name": "TestTermKeyBytesFunctionKeys",
       "kind": "function",
       "line": 70
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabkeys_test.go",
+      "name": "TestTermKeyBytesNavigationKeys",
+      "kind": "function",
+      "line": 95
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabkeys_test.go",
+      "name": "TestTermKeyBytesUnmappedKeyReturnsNil",
+      "kind": "function",
+      "line": 114
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabkeys_test.go",
       "name": "TestTermKeyBytesPlainRuneIsUnaffectedByUnrelatedModifiers",
       "kind": "function",
-      "line": 76
+      "line": 123
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -58199,5 +58213,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "67212cd43ed9bc6b0d2647f56402196ba3a9138df0b8341c51d98fc55fbc8811"
+  "merkle_root": "569c2a30f551c2b878d229d1d13032e8f985e3332472a55784764a83dae6837e"
 }
