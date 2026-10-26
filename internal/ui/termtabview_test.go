@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/hinshun/vt10x"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -173,6 +174,94 @@ func TestTermTabViewCtrlCEscapeTabCallOnLeaveOnceExited(t *testing.T) {
 	if leaveCalls != 3 {
 		t.Errorf("onLeave called %d times, want 3 (Ctrl+C, Escape, Tab each once)", leaveCalls)
 	}
+}
+
+func TestTermTabViewMouseHandlerClaimsFocusOnButtonDownInRect(t *testing.T) {
+	session, err := termtab.Start(termNoopConn(), termtab.StartOptions{
+		Cols: 20, Rows: 5,
+		Command: func() *exec.Cmd { return exec.Command("sh", "-c", `sleep 5`) },
+	})
+	if err != nil {
+		t.Fatalf("termtab.Start: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	v := newTermTabView(session)
+	v.SetRect(0, 0, 20, 5)
+
+	var focused tview.Primitive
+	setFocus := func(p tview.Primitive) { focused = p }
+
+	handler := v.MouseHandler()
+	consumed, _ := handler(tview.MouseLeftDown, tcell.NewEventMouse(2, 1, tcell.ButtonPrimary, tcell.ModNone), setFocus)
+	if !consumed {
+		t.Error("MouseLeftDown inside rect: consumed = false, want true")
+	}
+	if focused != v {
+		t.Error("MouseLeftDown inside rect never called setFocus(v)")
+	}
+}
+
+func TestTermTabViewMouseHandlerIgnoresEventsOutsideItsRect(t *testing.T) {
+	session, err := termtab.Start(termNoopConn(), termtab.StartOptions{
+		Cols: 20, Rows: 5,
+		Command: func() *exec.Cmd { return exec.Command("sh", "-c", `sleep 5`) },
+	})
+	if err != nil {
+		t.Fatalf("termtab.Start: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	v := newTermTabView(session)
+	v.SetRect(0, 0, 20, 5)
+
+	noopFocus := func(tview.Primitive) {}
+	handler := v.MouseHandler()
+	consumed, _ := handler(tview.MouseLeftDown, tcell.NewEventMouse(50, 50, tcell.ButtonPrimary, tcell.ModNone), noopFocus)
+	if consumed {
+		t.Error("MouseLeftDown outside rect: consumed = true, want false (let another primitive have it)")
+	}
+}
+
+// TestTermTabViewMouseHandlerForwardsClickToARealSessionOnceEnabled is
+// the end-to-end proof that Mode(), termMouseBytes and WriteInput are
+// wired together correctly: the remote script first turns on SGR
+// mouse reporting exactly the way a real program (mc, vim, tmux) does,
+// switches the pty to raw mode so a fixed byte count can be read back
+// without waiting on a newline the mouse sequence never sends, then
+// echoes those bytes back as hex so the test can assert on them
+// through the ordinary cell buffer.
+func TestTermTabViewMouseHandlerForwardsClickToARealSessionOnceEnabled(t *testing.T) {
+	session, err := termtab.Start(termNoopConn(), termtab.StartOptions{
+		Cols: 40, Rows: 5,
+		Command: func() *exec.Cmd {
+			return exec.Command("sh", "-c", `stty raw -echo; printf '\033[?1000h\033[?1006h'; dd bs=1 count=9 2>/dev/null | od -An -tx1 | tr -d ' \n'`)
+		},
+	})
+	if err != nil {
+		t.Fatalf("termtab.Start: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	v := newTermTabView(session)
+	v.SetRect(0, 0, 40, 5)
+	screen := newTestSimulationScreen(t, 40, 5)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for session.Mode()&vt10x.ModeMouseSgr == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("session never reported SGR mouse mode enabled")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	handler := v.MouseHandler()
+	// Left-down at virtual column 0, row 0 — SGR-encodes to the fixed
+	// 9-byte sequence "\x1b[<0;1;1M" the remote dd/od pipeline above
+	// reads exactly.
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(0, 0, tcell.ButtonPrimary, tcell.ModNone), func(tview.Primitive) {})
+
+	waitForScreenRow(t, v, screen, 0, "1b5b3c303b313b314d", 2*time.Second)
 }
 
 func TestTermTabViewOtherKeysStillReachTheSessionOnceExited(t *testing.T) {
