@@ -358,6 +358,24 @@ func chordFamilies() []chordFamily {
 			// header's own "@" button (see buildHeaderSpans) is this
 			// same action's mouse equivalent.
 			{'c', "Connect…", func(r *Root) { r.openConnectionMenu() }},
+			// "gC" — capital, right after lowercase "gc" (Connect),
+			// the same lower/uppercase-sibling pairing plainCommands'
+			// own c/C, d/D, e/E, v/V pairs already use. Opens the AI
+			// Consigliere chat sidebar (see consigliere.go) — docked
+			// against the right edge, the same non-modal shape "I"
+			// (Details) uses, not its own chord family, and not
+			// coupled to "I" itself, per feature_ideas.txt's own
+			// explicit requirement that it reach every view, not just
+			// the ones Details happens to be available on. "gC"/"ga"
+			// were both still free candidates per that same note; "gC"
+			// was the user's own explicit final choice. Only ever
+			// reaches toggleConsigliere's own "open" branch from here:
+			// once open, the sidebar's own input field takes real
+			// keyboard focus, so "gC" typed again is just two
+			// characters of the next question, not a second chord —
+			// see toggleConsigliere's own doc comment for the real
+			// close paths (Escape, the close glyph, a click outside).
+			{'C', "AI Consigliere", func(r *Root) { r.toggleConsigliere() }},
 			// "Direct SSH shell…" ("go ssh"), right after Connect: the
 			// same "go to a whole further place" role, just landing in
 			// a real interactive remote shell (Suspend + exec ssh, see

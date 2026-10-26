@@ -98,7 +98,10 @@ var helpText = strings.TrimLeft(`
                 gm Flareup · ge Email (launches neomutt/aerc/himalaya/
                 mail/mailx, whichever is installed — configurable
                 under Options) ·
-                g: Bash prompt (same as plain ":")
+                g: Bash prompt (same as plain ":") · gC AI Consigliere
+                (chat advisor overlay, text tips only, reachable from
+                any view — currently a placeholder reply, no real
+                provider wired up yet)
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
                 mw Open with… · mt tail -f · ma Select all · mA Deselect all ·
