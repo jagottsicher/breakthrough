@@ -1133,3 +1133,48 @@ func TestGCInLogAuditDoesNotReachOtherGotoMembers(t *testing.T) {
 		t.Errorf("panel.path changed to %q, want unchanged %q — no goto-family member should have touched the hidden panel", r.panel.path, beforePath)
 	}
 }
+
+// TestGCUnknownSecondKeyInLogAuditDoesNotCloseTheScreen is the exact
+// scenario the user reported: pressing "g" then some other key inside
+// Log Audit (not just the file panel) must show the "not a command"
+// notice without that notice itself kicking them back out to the file
+// panel — see showTransientErrorOverOverlay's own doc comment for the
+// general fix. Checked on both the selection screen and the viewer,
+// since both wire "gC" in independently (see
+// captureLogAuditSelectionTableKey/captureLogAuditViewerTableKey).
+func TestGCUnknownSecondKeyInLogAuditDoesNotCloseTheScreen(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+
+	for _, tc := range []struct {
+		name  string
+		setup func(r *Root) (capture func(*tcell.EventKey) *tcell.EventKey, wantPage string)
+	}{
+		{"Selection", func(r *Root) (func(*tcell.EventKey) *tcell.EventKey, string) {
+			return r.captureLogAuditSelectionTableKey, logAuditSelectionPage
+		}},
+		{"Viewer", func(r *Root) (func(*tcell.EventKey) *tcell.EventKey, string) {
+			r.logAuditTable.Select(1, 0)
+			r.openLogAuditViewer()
+			return r.captureLogAuditViewerTableKey, logAuditViewerPage
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newTestRootForLogAudit(t, dir)
+			capture, wantPage := tc.setup(r)
+
+			capture(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
+			r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone)) // not 'C'
+
+			if r.activePage != errorPage {
+				t.Fatalf("activePage = %q, want the notice layered on top as %q", r.activePage, errorPage)
+			}
+
+			r.hideOverlay() // dismiss the notice
+
+			if r.activePage != wantPage {
+				t.Errorf("activePage after dismissing the notice = %q, want %q restored", r.activePage, wantPage)
+			}
+		})
+	}
+}

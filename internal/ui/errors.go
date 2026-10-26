@@ -52,8 +52,22 @@ func (r *Root) newErrorView() *tview.TextView {
 // and Root's own actions call this directly. A nil error is ignored, so
 // callers can pass a result straight through without checking first.
 func (r *Root) showError(err error) {
-	if err == nil {
+	if !r.layoutErrorView(err) {
 		return
+	}
+	r.showOverlay(errorPage, r.errorView)
+	r.errorGeneration++
+}
+
+// layoutErrorView sets errorView's own text and rect from err — the
+// shared body showError and showTransientErrorOverOverlay both need
+// before deciding, each its own way, how to actually display it
+// (showOverlay replacing whatever's open vs. pushOverlay layering on
+// top of it). Reports false for a nil err, same as showError's own
+// former early return, so both callers can still just forward it.
+func (r *Root) layoutErrorView(err error) bool {
+	if err == nil {
+		return false
 	}
 
 	text := strings.Join(wrapText(err.Error(), r.errorWidth()), "\n")
@@ -64,8 +78,7 @@ func (r *Root) showError(err error) {
 	x, y, width, height := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
 
 	r.errorView.SetRect(x, y, width, height)
-	r.showOverlay(errorPage, r.errorView)
-	r.errorGeneration++
+	return true
 }
 
 // showTransientError is showError, plus an automatic dismiss after
@@ -90,6 +103,34 @@ func (r *Root) showTransientError(err error) {
 		return
 	}
 	r.showError(err)
+	generation := r.errorGeneration
+	time.AfterFunc(errorAutoHideDelay, func() {
+		r.app.QueueUpdateDraw(func() { r.autoHideError(generation) })
+	})
+}
+
+// showTransientErrorOverOverlay is showTransientError, except it
+// layers the notice on top of whatever's already open (pushOverlay)
+// instead of replacing it (showOverlay, which closeAllOverlays first —
+// see showOverlay's own doc comment). resolveChord's own fallback for
+// an unrecognized second key (see keymap.go) is the one caller that
+// needs this specifically: a chord started from inside a full-screen
+// catalog (Log Audit, Git Breach, ...) on a key that only means
+// something there (see startConsigliereChord in consigliere.go) must
+// still be able to report "not a command" without that notice itself
+// closing the very screen the chord was pressed from — a real,
+// reported bug (showOverlay's own closeAllOverlays silently discarding
+// that screen's own overlayFrame, not just hiding it, so dismissing
+// the notice afterwards left the panel showing instead of restoring
+// it). Every other showTransientError caller is unaffected: this is a
+// new, separate entry point, not a change to the existing one.
+func (r *Root) showTransientErrorOverOverlay(err error) {
+	if !r.layoutErrorView(err) {
+		return
+	}
+	r.pushOverlay(errorPage, r.errorView, nil)
+	r.errorGeneration++
+
 	generation := r.errorGeneration
 	time.AfterFunc(errorAutoHideDelay, func() {
 		r.app.QueueUpdateDraw(func() { r.autoHideError(generation) })

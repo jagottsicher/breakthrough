@@ -666,3 +666,33 @@ func TestChordLegendHighlightsTheMemberKey(t *testing.T) {
 		t.Errorf("legend text = %q, want it to contain %q", text, want)
 	}
 }
+
+// TestChordUnknownSecondKeyDoesNotCloseAnAlreadyOpenOverlay pins a
+// real, reported bug: a chord started from inside an already-open
+// overlay (see startConsigliereChord in consigliere.go — Log Audit/Git
+// Breach call this on a bare 'g') resolving to an unrecognized second
+// key used to report "not a command" via showTransientError, whose own
+// showOverlay call closes every other overlay first — silently
+// discarding that screen's own place in overlayStack rather than just
+// covering it with the notice, so dismissing the notice afterwards
+// left the bare panel showing instead of restoring the screen the
+// chord was pressed from. Help stands in for any such overlay here;
+// the fix (showTransientErrorOverOverlay) is generic, not specific to
+// Log Audit or Git Breach.
+func TestChordUnknownSecondKeyDoesNotCloseAnAlreadyOpenOverlay(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+
+	root.startChord(consigliereChordFamily)
+	root.HandlePlainKey(runeEvent('q')) // not a member of consigliereChordFamily
+
+	if root.activePage != errorPage {
+		t.Fatalf("activePage = %q, want the notice layered on top as %q", root.activePage, errorPage)
+	}
+
+	root.hideOverlay() // dismiss the notice, same as autoHideError/Escape would
+
+	if root.activePage != helpPage {
+		t.Errorf("activePage after dismissing the notice = %q, want %q restored — not kicked back to the bare panel", root.activePage, helpPage)
+	}
+}

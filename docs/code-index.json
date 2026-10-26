@@ -1948,8 +1948,8 @@
     },
     {
       "path": "internal/ui/errors.go",
-      "size": 6241,
-      "sha256": "2fc5c84e220a4a3d664d1369b6bc9be200aaeb4c2442fa012154e6260cfeaad4"
+      "size": 8114,
+      "sha256": "13881d5c3ef27642cc6081d8bf0bc4b525bd4406de4220d05972c49b292bc999"
     },
     {
       "path": "internal/ui/errors_test.go",
@@ -2078,13 +2078,13 @@
     },
     {
       "path": "internal/ui/keymap.go",
-      "size": 55496,
-      "sha256": "64215cf122af8018db35b8a1c015803dcb3db3d2d1bd7d71bc86590c304f4805"
+      "size": 56288,
+      "sha256": "f65019c9b87870cd24280cbfe85c4d2c2e9b9532f151fd3a11c5e6a5796b4a5c"
     },
     {
       "path": "internal/ui/keymap_test.go",
-      "size": 23666,
-      "sha256": "881adcd81de0170c562e87ab8e04add6aa3743b3f0b3cfce2212026af140dd74"
+      "size": 25099,
+      "sha256": "8ec0279259fbf9796e8f32eb58a8384b41c58d54ab989f9fe2bc7cfe0cfe7b93"
     },
     {
       "path": "internal/ui/labellifecycle_test.go",
@@ -2128,8 +2128,8 @@
     },
     {
       "path": "internal/ui/logaudit_test.go",
-      "size": 48257,
-      "sha256": "c598f8b406e53bb88baadd94dc625ada3a12aaa6ad07a0236a799c54352c5189"
+      "size": 50012,
+      "sha256": "9452e0585e4176f4476a41aa18c7918c435ca594a295374c3d53bf56604d4121"
     },
     {
       "path": "internal/ui/logauditscreen.go",
@@ -32638,10 +32638,26 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/errors.go",
+      "name": "layoutErrorView",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 68
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/errors.go",
       "name": "showTransientError",
       "kind": "method",
       "receiver": "*Root",
-      "line": 88
+      "line": 101
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/errors.go",
+      "name": "showTransientErrorOverOverlay",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 127
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32649,7 +32665,7 @@
       "name": "autoHideError",
       "kind": "method",
       "receiver": "*Root",
-      "line": 103
+      "line": 144
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32657,14 +32673,14 @@
       "name": "errorWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 115
+      "line": 156
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/errors.go",
       "name": "wrapText",
       "kind": "function",
-      "line": 133
+      "line": 174
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35957,14 +35973,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -36610,7 +36626,7 @@
       "name": "cancelChord",
       "kind": "method",
       "receiver": "*Root",
-      "line": 906
+      "line": 918
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -36618,14 +36634,14 @@
       "name": "animateChordCountdown",
       "kind": "method",
       "receiver": "*Root",
-      "line": 929
+      "line": 941
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/keymap.go",
       "name": "chordCountdownBlocks",
       "kind": "var",
-      "line": 959
+      "line": 971
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -36633,7 +36649,7 @@
       "name": "chordCountdownGlyph",
       "kind": "method",
       "receiver": "*Root",
-      "line": 968
+      "line": 980
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -36641,7 +36657,7 @@
       "name": "chordIndicatorText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 998
+      "line": 1010
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -36649,7 +36665,7 @@
       "name": "chordHintBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1046
+      "line": 1058
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -36888,6 +36904,13 @@
       "name": "TestChordLegendHighlightsTheMemberKey",
       "kind": "function",
       "line": 653
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/keymap_test.go",
+      "name": "TestChordUnknownSecondKeyDoesNotCloseAnAlreadyOpenOverlay",
+      "kind": "function",
+      "line": 682
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37742,6 +37765,13 @@
       "name": "TestGCInLogAuditDoesNotReachOtherGotoMembers",
       "kind": "function",
       "line": 1111
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/logaudit_test.go",
+      "name": "TestGCUnknownSecondKeyInLogAuditDoesNotCloseTheScreen",
+      "kind": "function",
+      "line": 1145
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -58921,5 +58951,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "1c5330a22b8bea4d5bc44d6e5bea4e8ce2d91038dad13a0f99b686026f5283eb"
+  "merkle_root": "193a5bb6a856771ab915ed5b023d15517b8f42cbd7172212487e5aca65ce5199"
 }
