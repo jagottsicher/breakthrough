@@ -1028,3 +1028,81 @@ func TestCancellingAResetLeavesTheOptionsScreenOpen(t *testing.T) {
 		t.Errorf("activePage = %q after cancelling, want the Options screen still open", r.activePage)
 	}
 }
+
+// TestLabelNameOptionsDefaultToTheirOwnColorName pins the fresh-install
+// defaults — each one starting with the same hue and order as
+// config.labelFallbackColors, against the generic "Label 1".."Label 9"
+// an earlier revision used, which told a reader nothing about which
+// color they'd actually be renaming.
+func TestLabelNameOptionsDefaultToTheirOwnColorName(t *testing.T) {
+	want := []string{
+		"Red Alert", "Green Day", "Yellow Stone", "Blue Moon", "Orange Crush",
+		"Purple Rain", "Teal Deer", "Pink Panther", "Lime Disease",
+	}
+	d := config.DefaultSettings()
+	for id := 1; id <= config.MaxLabelID; id++ {
+		if got := d.LabelName(id); got != want[id-1] {
+			t.Errorf("DefaultSettings().LabelName(%d) = %q, want %q", id, got, want[id-1])
+		}
+	}
+}
+
+// TestLabelNameOptionsCarryTheirOwnLabelBackground checks that each of
+// the nine "Label N name" options' own labelBackground resolves to
+// exactly the color Panel.rowLabelBackground would also use for that
+// same id — the one guarantee the whole feature rests on: the swatch
+// behind the field you're renaming must be the same color the file list
+// itself already shows for it, not an independently-picked one that
+// could drift out of sync.
+func TestLabelNameOptionsCarryTheirOwnLabelBackground(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	for id := 1; id <= config.MaxLabelID; id++ {
+		opt := labelNameOptions()[id-1]
+		if opt.labelBackground == nil {
+			t.Fatalf("label %d option has no labelBackground", id)
+		}
+		want := r.theme.LabelBackground(id)
+		if got := opt.labelBackground(r); got != want {
+			t.Errorf("label %d option's labelBackground = %v, want %v (theme.LabelBackground(%d))", id, got, want, id)
+		}
+	}
+}
+
+// TestNonLabelOptionsHaveNoLabelBackground guards the other side: every
+// option outside the "Label" category must leave labelBackground nil,
+// so an ordinary row never silently gains a colored swatch it was never
+// meant to have.
+func TestNonLabelOptionsHaveNoLabelBackground(t *testing.T) {
+	for _, cat := range optionCategories() {
+		if cat.name == "Label" {
+			continue
+		}
+		for _, opt := range cat.options {
+			if opt.labelBackground != nil {
+				t.Errorf("category %q option %q has a labelBackground set, want nil", cat.name, opt.key)
+			}
+		}
+	}
+}
+
+// TestLabelCategoryRowsShowTheirOwnLabelColorBehindTheFieldName renders
+// the "Label" category for real and reads back each row's own label
+// cell Style — the end-to-end proof that renderOptions actually wires
+// optionSpec.labelBackground through to the table, not just that the
+// catalog entry carries the right color.
+func TestLabelCategoryRowsShowTheirOwnLabelColorBehindTheFieldName(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "Label")
+	r.renderOptions()
+
+	for row := 0; row < config.MaxLabelID; row++ {
+		id := row + 1
+		want := r.theme.LabelBackground(id)
+		cell := r.optionsTable.GetCell(row, optionsColLabel)
+		_, got, _ := cell.Style.Decompose()
+		if got != want {
+			t.Errorf("row %d (label %d) cell background = %v, want %v", row, id, got, want)
+		}
+	}
+}
