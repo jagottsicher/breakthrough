@@ -1030,12 +1030,15 @@ func TestCancellingAResetLeavesTheOptionsScreenOpen(t *testing.T) {
 }
 
 // TestLabelNameOptionsDefaultToTheirOwnColorName pins the fresh-install
-// defaults — "Red".."Lime", the same nine hues and order as
-// config.labelFallbackColors — against the generic "Label 1".."Label 9"
+// defaults — each one starting with the same hue and order as
+// config.labelFallbackColors, against the generic "Label 1".."Label 9"
 // an earlier revision used, which told a reader nothing about which
 // color they'd actually be renaming.
 func TestLabelNameOptionsDefaultToTheirOwnColorName(t *testing.T) {
-	want := []string{"Red", "Green", "Yellow", "Blue", "Orange", "Purple", "Teal", "Pink", "Lime"}
+	want := []string{
+		"Red Alert", "Green Day", "Yellow Stone", "Blue Moon", "Orange Crush",
+		"Purple Rain", "Teal Deer", "Pink Panther", "Lime Disease",
+	}
 	d := config.DefaultSettings()
 	for id := 1; id <= config.MaxLabelID; id++ {
 		if got := d.LabelName(id); got != want[id-1] {

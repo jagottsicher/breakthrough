@@ -1344,8 +1344,8 @@ func labelNameOptions() []optionSpec {
 		opt := stringOption(key, fmt.Sprintf("Label %d name", id),
 			fmt.Sprintf("The display name for color label %d, shown in the \"zl\" chord's own "+
 				"quick picker (\"%d  <name>\") and, once built, the context menu's \"Color "+
-				"label\" submenu.\n\n%q by default — the same hue this label's own color "+
-				"already is.", id, id, config.DefaultSettings().LabelName(id)),
+				"label\" submenu.\n\n%q by default, starting with the same hue this "+
+				"label's own color already is.", id, id, config.DefaultSettings().LabelName(id)),
 			func(r *Root) string { return r.settings.LabelName(id) },
 			func(r *Root, v string) {
 				switch id {

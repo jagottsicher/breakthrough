@@ -153,8 +153,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 159015,
-      "sha256": "6ec4d5c3de3c2c71987cd704571bd7bd970d0e92ccda63fc1cc6190175d64683"
+      "size": 159029,
+      "sha256": "52194f14785c27fe0ce681cac8a6b7af162cdc713e8d26ac26604c41b5a6f438"
     },
     {
       "path": "docs/whitepaper.md",
@@ -428,8 +428,8 @@
     },
     {
       "path": "internal/config/settings.go",
-      "size": 47729,
-      "sha256": "6f16c3512b51de61f53fde3d69333ef6aa3d0efa97e75250c0f94b50dc3b1ae8"
+      "size": 47926,
+      "sha256": "388cf190804cedd71da7adcd27625744f6fc4a4020586fe24858adcee054a70d"
     },
     {
       "path": "internal/config/settings_test.go",
@@ -2213,8 +2213,8 @@
     },
     {
       "path": "internal/ui/optioncatalog.go",
-      "size": 75587,
-      "sha256": "7685bf7d0270c869c537543d9616f849016aabd5a7ce65a528f16723aa4b8db0"
+      "size": 75598,
+      "sha256": "a10b80d552de7f9c490f846ae77d9b897112748552709c3d26a88c5c49cc6b80"
     },
     {
       "path": "internal/ui/options.go",
@@ -2233,8 +2233,8 @@
     },
     {
       "path": "internal/ui/optionsscreen_test.go",
-      "size": 39691,
-      "sha256": "4273b18df5e5f1e3958ad930b27e4c5e02094f7049780d4670806833e84e18a8"
+      "size": 39751,
+      "sha256": "bef917177fe5276dd92334682a3c1dad44fa43e7f67e6ae9820fa62fe0e88942"
     },
     {
       "path": "internal/ui/panel.go",
@@ -7370,14 +7370,14 @@
       "name": "LabelName",
       "kind": "method",
       "receiver": "Settings",
-      "line": 576
+      "line": 577
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "DefaultSettings",
       "kind": "function",
-      "line": 606
+      "line": 607
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -7385,56 +7385,56 @@
       "name": "apply",
       "kind": "method",
       "receiver": "*Settings",
-      "line": 726
+      "line": 729
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "Load",
       "kind": "function",
-      "line": 946
+      "line": 949
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "sortedKeys",
       "kind": "function",
-      "line": 954
+      "line": 957
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "SetKey",
       "kind": "function",
-      "line": 971
+      "line": 974
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "UnsetKey",
       "kind": "function",
-      "line": 1019
+      "line": 1022
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "EnsureUserFile",
       "kind": "function",
-      "line": 1053
+      "line": 1056
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "readConfigLines",
       "kind": "function",
-      "line": 1068
+      "line": 1071
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "writeConfigLines",
       "kind": "function",
-      "line": 1090
+      "line": 1093
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -40274,21 +40274,21 @@
       "file": "internal/ui/optionsscreen_test.go",
       "name": "TestLabelNameOptionsCarryTheirOwnLabelBackground",
       "kind": "function",
-      "line": 1054
+      "line": 1057
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optionsscreen_test.go",
       "name": "TestNonLabelOptionsHaveNoLabelBackground",
       "kind": "function",
-      "line": 1073
+      "line": 1076
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optionsscreen_test.go",
       "name": "TestLabelCategoryRowsShowTheirOwnLabelColorBehindTheFieldName",
       "kind": "function",
-      "line": 1091
+      "line": 1094
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -58374,5 +58374,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "1456b94c900ce688ddbad1862fd6622c7dbe8e5e4e71381a1f3040e5153bdc84"
+  "merkle_root": "6620cd558f2c51b88e4be861aeeec2cd24fdf63e4ad9a3efb15bb03e710f0b3a"
 }

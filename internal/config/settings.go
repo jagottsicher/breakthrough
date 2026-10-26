@@ -556,8 +556,9 @@ type Settings struct {
 	// internal/ui's own labelMenuRows) — nine flat keys, not a
 	// structured list, per this project's own flat-config rule. Label 0
 	// ("no label") is fixed and not renamable, so there is no
-	// Label0Name. Default "Red".."Lime" (see DefaultSettings), the same
-	// hue each one's own color already is, until the user renames them.
+	// Label0Name. Default "Red Alert".."Lime Disease" (see
+	// DefaultSettings) — each one's own hue plus a pun, until the user
+	// renames them.
 	Label1Name string
 	Label2Name string
 	Label3Name string
@@ -702,19 +703,21 @@ func DefaultSettings() Settings {
 		FirewallDefaultProtocol:  "",
 
 		// The same nine hues and the same order as
-		// theme.labelFallbackColors — a fresh install's default names
-		// already match the color actually shown for each id, rather
-		// than the generic "Label 3" that told you nothing until you'd
-		// looked it up.
-		Label1Name: "Red",
-		Label2Name: "Green",
-		Label3Name: "Yellow",
-		Label4Name: "Blue",
-		Label5Name: "Orange",
-		Label6Name: "Purple",
-		Label7Name: "Teal",
-		Label8Name: "Pink",
-		Label9Name: "Lime",
+		// theme.labelFallbackColors, each paired with a second word
+		// that turns it into a recognizable name or pun — a fresh
+		// install's default names already match the color actually
+		// shown for each id, rather than the generic "Label 3" that
+		// told you nothing until you'd looked it up, and are more fun
+		// to read than the bare hue alone.
+		Label1Name: "Red Alert",
+		Label2Name: "Green Day",
+		Label3Name: "Yellow Stone",
+		Label4Name: "Blue Moon",
+		Label5Name: "Orange Crush",
+		Label6Name: "Purple Rain",
+		Label7Name: "Teal Deer",
+		Label8Name: "Pink Panther",
+		Label9Name: "Lime Disease",
 	}
 }
 
