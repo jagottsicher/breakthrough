@@ -49,6 +49,16 @@ func (r *Root) newConsigliereSidebar() {
 	r.consigliereHistory.SetWrap(true)
 	r.consigliereHistory.SetBorderPadding(0, 0, 1, 1)
 	r.consigliereHistory.SetInputCapture(r.captureConsigliereHistoryKey)
+	// FocusFunc/BlurFunc — not consigliereInput's own focus, and not a
+	// generic "is the sidebar open" check: per the user's own explicit
+	// request, the title bar only reads as active while the history
+	// itself has real keyboard focus, i.e. while it's actually the
+	// thing being scrolled — the same live-focus-driven title bar
+	// newDetailsSidebarView already establishes for Details, reused
+	// here for the identical reason (applyTheme's own re-derivation
+	// of this, for a live theme switch mid-focus, lives in theme.go).
+	r.consigliereHistory.SetFocusFunc(func() { r.consigliereTitleBar.SetBackgroundColor(r.theme.InputFocusedBackground) })
+	r.consigliereHistory.SetBlurFunc(func() { r.consigliereTitleBar.SetBackgroundColor(r.theme.InputBackground) })
 	r.consigliereScrollbar = newVerticalScrollbarForTextView(r, r.consigliereHistory)
 
 	r.consigliereTitleBar = newPlainTitleBar("AI Consigliere")
@@ -273,24 +283,30 @@ func (r *Root) hideConsigliere() {
 // handleConsigliereInputDone is consigliereInput's own SetDoneFunc —
 // Enter submits the current text, Escape closes the sidebar. Tab/
 // Backtab (the other two keys InputField itself calls this for) move
-// focus to consigliereHistory instead of no-op'ing: InputField's own
-// SetDoneFunc claims Tab before it could ever reach
-// CycleFocusShortcut's global handling (see its own doc comment on
-// every other field with a DoneFunc doing the same), so without this,
-// there would be no keyboard path at all from the question field to
-// the scrollable history — a real gap against CLAUDE.md's "Tastatur
-// zuerst" and the spec's own explicit "Fokus-/Scroll-Verhalten inkl.
-// Pfeiltasten/PageUp/PageDown/Home/End/vi-Tasten" requirement.
-// consigliereHistory is also one of focusCycleStops' own stops (see
-// detailssidebar.go), so Tab from there continues on to the panel
-// rather than getting stuck.
+// focus onward instead of no-op'ing: InputField's own SetDoneFunc
+// claims Tab before it could ever reach CycleFocusShortcut's global
+// handling (see its own doc comment on every other field with a
+// DoneFunc doing the same), so without this, there would be no
+// keyboard path at all out of the question field once it has real
+// focus. Lands on consigliereHistory only when there's actually
+// something in it to scroll to — the exact same
+// consigliereScrollbar.maxOffset() > 0 condition focusCycleStops
+// itself uses (see detailssidebar.go) to decide whether history is
+// even a stop right now — wrapping straight back to the panel
+// otherwise, per the user's own explicit request: a destination
+// nothing can be done in once there is deserves to be skipped, not
+// tabbed into as a dead end.
 func (r *Root) handleConsigliereInputDone(key tcell.Key) {
 	if key == tcell.KeyEscape {
 		r.hideConsigliere()
 		return
 	}
 	if key == tcell.KeyTab || key == tcell.KeyBacktab {
-		r.app.SetFocus(r.consigliereHistory)
+		if r.consigliereScrollbar.maxOffset() > 0 {
+			r.app.SetFocus(r.consigliereHistory)
+		} else {
+			r.app.SetFocus(r.panel.table)
+		}
 		return
 	}
 	if key != tcell.KeyEnter {

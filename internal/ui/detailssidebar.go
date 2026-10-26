@@ -446,21 +446,31 @@ func (r *Root) focusCycleStops() []tview.Primitive {
 		stops = append(stops, r.detailsSidebar)
 	}
 	if r.consigliereVisible {
-		// consigliereInput first, then consigliereHistory — Tab from
-		// the panel reaches the question field directly (answering the
-		// user's own explicit question: once focus has left it, e.g.
-		// via a mouse click back into the panel, or by tabbing on into
+		// consigliereInput first — Tab from the panel reaches the
+		// question field directly (answering the user's own explicit
+		// question: once focus has left it, e.g. via a mouse click
+		// back into the panel, or by tabbing on into
 		// consigliereHistory, this is the real keyboard path back in,
-		// not just closing and reopening the sidebar), and Tab from
-		// the field itself still reaches consigliereHistory the same
-		// way it already did (handleConsigliereInputDone's own direct
-		// SetFocus, not this list — InputField's own SetDoneFunc
-		// claims Tab before CycleFocusShortcut could ever see it while
-		// consigliereInput itself has focus, same as every other
-		// SetDoneFunc field in this app). Tab from consigliereHistory
-		// wraps back around to the panel (it's the last stop here),
-		// completing a full panel → input → history → panel loop.
-		stops = append(stops, r.consigliereInput, r.consigliereHistory)
+		// not just closing and reopening the sidebar).
+		stops = append(stops, r.consigliereInput)
+		// consigliereHistory only joins the cycle once there's
+		// actually something in it to scroll to (the same
+		// maxOffset() > 0 condition consigliereScrollbar's own Draw
+		// already uses to decide whether to even render a thumb — see
+		// scrollbar.go) — per the user's own explicit request: a stop
+		// Tab can land on with nothing to scroll once there is would
+		// just be a dead end to tab past, not a real destination. Tab
+		// from the field itself still reaches consigliereHistory the
+		// same way it already did (handleConsigliereInputDone's own
+		// direct SetFocus, not this list — InputField's own
+		// SetDoneFunc claims Tab before CycleFocusShortcut could ever
+		// see it while consigliereInput itself has focus, same as
+		// every other SetDoneFunc field in this app), using the exact
+		// same condition to decide whether to land there or wrap
+		// straight back to the panel instead.
+		if r.consigliereScrollbar.maxOffset() > 0 {
+			stops = append(stops, r.consigliereHistory)
+		}
 	}
 	for _, tw := range r.toolWindows {
 		stops = append(stops, tw)

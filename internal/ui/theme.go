@@ -443,10 +443,17 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.consigliereHistory.SetTextColor(theme.TextColor)
 	}
 	if r.consigliereTitleBar != nil {
-		// Background is set via updateOverlayTitleBarColors below
-		// instead, since it depends on whether this is currently the
-		// active overlay — the same reasoning helpTitleBar's own
-		// comment gives.
+		// Re-derived from consigliereHistory's own current focus state
+		// (see its own SetFocusFunc/SetBlurFunc in consigliere.go)
+		// rather than always reset to the unfocused look — the same
+		// "a live theme switch mid-focus must not show the wrong one
+		// until the next blur/focus cycle" hazard detailsTitleBar's
+		// own identical block documents.
+		if r.consigliereHistory.HasFocus() {
+			r.consigliereTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		} else {
+			r.consigliereTitleBar.SetBackgroundColor(theme.InputBackground)
+		}
 		r.consigliereTitleBar.SetTextColor(theme.Text)
 	}
 	if r.consigliereInput != nil {

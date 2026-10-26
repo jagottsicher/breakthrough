@@ -6,6 +6,25 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
+// drawConsigliereLayout forces a real Flex layout pass (via a
+// simulation screen) so consigliereHistory's own rect — and therefore
+// consigliereScrollbar.maxOffset() — actually reflects the size just
+// given to consigliereLayout: Flex only resolves a child's own rect
+// during Draw, never synchronously when SetRect is called on the
+// parent (see repositionConsigliereSidebar's own doc comment) — the
+// same pattern drawCompareDiff already establishes in
+// comparediff_scrollbar_test.go for the identical reason.
+func drawConsigliereLayout(t *testing.T, r *Root, width, height int) {
+	t.Helper()
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	t.Cleanup(screen.Fini)
+	screen.SetSize(width, height)
+	r.consigliereLayout.Draw(screen)
+}
+
 // TestChordGoAIConsigliereOpensTheSidebarAndFocusesInput pins "gC"
 // (see keymap.go): opens the sidebar and hands keyboard focus straight
 // to the question field, so typing can start immediately — unlike
@@ -138,6 +157,26 @@ func TestTabInConsigliereInputMovesFocusToHistory(t *testing.T) {
 	}
 }
 
+// TestTabInConsigliereInputSkipsHistoryWhenNothingToScroll pins
+// handleConsigliereInputDone's own other branch: on a generously sized
+// Root (unlike newPlainKeyRoot's own tiny default — see
+// TestCycleFocusShortcutSkipsConsigliereHistoryWhenNothingToScroll's
+// own doc comment), consigliereSplashArt's short content fits without
+// scrolling, so Tab must land back on the panel directly instead of a
+// history view with nothing in it to scroll to.
+func TestTabInConsigliereInputSkipsHistoryWhenNothingToScroll(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 200, 100)
+	root.showConsigliere()
+	drawConsigliereLayout(t, root, 200, 100)
+
+	root.handleConsigliereInputDone(tcell.KeyTab)
+
+	if !root.panel.table.HasFocus() {
+		t.Error("Tab should have moved focus straight back to the panel")
+	}
+}
+
 // TestEscapeInConsigliereHistoryClosesTheSidebar pins
 // captureConsigliereHistoryKey: Escape must still close the sidebar
 // once focus has moved to the history (see the test above), even
@@ -153,6 +192,31 @@ func TestEscapeInConsigliereHistoryClosesTheSidebar(t *testing.T) {
 
 	if root.consigliereVisible {
 		t.Error("Escape should have closed the sidebar from the history view too")
+	}
+}
+
+// TestConsigliereTitleBarReflectsHistoryFocusOnly pins the user's own
+// explicit request: the title bar reads as active while
+// consigliereHistory specifically has real keyboard focus, and only
+// then — not while consigliereInput has it, even though that's the
+// widget showConsigliere itself normally focuses first.
+func TestConsigliereTitleBarReflectsHistoryFocusOnly(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.showConsigliere() // focuses consigliereInput
+
+	theme := root.theme
+	if got := root.consigliereTitleBar.GetBackgroundColor(); got != theme.InputBackground {
+		t.Errorf("title bar background with the input focused = %v, want the unfocused InputBackground", got)
+	}
+
+	root.app.SetFocus(root.consigliereHistory)
+	if got := root.consigliereTitleBar.GetBackgroundColor(); got != theme.InputFocusedBackground {
+		t.Errorf("title bar background with the history focused = %v, want InputFocusedBackground", got)
+	}
+
+	root.app.SetFocus(root.consigliereInput)
+	if got := root.consigliereTitleBar.GetBackgroundColor(); got != theme.InputBackground {
+		t.Errorf("title bar background back on the input = %v, want InputBackground again", got)
 	}
 }
 
@@ -206,12 +270,22 @@ func TestCycleFocusShortcutReachesConsigliereInputFromThePanel(t *testing.T) {
 }
 
 // TestCycleFocusShortcutLoopsPanelInputHistoryPanel pins the full loop
-// Tab now walks through once the sidebar is open: panel ->
-// consigliereInput -> consigliereHistory -> back to panel.
+// Tab walks through once the sidebar is open AND its history actually
+// needs scrolling: panel -> consigliereInput -> consigliereHistory ->
+// back to panel. Relies on newPlainKeyRoot's own default, uninitialized
+// Root rect (tview.Box's own 15x10 default — see showError's own doc
+// comment on the same default elsewhere) being far too small to fit
+// consigliereSplashArt's own ~11 lines, i.e. consigliereScrollbar.
+// maxOffset() > 0 — see TestCycleFocusShortcutSkipsConsigliereHistoryWhenNothingToScroll
+// for the opposite case on a generously sized Root instead.
 func TestCycleFocusShortcutLoopsPanelInputHistoryPanel(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.showConsigliere()
 	root.app.SetFocus(root.panel.table)
+
+	if root.consigliereScrollbar.maxOffset() <= 0 {
+		t.Fatal("test precondition: expected the default tiny Root rect to make scrolling necessary")
+	}
 
 	root.CycleFocusShortcut()
 	if !root.consigliereInput.HasFocus() {
@@ -226,6 +300,35 @@ func TestCycleFocusShortcutLoopsPanelInputHistoryPanel(t *testing.T) {
 	root.CycleFocusShortcut()
 	if !root.panel.table.HasFocus() {
 		t.Error("third Tab should have wrapped back around to the panel")
+	}
+}
+
+// TestCycleFocusShortcutSkipsConsigliereHistoryWhenNothingToScroll pins
+// the user's own explicit request: consigliereHistory must not be a
+// Tab stop at all while there's nothing in it to scroll to (a
+// generously sized Root here, unlike newPlainKeyRoot's own tiny
+// default, is what makes consigliereSplashArt's own short content fit
+// without scrolling) — Tab from consigliereInput wraps straight back
+// to the panel instead of landing on a dead end.
+func TestCycleFocusShortcutSkipsConsigliereHistoryWhenNothingToScroll(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 200, 100)
+	root.showConsigliere()
+	drawConsigliereLayout(t, root, 200, 100)
+	root.app.SetFocus(root.panel.table)
+
+	if root.consigliereScrollbar.maxOffset() > 0 {
+		t.Fatal("test precondition: expected the generous Root rect to make scrolling unnecessary")
+	}
+
+	root.CycleFocusShortcut()
+	if !root.consigliereInput.HasFocus() {
+		t.Fatal("first Tab should still have reached consigliereInput")
+	}
+
+	root.CycleFocusShortcut()
+	if !root.panel.table.HasFocus() {
+		t.Error("second Tab should have wrapped straight back to the panel, skipping consigliereHistory")
 	}
 }
 

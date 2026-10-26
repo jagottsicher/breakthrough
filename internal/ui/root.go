@@ -3710,7 +3710,6 @@ func (r *Root) updateOverlayTitleBarColors() {
 	set(r.propertiesTitleBar, propertiesPage)
 	set(r.menuTitleBar, contextMenuPage)
 	set(r.helpTitleBar, helpPage)
-	set(r.consigliereTitleBar, consiglierePage)
 }
 
 // pushOverlayReturningFocusTo is pushOverlay, plus emptyStackFocus (see
