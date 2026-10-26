@@ -549,10 +549,22 @@ func (r *Root) renderOptions() {
 		// being left to size itself: without it the value column starts
 		// at a different place in every category, and switching
 		// categories visibly jumps the whole layout sideways.
-		r.optionsTable.SetCell(row, optionsColLabel,
-			tview.NewTableCell(padRight(opt.label, optionsLabelWidth)).
-				SetTextColor(r.theme.Text).
-				SetSelectable(true))
+		labelCell := tview.NewTableCell(padRight(opt.label, optionsLabelWidth)).
+			SetTextColor(r.theme.Text).
+			SetSelectable(true)
+		if opt.labelBackground != nil {
+			bg := opt.labelBackground(r)
+			labelCell.SetBackgroundColor(bg)
+			// Its own SelectedStyle, so the cursor landing on this row
+			// doesn't blank out the very color swatch the cell exists
+			// to show — the one time it matters most, since renaming a
+			// label only ever happens while its own row is selected.
+			// The other three columns still take the table-wide
+			// SetSelectedStyle normally (see setOptionsPaneFocused), so
+			// the row is still visibly the cursor's.
+			labelCell.SetSelectedStyle(tcell.StyleDefault.Background(bg).Foreground(r.theme.Text))
+		}
+		r.optionsTable.SetCell(row, optionsColLabel, labelCell)
 
 		display := r.optionValueDisplay(opt)
 		if opt.restartHint {

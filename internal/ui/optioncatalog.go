@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/gdamore/tcell/v2"
+
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/mail"
@@ -86,6 +88,15 @@ type optionSpec struct {
 	// empty section (see renderOptions' own doc comment on why row 0
 	// specifically can never be a header).
 	section string
+
+	// labelBackground, when non-nil, tints this row's own label-column
+	// cell background — currently only the nine color-label name
+	// options (see labelNameOptions), each in its own label's actual
+	// color, so the field you'd rename to "Teal" is visibly the teal
+	// one rather than requiring a trip to the "zl" picker first just to
+	// tell them apart. Nil for every other option, the overwhelming
+	// majority, which keep the table's ordinary background.
+	labelBackground func(*Root) tcell.Color
 }
 
 // doc returns the config-package metadata for this setting — its kind,
@@ -1330,10 +1341,11 @@ func labelNameOptions() []optionSpec {
 	for id := 1; id <= config.MaxLabelID; id++ {
 		id := id // captured per-iteration, not the shared loop variable
 		key := fmt.Sprintf("label_%d_name", id)
-		opts = append(opts, stringOption(key, fmt.Sprintf("Label %d name", id),
+		opt := stringOption(key, fmt.Sprintf("Label %d name", id),
 			fmt.Sprintf("The display name for color label %d, shown in the \"zl\" chord's own "+
 				"quick picker (\"%d  <name>\") and, once built, the context menu's \"Color "+
-				"label\" submenu.\n\n\"Label %d\" by default.", id, id, id),
+				"label\" submenu.\n\n%q by default — the same hue this label's own color "+
+				"already is.", id, id, config.DefaultSettings().LabelName(id)),
 			func(r *Root) string { return r.settings.LabelName(id) },
 			func(r *Root, v string) {
 				switch id {
@@ -1358,7 +1370,9 @@ func labelNameOptions() []optionSpec {
 				}
 				r.persistSetting(key, v)
 			},
-		))
+		)
+		opt.labelBackground = func(r *Root) tcell.Color { return r.theme.LabelBackground(id) }
+		opts = append(opts, opt)
 	}
 	return opts
 }

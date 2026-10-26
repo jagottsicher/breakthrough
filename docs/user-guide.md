@@ -2691,7 +2691,7 @@ Every key breakthrough recognizes, with its default:
 | `log_category_shell` | `true` | Log the bash line, "Open with…", and Edit |
 | `log_category_firewall` | `true` | Log Firewall rule changes (Add rule, Simulate) |
 | `hide_activity_log_fallback_notice` | `false` | Skip the one-time "logging to a user directory instead of /var/log/breakthrough" dialog |
-| `label_1_name` through `label_9_name` | `Label 1` … `Label 9` | Display names for the 9 color labels (the `zl` chord) — label 0 ("no label") is fixed and has no key of its own |
+| `label_1_name` through `label_9_name` | `Red` … `Lime` | Display names for the 9 color labels (the `zl` chord) — label 0 ("no label") is fixed and has no key of its own |
 | `status_bar_show_label` | `true` | Show the cursor row's own color label (swatch and name) in the status bar |
 
 ## Keyboard reference

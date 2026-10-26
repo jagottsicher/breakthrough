@@ -556,9 +556,8 @@ type Settings struct {
 	// internal/ui's own labelMenuRows) — nine flat keys, not a
 	// structured list, per this project's own flat-config rule. Label 0
 	// ("no label") is fixed and not renamable, so there is no
-	// Label0Name. Default "Label 1".."Label 9" (see DefaultSettings)
-	// until the user renames them — Phase 2's own Options "Label"
-	// section (not yet built).
+	// Label0Name. Default "Red".."Lime" (see DefaultSettings), the same
+	// hue each one's own color already is, until the user renames them.
 	Label1Name string
 	Label2Name string
 	Label3Name string
@@ -702,15 +701,20 @@ func DefaultSettings() Settings {
 		FirewallDefaultAction:    "allow",
 		FirewallDefaultProtocol:  "",
 
-		Label1Name: "Label 1",
-		Label2Name: "Label 2",
-		Label3Name: "Label 3",
-		Label4Name: "Label 4",
-		Label5Name: "Label 5",
-		Label6Name: "Label 6",
-		Label7Name: "Label 7",
-		Label8Name: "Label 8",
-		Label9Name: "Label 9",
+		// The same nine hues and the same order as
+		// theme.labelFallbackColors — a fresh install's default names
+		// already match the color actually shown for each id, rather
+		// than the generic "Label 3" that told you nothing until you'd
+		// looked it up.
+		Label1Name: "Red",
+		Label2Name: "Green",
+		Label3Name: "Yellow",
+		Label4Name: "Blue",
+		Label5Name: "Orange",
+		Label6Name: "Purple",
+		Label7Name: "Teal",
+		Label8Name: "Pink",
+		Label9Name: "Lime",
 	}
 }
 
