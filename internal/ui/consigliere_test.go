@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // drawConsigliereLayout forces a real Flex layout pass (via a
@@ -348,5 +349,97 @@ func TestHideConsigliereCancelsAPendingReply(t *testing.T) {
 
 	if root.consigliereCancel != nil {
 		t.Error("hideConsigliere should have cleared consigliereCancel")
+	}
+}
+
+// TestHideConsigliereRestoresFocusToWhatHadItBefore pins the real
+// bug a hardcoded r.panel.table fallback had: opened from inside a
+// full-screen modal (Help stands in for Log Audit/Git Breach here —
+// the mechanism is the same, see closeConsigliereIfHostPageChanged's
+// own doc comment), closing it must hand focus back to that modal's
+// own widget, not the panel underneath it, which isn't even visible.
+func TestHideConsigliereRestoresFocusToWhatHadItBefore(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	before := root.app.GetFocus()
+
+	root.showConsigliere()
+	root.hideConsigliere()
+
+	if got := root.app.GetFocus(); got != before {
+		t.Errorf("focus after hideConsigliere = %v, want %v (Help's own widget, not the panel)", got, before)
+	}
+}
+
+// TestOpeningAnotherOverlayClosesConsigliere pins
+// closeConsigliereIfHostPageChanged's own pushOverlay-side hook: per
+// the user's own explicit request, the sidebar is about whatever view
+// was open when it was asked for — opening a different one (Help,
+// standing in for any pushOverlay caller) closes it.
+func TestOpeningAnotherOverlayClosesConsigliere(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.showConsigliere()
+
+	root.openHelp()
+
+	if root.consigliereVisible {
+		t.Error("opening another overlay should have closed the already-open Consigliere sidebar")
+	}
+}
+
+// TestClosingTheHostOverlayClosesConsigliere pins
+// closeConsigliereIfHostPageChanged's own hideOverlay-side hook: the
+// sidebar must not survive its own host view closing out from under
+// it.
+func TestClosingTheHostOverlayClosesConsigliere(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	root.showConsigliere()
+
+	root.hideOverlay() // closes Help
+
+	if root.consigliereVisible {
+		t.Error("closing the host overlay should have closed Consigliere too")
+	}
+}
+
+// TestClickOnConsigliereDoesNotCloseTheHostOverlay pins the real,
+// confirmed bug in captureOutsideClick: the sidebar is non-modal, so
+// neither overlayStack nor r.activeWidget ever knew about its own
+// rect — a click landing on it, while some other modal is the active
+// overlay, used to read as "outside that overlay" and close it
+// instead.
+func TestClickOnConsigliereDoesNotCloseTheHostOverlay(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.openHelp()
+	root.showConsigliere()
+
+	x, y, _, _ := root.consigliereLayout.GetRect()
+	root.captureOutsideClick(tview.MouseLeftClick, tcellMouseEventAt(x, y))
+
+	if root.activePage != helpPage {
+		t.Errorf("activePage = %q, want helpPage still open", root.activePage)
+	}
+	if !root.consigliereVisible {
+		t.Error("the sidebar itself should still be visible")
+	}
+}
+
+// TestClickOutsideConsigliereWithNothingElseOpenClosesIt pins the
+// other half of the same fix: with nothing else open at all, a click
+// outside the sidebar must still close it — the standing claim this
+// package's own doc comments already made ("a click outside" closes
+// it), which activePage == "" used to short-circuit before ever
+// reaching Consigliere-specific handling.
+func TestClickOutsideConsigliereWithNothingElseOpenClosesIt(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.showConsigliere()
+
+	root.captureOutsideClick(tview.MouseLeftClick, tcellMouseEventAt(0, 0))
+
+	if root.consigliereVisible {
+		t.Error("a click outside the sidebar, with nothing else open, should have closed it")
 	}
 }

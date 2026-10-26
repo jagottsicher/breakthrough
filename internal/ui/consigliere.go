@@ -242,6 +242,15 @@ func (r *Root) showConsigliere() {
 		r.hideDetailsSidebar()
 	}
 
+	// consigliereReturnFocus/consigliereHostPage are both captured
+	// *before* anything below changes focus or activePage — see
+	// hideConsigliere's own doc comment for why a hardcoded
+	// r.panel.table fallback is wrong whenever this was opened from
+	// inside a full-screen modal (Log Audit, Git Breach, ...) rather
+	// than the bare file panel.
+	r.consigliereReturnFocus = r.app.GetFocus()
+	r.consigliereHostPage = r.activePage
+
 	r.consigliereMessages = nil
 	r.consigliereInput.SetText("")
 
@@ -275,8 +284,23 @@ func (r *Root) hideConsigliere() {
 	hadFocus := r.consigliereInput.HasFocus() || r.consigliereHistory.HasFocus()
 	r.HidePage(consiglierePage)
 	if hadFocus {
-		r.app.SetFocus(r.panel.table)
+		// consigliereReturnFocus, not a hardcoded r.panel.table: opened
+		// from inside Log Audit/Git Breach/etc. (see
+		// closeConsigliereIfHostPageChanged's own doc comment for the
+		// other half of this), the panel's own table isn't even
+		// visible — it's still covered by that full-screen modal, so
+		// focusing it would leave the keyboard dead against whatever's
+		// actually on screen. Falls back to the panel only if nothing
+		// was recorded (e.g. a direct call before the sidebar was ever
+		// shown once).
+		target := r.consigliereReturnFocus
+		if target == nil {
+			target = r.panel.table
+		}
+		r.app.SetFocus(target)
 	}
+	r.consigliereReturnFocus = nil
+	r.consigliereHostPage = ""
 	r.consigliereVisible = false
 }
 

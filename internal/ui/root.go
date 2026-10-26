@@ -1791,6 +1791,13 @@ type Root struct {
 	consigliereMessages  []consigliere.Message
 	consigliereProvider  consigliere.Provider
 	consigliereCancel    context.CancelFunc
+	// consigliereReturnFocus/consigliereHostPage are captured once, in
+	// showConsigliere, before anything changes focus or activePage —
+	// see hideConsigliere's own doc comment (return focus) and
+	// closeConsigliereIfHostPageChanged's own doc comment (auto-close
+	// once that recorded page is no longer the active one).
+	consigliereReturnFocus tview.Primitive
+	consigliereHostPage    string
 
 	// detailsSidebar is the right-hand Details layer toggled by "I"
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
@@ -3683,6 +3690,30 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 	} else {
 		r.app.SetFocus(widget)
 	}
+	r.closeConsigliereIfHostPageChanged()
+}
+
+// closeConsigliereIfHostPageChanged closes the AI Consigliere sidebar
+// once r.activePage no longer matches consigliereHostPage — the page
+// (possibly "", the bare file panel) that was active the moment
+// showConsigliere last ran (see its own doc comment). Per the user's
+// own explicit request: the sidebar is about whatever view was open
+// when it was asked for, so navigating away from that view — opening
+// a different full-screen modal (pushOverlay) or closing the one it
+// was opened from (hideOverlay) — closes it too, rather than leaving
+// it floating over a view it was never about.
+//
+// A no-op whenever consigliereVisible is already false, or the active
+// page genuinely hasn't changed (every call elsewhere into
+// pushOverlay/hideOverlay that doesn't actually change which page is
+// topmost — e.g. hideOverlay popping down to the exact same
+// consigliereHostPage it started from isn't possible given the stack
+// shape, but a future caller doing so safely would still just see this
+// decline to act).
+func (r *Root) closeConsigliereIfHostPageChanged() {
+	if r.consigliereVisible && r.activePage != r.consigliereHostPage {
+		r.hideConsigliere()
+	}
 }
 
 // updateOverlayTitleBarColors recolors every modal overlay's own title
@@ -3758,6 +3789,7 @@ func (r *Root) hideOverlay() {
 		} else {
 			r.app.SetFocus(r.panel)
 		}
+		r.closeConsigliereIfHostPageChanged()
 		return
 	}
 
@@ -3770,6 +3802,7 @@ func (r *Root) hideOverlay() {
 	} else {
 		r.app.SetFocus(below.widget)
 	}
+	r.closeConsigliereIfHostPageChanged()
 }
 
 // closeAllOverlays hides every currently-open overlay layer without
@@ -3899,11 +3932,35 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 		return r.captureLogAuditTimelineMouse(action, event)
 	}
 
+	x, y := event.Position()
+
+	// The AI Consigliere sidebar is non-modal (see consigliere.go's own
+	// doc comment — it isn't part of overlayStack/activeWidget at all),
+	// so neither of the two checks below would otherwise ever know
+	// about it. Two real, separate bugs this fixes: a click landing on
+	// the sidebar itself, while some other modal (Log Audit, Git
+	// Breach, ...) is the active overlay, used to read as "outside
+	// that overlay" and close *it* — never consigliereLayout's own
+	// rect, which this now checks first, same priority the drag guards
+	// above already get. And with nothing else open at all
+	// (activePage == ""), a click outside the sidebar used to be a
+	// pure no-op — this is also what actually makes good on every
+	// other doc comment in this package already claiming "a click
+	// outside" closes it.
+	if r.consigliereVisible {
+		if primitiveContains(r.consigliereLayout, x, y) {
+			return action, event // landed on the sidebar itself
+		}
+		if r.activePage == "" && (action == tview.MouseLeftClick || action == tview.MouseRightClick) {
+			r.hideConsigliere()
+			return tview.MouseConsumed, nil
+		}
+	}
+
 	if r.activePage == "" {
 		return action, event // nothing open, nothing to do
 	}
 
-	x, y := event.Position()
 	if primitiveContains(r.activeWidget, x, y) {
 		return action, event // event landed on the open overlay itself
 	}
