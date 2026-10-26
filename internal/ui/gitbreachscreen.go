@@ -725,16 +725,48 @@ func (r *Root) toggleGitBreachFocus() {
 		return
 	}
 	if r.gitBreachMainHasFocus() {
-		r.app.SetFocus(focusables[(r.gitBreachMainOwnerIndex()+1)%len(focusables)].body)
+		r.app.SetFocus(r.gitBreachFocusNext(focusables, r.gitBreachMainOwnerIndex()))
 		return
 	}
 	for i, f := range focusables {
 		if f.body.HasFocus() {
-			r.app.SetFocus(focusables[(i+1)%len(focusables)].body)
+			r.app.SetFocus(r.gitBreachFocusNext(focusables, i))
 			return
 		}
 	}
 	r.app.SetFocus(focusables[0].body)
+}
+
+// gitBreachFocusNext/gitBreachFocusPrev are toggleGitBreachFocus/
+// reverseToggleGitBreachFocus's own shared "advance by one, with
+// wraparound" step — redirecting into the AI Consigliere sidebar
+// ("gC", see startConsigliereChord in consigliere.go) instead of
+// wrapping back around to the opposite end of gitBreachFocusables,
+// whenever it's actually open. Without this, Tab/Backtab could never
+// reach consigliereInput/consigliereHistory from here at all: the
+// global focus cycle excludes them while any full-screen modal is
+// active (see focusCycleStops' own doc comment in detailssidebar.go),
+// so each host screen that can open the sidebar is responsible for
+// its own entry point into it. consigliereExitFocus (see
+// consigliere.go) is the matching way back out, landing on whatever
+// had focus here when the sidebar was opened — not necessarily index
+// i again, the same documented, accepted imprecision every other host
+// screen's own entry point already has.
+func (r *Root) gitBreachFocusNext(focusables []gitBreachFocusEntry, i int) tview.Primitive {
+	if i == len(focusables)-1 && r.consigliereVisible {
+		return r.consigliereInput
+	}
+	return focusables[(i+1)%len(focusables)].body
+}
+
+func (r *Root) gitBreachFocusPrev(focusables []gitBreachFocusEntry, i int) tview.Primitive {
+	if i == 0 && r.consigliereVisible {
+		if r.consigliereScrollbar.maxOffset() > 0 {
+			return r.consigliereHistory
+		}
+		return r.consigliereInput
+	}
+	return focusables[(i-1+len(focusables))%len(focusables)].body
 }
 
 // reverseToggleGitBreachFocus is "Shift-Tab" (tcell.KeyBacktab) — the
@@ -746,13 +778,12 @@ func (r *Root) reverseToggleGitBreachFocus() {
 		return
 	}
 	if r.gitBreachMainHasFocus() {
-		i := r.gitBreachMainOwnerIndex()
-		r.app.SetFocus(focusables[(i-1+len(focusables))%len(focusables)].body)
+		r.app.SetFocus(r.gitBreachFocusPrev(focusables, r.gitBreachMainOwnerIndex()))
 		return
 	}
 	for i, f := range focusables {
 		if f.body.HasFocus() {
-			r.app.SetFocus(focusables[(i-1+len(focusables))%len(focusables)].body)
+			r.app.SetFocus(r.gitBreachFocusPrev(focusables, i))
 			return
 		}
 	}
@@ -839,12 +870,14 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 		r.deactivateGitBreachMain()
 		return nil
 	case tcell.KeyTab:
-		r.app.SetFocus(r.gitBreachFocusables()[(r.gitBreachMainOwnerIndex()+1)%len(r.gitBreachFocusables())].body)
+		// gitBreachFocusNext, not the raw modulo arithmetic this used
+		// to inline directly: redirects into the AI Consigliere
+		// sidebar instead of wrapping back to Files once Main's own
+		// owner is the last entry — see its own doc comment.
+		r.app.SetFocus(r.gitBreachFocusNext(r.gitBreachFocusables(), r.gitBreachMainOwnerIndex()))
 		return nil
 	case tcell.KeyBacktab:
-		focusables := r.gitBreachFocusables()
-		i := r.gitBreachMainOwnerIndex()
-		r.app.SetFocus(focusables[(i-1+len(focusables))%len(focusables)].body)
+		r.app.SetFocus(r.gitBreachFocusPrev(r.gitBreachFocusables(), r.gitBreachMainOwnerIndex()))
 		return nil
 	case tcell.KeyRune:
 		switch event.Rune() {

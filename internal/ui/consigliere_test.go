@@ -443,3 +443,97 @@ func TestClickOutsideConsigliereWithNothingElseOpenClosesIt(t *testing.T) {
 		t.Error("a click outside the sidebar, with nothing else open, should have closed it")
 	}
 }
+
+// TestCycleFocusShortcutDoesNotMatchConsigliereInsideAModal pins step
+// one of the real fix for a reported bug: once some full-screen modal
+// (Help stands in for Log Audit/Git Breach) is the active page, the
+// global focus cycle must no longer treat consigliereInput as one of
+// its own stops at all — matching it there, before the host screen's
+// own local Tab handling ever ran, is exactly what used to strand the
+// keyboard on the hidden file panel.
+func TestCycleFocusShortcutDoesNotMatchConsigliereInsideAModal(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	root.showConsigliere()
+	if !root.consigliereInput.HasFocus() {
+		t.Fatal("test precondition: expected consigliereInput to have focus")
+	}
+
+	if root.CycleFocusShortcut() {
+		t.Error("CycleFocusShortcut should report false — consigliereInput must not be one of its own stops while a modal is open")
+	}
+	if !root.consigliereInput.HasFocus() {
+		t.Error("focus should not have moved at all")
+	}
+}
+
+// TestTabInConsigliereInputExitsToTheHostNotTheHiddenPanel pins the
+// real fix: exiting consigliere's own loop (via consigliereExitFocus)
+// must land on whatever had focus on the host screen when the sidebar
+// was opened, not a hardcoded r.panel.table — which, with a
+// full-screen modal open, isn't even visible. Help stands in for Log
+// Audit/Git Breach; the mechanism is host-agnostic.
+func TestTabInConsigliereInputExitsToTheHostNotTheHiddenPanel(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 200, 100)
+	root.openHelp()
+	before := root.app.GetFocus()
+	root.showConsigliere()
+	drawConsigliereLayout(t, root, 200, 100) // makes the splash art fit without scrolling
+
+	root.handleConsigliereInputDone(tcell.KeyTab)
+
+	if got := root.app.GetFocus(); got != before {
+		t.Errorf("focus after Tab = %v, want %v (Help's own widget, not the panel)", got, before)
+	}
+}
+
+// TestBacktabInConsigliereInputExitsToTheHost pins Backtab's own,
+// unconditional case: backward out of the very first stop in
+// consigliere's own loop always exits immediately, regardless of
+// whether there's anything to scroll to.
+func TestBacktabInConsigliereInputExitsToTheHost(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	before := root.app.GetFocus()
+	root.showConsigliere()
+
+	root.handleConsigliereInputDone(tcell.KeyBacktab)
+
+	if got := root.app.GetFocus(); got != before {
+		t.Errorf("focus after Backtab = %v, want %v", got, before)
+	}
+}
+
+// TestTabInConsigliereHistoryExitsToTheHost and
+// TestBacktabInConsigliereHistoryReturnsToInput pin
+// captureConsigliereHistoryKey's own, newly-added Tab/Backtab cases —
+// only ever reached once a full-screen modal has excluded consigliere
+// from the global focus cycle (see focusCycleStops' own doc comment),
+// since that cycle still claims both directly otherwise.
+func TestTabInConsigliereHistoryExitsToTheHost(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	before := root.app.GetFocus()
+	root.showConsigliere()
+	root.app.SetFocus(root.consigliereHistory)
+
+	root.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+
+	if got := root.app.GetFocus(); got != before {
+		t.Errorf("focus after Tab = %v, want %v", got, before)
+	}
+}
+
+func TestBacktabInConsigliereHistoryReturnsToInput(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	root.showConsigliere()
+	root.app.SetFocus(root.consigliereHistory)
+
+	root.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+
+	if !root.consigliereInput.HasFocus() {
+		t.Error("Backtab from the history should have returned focus to the input field")
+	}
+}

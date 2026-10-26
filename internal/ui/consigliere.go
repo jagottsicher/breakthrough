@@ -122,11 +122,44 @@ func (r *Root) newConsigliereSidebar() {
 // scrolling key fall through to TextView's own default handling and,
 // for Tab, on to CycleFocusShortcut.
 func (r *Root) captureConsigliereHistoryKey(event *tcell.EventKey) *tcell.EventKey {
-	if event.Key() == tcell.KeyEscape {
+	switch event.Key() {
+	case tcell.KeyEscape:
 		r.hideConsigliere()
+		return nil
+	case tcell.KeyTab, tcell.KeyBacktab:
+		// Only ever reached once a full-screen modal has already
+		// excluded Consigliere from the global focus cycle (see
+		// focusCycleStops' own doc comment in detailssidebar.go) —
+		// while nothing else is open, that global cycle still claims
+		// Tab/Backtab here directly, before this InputCapture (or
+		// TextView's own InputHandler, which — per tview's own
+		// textview.go — does nothing at all for either key without a
+		// SetDoneFunc) ever sees it. Backtab goes back to the field;
+		// Tab exits consigliere's own tiny loop the same host-agnostic
+		// way handleConsigliereInputDone's identical fallback does.
+		if event.Key() == tcell.KeyBacktab {
+			r.app.SetFocus(r.consigliereInput)
+		} else {
+			r.app.SetFocus(r.consigliereExitFocus())
+		}
 		return nil
 	}
 	return event
+}
+
+// consigliereExitFocus is where Tab/Backtab leaving consigliere's own
+// input/history pair lands: whatever had real keyboard focus the
+// moment showConsigliere last ran (consigliereReturnFocus — see its
+// own doc comment in root.go), falling back to the panel only if
+// nothing was ever recorded. The one place this logic lives, shared
+// by handleConsigliereInputDone and captureConsigliereHistoryKey, so
+// every host screen's own exit path behaves identically without
+// either of them needing to know which screen is actually hosting it.
+func (r *Root) consigliereExitFocus() tview.Primitive {
+	if r.consigliereReturnFocus != nil {
+		return r.consigliereReturnFocus
+	}
+	return r.panel.table
 }
 
 // renderConsigliereTitleBar sets consigliereTitleBar's own text,
@@ -343,12 +376,18 @@ func (r *Root) hideConsigliere() {
 // handling (see its own doc comment on every other field with a
 // DoneFunc doing the same), so without this, there would be no
 // keyboard path at all out of the question field once it has real
-// focus. Lands on consigliereHistory only when there's actually
+// focus — true unconditionally once a full-screen modal is open (see
+// focusCycleStops' own doc comment on why Consigliere leaves the
+// global cycle there), and true for plain Tab even otherwise, since
+// it's always this SetDoneFunc, never the global cycle, that a key
+// press actually reaches first while this field itself has real
+// focus. Tab lands on consigliereHistory only when there's actually
 // something in it to scroll to — the exact same
 // consigliereScrollbar.maxOffset() > 0 condition focusCycleStops
 // itself uses (see detailssidebar.go) to decide whether history is
-// even a stop right now — wrapping straight back to the panel
-// otherwise, per the user's own explicit request: a destination
+// even a stop right now — exiting via consigliereExitFocus
+// otherwise (also Backtab's own, unconditional case), per the user's
+// own explicit request: a destination
 // nothing can be done in once there is deserves to be skipped, not
 // tabbed into as a dead end.
 func (r *Root) handleConsigliereInputDone(key tcell.Key) {
@@ -356,11 +395,18 @@ func (r *Root) handleConsigliereInputDone(key tcell.Key) {
 		r.hideConsigliere()
 		return
 	}
-	if key == tcell.KeyTab || key == tcell.KeyBacktab {
+	if key == tcell.KeyBacktab {
+		// Backward from the first stop in consigliere's own tiny
+		// loop — exits the same host-agnostic way Tab's own "nothing
+		// to scroll" case does, just one key earlier in the sequence.
+		r.app.SetFocus(r.consigliereExitFocus())
+		return
+	}
+	if key == tcell.KeyTab {
 		if r.consigliereScrollbar.maxOffset() > 0 {
 			r.app.SetFocus(r.consigliereHistory)
 		} else {
-			r.app.SetFocus(r.panel.table)
+			r.app.SetFocus(r.consigliereExitFocus())
 		}
 		return
 	}

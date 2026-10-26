@@ -2424,3 +2424,67 @@ func TestGCReachesAIConsigliereFromEveryGitBreachPane(t *testing.T) {
 		})
 	}
 }
+
+// TestTabFromLastGitBreachTableReachesConsigliere and
+// TestBacktabFromFirstGitBreachTableReachesConsigliere pin
+// gitBreachFocusNext/gitBreachFocusPrev's own redirect: wrapping
+// around gitBreachFocusables (Files -> Branches -> Commits -> Stash
+// -> wraps to Files) now reaches the AI Consigliere sidebar instead,
+// once it's open.
+func TestTabFromLastGitBreachTableReachesConsigliere(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.showConsigliere()
+	r.app.SetFocus(r.gitBreachStashTable) // the last entry in gitBreachFocusables
+
+	if got := r.captureGitBreachStashTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
+		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
+	}
+	if !r.consigliereInput.HasFocus() {
+		t.Error("Tab from Stash should have reached consigliereInput, not wrapped to Files")
+	}
+}
+
+func TestBacktabFromFirstGitBreachTableReachesConsigliere(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.showConsigliere()
+	r.app.SetFocus(r.gitBreachFilesTable) // the first entry in gitBreachFocusables
+
+	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+
+	if !r.consigliereInput.HasFocus() && !r.consigliereHistory.HasFocus() {
+		t.Error("Backtab from Files should have reached consigliere, not wrapped to Stash")
+	}
+}
+
+// TestTabFromGitBreachMainReachesConsigliereWhenOwnerIsLast pins the
+// identical redirect for captureGitBreachMainKey's own Tab, when
+// Main's current owner happens to be the last table in
+// gitBreachFocusables.
+func TestTabFromGitBreachMainReachesConsigliereWhenOwnerIsLast(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.showConsigliere()
+	r.app.SetFocus(r.gitBreachStashTable)
+	r.activateGitBreachMain() // Main now owned by Stash, the last table
+
+	if got := r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
+		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
+	}
+	if !r.consigliereInput.HasFocus() {
+		t.Error("Tab from Main (owned by Stash) should have reached consigliereInput, not wrapped to Files")
+	}
+}

@@ -154,6 +154,22 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditKeywordField.SetPlaceholder(`keyword, keyword1 AND (keyword2 OR keyword3)`)
 	r.logAuditKeywordField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
 	r.logAuditKeywordField.SetDoneFunc(func(key tcell.Key) {
+		// Keyword is the first stop in this screen's own field chain —
+		// Backtab from here is the backward edge into the AI
+		// Consigliere sidebar, same reasoning
+		// captureLogAuditViewerTableKey's own forward-edge case (Tab,
+		// below) gives. Checked here, ahead of the ordinary
+		// logAuditViewerFieldDone call, so its own ordinary
+		// prev (logAuditViewerTable) is only ever reached once the
+		// sidebar isn't open.
+		if key == tcell.KeyBacktab && r.consigliereVisible {
+			if r.consigliereScrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliereHistory)
+			} else {
+				r.app.SetFocus(r.consigliereInput)
+			}
+			return
+		}
 		r.logAuditViewerFieldDone(key, r.logAuditTimeField, r.logAuditViewerTable)
 	})
 	r.logAuditKeywordField.SetFocusFunc(func() { r.restyleLogAuditFocusTargets(r.logAuditKeywordField) })
@@ -975,6 +991,29 @@ func (r *Root) captureLogAuditSelectionTableKey(event *tcell.EventKey) *tcell.Ev
 		r.closeLogAuditSelection()
 		return nil
 	}
+	// Tab/Backtab reach the AI Consigliere sidebar — see
+	// startConsigliereChord's own doc comment in consigliere.go. The
+	// global focus cycle excludes consigliereInput/consigliereHistory
+	// while this screen is open (see focusCycleStops' own doc comment
+	// in detailssidebar.go), so this table — the only real stop here —
+	// is responsible for its own entry point into it, same reasoning
+	// gitBreachFocusNext/gitBreachFocusPrev already give. A no-op
+	// (falls through unchanged) whenever the sidebar isn't even open:
+	// nothing else to cycle to on this screen.
+	if r.consigliereVisible {
+		if event.Key() == tcell.KeyTab {
+			r.app.SetFocus(r.consigliereInput)
+			return nil
+		}
+		if event.Key() == tcell.KeyBacktab {
+			if r.consigliereScrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliereHistory)
+			} else {
+				r.app.SetFocus(r.consigliereInput)
+			}
+			return nil
+		}
+	}
 	if event.Key() == tcell.KeyRune {
 		switch event.Rune() {
 		case 'r':
@@ -1024,6 +1063,16 @@ func (r *Root) captureLogAuditViewerTableKey(event *tcell.EventKey) *tcell.Event
 		return nil
 	}
 	if event.Key() == tcell.KeyTab {
+		// The forward edge into the AI Consigliere sidebar — the
+		// table is this screen's own last stop (Keyword -> Time ->
+		// Level -> Timeline -> Table), so wrapping back to Keyword
+		// (the ordinary case) is what gives way to it instead,
+		// exactly the same reasoning the Keyword field's own backward
+		// edge (SetDoneFunc above) gives for Backtab.
+		if r.consigliereVisible {
+			r.app.SetFocus(r.consigliereInput)
+			return nil
+		}
 		r.app.SetFocus(r.logAuditKeywordField)
 		return nil
 	}
@@ -1290,6 +1339,20 @@ func (r *Root) captureLogAuditDetailKey(event *tcell.EventKey) *tcell.EventKey {
 		// PageDown/Home/End are all a different rune or tcell.Key, so
 		// none of them are affected.
 		r.startConsigliereChord()
+		return nil
+	}
+	// Tab/Backtab into the AI Consigliere sidebar — the only other
+	// stop on this screen, same reasoning
+	// captureLogAuditSelectionTableKey's own identical case gives.
+	// Neither key was ever a built-in TextView binding to begin with
+	// (tview's own vi-style keys are 'g'/'G'/'j'/'k'/'h'/'l', not
+	// Tab/Backtab — see textview.go), so nothing existing is lost.
+	if r.consigliereVisible && (event.Key() == tcell.KeyTab || event.Key() == tcell.KeyBacktab) {
+		if event.Key() == tcell.KeyBacktab && r.consigliereScrollbar.maxOffset() > 0 {
+			r.app.SetFocus(r.consigliereHistory)
+		} else {
+			r.app.SetFocus(r.consigliereInput)
+		}
 		return nil
 	}
 	return event

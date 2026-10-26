@@ -445,7 +445,29 @@ func (r *Root) focusCycleStops() []tview.Primitive {
 	if r.detailsSidebarVisible {
 		stops = append(stops, r.detailsSidebar)
 	}
-	if r.consigliereVisible {
+	// consigliereVisible alone isn't enough here — unlike
+	// detailsSidebar/toolWindows above, Consigliere is also reachable
+	// from inside a full-screen modal (Log Audit, Git Breach, ... — see
+	// startConsigliereChord in consigliere.go), and this list is read
+	// globally, for every Tab press, regardless of what's currently
+	// open (see cmd/breakthrough's own SetInputCapture). Including it
+	// here unconditionally was a real, reported bug: the moment
+	// consigliereInput/consigliereHistory actually had focus, this
+	// list matched them before the host screen's own local Tab
+	// handling (Git Breach's own toggleGitBreachFocus, Log Audit's own
+	// per-field chain) ever got a chance to run, so Tab always landed
+	// back on r.panel.table next — hidden behind whatever modal was
+	// actually on screen, a dead end. r.activePage == "" is exactly
+	// the same precondition every other entry in this list already
+	// has (split/details/tool windows only ever coexist with plain
+	// browsing too), so Consigliere now only joins the global cycle in
+	// that same, already-correct case; each host screen reachable from
+	// is responsible for its own local entry point instead (see
+	// gitBreachFocusables/captureLogAuditSelectionTableKey/
+	// captureLogAuditViewerTableKey/captureLogAuditDetailKey), with
+	// handleConsigliereInputDone's own consigliereReturnFocus as the
+	// one, host-agnostic way back out.
+	if r.consigliereVisible && r.activePage == "" {
 		// consigliereInput first — Tab from the panel reaches the
 		// question field directly (answering the user's own explicit
 		// question: once focus has left it, e.g. via a mouse click

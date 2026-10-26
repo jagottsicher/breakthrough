@@ -1178,3 +1178,95 @@ func TestGCUnknownSecondKeyInLogAuditDoesNotCloseTheScreen(t *testing.T) {
 		})
 	}
 }
+
+// TestTabBacktabReachConsigliereFromLogAuditSelection pins the entry
+// point captureLogAuditSelectionTableKey now owns: Tab/Backtab from
+// the selection table reach the AI Consigliere sidebar once it's
+// open — the only other stop on this screen (see
+// startConsigliereChord's own doc comment in consigliere.go).
+func TestTabBacktabReachConsigliereFromLogAuditSelection(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.showConsigliere()
+	r.app.SetFocus(r.logAuditTable)
+
+	if got := r.captureLogAuditSelectionTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
+		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
+	}
+	if !r.consigliereInput.HasFocus() {
+		t.Error("Tab should have reached consigliereInput")
+	}
+}
+
+// TestTabFromLogAuditViewerTableReachesConsigliere and
+// TestBacktabFromLogAuditKeywordReachesConsigliere pin the two edges
+// patched into the viewer's own fixed field chain (Keyword -> Time ->
+// Level -> Timeline -> Table -> wraps to Keyword): Table's own Tab,
+// and Keyword's own Backtab, now reach the sidebar instead of
+// wrapping within the chain, once it's open.
+func TestTabFromLogAuditViewerTableReachesConsigliere(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	r.showConsigliere()
+	r.app.SetFocus(r.logAuditViewerTable)
+
+	if got := r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
+		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
+	}
+	if !r.consigliereInput.HasFocus() {
+		t.Error("Tab from the table should have reached consigliereInput, not wrapped to Keyword")
+	}
+}
+
+func TestBacktabFromLogAuditKeywordReachesConsigliere(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	r.showConsigliere()
+
+	r.app.SetFocus(r.logAuditKeywordField)
+	// Drives the field's own SetDoneFunc through its real
+	// InputHandler, the same pattern this package's other field-chain
+	// tests already use (tview.InputField exposes no direct way to
+	// call a DoneFunc set on it).
+	r.logAuditKeywordField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	// Lands on consigliereHistory, not consigliereInput, whenever
+	// there's something to scroll to (the default, tiny Root rect this
+	// test runs on makes consigliereSplashArt overflow it — same
+	// precondition TestCycleFocusShortcutLoopsPanelInputHistoryPanel's
+	// own doc comment already documents) — either one still proves
+	// the backward edge reached consigliere instead of wrapping to
+	// the table.
+	if !r.consigliereInput.HasFocus() && !r.consigliereHistory.HasFocus() {
+		t.Error("Backtab from Keyword should have reached consigliere, not wrapped to the table")
+	}
+}
+
+// TestTabBacktabReachConsigliereFromLogAuditDetail pins the entry
+// point captureLogAuditDetailKey now owns — Tab/Backtab are not a
+// tview.TextView built-in binding to begin with (only 'g'/'G'/'j'/'k'/
+// 'h'/'l' are — see textview.go), so neither was ever claimed before.
+func TestTabBacktabReachConsigliereFromLogAuditDetail(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	r.openLogAuditDetail(1)
+	r.showConsigliere()
+	r.app.SetFocus(r.logAuditDetailView)
+
+	if got := r.captureLogAuditDetailKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
+		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
+	}
+	if !r.consigliereInput.HasFocus() {
+		t.Error("Tab should have reached consigliereInput")
+	}
+}
