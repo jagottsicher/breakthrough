@@ -67,9 +67,56 @@ func TestTermKeyBytesCtrlLetters(t *testing.T) {
 	}
 }
 
+func TestTermKeyBytesFunctionKeys(t *testing.T) {
+	for _, tc := range []struct {
+		key  tcell.Key
+		want string
+	}{
+		{tcell.KeyF1, "\x1bOP"},
+		{tcell.KeyF2, "\x1bOQ"},
+		{tcell.KeyF3, "\x1bOR"},
+		{tcell.KeyF4, "\x1bOS"},
+		{tcell.KeyF5, "\x1b[15~"},
+		{tcell.KeyF6, "\x1b[17~"},
+		{tcell.KeyF7, "\x1b[18~"},
+		{tcell.KeyF8, "\x1b[19~"},
+		{tcell.KeyF9, "\x1b[20~"},
+		{tcell.KeyF10, "\x1b[21~"},
+		{tcell.KeyF11, "\x1b[23~"},
+		{tcell.KeyF12, "\x1b[24~"},
+	} {
+		got := termKeyBytes(tcell.NewEventKey(tc.key, 0, tcell.ModNone))
+		if string(got) != tc.want {
+			t.Errorf("termKeyBytes(%v) = %q, want %q", tc.key, got, tc.want)
+		}
+	}
+}
+
+func TestTermKeyBytesNavigationKeys(t *testing.T) {
+	for _, tc := range []struct {
+		key  tcell.Key
+		want string
+	}{
+		{tcell.KeyHome, "\x1b[H"},
+		{tcell.KeyEnd, "\x1b[F"},
+		{tcell.KeyPgUp, "\x1b[5~"},
+		{tcell.KeyPgDn, "\x1b[6~"},
+		{tcell.KeyInsert, "\x1b[2~"},
+		{tcell.KeyDelete, "\x1b[3~"},
+	} {
+		got := termKeyBytes(tcell.NewEventKey(tc.key, 0, tcell.ModNone))
+		if string(got) != tc.want {
+			t.Errorf("termKeyBytes(%v) = %q, want %q", tc.key, got, tc.want)
+		}
+	}
+}
+
 func TestTermKeyBytesUnmappedKeyReturnsNil(t *testing.T) {
-	if got := termKeyBytes(tcell.NewEventKey(tcell.KeyF5, 0, tcell.ModNone)); got != nil {
-		t.Errorf("termKeyBytes(F5) = %v, want nil (not yet mapped — see its own doc comment)", got)
+	// F13 and beyond stay unmapped — essentially never present on a
+	// real keyboard, and not worth a table entry until someone
+	// actually hits this.
+	if got := termKeyBytes(tcell.NewEventKey(tcell.KeyF13, 0, tcell.ModNone)); got != nil {
+		t.Errorf("termKeyBytes(F13) = %v, want nil (not yet mapped — see its own doc comment)", got)
 	}
 }
 
