@@ -174,6 +174,19 @@ func (s *Session) Size() (cols, rows int) {
 	return s.term.Size()
 }
 
+// Mode returns the virtual terminal's own current DEC private-mode
+// flags — in particular whether the remote program has turned on
+// mouse reporting (and in which flavor: X10/button/motion/any-event,
+// and whether it asked for SGR extended coordinates), the same way a
+// real terminal emulator would decide whether a mouse click is
+// meaningful input to send at all rather than a local-only gesture.
+// Same locking contract as Cell/Cursor.
+func (s *Session) Mode() vt10x.ModeFlag {
+	s.term.Lock()
+	defer s.term.Unlock()
+	return s.term.Mode()
+}
+
 // Resize changes both the virtual terminal's own buffer size and the
 // real pty's own kernel-level window size (vt10x.ResizePty — a TIOCSWINSZ
 // ioctl under the hood) — doing only one of the two is the classic

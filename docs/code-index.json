@@ -1603,13 +1603,13 @@
     },
     {
       "path": "internal/termtab/session.go",
-      "size": 7772,
-      "sha256": "7163c4acfa16943057665ac16311dc9e1a1aec94093a8c1a8beff4d37f748f98"
+      "size": 8327,
+      "sha256": "9841a055e6f51c9a37dffdf456a15256911aed83f4950e373a73f88da49309f5"
     },
     {
       "path": "internal/termtab/session_test.go",
-      "size": 7857,
-      "sha256": "b4b41d5fba7997770ef76935cb6f2dfb3dcd5c61b83f9ccc142f8e9e3b0715c2"
+      "size": 9564,
+      "sha256": "bdcb16bf03597033db60b17c4878c4f82413067b6ddf97de783066762aee0ceb"
     },
     {
       "path": "internal/ui/activitylog.go",
@@ -2582,14 +2582,24 @@
       "sha256": "d98325d73ec8d868cf5d82fde542fc8b3b62b4fa8c73c789d6fb3a5145e48133"
     },
     {
+      "path": "internal/ui/termtabmouse.go",
+      "size": 3582,
+      "sha256": "2830ef170e24d90168fc8ad938010beafc2f55375c52518f0c07edc1fef25d2d"
+    },
+    {
+      "path": "internal/ui/termtabmouse_test.go",
+      "size": 5435,
+      "sha256": "e21e80893095d171dda2652a6d6160dc96084a2ddfc910680662ec21ffcc8622"
+    },
+    {
       "path": "internal/ui/termtabview.go",
-      "size": 4993,
-      "sha256": "4581eb2543308db8962274e79d6455133ba1945334892bd18a398c3499bf4843"
+      "size": 6335,
+      "sha256": "01d45563b3fb73a04bcb055477f18fb3e156cd91c30653948e6f59825000b207"
     },
     {
       "path": "internal/ui/termtabview_test.go",
-      "size": 6212,
-      "sha256": "532c65b0d61aa4ae2a403afa1c82f515cde37ac762e906aa145743ba6a76b51f"
+      "size": 9445,
+      "sha256": "09bb45dd349cb84193e880e1a54ed1cd79ddf193782ce6ec42697b6f4d2e52e0"
     },
     {
       "path": "internal/ui/theme.go",
@@ -3939,6 +3949,8 @@
         "internal/ui/termtabcolor_test.go",
         "internal/ui/termtabkeys.go",
         "internal/ui/termtabkeys_test.go",
+        "internal/ui/termtabmouse.go",
+        "internal/ui/termtabmouse_test.go",
         "internal/ui/termtabview.go",
         "internal/ui/termtabview_test.go",
         "internal/ui/theme.go",
@@ -21238,10 +21250,18 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session.go",
+      "name": "Mode",
+      "kind": "method",
+      "receiver": "*Session",
+      "line": 184
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/termtab",
+      "file": "internal/termtab/session.go",
       "name": "Resize",
       "kind": "method",
       "receiver": "*Session",
-      "line": 195
+      "line": 208
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
@@ -21249,7 +21269,7 @@
       "name": "WriteInput",
       "kind": "method",
       "receiver": "*Session",
-      "line": 205
+      "line": 218
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
@@ -21257,105 +21277,126 @@
       "name": "Close",
       "kind": "method",
       "receiver": "*Session",
-      "line": 213
+      "line": 226
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "connNoop",
       "kind": "function",
-      "line": 20
+      "line": 22
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "waitForCellRow",
       "kind": "function",
-      "line": 31
+      "line": 33
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "shCommand",
       "kind": "function",
-      "line": 49
+      "line": 51
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestStartParsesRealOutputIntoCells",
       "kind": "function",
-      "line": 53
+      "line": 55
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestSizeReturnsTheConfiguredStartingSize",
       "kind": "function",
-      "line": 66
+      "line": 68
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestSizeFallsBackToDefaultsWhenUnset",
       "kind": "function",
-      "line": 82
+      "line": 84
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestResizeUpdatesTheVirtualTerminalsOwnSize",
       "kind": "function",
-      "line": 97
+      "line": 99
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestWriteInputReachesTheRemoteProcess",
       "kind": "function",
-      "line": 116
+      "line": 118
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/termtab",
+      "file": "internal/termtab/session_test.go",
+      "name": "waitForMode",
+      "kind": "function",
+      "line": 147
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/termtab",
+      "file": "internal/termtab/session_test.go",
+      "name": "TestModeReflectsMouseReportingTurnedOnByTheRemoteProgram",
+      "kind": "function",
+      "line": 161
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/termtab",
+      "file": "internal/termtab/session_test.go",
+      "name": "TestModeHasNoMouseBitsBeforeAnyProgramAsksForReporting",
+      "kind": "function",
+      "line": 179
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestExitedReportsCleanExit",
       "kind": "function",
-      "line": 141
+      "line": 194
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestExitedReportsNonzeroExit",
       "kind": "function",
-      "line": 164
+      "line": 217
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestCloseTerminatesAStillRunningProcess",
       "kind": "function",
-      "line": 187
+      "line": 240
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestCloseIsSafeToCallTwice",
       "kind": "function",
-      "line": 213
+      "line": 266
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestCloseIsSafeAfterTheProcessAlreadyExitedOnItsOwn",
       "kind": "function",
-      "line": 228
+      "line": 281
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/termtab",
       "file": "internal/termtab/session_test.go",
       "name": "TestDefaultCommandBuildsRealSSHArgv",
       "kind": "function",
-      "line": 246
+      "line": 299
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -35391,14 +35432,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
@@ -48928,14 +48969,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 27
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 27
     },
@@ -54831,6 +54872,69 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabmouse.go",
+      "name": "termMouseBytes",
+      "kind": "function",
+      "line": 27
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabmouse_test.go",
+      "name": "TestTermMouseBytesNoReportingReturnsNil",
+      "kind": "function",
+      "line": 11
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabmouse_test.go",
+      "name": "TestTermMouseBytesSgrPressAndRelease",
+      "kind": "function",
+      "line": 18
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabmouse_test.go",
+      "name": "TestTermMouseBytesSgrAppliesModifiers",
+      "kind": "function",
+      "line": 42
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabmouse_test.go",
+      "name": "TestTermMouseBytesSgrMotionOnlyWhileButtonHeldInButtonEventMode",
+      "kind": "function",
+      "line": 53
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabmouse_test.go",
+      "name": "TestTermMouseBytesSgrMotionAlwaysReportedInAnyEventMode",
+      "kind": "function",
+      "line": 67
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabmouse_test.go",
+      "name": "TestTermMouseBytesX10OnlyIgnoresReleaseAndMotion",
+      "kind": "function",
+      "line": 78
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabmouse_test.go",
+      "name": "TestTermMouseBytesLegacyEncodingUsesSingleBytesAndSaturates",
+      "kind": "function",
+      "line": 97
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabmouse_test.go",
+      "name": "TestTermMouseBytesClickAndDoubleClickAreIgnored",
+      "kind": "function",
+      "line": 126
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview.go",
       "name": "termTabView",
       "kind": "type",
@@ -54862,72 +54966,101 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview.go",
+      "name": "MouseHandler",
+      "kind": "method",
+      "receiver": "*termTabView",
+      "line": 120
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview.go",
       "name": "isTermLeaveKey",
       "kind": "function",
-      "line": 118
+      "line": 148
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview_test.go",
       "name": "termNoopConn",
       "kind": "function",
-      "line": 19
+      "line": 20
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview_test.go",
       "name": "newTestSimulationScreen",
       "kind": "function",
-      "line": 23
+      "line": 24
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview_test.go",
       "name": "waitForScreenRow",
       "kind": "function",
-      "line": 41
+      "line": 42
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview_test.go",
       "name": "TestTermTabViewDrawRendersRealSessionOutput",
       "kind": "function",
-      "line": 61
+      "line": 62
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview_test.go",
       "name": "TestTermTabViewDrawResizesTheSessionToMatchItsOwnRect",
       "kind": "function",
-      "line": 78
+      "line": 79
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview_test.go",
       "name": "TestTermTabViewInputHandlerWritesToTheRealSession",
       "kind": "function",
-      "line": 99
+      "line": 100
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview_test.go",
       "name": "TestTermTabViewForwardsCtrlCEscapeTabToALiveSession",
       "kind": "function",
-      "line": 127
+      "line": 128
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview_test.go",
       "name": "TestTermTabViewCtrlCEscapeTabCallOnLeaveOnceExited",
       "kind": "function",
-      "line": 152
+      "line": 153
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview_test.go",
+      "name": "TestTermTabViewMouseHandlerClaimsFocusOnButtonDownInRect",
+      "kind": "function",
+      "line": 179
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview_test.go",
+      "name": "TestTermTabViewMouseHandlerIgnoresEventsOutsideItsRect",
+      "kind": "function",
+      "line": 205
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/termtabview_test.go",
+      "name": "TestTermTabViewMouseHandlerForwardsClickToARealSessionOnceEnabled",
+      "kind": "function",
+      "line": 234
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/termtabview_test.go",
       "name": "TestTermTabViewOtherKeysStillReachTheSessionOnceExited",
       "kind": "function",
-      "line": 178
+      "line": 267
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -58213,5 +58346,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "569c2a30f551c2b878d229d1d13032e8f985e3332472a55784764a83dae6837e"
+  "merkle_root": "a6411f21675ae86e5de3d863229a84be894fb679dd2376fe92426be615768038"
 }

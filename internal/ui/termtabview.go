@@ -108,6 +108,36 @@ func (v *termTabView) InputHandler() func(event *tcell.EventKey, setFocus func(p
 	})
 }
 
+// MouseHandler claims focus on a button-down within this widget's own
+// rect (the same left-click-to-focus convention every other primitive
+// in this app already has) and otherwise translates the event via
+// termMouseBytes, writing the result straight to the session exactly
+// like InputHandler does for keys. Nothing here is ever left
+// unconsumed once inside the rect — this view owns its whole screen
+// area exclusively while visible, the same "swallow everything, this
+// is the only thing here" reasoning toolWindow's own MouseHandler
+// already uses while dragging/resizing.
+func (v *termTabView) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
+	return v.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
+		x, y := event.Position()
+		if !v.InRect(x, y) {
+			return false, nil
+		}
+		switch action {
+		case tview.MouseLeftDown, tview.MouseMiddleDown, tview.MouseRightDown:
+			setFocus(v)
+		}
+		if v.exited {
+			return true, nil
+		}
+		innerX, innerY, _, _ := v.GetInnerRect()
+		if b := termMouseBytes(action, event, x-innerX, y-innerY, v.session.Mode()); b != nil {
+			_, _ = v.session.WriteInput(b)
+		}
+		return true, nil
+	})
+}
+
 // isTermLeaveKey reports whether event is one of the three keys
 // exited's own doc comment on the struct names — Ctrl+C, Escape, Tab
 // — the user's own explicit choice: all three already mean "get out
