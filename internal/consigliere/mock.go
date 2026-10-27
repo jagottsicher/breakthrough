@@ -10,10 +10,11 @@ import "context"
 const mockReplyText = "This is a placeholder reply from the AI Consigliere — no real provider call yet, just a preview of how a multi-line reply looks and scrolls in this panel. A real tip would speak to the current view's own visible context (e.g. Log Audit: time range, active filter) and give one short, concrete piece of advice instead of this notice."
 
 // Mock is a Provider that never makes a network call — it always
-// answers with mockReplyText, regardless of req. Exists to exercise
-// the UI panel's own history/scroll/input mechanics end to end before
-// any real provider, API-key storage, or consent-checkbox decision
-// (all still open per feature_ideas.txt) is made.
+// answers with mockReplyText, regardless of req. Nothing in
+// internal/ui constructs this anymore (see buildConsigliereProvider),
+// now that Anthropic/OpenAICompat exist — kept as a standalone,
+// dependency-free Provider for exercising the UI panel's own history/
+// scroll/input mechanics without a network call or API key.
 type Mock struct{}
 
 func (Mock) Reply(ctx context.Context, req Request) (string, error) {

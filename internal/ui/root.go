@@ -1810,8 +1810,10 @@ type Root struct {
 	// (detailsSidebar/detailsSidebarLayout above) uses, plus
 	// consigliereInput as a second, fixed-height row beneath the
 	// history for the next question. consigliereMessages/
-	// consigliereProvider/consigliereCancel are this session's own
-	// chat state — see consigliere.go.
+	// consigliereCancel are this session's own chat state — see
+	// consigliere.go. The Provider itself is never cached on Root —
+	// buildConsigliereProvider constructs one fresh per question (see
+	// its own doc comment).
 	consigliereHistory   *tview.TextView
 	consigliereScrollbar *verticalScrollbar
 	consigliereTitleBar  *tview.TextView
@@ -1819,7 +1821,6 @@ type Root struct {
 	consigliereLayout    *tview.Flex
 	consigliereVisible   bool // mirrors detailsSidebarVisible — see showConsigliere/hideConsigliere
 	consigliereMessages  []consigliere.Message
-	consigliereProvider  consigliere.Provider
 	consigliereCancel    context.CancelFunc
 	// consigliereReturnFocus is captured once, in showConsigliere,
 	// before anything changes focus — see hideConsigliere's own doc
@@ -3202,12 +3203,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.dirPicker = r.newDirPicker()
 
 	// The AI Consigliere sidebar ("gC", see consigliere.go) — built once
-	// here, same as everything else above; r.consigliereProvider starts
-	// as consigliere.Mock{} (see internal/consigliere/mock.go) since no
-	// real provider/API-key/consent decision has been made yet (see
-	// feature_ideas.txt's own "AI Consigliere" entry).
+	// here, same as everything else above. The real Provider itself is
+	// built fresh per question, not here — see
+	// buildConsigliereProvider's own doc comment.
 	r.newConsigliereSidebar()
-	r.consigliereProvider = consigliere.Mock{}
 
 	// The Help overlay (see help.go/openHelp) — a single, static,
 	// read-only TextView, the simplest of all of these (nothing to

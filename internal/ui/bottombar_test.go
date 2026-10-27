@@ -83,6 +83,21 @@ func TestMain(m *testing.M) {
 	os.Setenv("XDG_RUNTIME_DIR", filepath.Join(os.TempDir(), "breakthrough-test-xdg-runtime"))     //nolint:errcheck
 	os.Setenv("XDG_DATA_HOME", filepath.Join(os.TempDir(), "breakthrough-test-xdg-data"))          //nolint:errcheck
 
+	// AI Consigliere's own env-var key tier (internal/apikey.Resolve,
+	// consigliereEnvVarForProvider): blanked out regardless of whatever
+	// the machine running `go test` actually has exported for real use
+	// of these same CLI tools/API keys — without this, a developer's
+	// own ANTHROPIC_API_KEY would make submitConsigliereMessage's
+	// background goroutine (TestSubmitConsigliereMessageShowsTheQuestion
+	// Immediately et al.) fire a real, billed network request with a
+	// real credential, the exact "a test that depends on the outside
+	// environment" problem HISTFILE/XDG_RUNTIME_DIR/XDG_DATA_HOME above
+	// already guard against for their own, differently-shaped version
+	// of it.
+	os.Setenv("ANTHROPIC_API_KEY", "") //nolint:errcheck
+	os.Setenv("OPENAI_API_KEY", "")    //nolint:errcheck
+	os.Setenv("DEEPSEEK_API_KEY", "")  //nolint:errcheck
+
 	notifyPersistPath = func() string { return "" }
 	labelsPersistPath = func() string { return "" }
 	operationsPersistPath = func() string { return "" }

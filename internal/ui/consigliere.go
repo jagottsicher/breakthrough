@@ -7,22 +7,26 @@
 // window itself — see detailssidebar.go). Docked flush against the
 // right edge, non-modal (its own show/hide path, not pushOverlay/
 // hideOverlay/activePage/overlayStack), the same shape Details uses —
-// not a centered modal dialog. This first slice is UI-only:
-// r.consigliereProvider is consigliere.Mock{} (see NewRoot), so no
-// network call, API key, or consent checkbox exists yet — all three
-// are still open product decisions per the spec. The point of this
-// slice is purely to see and judge the panel's own layout, scrolling,
-// and chat mechanics before any of that is decided.
+// not a centered modal dialog. buildConsigliereProvider constructs the
+// real Provider (internal/consigliere's Anthropic/OpenAICompat) for
+// whichever backend consigliere_provider currently names, with its
+// API key resolved via internal/apikey's own three-tier chain — see
+// that function's own doc comment. consigliere.Mock{} still exists
+// (internal/consigliere/mock.go) but nothing here constructs it
+// anymore; it's kept only as a standalone, dependency-free Provider a
+// future test or local experiment can still reach for directly.
 package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/apikey"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
 )
 
@@ -595,6 +599,79 @@ func (r *Root) consigliereContextSnapshot() string {
 	return "Placeholder context — no real view snapshot wired up yet (see feature_ideas.txt)."
 }
 
+// errConsigliereNoAPIKey is what buildConsigliereProvider's own
+// KeyFunc returns when apikey.Resolve finds no key in any of the
+// three tiers (apikey.TierNone) — surfaced verbatim as the reply text
+// (see submitConsigliereMessage's "Fehler: %v" below), naming exactly
+// where to fix it rather than letting the request fail with a bare,
+// confusing 401 from the provider itself. Deliberately never silently
+// falls back to consigliere.Mock{} instead: a placeholder reply that
+// reads like a real answer would be exactly the kind of silent
+// failure CLAUDE.md's "keine stillen Fehler" rule rules out.
+var errConsigliereNoAPIKey = errors.New("no API key configured — set one in Options → AI Consigliere")
+
+// buildConsigliereProvider constructs the real Provider for whichever
+// backend r.settings.ConsigliereProvider currently names, built fresh
+// on every call rather than cached on Root: the provider/model/key-
+// file settings, and whether the encrypted tier is unlocked, can all
+// change between one question and the next (an Options screen edit,
+// or an unlock, mid-session).
+//
+// The returned KeyFunc calls apikey.Resolve at call time — i.e. when
+// Provider.Reply actually sends the request, not here — so a key in
+// the encrypted tier that's still locked when the sidebar opens, but
+// gets unlocked before this particular question is asked, is picked
+// up correctly instead of staying permanently unresolved for the rest
+// of the run (see consigliere.KeyFunc's own doc comment).
+func (r *Root) buildConsigliereProvider() consigliere.Provider {
+	providerName := r.settings.ConsigliereProvider
+	model := r.settings.ConsigliereModel
+	keyFile := r.settings.ConsigliereAPIKeyFile
+	session := r.apiKeySession
+
+	keyFunc := func() (string, error) {
+		key, tier, err := apikey.Resolve(consigliereEnvVarForProvider(providerName), keyFile, providerName, session)
+		if err != nil {
+			return "", err
+		}
+		if tier == apikey.TierNone {
+			return "", errConsigliereNoAPIKey
+		}
+		return key, nil
+	}
+
+	switch providerName {
+	case "openai":
+		return consigliere.OpenAICompat{
+			BaseURL: consigliere.OpenAIDefaultBaseURL,
+			Model:   firstNonEmptyConsigliereModel(model, consigliere.OpenAIDefaultModel),
+			APIKey:  keyFunc,
+		}
+	case "deepseek":
+		return consigliere.OpenAICompat{
+			BaseURL: consigliere.DeepSeekDefaultBaseURL,
+			Model:   firstNonEmptyConsigliereModel(model, consigliere.DeepSeekDefaultModel),
+			APIKey:  keyFunc,
+		}
+	default: // "anthropic", and anything unrecognized (e.g. a hand-edited config)
+		return consigliere.Anthropic{
+			Model:  model, // "" already means "use AnthropicDefaultModel" — see Anthropic.Reply
+			APIKey: keyFunc,
+		}
+	}
+}
+
+// firstNonEmptyConsigliereModel returns override if set, otherwise
+// fallback — OpenAICompat (unlike Anthropic.Reply) expects its caller
+// to always supply a concrete Model, since OpenAI and DeepSeek each
+// need a different default (see OpenAICompat's own doc comment).
+func firstNonEmptyConsigliereModel(override, fallback string) string {
+	if override != "" {
+		return override
+	}
+	return fallback
+}
+
 // submitConsigliereMessage appends text as a user turn, re-renders the
 // history immediately so the question shows up without waiting for the
 // provider, then asks consigliereProvider for a reply off the UI
@@ -617,7 +694,7 @@ func (r *Root) submitConsigliereMessage(text string) {
 		History:  r.consigliereMessages,
 		Snapshot: r.consigliereContextSnapshot(),
 	}
-	provider := r.consigliereProvider
+	provider := r.buildConsigliereProvider()
 
 	r.safeGo("AI Consigliere reply", func() { r.consigliereCancel = nil }, func() {
 		reply, err := provider.Reply(ctx, req)

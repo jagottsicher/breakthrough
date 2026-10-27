@@ -1372,6 +1372,17 @@ func optionCategories() []optionCategory {
 						}
 					},
 				},
+				stringOption("consigliere_model", "Model",
+					"Overrides the selected provider's own built-in default model ID. \"\" (the "+
+						"default) means use that default — see internal/consigliere's own "+
+						"Anthropic/OpenAI/DeepSeekDefaultModel constants. Model IDs retire over "+
+						"time; set this if the default one stops working.",
+					func(r *Root) string { return r.settings.ConsigliereModel },
+					func(r *Root, v string) {
+						r.settings.ConsigliereModel = v
+						r.persistSetting("consigliere_model", v)
+					},
+				),
 				stringOption("consigliere_api_key_file", "API key file (plain text)",
 					"An optional path to a plain-text file holding the selected provider's "+
 						"API key — the deliberately unencrypted, opt-in tier: protected only by "+
@@ -1726,6 +1737,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.ConsigliereProvider, true
 	case "consigliere_api_key_file":
 		return s.ConsigliereAPIKeyFile, true
+	case "consigliere_model":
+		return s.ConsigliereModel, true
 	}
 	return "", false
 }

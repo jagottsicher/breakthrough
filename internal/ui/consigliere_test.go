@@ -122,7 +122,9 @@ func TestShowConsigliereStartsAFreshSession(t *testing.T) {
 // TestSubmitConsigliereMessageShowsTheQuestionImmediately pins
 // submitConsigliereMessage's own synchronous half: the user's own
 // question renders into the history right away, before the provider
-// (here consigliere.Mock, see NewRoot) has answered — the same
+// (buildConsigliereProvider's own real Provider, which errors out
+// immediately here since TestMain blanks the env-var key tier and
+// nothing unlocks the encrypted one) has answered — the same
 // "assert only the synchronous half" limitation
 // TestRunTestCloudRemoteShowsTestingImmediately already documents,
 // since nothing here drains a live Application.Run() event loop for

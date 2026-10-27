@@ -711,6 +711,13 @@ func SettingDocs() []SettingDoc {
 			Summary:     "Optional path to a plain-text file holding the selected provider's API key (the unencrypted, opt-in tier — see internal/apikey).",
 			Implemented: true,
 		},
+		{
+			Key:         "consigliere_model",
+			Default:     d.ConsigliereModel,
+			Kind:        KindString,
+			Summary:     `Overrides the selected provider's own built-in default model ID. "" means use that default.`,
+			Implemented: true,
+		},
 	}
 }
 

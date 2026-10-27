@@ -583,6 +583,14 @@ type Settings struct {
 	// environment variable and above the encrypted store. "" (the
 	// default) means this tier isn't configured at all, not an error.
 	ConsigliereAPIKeyFile string
+
+	// ConsigliereModel overrides the selected provider's own built-in
+	// default model ID (internal/consigliere's
+	// Anthropic/OpenAI/DeepSeekDefaultModel consts) — "" (the default)
+	// means "use that default". Exists because model IDs retire over
+	// time; without this, an outdated built-in literal would need a
+	// breakthrough update to fix instead of a one-line override here.
+	ConsigliereModel string
 }
 
 // LabelName returns the display name for color-label id (1-9) — the
@@ -736,6 +744,7 @@ func DefaultSettings() Settings {
 
 		ConsigliereProvider:   "anthropic",
 		ConsigliereAPIKeyFile: "",
+		ConsigliereModel:      "",
 	}
 }
 
@@ -950,6 +959,8 @@ func (s *Settings) apply(key, value string) error {
 		s.ConsigliereProvider = value
 	case "consigliere_api_key_file":
 		s.ConsigliereAPIKeyFile = value
+	case "consigliere_model":
+		s.ConsigliereModel = value
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
