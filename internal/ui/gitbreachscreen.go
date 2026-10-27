@@ -904,7 +904,7 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 			// correct, valued behavior. "G" (bottom) and every other
 			// scroll key are untouched — only this one jump is the
 			// price.
-			r.startConsigliereChord()
+			r.startConsigliereChord(r.gitBreachFocusables()[0].body)
 			return nil
 		}
 	}
@@ -947,7 +947,7 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 			// Main's own *tview.TextView — see
 			// captureGitBreachMainKey's own case), so nothing existing
 			// is lost by claiming it here.
-			r.startConsigliereChord()
+			r.startConsigliereChord(r.gitBreachFocusables()[0].body)
 			return nil
 		case ' ':
 			r.toggleGitBreachStage()
@@ -1002,7 +1002,7 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			// consigliere.go and captureGitBreachFilesTableKey's own
 			// identical case (gitBreachBranchesTable is also a plain
 			// *tview.Table).
-			r.startConsigliereChord()
+			r.startConsigliereChord(r.gitBreachFocusables()[0].body)
 			return nil
 		}
 	}
@@ -1066,7 +1066,7 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 			// consigliere.go and captureGitBreachFilesTableKey's own
 			// identical case (gitBreachCommitsTable is also a plain
 			// *tview.Table).
-			r.startConsigliereChord()
+			r.startConsigliereChord(r.gitBreachFocusables()[0].body)
 			return nil
 		}
 	}
@@ -1126,7 +1126,7 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 			// consigliere.go and captureGitBreachFilesTableKey's own
 			// identical case (gitBreachStashTable is also a plain
 			// *tview.Table).
-			r.startConsigliereChord()
+			r.startConsigliereChord(r.gitBreachFocusables()[0].body)
 			return nil
 		}
 	}

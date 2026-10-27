@@ -1270,3 +1270,75 @@ func TestTabBacktabReachConsigliereFromLogAuditDetail(t *testing.T) {
 		t.Error("Tab should have reached consigliereInput")
 	}
 }
+
+// TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere is the
+// exact scenario the user reported: opening the AI Consigliere from
+// the viewer's own table used to collapse the whole ring down to just
+// input <-> history <-> table, permanently orphaning Keyword/Time/
+// Level/Timeline — a real, reported bug in how the sidebar was first
+// spliced into an existing host ring. Drives a full lap and asserts
+// every stop is actually visited, not just the one hop the earlier,
+// narrower tests already covered.
+func TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	r.app.SetFocus(r.logAuditViewerTable)
+	// The real "gC" entry path, not a direct showConsigliere() call —
+	// that's what actually sets consigliereForwardExit (see
+	// startConsigliereChord's own doc comment), the whole thing this
+	// test exists to pin.
+	r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
+	r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone))
+
+	tabFrom := func(current tview.Primitive) tview.Primitive {
+		switch current {
+		case r.logAuditViewerTable:
+			r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.logAuditKeywordField, r.logAuditTimeField, r.logAuditLevelField:
+			current.(*tview.InputField).InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
+		case r.logAuditTimelineView:
+			r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.consigliereInput:
+			r.handleConsigliereInputDone(tcell.KeyTab)
+		case r.consigliereHistory:
+			r.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		default:
+			t.Fatalf("tabFrom: unhandled current focus %v", current)
+		}
+		return r.app.GetFocus()
+	}
+
+	var visited []tview.Primitive
+	var current tview.Primitive = r.consigliereInput // where "gC" just left focus
+	for i := 0; i < 8; i++ {
+		current = tabFrom(current)
+		visited = append(visited, current)
+		if current == r.consigliereInput && i > 0 {
+			break // back to the start — one full lap done
+		}
+	}
+
+	want := map[string]tview.Primitive{
+		"consigliereInput": r.consigliereInput,
+		"Keyword":          r.logAuditKeywordField,
+		"Time":             r.logAuditTimeField,
+		"Level":            r.logAuditLevelField,
+		"Timeline":         r.logAuditTimelineView,
+		"Table":            r.logAuditViewerTable,
+	}
+	for name, stop := range want {
+		found := false
+		for _, v := range visited {
+			if v == stop {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s was never reached in one full Tab lap: %v", name, visited)
+		}
+	}
+}

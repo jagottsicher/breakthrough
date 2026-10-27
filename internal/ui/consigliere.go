@@ -55,7 +55,19 @@ var consigliereChordFamily = chordFamily{
 // same comment about why it has to be this specific family and not
 // chordFamilyFor('g')'s real "goto" one (see pendingChordFamily's own
 // doc comment in root.go for that part).
-func (r *Root) startConsigliereChord() {
+// forwardExit is where Tab leaving consigliere's own input/history
+// pair lands, once it actually opens (see consigliereForwardExit's
+// own doc comment in root.go) — the fixed stop that follows wherever
+// this host screen splices consigliere into its own ring, the same
+// for every one of that screen's own 'g' entry points (e.g. Log
+// Audit's table and timeline both splice it in right before Keyword;
+// Git Breach's five entry points all splice it in right before
+// Files). Pass nil for a single-node "ring" (Log Audit's selection/
+// detail screens) — consigliereForwardExit then falls back to
+// consigliereReturnFocus, which is exactly the one other node there
+// is.
+func (r *Root) startConsigliereChord(forwardExit tview.Primitive) {
+	r.consigliereForwardExit = forwardExit
 	r.startChord(consigliereChordFamily)
 }
 
@@ -135,31 +147,48 @@ func (r *Root) captureConsigliereHistoryKey(event *tcell.EventKey) *tcell.EventK
 		// TextView's own InputHandler, which — per tview's own
 		// textview.go — does nothing at all for either key without a
 		// SetDoneFunc) ever sees it. Backtab goes back to the field;
-		// Tab exits consigliere's own tiny loop the same host-agnostic
-		// way handleConsigliereInputDone's identical fallback does.
+		// Tab exits consigliere's own tiny loop forward — continuing
+		// the host screen's own ring past it, the same way
+		// handleConsigliereInputDone's identical fallback does.
 		if event.Key() == tcell.KeyBacktab {
 			r.app.SetFocus(r.consigliereInput)
 		} else {
-			r.app.SetFocus(r.consigliereExitFocus())
+			r.app.SetFocus(r.consigliereForwardExitTarget())
 		}
 		return nil
 	}
 	return event
 }
 
-// consigliereExitFocus is where Tab/Backtab leaving consigliere's own
-// input/history pair lands: whatever had real keyboard focus the
-// moment showConsigliere last ran (consigliereReturnFocus — see its
-// own doc comment in root.go), falling back to the panel only if
-// nothing was ever recorded. The one place this logic lives, shared
-// by handleConsigliereInputDone and captureConsigliereHistoryKey, so
-// every host screen's own exit path behaves identically without
-// either of them needing to know which screen is actually hosting it.
-func (r *Root) consigliereExitFocus() tview.Primitive {
+// consigliereBackwardExit is where Backtab leaving consigliere's own
+// first stop (consigliereInput) lands: whatever had real keyboard
+// focus the moment showConsigliere last ran (consigliereReturnFocus —
+// see its own doc comment in root.go), falling back to the panel only
+// if nothing was ever recorded. Shared by handleConsigliereInputDone
+// and captureConsigliereHistoryKey's own Backtab case.
+func (r *Root) consigliereBackwardExit() tview.Primitive {
 	if r.consigliereReturnFocus != nil {
 		return r.consigliereReturnFocus
 	}
 	return r.panel.table
+}
+
+// consigliereForwardExit is where Tab leaving consigliere's own last
+// stop lands: the fixed splice point the host screen that opened it
+// recorded (consigliereForwardExit — see its own doc comment in
+// root.go), falling back to consigliereBackwardExit for a single-node
+// "ring" (nothing else was ever recorded, so both directions lead to
+// the same one other node) or, failing that, the panel. Shared by
+// handleConsigliereInputDone and captureConsigliereHistoryKey's own
+// Tab case — the one change that made Tab actually continue a host
+// screen's own ring past consigliere instead of looping it back to
+// wherever consigliere was opened from, stranding every stop in
+// between (a real, reported bug).
+func (r *Root) consigliereForwardExitTarget() tview.Primitive {
+	if r.consigliereForwardExit != nil {
+		return r.consigliereForwardExit
+	}
+	return r.consigliereBackwardExit()
 }
 
 // renderConsigliereTitleBar sets consigliereTitleBar's own text,
@@ -397,16 +426,20 @@ func (r *Root) handleConsigliereInputDone(key tcell.Key) {
 	}
 	if key == tcell.KeyBacktab {
 		// Backward from the first stop in consigliere's own tiny
-		// loop — exits the same host-agnostic way Tab's own "nothing
-		// to scroll" case does, just one key earlier in the sequence.
-		r.app.SetFocus(r.consigliereExitFocus())
+		// loop — back to wherever it was opened from.
+		r.app.SetFocus(r.consigliereBackwardExit())
 		return
 	}
 	if key == tcell.KeyTab {
 		if r.consigliereScrollbar.maxOffset() > 0 {
 			r.app.SetFocus(r.consigliereHistory)
 		} else {
-			r.app.SetFocus(r.consigliereExitFocus())
+			// Forward, not backward: continues the host screen's own
+			// ring past consigliere (consigliereForwardExit) instead
+			// of looping back to wherever it was opened from — the
+			// real, reported bug this fixes (see
+			// consigliereForwardExitTarget's own doc comment).
+			r.app.SetFocus(r.consigliereForwardExitTarget())
 		}
 		return
 	}

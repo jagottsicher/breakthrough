@@ -1798,6 +1798,18 @@ type Root struct {
 	// once that recorded page is no longer the active one).
 	consigliereReturnFocus tview.Primitive
 	consigliereHostPage    string
+	// consigliereForwardExit is where Tab leaving consigliere's own
+	// input/history pair lands — the fixed stop that follows wherever
+	// the host screen that opened it (see startConsigliereChord's own
+	// doc comment in consigliere.go) splices it into its own ring.
+	// nil (the common case — a single-node "ring" like Log Audit's
+	// selection/detail screens, or consigliere opened from the bare
+	// panel, where the global focus cycle handles it instead — see
+	// focusCycleStops' own doc comment) falls back to
+	// consigliereReturnFocus in consigliereExitFocus, since Backtab
+	// and Tab then both lead to the same, single other node either
+	// way.
+	consigliereForwardExit tview.Primitive
 
 	// detailsSidebar is the right-hand Details layer toggled by "I"
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's

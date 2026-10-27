@@ -2488,3 +2488,70 @@ func TestTabFromGitBreachMainReachesConsigliereWhenOwnerIsLast(t *testing.T) {
 		t.Error("Tab from Main (owned by Stash) should have reached consigliereInput, not wrapped to Files")
 	}
 }
+
+// TestFullTabLapFromGitBreachVisitsEveryTableAndConsigliere is the
+// Git Breach side of the exact bug
+// TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere pins
+// for Log Audit: opening the AI Consigliere must not collapse the
+// existing Files/Branches/Commits/Stash ring down to just looping
+// between itself and whichever table it was opened from.
+func TestFullTabLapFromGitBreachVisitsEveryTableAndConsigliere(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachFilesTable)
+	// The real "gC" entry path (sets consigliereForwardExit), not a
+	// direct showConsigliere() call.
+	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
+	r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone))
+
+	tabFrom := func(current tview.Primitive) tview.Primitive {
+		switch current {
+		case r.gitBreachFilesTable:
+			r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.gitBreachBranchesTable:
+			r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.gitBreachCommitsTable:
+			r.captureGitBreachCommitsTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.gitBreachStashTable:
+			r.captureGitBreachStashTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.consigliereInput:
+			r.handleConsigliereInputDone(tcell.KeyTab)
+		case r.consigliereHistory:
+			r.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		default:
+			t.Fatalf("tabFrom: unhandled current focus %v", current)
+		}
+		return r.app.GetFocus()
+	}
+
+	var visited []tview.Primitive
+	var current tview.Primitive = r.consigliereInput // where "gC" just left focus
+	for i := 0; i < 8; i++ {
+		current = tabFrom(current)
+		visited = append(visited, current)
+		if current == r.consigliereInput && i > 0 {
+			break
+		}
+	}
+
+	want := map[string]tview.Primitive{
+		"Files":    r.gitBreachFilesTable,
+		"Branches": r.gitBreachBranchesTable,
+		"Commits":  r.gitBreachCommitsTable,
+		"Stash":    r.gitBreachStashTable,
+	}
+	for name, stop := range want {
+		found := false
+		for _, v := range visited {
+			if v == stop {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s was never reached in one full Tab lap: %v", name, visited)
+		}
+	}
+}

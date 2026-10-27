@@ -1026,7 +1026,7 @@ func (r *Root) captureLogAuditSelectionTableKey(event *tcell.EventKey) *tcell.Ev
 			// (unlike a *tview.TextView) has no built-in meaning for a
 			// bare 'g' to begin with, so nothing existing is lost by
 			// claiming it here.
-			r.startConsigliereChord()
+			r.startConsigliereChord(nil)
 			return nil
 		}
 	}
@@ -1104,7 +1104,7 @@ func (r *Root) captureLogAuditViewerTableKey(event *tcell.EventKey) *tcell.Event
 			// unaffected by the TextView-only vi-style "g" (Home)
 			// binding captureLogAuditDetailKey's own case below has to
 			// account for.
-			r.startConsigliereChord()
+			r.startConsigliereChord(r.logAuditKeywordField)
 			return nil
 		}
 	}
@@ -1162,7 +1162,7 @@ func (r *Root) captureLogAuditTimelineKey(event *tcell.EventKey) *tcell.EventKey
 			// have scrolled a one-line visual bar with nothing
 			// meaningful to scroll to, unlike captureLogAuditDetailKey's
 			// own case below.
-			r.startConsigliereChord()
+			r.startConsigliereChord(r.logAuditKeywordField)
 			return nil
 		}
 	}
@@ -1338,7 +1338,7 @@ func (r *Root) captureLogAuditDetailKey(event *tcell.EventKey) *tcell.EventKey {
 		// very bottom), 'j'/'k'/'h'/'l', the arrow keys, and PageUp/
 		// PageDown/Home/End are all a different rune or tcell.Key, so
 		// none of them are affected.
-		r.startConsigliereChord()
+		r.startConsigliereChord(nil)
 		return nil
 	}
 	// Tab/Backtab into the AI Consigliere sidebar — the only other
