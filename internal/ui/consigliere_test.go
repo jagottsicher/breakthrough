@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // drawConsigliereLayout forces a real Flex layout pass (via a
@@ -220,31 +221,30 @@ func TestConsigliereTitleBarReflectsHistoryFocusOnly(t *testing.T) {
 	}
 }
 
-// TestShowConsigliereHidesAnOpenDetailsSidebar and
-// TestShowDetailsSidebarHidesAnOpenConsigliere pin the mutual
-// exclusion between the two sidebars: both dock to the exact same
-// rect (see consigliereSize/detailsSidebarSize), so showing one while
-// the other is already open must close the other first rather than
-// silently stacking them.
-func TestShowConsigliereHidesAnOpenDetailsSidebar(t *testing.T) {
+// TestShowConsigliereLeavesAnOpenDetailsSidebarOpen and
+// TestShowDetailsSidebarLeavesAnOpenConsigliereOpen pin the user's own
+// explicit request: the two no longer need to be mutually exclusive —
+// Details can simply stay open behind Consigliere (and vice versa),
+// rather than one silently closing the other.
+func TestShowConsigliereLeavesAnOpenDetailsSidebarOpen(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.showDetailsSidebar()
 
 	root.showConsigliere()
 
-	if root.detailsSidebarVisible {
-		t.Error("showConsigliere should have closed the open Details sidebar")
+	if !root.detailsSidebarVisible {
+		t.Error("showConsigliere should not have closed the open Details sidebar")
 	}
 }
 
-func TestShowDetailsSidebarHidesAnOpenConsigliere(t *testing.T) {
+func TestShowDetailsSidebarLeavesAnOpenConsigliereOpen(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.showConsigliere()
 
 	root.showDetailsSidebar()
 
-	if root.consigliereVisible {
-		t.Error("showDetailsSidebar should have closed the open Consigliere sidebar")
+	if !root.consigliereVisible {
+		t.Error("showDetailsSidebar should not have closed the open Consigliere sidebar")
 	}
 }
 
@@ -348,5 +348,362 @@ func TestHideConsigliereCancelsAPendingReply(t *testing.T) {
 
 	if root.consigliereCancel != nil {
 		t.Error("hideConsigliere should have cleared consigliereCancel")
+	}
+}
+
+// TestHideConsigliereRestoresFocusToWhatHadItBefore pins the real
+// bug a hardcoded r.panel.table fallback had: opened from inside a
+// full-screen modal (Help stands in for Log Audit/Git Breach here),
+// closing it must hand focus back to that modal's own widget, not the
+// panel underneath it, which isn't even visible.
+func TestHideConsigliereRestoresFocusToWhatHadItBefore(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	before := root.app.GetFocus()
+
+	root.showConsigliere()
+	root.hideConsigliere()
+
+	if got := root.app.GetFocus(); got != before {
+		t.Errorf("focus after hideConsigliere = %v, want %v (Help's own widget, not the panel)", got, before)
+	}
+}
+
+// TestOpeningAnotherOverlayLeavesConsigliereOpen and
+// TestClosingTheHostOverlayLeavesConsigliereOpen pin the user's own
+// explicit reversal of an earlier decision: the sidebar used to close
+// itself the moment the page it was opened from stopped being active
+// (e.g. drilling from Log Audit's own selection screen into a
+// specific file's viewer) — per the user's own explicit report, that
+// made perfectly ordinary within-task navigation lose the sidebar for
+// no reason, so it now simply stays open across any host page change,
+// closing only via Escape/the close glyph/a click outside, same as
+// ever. Help stands in for any pushOverlay/hideOverlay caller.
+func TestOpeningAnotherOverlayLeavesConsigliereOpen(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.showConsigliere()
+
+	root.openHelp()
+
+	if !root.consigliereVisible {
+		t.Error("opening another overlay should not have closed the already-open Consigliere sidebar")
+	}
+}
+
+func TestClosingTheHostOverlayLeavesConsigliereOpen(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	root.showConsigliere()
+
+	root.hideOverlay() // closes Help
+
+	if !root.consigliereVisible {
+		t.Error("closing the host overlay should not have closed Consigliere too")
+	}
+}
+
+// TestClickOnConsigliereDoesNotCloseTheHostOverlay pins the real,
+// confirmed bug in captureOutsideClick: the sidebar is non-modal, so
+// neither overlayStack nor r.activeWidget ever knew about its own
+// rect — a click landing on it, while some other modal is the active
+// overlay, used to read as "outside that overlay" and close it
+// instead.
+func TestClickOnConsigliereDoesNotCloseTheHostOverlay(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.openHelp()
+	root.showConsigliere()
+
+	x, y, _, _ := root.consigliereLayout.GetRect()
+	root.captureOutsideClick(tview.MouseLeftClick, tcellMouseEventAt(x, y))
+
+	if root.activePage != helpPage {
+		t.Errorf("activePage = %q, want helpPage still open", root.activePage)
+	}
+	if !root.consigliereVisible {
+		t.Error("the sidebar itself should still be visible")
+	}
+}
+
+// TestClickOutsideConsigliereWithNothingElseOpenClosesIt pins the
+// other half of the same fix: with nothing else open at all, a click
+// outside the sidebar must still close it — the standing claim this
+// package's own doc comments already made ("a click outside" closes
+// it), which activePage == "" used to short-circuit before ever
+// reaching Consigliere-specific handling.
+func TestClickOutsideConsigliereWithNothingElseOpenClosesIt(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.showConsigliere()
+
+	root.captureOutsideClick(tview.MouseLeftClick, tcellMouseEventAt(0, 0))
+
+	if root.consigliereVisible {
+		t.Error("a click outside the sidebar, with nothing else open, should have closed it")
+	}
+}
+
+// TestCycleFocusShortcutDoesNotMatchConsigliereInsideAModal pins step
+// one of the real fix for a reported bug: once some full-screen modal
+// (Help stands in for Log Audit/Git Breach) is the active page, the
+// global focus cycle must no longer treat consigliereInput as one of
+// its own stops at all — matching it there, before the host screen's
+// own local Tab handling ever ran, is exactly what used to strand the
+// keyboard on the hidden file panel.
+func TestCycleFocusShortcutDoesNotMatchConsigliereInsideAModal(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	root.showConsigliere()
+	if !root.consigliereInput.HasFocus() {
+		t.Fatal("test precondition: expected consigliereInput to have focus")
+	}
+
+	if root.CycleFocusShortcut() {
+		t.Error("CycleFocusShortcut should report false — consigliereInput must not be one of its own stops while a modal is open")
+	}
+	if !root.consigliereInput.HasFocus() {
+		t.Error("focus should not have moved at all")
+	}
+}
+
+// TestTabInConsigliereInputExitsToTheHostNotTheHiddenPanel pins the
+// real fix: exiting consigliere's own loop (via consigliereExitFocus)
+// must land on whatever had focus on the host screen when the sidebar
+// was opened, not a hardcoded r.panel.table — which, with a
+// full-screen modal open, isn't even visible. Help stands in for Log
+// Audit/Git Breach; the mechanism is host-agnostic.
+func TestTabInConsigliereInputExitsToTheHostNotTheHiddenPanel(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 200, 100)
+	root.openHelp()
+	before := root.app.GetFocus()
+	root.showConsigliere()
+	drawConsigliereLayout(t, root, 200, 100) // makes the splash art fit without scrolling
+
+	root.handleConsigliereInputDone(tcell.KeyTab)
+
+	if got := root.app.GetFocus(); got != before {
+		t.Errorf("focus after Tab = %v, want %v (Help's own widget, not the panel)", got, before)
+	}
+}
+
+// TestBacktabInConsigliereInputExitsToTheHost pins Backtab's own,
+// unconditional case: backward out of the very first stop in
+// consigliere's own loop always exits immediately, regardless of
+// whether there's anything to scroll to.
+func TestBacktabInConsigliereInputExitsToTheHost(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	before := root.app.GetFocus()
+	root.showConsigliere()
+
+	root.handleConsigliereInputDone(tcell.KeyBacktab)
+
+	if got := root.app.GetFocus(); got != before {
+		t.Errorf("focus after Backtab = %v, want %v", got, before)
+	}
+}
+
+// TestTabInConsigliereHistoryExitsToTheHost and
+// TestBacktabInConsigliereHistoryReturnsToInput pin
+// captureConsigliereHistoryKey's own, newly-added Tab/Backtab cases —
+// only ever reached once a full-screen modal has excluded consigliere
+// from the global focus cycle (see focusCycleStops' own doc comment),
+// since that cycle still claims both directly otherwise.
+func TestTabInConsigliereHistoryExitsToTheHost(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	before := root.app.GetFocus()
+	root.showConsigliere()
+	root.app.SetFocus(root.consigliereHistory)
+
+	root.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+
+	if got := root.app.GetFocus(); got != before {
+		t.Errorf("focus after Tab = %v, want %v", got, before)
+	}
+}
+
+func TestBacktabInConsigliereHistoryReturnsToInput(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openHelp()
+	root.showConsigliere()
+	root.app.SetFocus(root.consigliereHistory)
+
+	root.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+
+	if !root.consigliereInput.HasFocus() {
+		t.Error("Backtab from the history should have returned focus to the input field")
+	}
+}
+
+// TestConsigliereSizeUnchangedOverTheBarePanel pins the user's own
+// explicit request: the sidebar's own size/position over the bare
+// file panel must stay exactly what it already was — matching
+// Details' own geometry there — even after the one-row-taller,
+// one-row-lower adjustment below for every full-screen modal.
+func TestConsigliereSizeUnchangedOverTheBarePanel(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 120, 40)
+
+	_, wantHeight := root.detailsSidebarSize()
+	_, gotHeight := root.consigliereSize()
+	if gotHeight != wantHeight {
+		t.Errorf("consigliereSize height over the bare panel = %d, want %d (Details' own, unchanged)", gotHeight, wantHeight)
+	}
+
+	root.showConsigliere()
+	_, y, _, _ := root.consigliereLayout.GetRect()
+	if y != 0 {
+		t.Errorf("consigliereLayout y over the bare panel = %d, want 0 (unchanged)", y)
+	}
+}
+
+// TestConsigliereSizeOneRowTallerAndLowerOverAModal pins the other
+// half: one row taller, starting one row lower, once docked over a
+// full-screen modal (Help stands in for Log Audit/Git Breach — the
+// activePage != "" condition is generic, not screen-specific).
+func TestConsigliereSizeOneRowTallerAndLowerOverAModal(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 120, 40)
+
+	_, barePanelHeight := root.consigliereSize()
+
+	root.openHelp()
+	_, modalHeight := root.consigliereSize()
+	if modalHeight != barePanelHeight+1 {
+		t.Errorf("consigliereSize height over a modal = %d, want %d (one more than over the bare panel)", modalHeight, barePanelHeight+1)
+	}
+
+	root.showConsigliere()
+	_, y, _, _ := root.consigliereLayout.GetRect()
+	if y != 1 {
+		t.Errorf("consigliereLayout y over a modal = %d, want 1", y)
+	}
+}
+
+// TestConsigliereTitleBarCloseGlyphClickClosesIt pins
+// dragConsigliereMouseCapture's own close-glyph case — MouseLeftDown,
+// not MouseLeftClick, since drag-start detection now needs to see the
+// press itself (see its own doc comment).
+func TestConsigliereTitleBarCloseGlyphClickClosesIt(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.showConsigliere()
+	// Forces a real Flex layout pass so consigliereTitleBar's own
+	// rect actually matches consigliereLayout's — see
+	// drawConsigliereLayout's own doc comment.
+	drawConsigliereLayout(t, root, 100, 40)
+
+	x, y, width, _ := root.consigliereTitleBar.GetRect()
+	closeX := x + toolWindowCloseButtonCol(0, width)
+	captured, _ := root.captureConsigliereTitleBarMouse(tview.MouseLeftDown, tcell.NewEventMouse(closeX, y, tcell.ButtonNone, 0))
+
+	if captured != tview.MouseConsumed {
+		t.Error("clicking the close glyph should consume the click")
+	}
+	if root.consigliereVisible {
+		t.Error("clicking the close glyph should have closed the sidebar")
+	}
+}
+
+// TestDraggingConsigliereTitleBarMovesIt pins the user's own explicit
+// request: press and drag anywhere else on the title bar moves the
+// whole sidebar.
+func TestDraggingConsigliereTitleBarMovesIt(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.showConsigliere()
+	drawConsigliereLayout(t, root, 100, 40)
+
+	startX, startY, width, height := root.consigliereLayout.GetRect()
+	titleY := startY // the title bar is the layout's own first row
+	grabX := startX + 2
+
+	root.captureConsigliereTitleBarMouse(tview.MouseLeftDown, tcell.NewEventMouse(grabX, titleY, tcell.Button1, 0))
+	if !root.consigliereDragging {
+		t.Fatal("pressing on the title bar (away from the close glyph) should have started a drag")
+	}
+
+	root.dragConsigliereMouseCapture(tview.MouseMove, tcell.NewEventMouse(grabX-5, titleY-3, tcell.Button1, 0))
+	newX, newY, newWidth, newHeight := root.consigliereLayout.GetRect()
+	if newX == startX && newY == startY {
+		t.Error("dragging should have moved the sidebar")
+	}
+	if newWidth != width || newHeight != height {
+		t.Errorf("drag changed size: %dx%d, want unchanged %dx%d (no resizing)", newWidth, newHeight, width, height)
+	}
+
+	root.dragConsigliereMouseCapture(tview.MouseLeftUp, tcell.NewEventMouse(grabX-5, titleY-3, tcell.ButtonNone, 0))
+	if root.consigliereDragging {
+		t.Error("releasing the mouse should have ended the drag")
+	}
+	if !root.consigliereManuallyPositioned {
+		t.Error("a completed drag should have set consigliereManuallyPositioned")
+	}
+}
+
+// TestConsigliereManuallyPositionedSurvivesResize pins
+// repositionConsigliereSidebar's own doc comment: once dragged, a
+// live terminal resize must not silently snap the sidebar back to its
+// docked position.
+func TestConsigliereManuallyPositionedSurvivesResize(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.showConsigliere()
+	root.moveConsigliere(10, 5)
+	x, y, _, _ := root.consigliereLayout.GetRect()
+
+	root.SetRect(0, 0, 120, 45) // simulates a live terminal resize
+	root.repositionConsigliereSidebar()
+
+	gotX, gotY, _, _ := root.consigliereLayout.GetRect()
+	if gotX != x || gotY != y {
+		t.Errorf("position after resize = (%d, %d), want unchanged (%d, %d)", gotX, gotY, x, y)
+	}
+}
+
+// TestConsigliereManuallyPositionedResetsOnFreshOpen pins the other
+// half: closing and reopening starts a fresh session (per the spec's
+// own "frische Konversation" rule), including position — a drag must
+// not outlive that.
+func TestConsigliereManuallyPositionedResetsOnFreshOpen(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.showConsigliere()
+	root.moveConsigliere(10, 5)
+	root.hideConsigliere()
+
+	root.showConsigliere()
+
+	if root.consigliereManuallyPositioned {
+		t.Error("a fresh session should not inherit the previous one's manual position")
+	}
+	wantX, wantY, _, _ := root.consigliereLayout.GetRect()
+	if wantX != 100-func() int { w, _ := root.consigliereSize(); return w }() || wantY != 0 {
+		t.Errorf("fresh session should be docked flush right at y=0, got (%d, %d)", wantX, wantY)
+	}
+}
+
+// TestPushOverlayKeepsConsigliereOnTopOfANewlyOpenedPage pins the real
+// bug the user reported: navigating within a related task (e.g. Log
+// Audit's own selection screen into a specific file's viewer, both
+// pushOverlay calls) while the sidebar is open used to visually bury
+// it — tview.Pages draws in SendToFront order, not Z-index, so
+// pushing a new full-screen page redrew it on top of
+// consigliereLayout, even though the sidebar was never actually
+// closed (see TestOpeningAnotherOverlayLeavesConsigliereOpen). Help
+// stands in for any pushOverlay caller.
+func TestPushOverlayKeepsConsigliereOnTopOfANewlyOpenedPage(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.showConsigliere()
+
+	root.openHelp() // pushOverlay(helpPage, ...)
+
+	// GetPageNames(true) orders front to back (see its own doc comment
+	// in tview's pages.go) — index 0 is topmost.
+	names := root.GetPageNames(true)
+	if len(names) == 0 || names[0] != consiglierePage {
+		t.Errorf("visible page draw order = %v, want %q drawn frontmost (index 0)", names, consiglierePage)
 	}
 }

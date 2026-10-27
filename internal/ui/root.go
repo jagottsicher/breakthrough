@@ -1791,6 +1791,56 @@ type Root struct {
 	consigliereMessages  []consigliere.Message
 	consigliereProvider  consigliere.Provider
 	consigliereCancel    context.CancelFunc
+	// consigliereReturnFocus is captured once, in showConsigliere,
+	// before anything changes focus — see hideConsigliere's own doc
+	// comment.
+	consigliereReturnFocus tview.Primitive
+	// consigliereExitPage is r.activePage at that exact same moment —
+	// NOT for the auto-close behavior removed in the previous commit
+	// (that used a similarly-named consigliereHostPage field; this is
+	// a different purpose, not a revival), but so
+	// consigliereBackwardExit/consigliereForwardExitTarget can tell
+	// whether consigliereReturnFocus/consigliereForwardExit are still
+	// valid at all: both name a specific widget on whatever page was
+	// active when the sidebar opened, which the user can now navigate
+	// away from (pushing further pages) while leaving the sidebar
+	// open — per the user's own explicit request in the previous
+	// commit. A widget on a page that is no longer active is still a
+	// perfectly real tview.Primitive (nothing frees it), so without
+	// this check, Tab/Backtab out of the sidebar would keep landing on
+	// it anyway — covered, unreachable, and indistinguishable from a
+	// dead end (a real, reported bug).
+	consigliereExitPage string
+	// consigliereForwardExit is where Tab leaving consigliere's own
+	// input/history pair lands — the fixed stop that follows wherever
+	// the host screen that opened it (see startConsigliereChord's own
+	// doc comment in consigliere.go) splices it into its own ring.
+	// nil (the common case — a single-node "ring" like Log Audit's
+	// selection/detail screens, or consigliere opened from the bare
+	// panel, where the global focus cycle handles it instead — see
+	// focusCycleStops' own doc comment) falls back to
+	// consigliereReturnFocus in consigliereExitFocus, since Backtab
+	// and Tab then both lead to the same, single other node either
+	// way.
+	consigliereForwardExit tview.Primitive
+
+	// consigliereManuallyPositioned/consigliereDragging/
+	// consigliereDragOffsetX/Y make the sidebar's own title bar
+	// draggable, per the user's own explicit request that it become
+	// movable the way a Toolbox tool window already is — no resizing,
+	// just position. Mirrors dragPropertiesMouseCapture's own
+	// dragging/dragOffsetX/Y exactly (see its own doc comment in
+	// properties.go) for the drag mechanics themselves;
+	// consigliereManuallyPositioned is this sidebar's own addition —
+	// once a drag has actually happened, repositionConsigliereSidebar
+	// stops re-docking it flush right on every resize/reshow and just
+	// re-clamps the position the user chose. Reset to false every
+	// time showConsigliere opens a fresh session, so a drag never
+	// outlives the sidebar being closed and reopened.
+	consigliereManuallyPositioned bool
+	consigliereDragging           bool
+	consigliereDragOffsetX        int
+	consigliereDragOffsetY        int
 
 	// detailsSidebar is the right-hand Details layer toggled by "I"
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
@@ -2238,6 +2288,24 @@ type Root struct {
 	pendingChord  rune
 	chordDeadline time.Time
 	chordCancel   context.CancelFunc
+
+	// pendingChordFamily is exactly the chordFamily startChord was
+	// called with — read back directly by resolveChord/
+	// refreshChordHintBar instead of either one re-deriving it from
+	// pendingChord via chordFamilyFor's own global-by-prefix lookup
+	// (which only ever finds one of the families already registered in
+	// chordFamilies()). That distinction only matters for an ad-hoc
+	// family started from outside the main panel — see
+	// consigliereChordFamily in consigliere.go: calling startChord with
+	// it while pendingChord happens to be 'g' must resolve against that
+	// one-member family, not the real "goto" family chordFamilyFor('g')
+	// would otherwise still find, which would make gg/gh/gu/... etc. all
+	// reachable (and silently acting on the hidden file panel) from
+	// wherever this was actually started. Every existing caller already
+	// passes chordFamilyFor's own result straight through, so this
+	// changes nothing for them — only a family that doesn't share its
+	// own prefix's single registered identity needs it.
+	pendingChordFamily chordFamily
 
 	// bashLineCompletingPick is true only for the moment openCompletionPicker
 	// moves focus away from bashLine to the completion picker it opens —
@@ -3677,6 +3745,22 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 	r.activeWidget = widget
 	r.ShowPage(page)
 	r.SendToFront(page)
+	// The AI Consigliere sidebar isn't part of overlayStack at all
+	// (see consigliere.go's own doc comment — it's non-modal), so
+	// pushing a new full-screen page here would otherwise bury it:
+	// tview's Pages draws in registration/SendToFront order, not
+	// Z-index, so without this, navigating from one full-screen page
+	// to another (e.g. Log Audit's own selection screen into a
+	// specific file's viewer) while the sidebar is open would redraw
+	// it on top of consigliereLayout, completely covering it — even
+	// though the sidebar itself is still fully open (per the user's
+	// own explicit request that it survive exactly this kind of
+	// ordinary within-task navigation). Keyboard focus is deliberately
+	// left on whatever this call already focused below, not pulled
+	// back onto the sidebar — only its own draw order needs fixing.
+	if r.consigliereVisible {
+		r.SendToFront(consiglierePage)
+	}
 	r.updateOverlayTitleBarColors()
 	if restore != nil {
 		restore()
@@ -3899,11 +3983,44 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 		return r.captureLogAuditTimelineMouse(action, event)
 	}
 
+	// An AI Consigliere title-bar drag in progress — same reasoning as
+	// every guard above: dragging the sidebar up or left would
+	// otherwise fall through to ordinary position-based dispatch
+	// mid-drag, leaving consigliereDragging stuck true forever.
+	if r.consigliereDragging {
+		out, outEvent, _ := r.dragConsigliereMouseCapture(action, event)
+		return out, outEvent
+	}
+
+	x, y := event.Position()
+
+	// The AI Consigliere sidebar is non-modal (see consigliere.go's own
+	// doc comment — it isn't part of overlayStack/activeWidget at all),
+	// so neither of the two checks below would otherwise ever know
+	// about it. Two real, separate bugs this fixes: a click landing on
+	// the sidebar itself, while some other modal (Log Audit, Git
+	// Breach, ...) is the active overlay, used to read as "outside
+	// that overlay" and close *it* — never consigliereLayout's own
+	// rect, which this now checks first, same priority the drag guards
+	// above already get. And with nothing else open at all
+	// (activePage == ""), a click outside the sidebar used to be a
+	// pure no-op — this is also what actually makes good on every
+	// other doc comment in this package already claiming "a click
+	// outside" closes it.
+	if r.consigliereVisible {
+		if primitiveContains(r.consigliereLayout, x, y) {
+			return action, event // landed on the sidebar itself
+		}
+		if r.activePage == "" && (action == tview.MouseLeftClick || action == tview.MouseRightClick) {
+			r.hideConsigliere()
+			return tview.MouseConsumed, nil
+		}
+	}
+
 	if r.activePage == "" {
 		return action, event // nothing open, nothing to do
 	}
 
-	x, y := event.Position()
 	if primitiveContains(r.activeWidget, x, y) {
 		return action, event // event landed on the open overlay itself
 	}

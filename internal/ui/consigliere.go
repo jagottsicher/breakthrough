@@ -28,6 +28,49 @@ import (
 
 const consiglierePage = "consigliere"
 
+// consigliereChordFamily is a one-member stand-in for the real "goto"
+// family (chordFamilies' own 'g' entry in keymap.go), started from
+// inside a full-screen modal (Log Audit, Git Breach, ...) on a bare
+// 'g' key press that screen's own InputCapture would otherwise leave
+// unclaimed — see startConsigliereChord's own doc comment for why this
+// needs to be its own family rather than just reusing the real one by
+// prefix. Reached the exact same way the main panel's own "gC" is
+// (startChord -> resolveChord -> this family's own single member), so
+// "gC" behaves identically everywhere it works at all; the only
+// per-screen cost is the three-line case that starts it.
+var consigliereChordFamily = chordFamily{
+	prefix: 'g',
+	name:   "AI Consigliere",
+	members: []chordMember{
+		{'C', "AI Consigliere", func(r *Root) { r.ConsigliereShortcut() }},
+	},
+}
+
+// startConsigliereChord is what a full-screen modal's own InputCapture
+// calls on a bare 'g' it doesn't otherwise claim, to make "gC" reach
+// the AI Consigliere from there too. Calling startChord directly with
+// this same family would already be correct by itself — the point of
+// wrapping it here is just a single, named, grep-able call site every
+// screen's own "case 'g':" can share, rather than each repeating the
+// same comment about why it has to be this specific family and not
+// chordFamilyFor('g')'s real "goto" one (see pendingChordFamily's own
+// doc comment in root.go for that part).
+// forwardExit is where Tab leaving consigliere's own input/history
+// pair lands, once it actually opens (see consigliereForwardExit's
+// own doc comment in root.go) — the fixed stop that follows wherever
+// this host screen splices consigliere into its own ring, the same
+// for every one of that screen's own 'g' entry points (e.g. Log
+// Audit's table and timeline both splice it in right before Keyword;
+// Git Breach's five entry points all splice it in right before
+// Files). Pass nil for a single-node "ring" (Log Audit's selection/
+// detail screens) — consigliereForwardExit then falls back to
+// consigliereReturnFocus, which is exactly the one other node there
+// is.
+func (r *Root) startConsigliereChord(forwardExit tview.Primitive) {
+	r.consigliereForwardExit = forwardExit
+	r.startChord(consigliereChordFamily)
+}
+
 // consigliereMinWidth is consigliereSize's own floor on a terminal too
 // narrow for a genuine one-third share to still be usable — the same
 // floor detailsSidebarMinWidth already establishes for the sidebar
@@ -91,11 +134,113 @@ func (r *Root) newConsigliereSidebar() {
 // scrolling key fall through to TextView's own default handling and,
 // for Tab, on to CycleFocusShortcut.
 func (r *Root) captureConsigliereHistoryKey(event *tcell.EventKey) *tcell.EventKey {
-	if event.Key() == tcell.KeyEscape {
+	switch event.Key() {
+	case tcell.KeyEscape:
 		r.hideConsigliere()
+		return nil
+	case tcell.KeyTab, tcell.KeyBacktab:
+		// Only ever reached once a full-screen modal has already
+		// excluded Consigliere from the global focus cycle (see
+		// focusCycleStops' own doc comment in detailssidebar.go) —
+		// while nothing else is open, that global cycle still claims
+		// Tab/Backtab here directly, before this InputCapture (or
+		// TextView's own InputHandler, which — per tview's own
+		// textview.go — does nothing at all for either key without a
+		// SetDoneFunc) ever sees it. Backtab goes back to the field;
+		// Tab exits consigliere's own tiny loop forward — continuing
+		// the host screen's own ring past it, the same way
+		// handleConsigliereInputDone's identical fallback does.
+		if event.Key() == tcell.KeyBacktab {
+			r.app.SetFocus(r.consigliereInput)
+		} else {
+			r.app.SetFocus(r.consigliereForwardExitTarget())
+		}
 		return nil
 	}
 	return event
+}
+
+// consigliereBackwardExit is where Backtab leaving consigliere's own
+// first stop (consigliereInput) lands: whatever had real keyboard
+// focus the moment showConsigliere last ran (consigliereReturnFocus —
+// see its own doc comment in root.go) — but only while
+// consigliereExitPage still matches r.activePage (see
+// consigliereCurrentHostEdges' own doc comment for why a stale one is
+// actively wrong, not just imprecise, and gets re-derived instead).
+// Falls back to the panel if even that re-derivation has nothing.
+// Shared by handleConsigliereInputDone and
+// captureConsigliereHistoryKey's own Backtab case.
+func (r *Root) consigliereBackwardExit() tview.Primitive {
+	if r.consigliereReturnFocus != nil && r.activePage == r.consigliereExitPage {
+		return r.consigliereReturnFocus
+	}
+	backward, _ := r.consigliereCurrentHostEdges()
+	if backward != nil {
+		return backward
+	}
+	return r.panel.table
+}
+
+// consigliereForwardExit is where Tab leaving consigliere's own last
+// stop lands: the fixed splice point the host screen that opened it
+// recorded (consigliereForwardExit — see its own doc comment in
+// root.go) — again only while consigliereExitPage still matches
+// r.activePage, same reasoning consigliereBackwardExit's own doc
+// comment gives. Falls back to consigliereBackwardExit for a
+// single-node "ring" (nothing else was ever recorded, so both
+// directions lead to the same one other node) or, failing that, the
+// panel. Shared by handleConsigliereInputDone and
+// captureConsigliereHistoryKey's own Tab case — the one change that
+// made Tab actually continue a host screen's own ring past
+// consigliere instead of looping it back to wherever consigliere was
+// opened from, stranding every stop in between (a real, reported
+// bug).
+func (r *Root) consigliereForwardExitTarget() tview.Primitive {
+	if r.consigliereForwardExit != nil && r.activePage == r.consigliereExitPage {
+		return r.consigliereForwardExit
+	}
+	_, forward := r.consigliereCurrentHostEdges()
+	if forward != nil {
+		return forward
+	}
+	return r.consigliereBackwardExit()
+}
+
+// consigliereCurrentHostEdges re-derives the backward/forward splice
+// targets consigliereBackwardExit/consigliereForwardExitTarget fall
+// back to once the recorded ones have gone stale — r.activePage has
+// moved on from consigliereExitPage, meaning the sidebar was opened
+// from one page and has since stayed open while the user navigated to
+// another (per the user's own explicit request that it survive
+// exactly that), so consigliereReturnFocus/consigliereForwardExit
+// still name real widgets, just ones on a page that isn't active any
+// more — covered, unreachable, and otherwise indistinguishable from a
+// dead end (a real, reported bug: Tab/Backtab out of the sidebar kept
+// landing there anyway).
+//
+// One switch case per screen reachable from — the same per-screen
+// cost startConsigliereChord's own callers already pay, not a
+// separate registry to keep in sync with them. (nil, nil) for
+// anything not listed (including "" — the bare panel, where the
+// global focus cycle already handles this instead, see
+// focusCycleStops' own doc comment) tells both callers above to fall
+// back further on their own.
+func (r *Root) consigliereCurrentHostEdges() (backward, forward tview.Primitive) {
+	switch r.activePage {
+	case logAuditSelectionPage:
+		return r.logAuditTable, r.logAuditTable
+	case logAuditViewerPage:
+		return r.logAuditViewerTable, r.logAuditKeywordField
+	case logAuditDetailPage:
+		return r.logAuditDetailView, r.logAuditDetailView
+	case gitBreachPage:
+		focusables := r.gitBreachFocusables()
+		if len(focusables) == 0 {
+			return nil, nil
+		}
+		return focusables[len(focusables)-1].body, focusables[0].body
+	}
+	return nil, nil
 }
 
 // renderConsigliereTitleBar sets consigliereTitleBar's own text,
@@ -114,28 +259,77 @@ func (r *Root) renderConsigliereTitleBar(width int) {
 	r.consigliereTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
 }
 
-// captureConsigliereTitleBarMouse closes the sidebar when the click
-// lands exactly on its own close glyph — see
-// captureDetailsTitleBarMouse's own doc comment for why every other
-// click on this bar stays inert, and for the InRect-first shape, which
-// matters here for the identical reason: without it, a MouseLeftDown
-// landing inside this bar could let tview's own default
-// TextView.MouseHandler steal real keyboard focus onto the title bar
-// itself before hideConsigliere's own hadFocus check ever runs.
+// captureConsigliereTitleBarMouse is dragConsigliereMouseCapture's own
+// wrapper for the title bar's SetMouseCapture — there's nothing else
+// for this bar to handle, unlike Properties' own hashesMouseCapture
+// (which falls through to unrelated hash-section handling), so an
+// unhandled result just passes the event through unchanged.
 func (r *Root) captureConsigliereTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if !r.consigliereTitleBar.InRect(event.Position()) {
-		return action, event
-	}
-	if action != tview.MouseLeftClick {
-		return tview.MouseConsumed, nil
-	}
+	out, outEvent, _ := r.dragConsigliereMouseCapture(action, event)
+	return out, outEvent
+}
+
+// dragConsigliereMouseCapture makes the sidebar's own title bar
+// draggable — press and drag anywhere on it, except the close glyph
+// (still closes the sidebar, same as before), to move the whole
+// window; release to stop. No resizing, per the user's own explicit
+// request — position only.
+//
+// Mirrors dragPropertiesMouseCapture's own shape exactly (see its own
+// doc comment in properties.go), including why captureOutsideClick's
+// own consigliereDragging check — not tview's own position-based
+// dispatch — is what keeps a drag that moves up/left receiving its
+// own subsequent events once the cursor is no longer over the
+// not-yet-updated title bar rect: the identical bug propertiesDragging's
+// own check already exists to prevent, for the identical reason.
+//
+// handled reports whether this call was about dragging (or the close
+// glyph) at all, the same shape dragPropertiesMouseCapture's own
+// third return value already has.
+func (r *Root) dragConsigliereMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (out tview.MouseAction, outEvent *tcell.EventMouse, handled bool) {
 	x, y := event.Position()
-	rectX, rectY, width, _ := r.consigliereTitleBar.GetRect()
-	if y != rectY || x != rectX+toolWindowCloseButtonCol(0, width) {
-		return action, event
+
+	if r.consigliereDragging {
+		switch action {
+		case tview.MouseMove:
+			if event.Buttons()&tcell.ButtonPrimary == 0 {
+				r.consigliereDragging = false
+				return tview.MouseConsumed, nil, true
+			}
+			r.moveConsigliere(x-r.consigliereDragOffsetX, y-r.consigliereDragOffsetY)
+			return tview.MouseConsumed, nil, true
+		case tview.MouseLeftUp:
+			r.consigliereDragging = false
+			return tview.MouseConsumed, nil, true
+		}
+		return tview.MouseConsumed, nil, true // swallow everything else for the duration of the drag
 	}
-	r.hideConsigliere()
-	return tview.MouseConsumed, nil
+
+	if action == tview.MouseLeftDown && r.consigliereTitleBar.InRect(x, y) {
+		wx, wy, width, _ := r.consigliereLayout.GetRect()
+		if y == wy && x == wx+toolWindowCloseButtonCol(0, width) {
+			r.hideConsigliere()
+			return tview.MouseConsumed, nil, true
+		}
+		r.consigliereDragging = true
+		r.consigliereDragOffsetX, r.consigliereDragOffsetY = x-wx, y-wy
+		return tview.MouseConsumed, nil, true
+	}
+
+	return action, event, false
+}
+
+// moveConsigliere repositions the sidebar to (x, y) without changing
+// its own size — the drag's own per-move step, called from
+// dragConsigliereMouseCapture. consigliereManuallyPositioned marks
+// that this has happened at all, so repositionConsigliereSidebar
+// stops re-docking it flush right on every resize/reshow (see its own
+// doc comment) and just re-clamps wherever the user actually left it.
+func (r *Root) moveConsigliere(x, y int) {
+	r.consigliereManuallyPositioned = true
+	_, _, width, height := r.consigliereLayout.GetRect()
+	x, y, width, height = r.clampToScreen(x, y, width, height)
+	r.consigliereLayout.SetRect(x, y, width, height)
 }
 
 // consigliereSize sizes the sidebar against the whole screen (Root's
@@ -147,6 +341,13 @@ func (r *Root) captureConsigliereTitleBarMouse(action tview.MouseAction, event *
 // with different numbers, since both dock against the same screen
 // edge above the same three reserved bottom rows (bashConsole/
 // buttonBar/statusBar).
+//
+// One row taller while docked over a full-screen modal (Log Audit,
+// Git Breach, ... — r.activePage != "") than over the bare file
+// panel — per the user's own explicit request, left at exactly
+// Details' own height in the bare-panel case specifically, rather
+// than changed everywhere. repositionConsigliereSidebar's own matching
+// one-row-lower y position is the other half of this.
 func (r *Root) consigliereSize() (width, height int) {
 	_, _, screenWidth, screenHeight := r.GetRect()
 	width = screenWidth / 3
@@ -154,6 +355,9 @@ func (r *Root) consigliereSize() (width, height int) {
 		width = consigliereMinWidth
 	}
 	height = screenHeight - detailsSidebarBottomRows
+	if r.activePage != "" {
+		height++
+	}
 	if height < 1 {
 		height = screenHeight
 	}
@@ -184,10 +388,31 @@ func (r *Root) consigliereHistoryContentWidth() int {
 // Root's own resize handling (see handleBeforeDraw) so a live terminal
 // resize keeps it correctly positioned while open, the same as
 // Details.
+//
+// Starts one row lower while docked over a full-screen modal than
+// over the bare file panel — see consigliereSize's own doc comment
+// for the matching one-row-taller height this pairs with, and for why
+// the bare-panel case is deliberately left exactly as it already was.
+//
+// Once the user has actually dragged the sidebar
+// (consigliereManuallyPositioned — see moveConsigliere), a resize no
+// longer re-docks it flush right: that would silently undo the move
+// on every live terminal resize, the same "a drag must not keep
+// snapping back" expectation a toolWindow's own manuallyResized
+// already protects, just for position instead of size. The current
+// x/y is kept as-is and only re-clamped, so it still can't end up
+// off-screen.
 func (r *Root) repositionConsigliereSidebar() {
 	width, height := r.consigliereSize()
 	_, _, screenWidth, _ := r.GetRect()
-	x, y, width, height := r.clampToScreen(screenWidth-width, 0, width, height)
+	x, y := screenWidth-width, 0
+	if r.activePage != "" {
+		y = 1
+	}
+	if r.consigliereManuallyPositioned {
+		x, y, _, _ = r.consigliereLayout.GetRect()
+	}
+	x, y, width, height = r.clampToScreen(x, y, width, height)
 	r.renderConsigliereTitleBar(width)
 	r.consigliereLayout.SetRect(x, y, width, height)
 }
@@ -231,16 +456,21 @@ func (r *Root) toggleConsigliere() {
 // every time, per the spec's own "Schließen und erneutes Öffnen
 // startet eine frische Konversation".
 func (r *Root) showConsigliere() {
-	// Both sidebars dock to the exact same rect (flush right, same
-	// width/height — see consigliereSize/detailsSidebarSize), so having
-	// both visible at once would just stack one over the other rather
-	// than showing anything useful of whichever is underneath — closing
-	// Details here, rather than letting them silently overlap, is the
-	// same "no silent broken state" reasoning hideConsigliere's own
-	// cancel-in-flight cleanup already follows.
-	if r.detailsSidebarVisible {
-		r.hideDetailsSidebar()
-	}
+	// consigliereReturnFocus is captured *before* anything below
+	// changes focus or activePage — see hideConsigliere's own doc
+	// comment for why a hardcoded r.panel.table fallback is wrong
+	// whenever this was opened from inside a full-screen modal (Log
+	// Audit, Git Breach, ...) rather than the bare file panel.
+	// consigliereExitPage is the matching activePage snapshot — see
+	// its own doc comment in root.go for why it's back, for a
+	// different reason than the auto-close behavior it used to serve
+	// under the removed consigliereHostPage name.
+	r.consigliereReturnFocus = r.app.GetFocus()
+	r.consigliereExitPage = r.activePage
+	// A previous session's own manual drag must not carry over into
+	// this fresh one — see repositionConsigliereSidebar's own doc
+	// comment.
+	r.consigliereManuallyPositioned = false
 
 	r.consigliereMessages = nil
 	r.consigliereInput.SetText("")
@@ -275,8 +505,23 @@ func (r *Root) hideConsigliere() {
 	hadFocus := r.consigliereInput.HasFocus() || r.consigliereHistory.HasFocus()
 	r.HidePage(consiglierePage)
 	if hadFocus {
-		r.app.SetFocus(r.panel.table)
+		// consigliereReturnFocus, not a hardcoded r.panel.table: opened
+		// from inside Log Audit/Git Breach/etc. (see
+		// closeConsigliereIfHostPageChanged's own doc comment for the
+		// other half of this), the panel's own table isn't even
+		// visible — it's still covered by that full-screen modal, so
+		// focusing it would leave the keyboard dead against whatever's
+		// actually on screen. Falls back to the panel only if nothing
+		// was recorded (e.g. a direct call before the sidebar was ever
+		// shown once).
+		target := r.consigliereReturnFocus
+		if target == nil {
+			target = r.panel.table
+		}
+		r.app.SetFocus(target)
 	}
+	r.consigliereReturnFocus = nil
+	r.consigliereExitPage = ""
 	r.consigliereVisible = false
 }
 
@@ -288,12 +533,18 @@ func (r *Root) hideConsigliere() {
 // handling (see its own doc comment on every other field with a
 // DoneFunc doing the same), so without this, there would be no
 // keyboard path at all out of the question field once it has real
-// focus. Lands on consigliereHistory only when there's actually
+// focus — true unconditionally once a full-screen modal is open (see
+// focusCycleStops' own doc comment on why Consigliere leaves the
+// global cycle there), and true for plain Tab even otherwise, since
+// it's always this SetDoneFunc, never the global cycle, that a key
+// press actually reaches first while this field itself has real
+// focus. Tab lands on consigliereHistory only when there's actually
 // something in it to scroll to — the exact same
 // consigliereScrollbar.maxOffset() > 0 condition focusCycleStops
 // itself uses (see detailssidebar.go) to decide whether history is
-// even a stop right now — wrapping straight back to the panel
-// otherwise, per the user's own explicit request: a destination
+// even a stop right now — exiting via consigliereExitFocus
+// otherwise (also Backtab's own, unconditional case), per the user's
+// own explicit request: a destination
 // nothing can be done in once there is deserves to be skipped, not
 // tabbed into as a dead end.
 func (r *Root) handleConsigliereInputDone(key tcell.Key) {
@@ -301,11 +552,22 @@ func (r *Root) handleConsigliereInputDone(key tcell.Key) {
 		r.hideConsigliere()
 		return
 	}
-	if key == tcell.KeyTab || key == tcell.KeyBacktab {
+	if key == tcell.KeyBacktab {
+		// Backward from the first stop in consigliere's own tiny
+		// loop — back to wherever it was opened from.
+		r.app.SetFocus(r.consigliereBackwardExit())
+		return
+	}
+	if key == tcell.KeyTab {
 		if r.consigliereScrollbar.maxOffset() > 0 {
 			r.app.SetFocus(r.consigliereHistory)
 		} else {
-			r.app.SetFocus(r.panel.table)
+			// Forward, not backward: continues the host screen's own
+			// ring past consigliere (consigliereForwardExit) instead
+			// of looping back to wherever it was opened from — the
+			// real, reported bug this fixes (see
+			// consigliereForwardExitTarget's own doc comment).
+			r.app.SetFocus(r.consigliereForwardExitTarget())
 		}
 		return
 	}
@@ -392,11 +654,21 @@ func (r *Root) renderConsigliereHistory() {
 		if i > 0 {
 			b.WriteString("\n\n")
 		}
-		speaker := "You"
+		// Label4Background/Label5Background ("Blue Moon"/"Orange Crush"
+		// — see config.DefaultSettings' own Label4Name/Label5Name) per
+		// the user's own explicit request: neutral, easily told apart,
+		// and both dark/saturated enough that a plain white foreground
+		// (not the theme's own TextColor, which a custom scheme could
+		// set close to either background) stays legible on both — the
+		// same reused-label-color idea renderGitBreachTheme's own
+		// "maximally-distinct" comment already relies on elsewhere,
+		// just picked for being visually neutral here rather than
+		// maximally distinct from a whole set.
+		speaker, labelBackground := "You", r.theme.Label5Background
 		if m.Role == consigliere.RoleAssistant {
-			speaker = "Consigliere"
+			speaker, labelBackground = "Consigliere", r.theme.Label4Background
 		}
-		fmt.Fprintf(&b, "[::b]%s:[::-] %s", speaker, tview.Escape(m.Text))
+		fmt.Fprintf(&b, "[white:%s:b]%s:[-:-:-] %s", colorTag(labelBackground), speaker, tview.Escape(m.Text))
 	}
 	r.consigliereHistory.SetText(b.String())
 	r.consigliereHistory.ScrollToEnd()

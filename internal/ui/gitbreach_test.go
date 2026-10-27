@@ -2375,3 +2375,183 @@ func TestGitBreachDiffCommentColorStaysReadableOnA256ColorTerminal(t *testing.T)
 		t.Errorf("degraded comment color vs degraded removed background = %.2f, want >= %.1f", got, minContrast)
 	}
 }
+
+// TestGCReachesAIConsigliereFromEveryGitBreachPane pins "gC" reaching
+// the AI Consigliere from inside Git Breach — see startConsigliereChord's
+// own doc comment in consigliere.go. acceptsPlainKeyCommand (see
+// keymap.go) never passes while Git Breach is the active full-screen
+// overlay, so "g" alone could never have started the chord without
+// each pane's own InputCapture explicitly doing it; this exercises
+// that for every pane, not just one.
+func TestGCReachesAIConsigliereFromEveryGitBreachPane(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	for _, tc := range []struct {
+		name    string
+		focus   func(r *Root) tview.Primitive
+		capture func(r *Root) func(*tcell.EventKey) *tcell.EventKey
+	}{
+		{"Files", func(r *Root) tview.Primitive { return r.gitBreachFilesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachFilesTableKey }},
+		{"Branches", func(r *Root) tview.Primitive { return r.gitBreachBranchesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachBranchesTableKey }},
+		{"Commits", func(r *Root) tview.Primitive { return r.gitBreachCommitsTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachCommitsTableKey }},
+		{"Stash", func(r *Root) tview.Primitive { return r.gitBreachStashTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachStashTableKey }},
+		{"Main", func(r *Root) tview.Primitive { return r.gitBreachDiffView }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachMainKey }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newTestRootForGitBreachDir(t, dir)
+			r.openGitBreach()
+			r.app.SetFocus(tc.focus(r))
+
+			if got := tc.capture(r)(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone)); got != nil {
+				t.Fatalf("capture('g') = %v, want nil (consumed, chord started)", got)
+			}
+			if r.pendingChord != 'g' {
+				t.Fatalf("pendingChord = %q, want 'g'", string(r.pendingChord))
+			}
+
+			if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
+				t.Fatal("the resolving 'C' should have been consumed")
+			}
+			if !r.consigliereVisible {
+				t.Error("\"gC\" should have opened the AI Consigliere sidebar")
+			}
+		})
+	}
+}
+
+// TestTabFromLastGitBreachTableReachesConsigliere and
+// TestBacktabFromFirstGitBreachTableReachesConsigliere pin
+// gitBreachFocusNext/gitBreachFocusPrev's own redirect: wrapping
+// around gitBreachFocusables (Files -> Branches -> Commits -> Stash
+// -> wraps to Files) now reaches the AI Consigliere sidebar instead,
+// once it's open.
+func TestTabFromLastGitBreachTableReachesConsigliere(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.showConsigliere()
+	r.app.SetFocus(r.gitBreachStashTable) // the last entry in gitBreachFocusables
+
+	if got := r.captureGitBreachStashTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
+		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
+	}
+	if !r.consigliereInput.HasFocus() {
+		t.Error("Tab from Stash should have reached consigliereInput, not wrapped to Files")
+	}
+}
+
+func TestBacktabFromFirstGitBreachTableReachesConsigliere(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.showConsigliere()
+	r.app.SetFocus(r.gitBreachFilesTable) // the first entry in gitBreachFocusables
+
+	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+
+	if !r.consigliereInput.HasFocus() && !r.consigliereHistory.HasFocus() {
+		t.Error("Backtab from Files should have reached consigliere, not wrapped to Stash")
+	}
+}
+
+// TestTabFromGitBreachMainReachesConsigliereWhenOwnerIsLast pins the
+// identical redirect for captureGitBreachMainKey's own Tab, when
+// Main's current owner happens to be the last table in
+// gitBreachFocusables.
+func TestTabFromGitBreachMainReachesConsigliereWhenOwnerIsLast(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.showConsigliere()
+	r.app.SetFocus(r.gitBreachStashTable)
+	r.activateGitBreachMain() // Main now owned by Stash, the last table
+
+	if got := r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
+		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
+	}
+	if !r.consigliereInput.HasFocus() {
+		t.Error("Tab from Main (owned by Stash) should have reached consigliereInput, not wrapped to Files")
+	}
+}
+
+// TestFullTabLapFromGitBreachVisitsEveryTableAndConsigliere is the
+// Git Breach side of the exact bug
+// TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere pins
+// for Log Audit: opening the AI Consigliere must not collapse the
+// existing Files/Branches/Commits/Stash ring down to just looping
+// between itself and whichever table it was opened from.
+func TestFullTabLapFromGitBreachVisitsEveryTableAndConsigliere(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachFilesTable)
+	// The real "gC" entry path (sets consigliereForwardExit), not a
+	// direct showConsigliere() call.
+	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
+	r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone))
+
+	tabFrom := func(current tview.Primitive) tview.Primitive {
+		switch current {
+		case r.gitBreachFilesTable:
+			r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.gitBreachBranchesTable:
+			r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.gitBreachCommitsTable:
+			r.captureGitBreachCommitsTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.gitBreachStashTable:
+			r.captureGitBreachStashTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.consigliereInput:
+			r.handleConsigliereInputDone(tcell.KeyTab)
+		case r.consigliereHistory:
+			r.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		default:
+			t.Fatalf("tabFrom: unhandled current focus %v", current)
+		}
+		return r.app.GetFocus()
+	}
+
+	var visited []tview.Primitive
+	var current tview.Primitive = r.consigliereInput // where "gC" just left focus
+	for i := 0; i < 8; i++ {
+		current = tabFrom(current)
+		visited = append(visited, current)
+		if current == r.consigliereInput && i > 0 {
+			break
+		}
+	}
+
+	want := map[string]tview.Primitive{
+		"Files":    r.gitBreachFilesTable,
+		"Branches": r.gitBreachBranchesTable,
+		"Commits":  r.gitBreachCommitsTable,
+		"Stash":    r.gitBreachStashTable,
+	}
+	for name, stop := range want {
+		found := false
+		for _, v := range visited {
+			if v == stop {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s was never reached in one full Tab lap: %v", name, visited)
+		}
+	}
+}

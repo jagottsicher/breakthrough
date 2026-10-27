@@ -831,11 +831,10 @@ func (r *Root) acceptsPropertiesAwareKey() bool {
 // (r.pendingChord already cleared, e.g. by a resolveChord that ran
 // between two ticks), since there would be no family to look up.
 func (r *Root) refreshChordHintBar() {
-	family, ok := chordFamilyFor(r.pendingChord)
-	if !ok {
+	if r.pendingChord == 0 {
 		return
 	}
-	text, spans := r.chordHintBar(family)
+	text, spans := r.chordHintBar(r.pendingChordFamily)
 	r.buttonBarSpans = spans
 	r.buttonBar.SetText(text)
 }
@@ -846,6 +845,7 @@ func (r *Root) refreshChordHintBar() {
 // rather than a separate status-bar segment.
 func (r *Root) startChord(family chordFamily) {
 	r.pendingChord = family.prefix
+	r.pendingChordFamily = family
 	r.chordDeadline = time.Now().Add(r.chordTimeout())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -878,7 +878,7 @@ func (r *Root) startChord(family chordFamily) {
 // have done something and didn't is exactly the situation that
 // deserves an explanation instead of nothing at all.
 func (r *Root) resolveChord(event *tcell.EventKey) bool {
-	family, _ := chordFamilyFor(r.pendingChord)
+	family := r.pendingChordFamily
 	r.cancelChord() // clear the pending state and its own UI first, so
 	// whatever the member action does next (most open an overlay of
 	// their own) isn't fighting leftover chord chrome.
@@ -896,7 +896,19 @@ func (r *Root) resolveChord(event *tcell.EventKey) bool {
 			return true
 		}
 	}
-	r.showTransientError(fmt.Errorf("%c%c is not a command — see \"?\" for help", family.prefix, event.Rune()))
+	// showTransientErrorOverOverlay, not showTransientError: this chord
+	// may well have been started from inside a full-screen catalog (Log
+	// Audit, Git Breach, ... — see startConsigliereChord in
+	// consigliere.go), and the ordinary showTransientError's own
+	// showOverlay closes every other overlay first, which would
+	// silently discard that screen's own place in overlayStack rather
+	// than just covering it — a real, reported bug: dismissing this
+	// very notice afterwards then landed back on the bare panel instead
+	// of restoring the screen the chord was actually pressed from. The
+	// main panel's own chords (started only while activePage == "" —
+	// see acceptsPlainKeyCommand) have nothing open to preserve either
+	// way, so this is no different for them.
+	r.showTransientErrorOverOverlay(fmt.Errorf("%c%c is not a command — see \"?\" for help", family.prefix, event.Rune()))
 	return true
 }
 
@@ -909,6 +921,7 @@ func (r *Root) cancelChord() {
 		r.chordCancel = nil
 	}
 	r.pendingChord = 0
+	r.pendingChordFamily = chordFamily{}
 	r.chordDeadline = time.Time{}
 	r.refreshButtonBar()
 	r.refreshStatusBar()
