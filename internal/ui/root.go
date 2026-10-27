@@ -14,6 +14,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/apikey"
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
@@ -72,6 +73,9 @@ const (
 	// (newBgJobCancelDialog) — shared between Rsync and Compress/
 	// Extract, see its own package doc comment.
 	bgJobCancelPage = "bg-job-cancel"
+	// apiKeyDialogPage's own dialog is built in apikeydialog.go — the
+	// Options screen's own "AI Consigliere" category.
+	apiKeyDialogPage = "api-key-dialog"
 )
 
 // overlayFrame is one entry in Root.overlayStack (see showOverlay/
@@ -284,6 +288,32 @@ type Root struct {
 	// that already came from disk is being applied — see
 	// applyWithoutPersisting, the only thing that sets it.
 	suppressPersist bool
+
+	// apiKeySession is the AI Consigliere's own encrypted API-key tier
+	// (see internal/apikey and apikeydialog.go) — nil when no user
+	// config directory is available at all (config.UserDir() == ""),
+	// in which case that tier is simply unavailable rather than an
+	// error (see NewRoot).
+	apiKeySession *apikey.Session
+
+	// apiKeyDialog* is the "API key (encrypted)" row's own dialog (see
+	// apikeydialog.go) — a fixed widget set, built once, whose actual
+	// fields are rebuilt per apiKeyDialogStep (passphrase vs. key),
+	// the same "fixed shell, variable fields" split
+	// cloudRemoteDialogForm already uses.
+	apiKeyDialogProvider        string
+	apiKeyDialogStep            apiKeyDialogStep
+	apiKeyDialogForm            *tview.Form
+	apiKeyDialogPassphraseField *tview.InputField
+	apiKeyDialogConfirmField    *tview.InputField
+	apiKeyDialogKeyField        *tview.InputField
+	apiKeyDialogStatus          *tview.TextView
+	apiKeyDialogCancelBtn       *tview.Button
+	apiKeyDialogOKBtn           *tview.Button
+	apiKeyDialogButtons         *tview.Flex
+	apiKeyDialogTitleBar        *tview.TextView
+	apiKeyDialogContent         *tview.Flex
+	apiKeyDialogLayout          *tview.Flex
 
 	// The Options screen (see optionsscreen.go) — a full-screen editor
 	// with the categories down the left (optionsCategories) and the
@@ -2717,6 +2747,28 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		return nil, err
 	}
 
+	// The AI Consigliere's own encrypted API-key tier (see
+	// internal/apikey's own doc comment for the three-tier chain this
+	// is the third of). A missing file is not an error — a brand-new,
+	// empty store (see apikey.LoadStore) — so apiKeyStoreWarning only
+	// ever fires for a store that exists but is actually corrupt, same
+	// "keine stillen Fehler" reasoning configWarnings already follows
+	// just below. userDir == "" (no home directory at all — see
+	// config.UserDir's own doc comment) leaves apiKeySession nil
+	// outright: Resolve already treats a nil Session as "this tier
+	// isn't available," the same way it treats an empty envVar/
+	// filePath argument.
+	var apiKeySession *apikey.Session
+	var apiKeyStoreWarning string
+	if userDir := config.UserDir(); userDir != "" {
+		session, err := apikey.OpenSession(filepath.Join(userDir, apiKeyStoreFilename))
+		if err != nil {
+			apiKeyStoreWarning = fmt.Sprintf("AI Consigliere API key store: %v", err)
+		} else {
+			apiKeySession = session
+		}
+	}
+
 	r := &Root{
 		Pages:          tview.NewPages(),
 		app:            app,
@@ -2727,6 +2779,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		colorSchemes:   colorSchemes,
 		settingOrigins: settingOrigins,
 		theme:          theme,
+		apiKeySession:  apiKeySession,
 		notify:         notify.NewWithPersistence(notifyPersistPath()),
 		operations:     operations.NewTrackerWithPersistence(operationsPersistPath()),
 		labels:         filelabels.NewWithPersistence(labelsPersistPath()),
@@ -2984,6 +3037,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.connectForm = r.newConnectForm()
 	r.connectButtons = r.newConnectButtons()
 	r.connectLayout = r.newConnectLayout()
+
+	// The "API key (encrypted)" dialog (see apikeydialog.go) — the
+	// Options screen's own "AI Consigliere" category.
+	r.apiKeyDialogForm = r.newAPIKeyDialogForm()
+	r.apiKeyDialogButtons = r.newAPIKeyDialogButtons()
+	r.apiKeyDialogLayout = r.newAPIKeyDialogLayout()
 	r.hostKeyConfirmDialog = r.newHostKeyConfirmDialog()
 	r.hostKeyConfirmLayout = r.newHostKeyConfirmLayout()
 
@@ -3358,6 +3417,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
 	r.AddPage(connectDialogPage, r.connectLayout, false, false)
+	r.AddPage(apiKeyDialogPage, r.apiKeyDialogLayout, false, false)
 	r.AddPage(cloudMountDialogPage, r.cloudMountDialogLayout, false, false)
 	r.AddPage(cloudRemoteDialogPage, r.cloudRemoteDialogLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
@@ -3389,6 +3449,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	var startupNotices []string
 	if len(configWarnings) > 0 {
 		startupNotices = append(startupNotices, fmt.Sprintf("config: %s", strings.Join(configWarnings, "; ")))
+	}
+	if apiKeyStoreWarning != "" {
+		startupNotices = append(startupNotices, apiKeyStoreWarning)
 	}
 	// Pushes its own notify.CategoryTrash toast directly (see its own
 	// doc comment) rather than adding to startupNotices/showError —

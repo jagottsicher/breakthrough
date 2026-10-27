@@ -514,6 +514,19 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.connectTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.connectTitleBar.SetTextColor(theme.TextColor)
 
+	// The "API key (encrypted)" dialog (see apikeydialog.go) — same
+	// shape as connectForm/connectTitleBar/connect*Btn just above.
+	// apiKeyDialogForm is rebuilt from scratch on every step change
+	// (see rebuildAPIKeyDialogFields), so this also has to run again
+	// there, not just here on a live theme switch — see that
+	// function's own call to styleAPIKeyDialogForm.
+	r.styleAPIKeyDialogForm()
+	r.apiKeyDialogStatus.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.apiKeyDialogCancelBtn, theme)
+	styleButton(r.apiKeyDialogOKBtn, theme)
+	r.apiKeyDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.apiKeyDialogTitleBar.SetTextColor(theme.TextColor)
+
 	// The "New cloud mount" dialog (see cloudmountdialog.go) — same
 	// shape as connectForm/connectTitleBar/connect*Btn just above,
 	// this dialog's own equivalents. A real, reported gap: these were

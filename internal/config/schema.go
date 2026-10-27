@@ -697,6 +697,20 @@ func SettingDocs() []SettingDoc {
 			Summary:     `Display name for color label 9 (the "zl" chord).`,
 			Implemented: true,
 		},
+		{
+			Key:         "consigliere_provider",
+			Default:     d.ConsigliereProvider,
+			Kind:        KindEnum,
+			Summary:     `Which AI backend the "gC" sidebar's own real provider call uses: "anthropic", "openai", or "deepseek".`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_api_key_file",
+			Default:     d.ConsigliereAPIKeyFile,
+			Kind:        KindString,
+			Summary:     "Optional path to a plain-text file holding the selected provider's API key (the unencrypted, opt-in tier — see internal/apikey).",
+			Implemented: true,
+		},
 	}
 }
 

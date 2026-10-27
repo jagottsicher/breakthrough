@@ -749,6 +749,8 @@ func (r *Root) activateOptionRow(row int) {
 	doc, _ := opt.doc()
 
 	switch {
+	case opt.secretAction != nil:
+		opt.secretAction(r)
 	case doc.Kind == config.KindBool:
 		// Toggled in place — no dialog for a two-state value, since
 		// picking from a list of exactly "Yes" and "No" is pure
@@ -846,9 +848,17 @@ func (r *Root) showOptionInfo(opt optionSpec) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[::b]%s[::-]\n\n", opt.label)
 	b.WriteString(opt.help)
-	fmt.Fprintf(&b, "\n\n[::d]Config key:[::-] %s", opt.key)
-	fmt.Fprintf(&b, "\n[::d]Default:[::-] %s", doc.Default)
-	fmt.Fprintf(&b, "\n[::d]Currently:[::-] %s (%s)", opt.value(r), r.settingOriginLabel(opt.key))
+	if opt.secretAction != nil {
+		// Never stored in the config file at all (see optionSpec's own
+		// doc comment on secretAction) — "Config key"/"Default" would
+		// both be misleading here, so this just shows where the live
+		// value currently comes from.
+		fmt.Fprintf(&b, "\n\n[::d]Currently:[::-] %s", opt.value(r))
+	} else {
+		fmt.Fprintf(&b, "\n\n[::d]Config key:[::-] %s", opt.key)
+		fmt.Fprintf(&b, "\n[::d]Default:[::-] %s", doc.Default)
+		fmt.Fprintf(&b, "\n[::d]Currently:[::-] %s (%s)", opt.value(r), r.settingOriginLabel(opt.key))
+	}
 	b.WriteString("\n\n[::d]Escape or a click outside closes this.[::-]")
 
 	r.optionsInfo.SetText(b.String())
@@ -985,6 +995,11 @@ func (r *Root) resetAllOptions() {
 // change here.
 func (r *Root) resetOptions(options []optionSpec) {
 	for _, opt := range options {
+		if opt.secretAction != nil {
+			// Not config-backed at all (see optionSpec.secretAction's
+			// own doc comment) — nothing for "reset" to do.
+			continue
+		}
 		value := r.resetSetting(opt.key)
 		// Without persistence: the value being applied is precisely the
 		// one that resetting produced, and writing it back would

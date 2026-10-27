@@ -39,6 +39,11 @@ const (
 	// Keys screen's own "Generate key" form — internal/sshkeys' own
 	// write side (see GenerateCommand).
 	CategorySSHKeys Category = "sshkeys"
+	// CategoryConsigliere covers storing an API key for the AI
+	// Consigliere sidebar's own real provider call via the Options
+	// screen (see internal/apikey) — only ever the fact that a key was
+	// stored for a given provider, never the key or passphrase itself.
+	CategoryConsigliere Category = "consigliere"
 )
 
 // Categories is every category this package defines, in the fixed
@@ -56,6 +61,7 @@ func Categories() []Category {
 		CategoryShell,
 		CategoryFirewall,
 		CategorySSHKeys,
+		CategoryConsigliere,
 	}
 }
 
@@ -81,6 +87,8 @@ func (c Category) Label() string {
 		return "Firewall rules (Add-rule form, self-lockout rollback)"
 	case CategorySSHKeys:
 		return "SSH keys (Generate key form)"
+	case CategoryConsigliere:
+		return "AI Consigliere (API key stored via the Options screen)"
 	default:
 		return string(c)
 	}

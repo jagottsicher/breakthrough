@@ -7,6 +7,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/apikey"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/mail"
 )
@@ -97,6 +98,19 @@ type optionSpec struct {
 	// tell them apart. Nil for every other option, the overwhelming
 	// majority, which keep the table's ordinary background.
 	labelBackground func(*Root) tcell.Color
+
+	// secretAction, when non-nil, marks this row as a credential entry
+	// point rather than an ordinary value: activateOptionRow calls it
+	// instead of toggling/cycling/editing in place, and this row is
+	// never routed through apply(string)/persistSetting at all —
+	// exactly the point, since persistSetting writes straight into the
+	// user's own plain-text config file, which is precisely what the
+	// encrypted tier (internal/apikey) exists to avoid for a secret
+	// typed in here. key still identifies the row (for the "offered
+	// more than once" check), but deliberately has no
+	// config.SettingDocs entry of its own — see
+	// TestOptionCatalogMatchesSettingDocs' own secretAction exemption.
+	secretAction func(*Root)
 }
 
 // doc returns the config-package metadata for this setting — its kind,
@@ -1329,6 +1343,111 @@ func optionCategories() []optionCategory {
 			name:    "Label",
 			options: labelNameOptions(),
 		},
+		{
+			// The "gC" sidebar's own provider setup (see
+			// internal/consigliere and internal/apikey's three-tier
+			// doc comment). Provider/key-file are ordinary, persisted
+			// settings; "API key (encrypted)" deliberately isn't one
+			// — see optionSpec.secretAction's own doc comment on why
+			// a credential never goes through persistSetting.
+			name: "AI Consigliere",
+			options: []optionSpec{
+				{
+					key:   "consigliere_provider",
+					label: "Provider",
+					help: "Which AI backend the sidebar's own real provider call uses.\n\n" +
+						"Only selects which provider's own API key is looked up (see \"API key\" " +
+						"below) — see internal/consigliere's own doc comment for the current " +
+						"state of the actual provider call itself.",
+					value: func(r *Root) string { return r.settings.ConsigliereProvider },
+					apply: func(r *Root, v string) {
+						r.settings.ConsigliereProvider = v
+						r.persistSetting("consigliere_provider", v)
+					},
+					choices: func(r *Root) []optionChoice {
+						return []optionChoice{
+							{value: "anthropic", label: "Anthropic (Claude)"},
+							{value: "openai", label: "OpenAI (ChatGPT)"},
+							{value: "deepseek", label: "DeepSeek"},
+						}
+					},
+				},
+				stringOption("consigliere_api_key_file", "API key file (plain text)",
+					"An optional path to a plain-text file holding the selected provider's "+
+						"API key — the deliberately unencrypted, opt-in tier: protected only by "+
+						"this file's own permissions, nothing more. \"\" (the default) means this "+
+						"tier isn't configured; a well-known environment variable "+
+						"(ANTHROPIC_API_KEY/OPENAI_API_KEY/DEEPSEEK_API_KEY, matching the "+
+						"provider above) always takes priority over it, and \"API key "+
+						"(encrypted)\" below is the fallback beneath it.",
+					func(r *Root) string { return r.settings.ConsigliereAPIKeyFile },
+					func(r *Root, v string) {
+						r.settings.ConsigliereAPIKeyFile = v
+						r.persistSetting("consigliere_api_key_file", v)
+					},
+				),
+				{
+					key:   "consigliere_api_key_secret",
+					label: "API key (encrypted)",
+					help: "Type the selected provider's API key here to store it encrypted in " +
+						"breakthrough's own config directory, under a passphrase you choose — " +
+						"the lowest-priority tier, only used when neither the environment " +
+						"variable nor \"API key file\" above supplies one.\n\n" +
+						"The passphrase is asked for once per run, then kept in memory only " +
+						"(never written to disk) for the rest of this session — the same " +
+						"ssh-agent/gpg-agent convention. A wrong passphrase is rejected " +
+						"immediately rather than failing later. There is no way to read a " +
+						"stored key back out through this screen — only replace it.",
+					value:        func(r *Root) string { return r.consigliereAPIKeyStatus() },
+					secretAction: func(r *Root) { r.openAPIKeyDialog(r.settings.ConsigliereProvider) },
+				},
+			},
+		},
+	}
+}
+
+// consigliereEnvVarForProvider is the well-known environment variable
+// each provider's own official SDK/CLI already reads — the first,
+// highest-priority tier of internal/apikey's chain, never itself a
+// user-configurable setting (see optionCategories' own "AI
+// Consigliere" category, which only lets the provider and the
+// plain-text-file tier be chosen).
+func consigliereEnvVarForProvider(provider string) string {
+	switch provider {
+	case "anthropic":
+		return "ANTHROPIC_API_KEY"
+	case "openai":
+		return "OPENAI_API_KEY"
+	case "deepseek":
+		return "DEEPSEEK_API_KEY"
+	default:
+		return ""
+	}
+}
+
+// consigliereAPIKeyStatus is the "API key (encrypted)" row's own live
+// value: which tier (see apikey.Tier) currently supplies the selected
+// provider's key, or that none does — never the key itself.
+func (r *Root) consigliereAPIKeyStatus() string {
+	provider := r.settings.ConsigliereProvider
+	_, tier, err := apikey.Resolve(
+		consigliereEnvVarForProvider(provider),
+		r.settings.ConsigliereAPIKeyFile,
+		provider,
+		r.apiKeySession,
+	)
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	switch tier {
+	case apikey.TierEnv:
+		return "set via " + consigliereEnvVarForProvider(provider)
+	case apikey.TierFile:
+		return "set via file"
+	case apikey.TierEncrypted:
+		return "stored (encrypted)"
+	default:
+		return "not set"
 	}
 }
 
@@ -1603,6 +1722,10 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.Label8Name, true
 	case "label_9_name":
 		return s.Label9Name, true
+	case "consigliere_provider":
+		return s.ConsigliereProvider, true
+	case "consigliere_api_key_file":
+		return s.ConsigliereAPIKeyFile, true
 	}
 	return "", false
 }
