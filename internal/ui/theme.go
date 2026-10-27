@@ -434,6 +434,37 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.helpTitleBar.SetTextColor(theme.Text)
 	}
 
+	if r.consigliereHistory != nil {
+		// SurfaceBackground, the same floating-chrome surface Help's
+		// own helpView uses (see above) — a chat overlay reads as the
+		// same kind of floating dialog, not a full-bleed catalog body
+		// the way viewerView/mountsLayout are.
+		r.consigliereHistory.SetBackgroundColor(theme.SurfaceBackground)
+		r.consigliereHistory.SetTextColor(theme.TextColor)
+	}
+	if r.consigliereTitleBar != nil {
+		// Re-derived from consigliereHistory's own current focus state
+		// (see its own SetFocusFunc/SetBlurFunc in consigliere.go)
+		// rather than always reset to the unfocused look — the same
+		// "a live theme switch mid-focus must not show the wrong one
+		// until the next blur/focus cycle" hazard detailsTitleBar's
+		// own identical block documents.
+		if r.consigliereHistory.HasFocus() {
+			r.consigliereTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		} else {
+			r.consigliereTitleBar.SetBackgroundColor(theme.InputBackground)
+		}
+		r.consigliereTitleBar.SetTextColor(theme.Text)
+	}
+	if r.consigliereInput != nil {
+		// Always the focused style: the input field is the only
+		// widget this overlay ever actually focuses (see
+		// openConsigliere) — there is no unfocused state of its own
+		// worth distinguishing, unlike an ordinary form field sitting
+		// next to others.
+		styleInput(r.consigliereInput, theme, true)
+	}
+
 	if r.viewerView != nil {
 		// PanelBackground, not SurfaceBackground — see mountsLayout's own
 		// comment: every full-bleed catalog/viewer body rests on the same

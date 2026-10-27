@@ -17,6 +17,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/consigliere"
 	"github.com/jagottsicher/breakthrough/internal/easteregg"
 	"github.com/jagottsicher/breakthrough/internal/filelabels"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
@@ -1772,6 +1773,25 @@ type Root struct {
 	helpTitleBar *tview.TextView
 	helpLayout   *tview.Flex
 
+	// consigliereHistory/consigliereScrollbar/consigliereTitleBar/
+	// consigliereInput/consigliereLayout are the AI Consigliere's own
+	// chat sidebar ("gC", see keymap.go and internal/consigliere) —
+	// docked against the right edge, the same non-modal shape Details
+	// (detailsSidebar/detailsSidebarLayout above) uses, plus
+	// consigliereInput as a second, fixed-height row beneath the
+	// history for the next question. consigliereMessages/
+	// consigliereProvider/consigliereCancel are this session's own
+	// chat state — see consigliere.go.
+	consigliereHistory   *tview.TextView
+	consigliereScrollbar *verticalScrollbar
+	consigliereTitleBar  *tview.TextView
+	consigliereInput     *tview.InputField
+	consigliereLayout    *tview.Flex
+	consigliereVisible   bool // mirrors detailsSidebarVisible — see showConsigliere/hideConsigliere
+	consigliereMessages  []consigliere.Message
+	consigliereProvider  consigliere.Provider
+	consigliereCancel    context.CancelFunc
+
 	// detailsSidebar is the right-hand Details layer toggled by "I"
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
 	// currently shown; unlike every overlay above it, it's deliberately
@@ -3054,6 +3074,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// on every open, the same as everything else above.
 	r.dirPicker = r.newDirPicker()
 
+	// The AI Consigliere sidebar ("gC", see consigliere.go) — built once
+	// here, same as everything else above; r.consigliereProvider starts
+	// as consigliere.Mock{} (see internal/consigliere/mock.go) since no
+	// real provider/API-key/consent decision has been made yet (see
+	// feature_ideas.txt's own "AI Consigliere" entry).
+	r.newConsigliereSidebar()
+	r.consigliereProvider = consigliere.Mock{}
+
 	// The Help overlay (see help.go/openHelp) — a single, static,
 	// read-only TextView, the simplest of all of these (nothing to
 	// reset or repopulate on open) — now topped with its own one-row
@@ -3256,6 +3284,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpLayout, false, false)
+	r.AddPage(consiglierePage, r.consigliereLayout, false, false)
 	r.AddPage(viewerPage, r.viewerLayout, false, false)
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
@@ -4048,6 +4077,9 @@ func (r *Root) handleBeforeDraw(screen tcell.Screen) bool {
 
 	if r.detailsSidebarVisible {
 		r.repositionDetailsSidebar()
+	}
+	if r.consigliereVisible {
+		r.repositionConsigliereSidebar()
 	}
 	if r.activePage == propertiesPage {
 		r.rerenderProperties()

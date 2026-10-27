@@ -232,6 +232,16 @@ func (r *Root) repositionDetailsSidebar() {
 // what populates the sidebar the very first time it's ever shown, when
 // there's nothing yet to compare the new target against.
 func (r *Root) showDetailsSidebar() {
+	// Both sidebars dock to the exact same rect (flush right, same
+	// width/height — see detailsSidebarSize/consigliereSize), so having
+	// both visible at once would just stack one over the other rather
+	// than showing anything useful of whichever is underneath — see
+	// showConsigliere's own identical reasoning for the other
+	// direction.
+	if r.consigliereVisible {
+		r.hideConsigliere()
+	}
+
 	r.repositionDetailsSidebar()
 	r.preserveFocusAcross(func() {
 		r.ShowPage(detailsSidebarPage)
@@ -355,6 +365,7 @@ func (r *Root) ToggleDetailsSidebarShortcut() {
 // the Details sidebar, or any currently open tool window (see
 // toolwindow.go) currently has real keyboard focus — moving to the next
 // one in that fixed order (panel, then Details if it's showing, then
+// the AI Consigliere sidebar's own history if it's showing, then
 // every open tool window in the order they were opened), wrapping back
 // to the panel after the last one. See cmd/breakthrough, which only
 // consumes Tab when this returns true. Everywhere else (Properties' own
@@ -433,6 +444,33 @@ func (r *Root) focusCycleStops() []tview.Primitive {
 	}
 	if r.detailsSidebarVisible {
 		stops = append(stops, r.detailsSidebar)
+	}
+	if r.consigliereVisible {
+		// consigliereInput first — Tab from the panel reaches the
+		// question field directly (answering the user's own explicit
+		// question: once focus has left it, e.g. via a mouse click
+		// back into the panel, or by tabbing on into
+		// consigliereHistory, this is the real keyboard path back in,
+		// not just closing and reopening the sidebar).
+		stops = append(stops, r.consigliereInput)
+		// consigliereHistory only joins the cycle once there's
+		// actually something in it to scroll to (the same
+		// maxOffset() > 0 condition consigliereScrollbar's own Draw
+		// already uses to decide whether to even render a thumb — see
+		// scrollbar.go) — per the user's own explicit request: a stop
+		// Tab can land on with nothing to scroll once there is would
+		// just be a dead end to tab past, not a real destination. Tab
+		// from the field itself still reaches consigliereHistory the
+		// same way it already did (handleConsigliereInputDone's own
+		// direct SetFocus, not this list — InputField's own
+		// SetDoneFunc claims Tab before CycleFocusShortcut could ever
+		// see it while consigliereInput itself has focus, same as
+		// every other SetDoneFunc field in this app), using the exact
+		// same condition to decide whether to land there or wrap
+		// straight back to the panel instead.
+		if r.consigliereScrollbar.maxOffset() > 0 {
+			stops = append(stops, r.consigliereHistory)
+		}
 	}
 	for _, tw := range r.toolWindows {
 		stops = append(stops, tw)
