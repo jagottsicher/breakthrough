@@ -1791,13 +1791,10 @@ type Root struct {
 	consigliereMessages  []consigliere.Message
 	consigliereProvider  consigliere.Provider
 	consigliereCancel    context.CancelFunc
-	// consigliereReturnFocus/consigliereHostPage are captured once, in
-	// showConsigliere, before anything changes focus or activePage —
-	// see hideConsigliere's own doc comment (return focus) and
-	// closeConsigliereIfHostPageChanged's own doc comment (auto-close
-	// once that recorded page is no longer the active one).
+	// consigliereReturnFocus is captured once, in showConsigliere,
+	// before anything changes focus — see hideConsigliere's own doc
+	// comment.
 	consigliereReturnFocus tview.Primitive
-	consigliereHostPage    string
 	// consigliereForwardExit is where Tab leaving consigliere's own
 	// input/history pair lands — the fixed stop that follows wherever
 	// the host screen that opened it (see startConsigliereChord's own
@@ -3732,35 +3729,27 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 	r.activeWidget = widget
 	r.ShowPage(page)
 	r.SendToFront(page)
+	// The AI Consigliere sidebar isn't part of overlayStack at all
+	// (see consigliere.go's own doc comment — it's non-modal), so
+	// pushing a new full-screen page here would otherwise bury it:
+	// tview's Pages draws in registration/SendToFront order, not
+	// Z-index, so without this, navigating from one full-screen page
+	// to another (e.g. Log Audit's own selection screen into a
+	// specific file's viewer) while the sidebar is open would redraw
+	// it on top of consigliereLayout, completely covering it — even
+	// though the sidebar itself is still fully open (per the user's
+	// own explicit request that it survive exactly this kind of
+	// ordinary within-task navigation). Keyboard focus is deliberately
+	// left on whatever this call already focused below, not pulled
+	// back onto the sidebar — only its own draw order needs fixing.
+	if r.consigliereVisible {
+		r.SendToFront(consiglierePage)
+	}
 	r.updateOverlayTitleBarColors()
 	if restore != nil {
 		restore()
 	} else {
 		r.app.SetFocus(widget)
-	}
-	r.closeConsigliereIfHostPageChanged()
-}
-
-// closeConsigliereIfHostPageChanged closes the AI Consigliere sidebar
-// once r.activePage no longer matches consigliereHostPage — the page
-// (possibly "", the bare file panel) that was active the moment
-// showConsigliere last ran (see its own doc comment). Per the user's
-// own explicit request: the sidebar is about whatever view was open
-// when it was asked for, so navigating away from that view — opening
-// a different full-screen modal (pushOverlay) or closing the one it
-// was opened from (hideOverlay) — closes it too, rather than leaving
-// it floating over a view it was never about.
-//
-// A no-op whenever consigliereVisible is already false, or the active
-// page genuinely hasn't changed (every call elsewhere into
-// pushOverlay/hideOverlay that doesn't actually change which page is
-// topmost — e.g. hideOverlay popping down to the exact same
-// consigliereHostPage it started from isn't possible given the stack
-// shape, but a future caller doing so safely would still just see this
-// decline to act).
-func (r *Root) closeConsigliereIfHostPageChanged() {
-	if r.consigliereVisible && r.activePage != r.consigliereHostPage {
-		r.hideConsigliere()
 	}
 }
 
@@ -3837,7 +3826,6 @@ func (r *Root) hideOverlay() {
 		} else {
 			r.app.SetFocus(r.panel)
 		}
-		r.closeConsigliereIfHostPageChanged()
 		return
 	}
 
@@ -3850,7 +3838,6 @@ func (r *Root) hideOverlay() {
 	} else {
 		r.app.SetFocus(below.widget)
 	}
-	r.closeConsigliereIfHostPageChanged()
 }
 
 // closeAllOverlays hides every currently-open overlay layer without

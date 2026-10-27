@@ -404,14 +404,15 @@ func (r *Root) toggleConsigliere() {
 // every time, per the spec's own "Schließen und erneutes Öffnen
 // startet eine frische Konversation".
 func (r *Root) showConsigliere() {
-	// consigliereReturnFocus/consigliereHostPage are both captured
-	// *before* anything below changes focus or activePage — see
-	// hideConsigliere's own doc comment for why a hardcoded
-	// r.panel.table fallback is wrong whenever this was opened from
-	// inside a full-screen modal (Log Audit, Git Breach, ...) rather
-	// than the bare file panel.
+	// consigliereReturnFocus is captured *before* anything below
+	// changes focus or activePage — see hideConsigliere's own doc
+	// comment for why a hardcoded r.panel.table fallback is wrong
+	// whenever this was opened from inside a full-screen modal (Log
+	// Audit, Git Breach, ...) rather than the bare file panel. The
+	// sidebar deliberately stays open across a host page change now
+	// (per the user's own explicit request) — it no longer needs to
+	// remember which page it was opened from for that purpose.
 	r.consigliereReturnFocus = r.app.GetFocus()
-	r.consigliereHostPage = r.activePage
 	// A previous session's own manual drag must not carry over into
 	// this fresh one — see repositionConsigliereSidebar's own doc
 	// comment.
@@ -466,7 +467,6 @@ func (r *Root) hideConsigliere() {
 		r.app.SetFocus(target)
 	}
 	r.consigliereReturnFocus = nil
-	r.consigliereHostPage = ""
 	r.consigliereVisible = false
 }
 

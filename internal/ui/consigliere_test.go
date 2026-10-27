@@ -353,10 +353,9 @@ func TestHideConsigliereCancelsAPendingReply(t *testing.T) {
 
 // TestHideConsigliereRestoresFocusToWhatHadItBefore pins the real
 // bug a hardcoded r.panel.table fallback had: opened from inside a
-// full-screen modal (Help stands in for Log Audit/Git Breach here —
-// the mechanism is the same, see closeConsigliereIfHostPageChanged's
-// own doc comment), closing it must hand focus back to that modal's
-// own widget, not the panel underneath it, which isn't even visible.
+// full-screen modal (Help stands in for Log Audit/Git Breach here),
+// closing it must hand focus back to that modal's own widget, not the
+// panel underneath it, which isn't even visible.
 func TestHideConsigliereRestoresFocusToWhatHadItBefore(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.openHelp()
@@ -370,35 +369,36 @@ func TestHideConsigliereRestoresFocusToWhatHadItBefore(t *testing.T) {
 	}
 }
 
-// TestOpeningAnotherOverlayClosesConsigliere pins
-// closeConsigliereIfHostPageChanged's own pushOverlay-side hook: per
-// the user's own explicit request, the sidebar is about whatever view
-// was open when it was asked for — opening a different one (Help,
-// standing in for any pushOverlay caller) closes it.
-func TestOpeningAnotherOverlayClosesConsigliere(t *testing.T) {
+// TestOpeningAnotherOverlayLeavesConsigliereOpen and
+// TestClosingTheHostOverlayLeavesConsigliereOpen pin the user's own
+// explicit reversal of an earlier decision: the sidebar used to close
+// itself the moment the page it was opened from stopped being active
+// (e.g. drilling from Log Audit's own selection screen into a
+// specific file's viewer) — per the user's own explicit report, that
+// made perfectly ordinary within-task navigation lose the sidebar for
+// no reason, so it now simply stays open across any host page change,
+// closing only via Escape/the close glyph/a click outside, same as
+// ever. Help stands in for any pushOverlay/hideOverlay caller.
+func TestOpeningAnotherOverlayLeavesConsigliereOpen(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.showConsigliere()
 
 	root.openHelp()
 
-	if root.consigliereVisible {
-		t.Error("opening another overlay should have closed the already-open Consigliere sidebar")
+	if !root.consigliereVisible {
+		t.Error("opening another overlay should not have closed the already-open Consigliere sidebar")
 	}
 }
 
-// TestClosingTheHostOverlayClosesConsigliere pins
-// closeConsigliereIfHostPageChanged's own hideOverlay-side hook: the
-// sidebar must not survive its own host view closing out from under
-// it.
-func TestClosingTheHostOverlayClosesConsigliere(t *testing.T) {
+func TestClosingTheHostOverlayLeavesConsigliereOpen(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.openHelp()
 	root.showConsigliere()
 
 	root.hideOverlay() // closes Help
 
-	if root.consigliereVisible {
-		t.Error("closing the host overlay should have closed Consigliere too")
+	if !root.consigliereVisible {
+		t.Error("closing the host overlay should not have closed Consigliere too")
 	}
 }
 
@@ -682,5 +682,28 @@ func TestConsigliereManuallyPositionedResetsOnFreshOpen(t *testing.T) {
 	wantX, wantY, _, _ := root.consigliereLayout.GetRect()
 	if wantX != 100-func() int { w, _ := root.consigliereSize(); return w }() || wantY != 0 {
 		t.Errorf("fresh session should be docked flush right at y=0, got (%d, %d)", wantX, wantY)
+	}
+}
+
+// TestPushOverlayKeepsConsigliereOnTopOfANewlyOpenedPage pins the real
+// bug the user reported: navigating within a related task (e.g. Log
+// Audit's own selection screen into a specific file's viewer, both
+// pushOverlay calls) while the sidebar is open used to visually bury
+// it — tview.Pages draws in SendToFront order, not Z-index, so
+// pushing a new full-screen page redrew it on top of
+// consigliereLayout, even though the sidebar was never actually
+// closed (see TestOpeningAnotherOverlayLeavesConsigliereOpen). Help
+// stands in for any pushOverlay caller.
+func TestPushOverlayKeepsConsigliereOnTopOfANewlyOpenedPage(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.showConsigliere()
+
+	root.openHelp() // pushOverlay(helpPage, ...)
+
+	// GetPageNames(true) orders front to back (see its own doc comment
+	// in tview's pages.go) — index 0 is topmost.
+	names := root.GetPageNames(true)
+	if len(names) == 0 || names[0] != consiglierePage {
+		t.Errorf("visible page draw order = %v, want %q drawn frontmost (index 0)", names, consiglierePage)
 	}
 }
