@@ -1342,3 +1342,106 @@ func TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere(t *testing.T
 		}
 	}
 }
+
+// TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing
+// is the exact scenario the user reported: open the AI Consigliere
+// from Log Audit's own selection screen (gC while r.logAuditTable has
+// focus — captures consigliereReturnFocus pointing at it), then drill
+// into a specific file's viewer (still open, per the user's own
+// earlier explicit request that it survive this) — the selection
+// screen's own table is now covered, not destroyed, so without
+// consigliereExitPage's own staleness check, Tab/Backtab out of the
+// sidebar kept landing on it anyway: a real, reported dead end ("ich
+// komme aus dem Consig nicht mehr raus"). Tab from consigliereInput
+// must re-join the *viewer's* own ring (Keyword/Time/Level/Timeline/
+// Table), never the hidden selection table.
+func TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.captureLogAuditSelectionTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
+	r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone))
+	if !r.consigliereVisible {
+		t.Fatal("setup: \"gC\" from the selection screen should have opened the sidebar")
+	}
+
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer() // still open while this runs, per the user's own explicit request
+
+	tabFrom := func(current tview.Primitive) tview.Primitive {
+		switch current {
+		case r.logAuditViewerTable:
+			r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.logAuditKeywordField, r.logAuditTimeField, r.logAuditLevelField:
+			current.(*tview.InputField).InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
+		case r.logAuditTimelineView:
+			r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		case r.consigliereInput:
+			r.handleConsigliereInputDone(tcell.KeyTab)
+		case r.consigliereHistory:
+			r.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+		default:
+			t.Fatalf("tabFrom: unhandled current focus %v", current)
+		}
+		return r.app.GetFocus()
+	}
+
+	var visited []tview.Primitive
+	var current tview.Primitive = r.consigliereInput
+	for i := 0; i < 8; i++ {
+		current = tabFrom(current)
+		visited = append(visited, current)
+		if current == r.logAuditTable {
+			t.Fatalf("Tab landed on the hidden selection table (covered by the viewer, not destroyed): %v", visited)
+		}
+		if current == r.consigliereInput && i > 0 {
+			break
+		}
+	}
+
+	want := map[string]tview.Primitive{
+		"Keyword":  r.logAuditKeywordField,
+		"Time":     r.logAuditTimeField,
+		"Level":    r.logAuditLevelField,
+		"Timeline": r.logAuditTimelineView,
+		"Table":    r.logAuditViewerTable,
+	}
+	for name, stop := range want {
+		found := false
+		for _, v := range visited {
+			if v == stop {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s was never reached in one full Tab lap: %v", name, visited)
+		}
+	}
+}
+
+// TestEscapeClosesConsigliereEvenAfterDrillingToADifferentPage pins
+// the one other place the old "same page the whole time" assumption
+// could still be hiding, per the advisor's own explicit caution:
+// hideConsigliere must still work correctly from
+// consigliereHistory/consigliereInput after the host page has moved
+// on, not just the Tab/Backtab paths the rest of this test covers.
+func TestEscapeClosesConsigliereEvenAfterDrillingToADifferentPage(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.captureLogAuditSelectionTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
+	r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone))
+
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	r.handleConsigliereInputDone(tcell.KeyEscape)
+
+	if r.consigliereVisible {
+		t.Error("Escape should have closed the sidebar even after drilling into the viewer")
+	}
+	if r.activePage != logAuditViewerPage {
+		t.Errorf("activePage = %q, want %q — closing the sidebar must not touch the still-open viewer", r.activePage, logAuditViewerPage)
+	}
+}

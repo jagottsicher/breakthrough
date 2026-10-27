@@ -1795,6 +1795,22 @@ type Root struct {
 	// before anything changes focus — see hideConsigliere's own doc
 	// comment.
 	consigliereReturnFocus tview.Primitive
+	// consigliereExitPage is r.activePage at that exact same moment —
+	// NOT for the auto-close behavior removed in the previous commit
+	// (that used a similarly-named consigliereHostPage field; this is
+	// a different purpose, not a revival), but so
+	// consigliereBackwardExit/consigliereForwardExitTarget can tell
+	// whether consigliereReturnFocus/consigliereForwardExit are still
+	// valid at all: both name a specific widget on whatever page was
+	// active when the sidebar opened, which the user can now navigate
+	// away from (pushing further pages) while leaving the sidebar
+	// open — per the user's own explicit request in the previous
+	// commit. A widget on a page that is no longer active is still a
+	// perfectly real tview.Primitive (nothing frees it), so without
+	// this check, Tab/Backtab out of the sidebar would keep landing on
+	// it anyway — covered, unreachable, and indistinguishable from a
+	// dead end (a real, reported bug).
+	consigliereExitPage string
 	// consigliereForwardExit is where Tab leaving consigliere's own
 	// input/history pair lands — the fixed stop that follows wherever
 	// the host screen that opened it (see startConsigliereChord's own

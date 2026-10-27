@@ -163,12 +163,20 @@ func (r *Root) captureConsigliereHistoryKey(event *tcell.EventKey) *tcell.EventK
 // consigliereBackwardExit is where Backtab leaving consigliere's own
 // first stop (consigliereInput) lands: whatever had real keyboard
 // focus the moment showConsigliere last ran (consigliereReturnFocus —
-// see its own doc comment in root.go), falling back to the panel only
-// if nothing was ever recorded. Shared by handleConsigliereInputDone
-// and captureConsigliereHistoryKey's own Backtab case.
+// see its own doc comment in root.go) — but only while
+// consigliereExitPage still matches r.activePage (see
+// consigliereCurrentHostEdges' own doc comment for why a stale one is
+// actively wrong, not just imprecise, and gets re-derived instead).
+// Falls back to the panel if even that re-derivation has nothing.
+// Shared by handleConsigliereInputDone and
+// captureConsigliereHistoryKey's own Backtab case.
 func (r *Root) consigliereBackwardExit() tview.Primitive {
-	if r.consigliereReturnFocus != nil {
+	if r.consigliereReturnFocus != nil && r.activePage == r.consigliereExitPage {
 		return r.consigliereReturnFocus
+	}
+	backward, _ := r.consigliereCurrentHostEdges()
+	if backward != nil {
+		return backward
 	}
 	return r.panel.table
 }
@@ -176,19 +184,63 @@ func (r *Root) consigliereBackwardExit() tview.Primitive {
 // consigliereForwardExit is where Tab leaving consigliere's own last
 // stop lands: the fixed splice point the host screen that opened it
 // recorded (consigliereForwardExit — see its own doc comment in
-// root.go), falling back to consigliereBackwardExit for a single-node
-// "ring" (nothing else was ever recorded, so both directions lead to
-// the same one other node) or, failing that, the panel. Shared by
-// handleConsigliereInputDone and captureConsigliereHistoryKey's own
-// Tab case — the one change that made Tab actually continue a host
-// screen's own ring past consigliere instead of looping it back to
-// wherever consigliere was opened from, stranding every stop in
-// between (a real, reported bug).
+// root.go) — again only while consigliereExitPage still matches
+// r.activePage, same reasoning consigliereBackwardExit's own doc
+// comment gives. Falls back to consigliereBackwardExit for a
+// single-node "ring" (nothing else was ever recorded, so both
+// directions lead to the same one other node) or, failing that, the
+// panel. Shared by handleConsigliereInputDone and
+// captureConsigliereHistoryKey's own Tab case — the one change that
+// made Tab actually continue a host screen's own ring past
+// consigliere instead of looping it back to wherever consigliere was
+// opened from, stranding every stop in between (a real, reported
+// bug).
 func (r *Root) consigliereForwardExitTarget() tview.Primitive {
-	if r.consigliereForwardExit != nil {
+	if r.consigliereForwardExit != nil && r.activePage == r.consigliereExitPage {
 		return r.consigliereForwardExit
 	}
+	_, forward := r.consigliereCurrentHostEdges()
+	if forward != nil {
+		return forward
+	}
 	return r.consigliereBackwardExit()
+}
+
+// consigliereCurrentHostEdges re-derives the backward/forward splice
+// targets consigliereBackwardExit/consigliereForwardExitTarget fall
+// back to once the recorded ones have gone stale — r.activePage has
+// moved on from consigliereExitPage, meaning the sidebar was opened
+// from one page and has since stayed open while the user navigated to
+// another (per the user's own explicit request that it survive
+// exactly that), so consigliereReturnFocus/consigliereForwardExit
+// still name real widgets, just ones on a page that isn't active any
+// more — covered, unreachable, and otherwise indistinguishable from a
+// dead end (a real, reported bug: Tab/Backtab out of the sidebar kept
+// landing there anyway).
+//
+// One switch case per screen reachable from — the same per-screen
+// cost startConsigliereChord's own callers already pay, not a
+// separate registry to keep in sync with them. (nil, nil) for
+// anything not listed (including "" — the bare panel, where the
+// global focus cycle already handles this instead, see
+// focusCycleStops' own doc comment) tells both callers above to fall
+// back further on their own.
+func (r *Root) consigliereCurrentHostEdges() (backward, forward tview.Primitive) {
+	switch r.activePage {
+	case logAuditSelectionPage:
+		return r.logAuditTable, r.logAuditTable
+	case logAuditViewerPage:
+		return r.logAuditViewerTable, r.logAuditKeywordField
+	case logAuditDetailPage:
+		return r.logAuditDetailView, r.logAuditDetailView
+	case gitBreachPage:
+		focusables := r.gitBreachFocusables()
+		if len(focusables) == 0 {
+			return nil, nil
+		}
+		return focusables[len(focusables)-1].body, focusables[0].body
+	}
+	return nil, nil
 }
 
 // renderConsigliereTitleBar sets consigliereTitleBar's own text,
@@ -408,11 +460,13 @@ func (r *Root) showConsigliere() {
 	// changes focus or activePage — see hideConsigliere's own doc
 	// comment for why a hardcoded r.panel.table fallback is wrong
 	// whenever this was opened from inside a full-screen modal (Log
-	// Audit, Git Breach, ...) rather than the bare file panel. The
-	// sidebar deliberately stays open across a host page change now
-	// (per the user's own explicit request) — it no longer needs to
-	// remember which page it was opened from for that purpose.
+	// Audit, Git Breach, ...) rather than the bare file panel.
+	// consigliereExitPage is the matching activePage snapshot — see
+	// its own doc comment in root.go for why it's back, for a
+	// different reason than the auto-close behavior it used to serve
+	// under the removed consigliereHostPage name.
 	r.consigliereReturnFocus = r.app.GetFocus()
+	r.consigliereExitPage = r.activePage
 	// A previous session's own manual drag must not carry over into
 	// this fresh one — see repositionConsigliereSidebar's own doc
 	// comment.
@@ -467,6 +521,7 @@ func (r *Root) hideConsigliere() {
 		r.app.SetFocus(target)
 	}
 	r.consigliereReturnFocus = nil
+	r.consigliereExitPage = ""
 	r.consigliereVisible = false
 }
 
