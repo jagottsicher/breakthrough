@@ -221,31 +221,30 @@ func TestConsigliereTitleBarReflectsHistoryFocusOnly(t *testing.T) {
 	}
 }
 
-// TestShowConsigliereHidesAnOpenDetailsSidebar and
-// TestShowDetailsSidebarHidesAnOpenConsigliere pin the mutual
-// exclusion between the two sidebars: both dock to the exact same
-// rect (see consigliereSize/detailsSidebarSize), so showing one while
-// the other is already open must close the other first rather than
-// silently stacking them.
-func TestShowConsigliereHidesAnOpenDetailsSidebar(t *testing.T) {
+// TestShowConsigliereLeavesAnOpenDetailsSidebarOpen and
+// TestShowDetailsSidebarLeavesAnOpenConsigliereOpen pin the user's own
+// explicit request: the two no longer need to be mutually exclusive —
+// Details can simply stay open behind Consigliere (and vice versa),
+// rather than one silently closing the other.
+func TestShowConsigliereLeavesAnOpenDetailsSidebarOpen(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.showDetailsSidebar()
 
 	root.showConsigliere()
 
-	if root.detailsSidebarVisible {
-		t.Error("showConsigliere should have closed the open Details sidebar")
+	if !root.detailsSidebarVisible {
+		t.Error("showConsigliere should not have closed the open Details sidebar")
 	}
 }
 
-func TestShowDetailsSidebarHidesAnOpenConsigliere(t *testing.T) {
+func TestShowDetailsSidebarLeavesAnOpenConsigliereOpen(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.showConsigliere()
 
 	root.showDetailsSidebar()
 
-	if root.consigliereVisible {
-		t.Error("showDetailsSidebar should have closed the open Consigliere sidebar")
+	if !root.consigliereVisible {
+		t.Error("showDetailsSidebar should not have closed the open Consigliere sidebar")
 	}
 }
 
@@ -535,5 +534,153 @@ func TestBacktabInConsigliereHistoryReturnsToInput(t *testing.T) {
 
 	if !root.consigliereInput.HasFocus() {
 		t.Error("Backtab from the history should have returned focus to the input field")
+	}
+}
+
+// TestConsigliereSizeUnchangedOverTheBarePanel pins the user's own
+// explicit request: the sidebar's own size/position over the bare
+// file panel must stay exactly what it already was — matching
+// Details' own geometry there — even after the one-row-taller,
+// one-row-lower adjustment below for every full-screen modal.
+func TestConsigliereSizeUnchangedOverTheBarePanel(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 120, 40)
+
+	_, wantHeight := root.detailsSidebarSize()
+	_, gotHeight := root.consigliereSize()
+	if gotHeight != wantHeight {
+		t.Errorf("consigliereSize height over the bare panel = %d, want %d (Details' own, unchanged)", gotHeight, wantHeight)
+	}
+
+	root.showConsigliere()
+	_, y, _, _ := root.consigliereLayout.GetRect()
+	if y != 0 {
+		t.Errorf("consigliereLayout y over the bare panel = %d, want 0 (unchanged)", y)
+	}
+}
+
+// TestConsigliereSizeOneRowTallerAndLowerOverAModal pins the other
+// half: one row taller, starting one row lower, once docked over a
+// full-screen modal (Help stands in for Log Audit/Git Breach — the
+// activePage != "" condition is generic, not screen-specific).
+func TestConsigliereSizeOneRowTallerAndLowerOverAModal(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 120, 40)
+
+	_, barePanelHeight := root.consigliereSize()
+
+	root.openHelp()
+	_, modalHeight := root.consigliereSize()
+	if modalHeight != barePanelHeight+1 {
+		t.Errorf("consigliereSize height over a modal = %d, want %d (one more than over the bare panel)", modalHeight, barePanelHeight+1)
+	}
+
+	root.showConsigliere()
+	_, y, _, _ := root.consigliereLayout.GetRect()
+	if y != 1 {
+		t.Errorf("consigliereLayout y over a modal = %d, want 1", y)
+	}
+}
+
+// TestConsigliereTitleBarCloseGlyphClickClosesIt pins
+// dragConsigliereMouseCapture's own close-glyph case — MouseLeftDown,
+// not MouseLeftClick, since drag-start detection now needs to see the
+// press itself (see its own doc comment).
+func TestConsigliereTitleBarCloseGlyphClickClosesIt(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.showConsigliere()
+	// Forces a real Flex layout pass so consigliereTitleBar's own
+	// rect actually matches consigliereLayout's — see
+	// drawConsigliereLayout's own doc comment.
+	drawConsigliereLayout(t, root, 100, 40)
+
+	x, y, width, _ := root.consigliereTitleBar.GetRect()
+	closeX := x + toolWindowCloseButtonCol(0, width)
+	captured, _ := root.captureConsigliereTitleBarMouse(tview.MouseLeftDown, tcell.NewEventMouse(closeX, y, tcell.ButtonNone, 0))
+
+	if captured != tview.MouseConsumed {
+		t.Error("clicking the close glyph should consume the click")
+	}
+	if root.consigliereVisible {
+		t.Error("clicking the close glyph should have closed the sidebar")
+	}
+}
+
+// TestDraggingConsigliereTitleBarMovesIt pins the user's own explicit
+// request: press and drag anywhere else on the title bar moves the
+// whole sidebar.
+func TestDraggingConsigliereTitleBarMovesIt(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.showConsigliere()
+	drawConsigliereLayout(t, root, 100, 40)
+
+	startX, startY, width, height := root.consigliereLayout.GetRect()
+	titleY := startY // the title bar is the layout's own first row
+	grabX := startX + 2
+
+	root.captureConsigliereTitleBarMouse(tview.MouseLeftDown, tcell.NewEventMouse(grabX, titleY, tcell.Button1, 0))
+	if !root.consigliereDragging {
+		t.Fatal("pressing on the title bar (away from the close glyph) should have started a drag")
+	}
+
+	root.dragConsigliereMouseCapture(tview.MouseMove, tcell.NewEventMouse(grabX-5, titleY-3, tcell.Button1, 0))
+	newX, newY, newWidth, newHeight := root.consigliereLayout.GetRect()
+	if newX == startX && newY == startY {
+		t.Error("dragging should have moved the sidebar")
+	}
+	if newWidth != width || newHeight != height {
+		t.Errorf("drag changed size: %dx%d, want unchanged %dx%d (no resizing)", newWidth, newHeight, width, height)
+	}
+
+	root.dragConsigliereMouseCapture(tview.MouseLeftUp, tcell.NewEventMouse(grabX-5, titleY-3, tcell.ButtonNone, 0))
+	if root.consigliereDragging {
+		t.Error("releasing the mouse should have ended the drag")
+	}
+	if !root.consigliereManuallyPositioned {
+		t.Error("a completed drag should have set consigliereManuallyPositioned")
+	}
+}
+
+// TestConsigliereManuallyPositionedSurvivesResize pins
+// repositionConsigliereSidebar's own doc comment: once dragged, a
+// live terminal resize must not silently snap the sidebar back to its
+// docked position.
+func TestConsigliereManuallyPositionedSurvivesResize(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.showConsigliere()
+	root.moveConsigliere(10, 5)
+	x, y, _, _ := root.consigliereLayout.GetRect()
+
+	root.SetRect(0, 0, 120, 45) // simulates a live terminal resize
+	root.repositionConsigliereSidebar()
+
+	gotX, gotY, _, _ := root.consigliereLayout.GetRect()
+	if gotX != x || gotY != y {
+		t.Errorf("position after resize = (%d, %d), want unchanged (%d, %d)", gotX, gotY, x, y)
+	}
+}
+
+// TestConsigliereManuallyPositionedResetsOnFreshOpen pins the other
+// half: closing and reopening starts a fresh session (per the spec's
+// own "frische Konversation" rule), including position — a drag must
+// not outlive that.
+func TestConsigliereManuallyPositionedResetsOnFreshOpen(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+	root.showConsigliere()
+	root.moveConsigliere(10, 5)
+	root.hideConsigliere()
+
+	root.showConsigliere()
+
+	if root.consigliereManuallyPositioned {
+		t.Error("a fresh session should not inherit the previous one's manual position")
+	}
+	wantX, wantY, _, _ := root.consigliereLayout.GetRect()
+	if wantX != 100-func() int { w, _ := root.consigliereSize(); return w }() || wantY != 0 {
+		t.Errorf("fresh session should be docked flush right at y=0, got (%d, %d)", wantX, wantY)
 	}
 }

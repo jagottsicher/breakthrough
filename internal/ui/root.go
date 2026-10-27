@@ -1811,6 +1811,24 @@ type Root struct {
 	// way.
 	consigliereForwardExit tview.Primitive
 
+	// consigliereManuallyPositioned/consigliereDragging/
+	// consigliereDragOffsetX/Y make the sidebar's own title bar
+	// draggable, per the user's own explicit request that it become
+	// movable the way a Toolbox tool window already is — no resizing,
+	// just position. Mirrors dragPropertiesMouseCapture's own
+	// dragging/dragOffsetX/Y exactly (see its own doc comment in
+	// properties.go) for the drag mechanics themselves;
+	// consigliereManuallyPositioned is this sidebar's own addition —
+	// once a drag has actually happened, repositionConsigliereSidebar
+	// stops re-docking it flush right on every resize/reshow and just
+	// re-clamps the position the user chose. Reset to false every
+	// time showConsigliere opens a fresh session, so a drag never
+	// outlives the sidebar being closed and reopened.
+	consigliereManuallyPositioned bool
+	consigliereDragging           bool
+	consigliereDragOffsetX        int
+	consigliereDragOffsetY        int
+
 	// detailsSidebar is the right-hand Details layer toggled by "I"
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
 	// currently shown; unlike every overlay above it, it's deliberately
@@ -3960,6 +3978,15 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// renderLogAuditTimeline's own doc comment on that field).
 	if r.logAuditTimelineDragging {
 		return r.captureLogAuditTimelineMouse(action, event)
+	}
+
+	// An AI Consigliere title-bar drag in progress — same reasoning as
+	// every guard above: dragging the sidebar up or left would
+	// otherwise fall through to ordinary position-based dispatch
+	// mid-drag, leaving consigliereDragging stuck true forever.
+	if r.consigliereDragging {
+		out, outEvent, _ := r.dragConsigliereMouseCapture(action, event)
+		return out, outEvent
 	}
 
 	x, y := event.Position()

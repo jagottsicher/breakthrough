@@ -232,16 +232,6 @@ func (r *Root) repositionDetailsSidebar() {
 // what populates the sidebar the very first time it's ever shown, when
 // there's nothing yet to compare the new target against.
 func (r *Root) showDetailsSidebar() {
-	// Both sidebars dock to the exact same rect (flush right, same
-	// width/height — see detailsSidebarSize/consigliereSize), so having
-	// both visible at once would just stack one over the other rather
-	// than showing anything useful of whichever is underneath — see
-	// showConsigliere's own identical reasoning for the other
-	// direction.
-	if r.consigliereVisible {
-		r.hideConsigliere()
-	}
-
 	r.repositionDetailsSidebar()
 	r.preserveFocusAcross(func() {
 		r.ShowPage(detailsSidebarPage)

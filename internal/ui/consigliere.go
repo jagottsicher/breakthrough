@@ -207,28 +207,77 @@ func (r *Root) renderConsigliereTitleBar(width int) {
 	r.consigliereTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
 }
 
-// captureConsigliereTitleBarMouse closes the sidebar when the click
-// lands exactly on its own close glyph — see
-// captureDetailsTitleBarMouse's own doc comment for why every other
-// click on this bar stays inert, and for the InRect-first shape, which
-// matters here for the identical reason: without it, a MouseLeftDown
-// landing inside this bar could let tview's own default
-// TextView.MouseHandler steal real keyboard focus onto the title bar
-// itself before hideConsigliere's own hadFocus check ever runs.
+// captureConsigliereTitleBarMouse is dragConsigliereMouseCapture's own
+// wrapper for the title bar's SetMouseCapture — there's nothing else
+// for this bar to handle, unlike Properties' own hashesMouseCapture
+// (which falls through to unrelated hash-section handling), so an
+// unhandled result just passes the event through unchanged.
 func (r *Root) captureConsigliereTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if !r.consigliereTitleBar.InRect(event.Position()) {
-		return action, event
-	}
-	if action != tview.MouseLeftClick {
-		return tview.MouseConsumed, nil
-	}
+	out, outEvent, _ := r.dragConsigliereMouseCapture(action, event)
+	return out, outEvent
+}
+
+// dragConsigliereMouseCapture makes the sidebar's own title bar
+// draggable — press and drag anywhere on it, except the close glyph
+// (still closes the sidebar, same as before), to move the whole
+// window; release to stop. No resizing, per the user's own explicit
+// request — position only.
+//
+// Mirrors dragPropertiesMouseCapture's own shape exactly (see its own
+// doc comment in properties.go), including why captureOutsideClick's
+// own consigliereDragging check — not tview's own position-based
+// dispatch — is what keeps a drag that moves up/left receiving its
+// own subsequent events once the cursor is no longer over the
+// not-yet-updated title bar rect: the identical bug propertiesDragging's
+// own check already exists to prevent, for the identical reason.
+//
+// handled reports whether this call was about dragging (or the close
+// glyph) at all, the same shape dragPropertiesMouseCapture's own
+// third return value already has.
+func (r *Root) dragConsigliereMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (out tview.MouseAction, outEvent *tcell.EventMouse, handled bool) {
 	x, y := event.Position()
-	rectX, rectY, width, _ := r.consigliereTitleBar.GetRect()
-	if y != rectY || x != rectX+toolWindowCloseButtonCol(0, width) {
-		return action, event
+
+	if r.consigliereDragging {
+		switch action {
+		case tview.MouseMove:
+			if event.Buttons()&tcell.ButtonPrimary == 0 {
+				r.consigliereDragging = false
+				return tview.MouseConsumed, nil, true
+			}
+			r.moveConsigliere(x-r.consigliereDragOffsetX, y-r.consigliereDragOffsetY)
+			return tview.MouseConsumed, nil, true
+		case tview.MouseLeftUp:
+			r.consigliereDragging = false
+			return tview.MouseConsumed, nil, true
+		}
+		return tview.MouseConsumed, nil, true // swallow everything else for the duration of the drag
 	}
-	r.hideConsigliere()
-	return tview.MouseConsumed, nil
+
+	if action == tview.MouseLeftDown && r.consigliereTitleBar.InRect(x, y) {
+		wx, wy, width, _ := r.consigliereLayout.GetRect()
+		if y == wy && x == wx+toolWindowCloseButtonCol(0, width) {
+			r.hideConsigliere()
+			return tview.MouseConsumed, nil, true
+		}
+		r.consigliereDragging = true
+		r.consigliereDragOffsetX, r.consigliereDragOffsetY = x-wx, y-wy
+		return tview.MouseConsumed, nil, true
+	}
+
+	return action, event, false
+}
+
+// moveConsigliere repositions the sidebar to (x, y) without changing
+// its own size — the drag's own per-move step, called from
+// dragConsigliereMouseCapture. consigliereManuallyPositioned marks
+// that this has happened at all, so repositionConsigliereSidebar
+// stops re-docking it flush right on every resize/reshow (see its own
+// doc comment) and just re-clamps wherever the user actually left it.
+func (r *Root) moveConsigliere(x, y int) {
+	r.consigliereManuallyPositioned = true
+	_, _, width, height := r.consigliereLayout.GetRect()
+	x, y, width, height = r.clampToScreen(x, y, width, height)
+	r.consigliereLayout.SetRect(x, y, width, height)
 }
 
 // consigliereSize sizes the sidebar against the whole screen (Root's
@@ -240,6 +289,13 @@ func (r *Root) captureConsigliereTitleBarMouse(action tview.MouseAction, event *
 // with different numbers, since both dock against the same screen
 // edge above the same three reserved bottom rows (bashConsole/
 // buttonBar/statusBar).
+//
+// One row taller while docked over a full-screen modal (Log Audit,
+// Git Breach, ... — r.activePage != "") than over the bare file
+// panel — per the user's own explicit request, left at exactly
+// Details' own height in the bare-panel case specifically, rather
+// than changed everywhere. repositionConsigliereSidebar's own matching
+// one-row-lower y position is the other half of this.
 func (r *Root) consigliereSize() (width, height int) {
 	_, _, screenWidth, screenHeight := r.GetRect()
 	width = screenWidth / 3
@@ -247,6 +303,9 @@ func (r *Root) consigliereSize() (width, height int) {
 		width = consigliereMinWidth
 	}
 	height = screenHeight - detailsSidebarBottomRows
+	if r.activePage != "" {
+		height++
+	}
 	if height < 1 {
 		height = screenHeight
 	}
@@ -277,10 +336,31 @@ func (r *Root) consigliereHistoryContentWidth() int {
 // Root's own resize handling (see handleBeforeDraw) so a live terminal
 // resize keeps it correctly positioned while open, the same as
 // Details.
+//
+// Starts one row lower while docked over a full-screen modal than
+// over the bare file panel — see consigliereSize's own doc comment
+// for the matching one-row-taller height this pairs with, and for why
+// the bare-panel case is deliberately left exactly as it already was.
+//
+// Once the user has actually dragged the sidebar
+// (consigliereManuallyPositioned — see moveConsigliere), a resize no
+// longer re-docks it flush right: that would silently undo the move
+// on every live terminal resize, the same "a drag must not keep
+// snapping back" expectation a toolWindow's own manuallyResized
+// already protects, just for position instead of size. The current
+// x/y is kept as-is and only re-clamped, so it still can't end up
+// off-screen.
 func (r *Root) repositionConsigliereSidebar() {
 	width, height := r.consigliereSize()
 	_, _, screenWidth, _ := r.GetRect()
-	x, y, width, height := r.clampToScreen(screenWidth-width, 0, width, height)
+	x, y := screenWidth-width, 0
+	if r.activePage != "" {
+		y = 1
+	}
+	if r.consigliereManuallyPositioned {
+		x, y, _, _ = r.consigliereLayout.GetRect()
+	}
+	x, y, width, height = r.clampToScreen(x, y, width, height)
 	r.renderConsigliereTitleBar(width)
 	r.consigliereLayout.SetRect(x, y, width, height)
 }
@@ -324,17 +404,6 @@ func (r *Root) toggleConsigliere() {
 // every time, per the spec's own "Schließen und erneutes Öffnen
 // startet eine frische Konversation".
 func (r *Root) showConsigliere() {
-	// Both sidebars dock to the exact same rect (flush right, same
-	// width/height — see consigliereSize/detailsSidebarSize), so having
-	// both visible at once would just stack one over the other rather
-	// than showing anything useful of whichever is underneath — closing
-	// Details here, rather than letting them silently overlap, is the
-	// same "no silent broken state" reasoning hideConsigliere's own
-	// cancel-in-flight cleanup already follows.
-	if r.detailsSidebarVisible {
-		r.hideDetailsSidebar()
-	}
-
 	// consigliereReturnFocus/consigliereHostPage are both captured
 	// *before* anything below changes focus or activePage — see
 	// hideConsigliere's own doc comment for why a hardcoded
@@ -343,6 +412,10 @@ func (r *Root) showConsigliere() {
 	// than the bare file panel.
 	r.consigliereReturnFocus = r.app.GetFocus()
 	r.consigliereHostPage = r.activePage
+	// A previous session's own manual drag must not carry over into
+	// this fresh one — see repositionConsigliereSidebar's own doc
+	// comment.
+	r.consigliereManuallyPositioned = false
 
 	r.consigliereMessages = nil
 	r.consigliereInput.SetText("")
