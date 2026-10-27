@@ -51,6 +51,12 @@ const DeepSeekDefaultBaseURL = "https://api.deepseek.com"
 type OpenAICompat struct {
 	BaseURL string
 	Model   string
+	// Effort sets reasoning_effort on the request (OpenAI:
+	// "none"/"minimal"/"low"/"medium"/"high"/"xhigh"/"max"; DeepSeek:
+	// "none"/"low"/"high"/"max" — see OpenAIEffortLevels/ModelInfo's
+	// own doc comments) — "" omits the field, the model's own
+	// documented default.
+	Effort string
 	// APIKey resolves the current key immediately before the request
 	// is sent — see KeyFunc's own doc comment.
 	APIKey KeyFunc
@@ -63,8 +69,9 @@ type openAICompatMessage struct {
 }
 
 type openAICompatRequest struct {
-	Model    string                `json:"model"`
-	Messages []openAICompatMessage `json:"messages"`
+	Model           string                `json:"model"`
+	Messages        []openAICompatMessage `json:"messages"`
+	ReasoningEffort string                `json:"reasoning_effort,omitempty"`
 }
 
 type openAICompatChoice struct {
@@ -91,8 +98,9 @@ func (p OpenAICompat) Reply(ctx context.Context, req Request) (string, error) {
 	}
 
 	body := openAICompatRequest{
-		Model:    p.Model,
-		Messages: toOpenAICompatMessages(req),
+		Model:           p.Model,
+		Messages:        toOpenAICompatMessages(req),
+		ReasoningEffort: p.Effort,
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {

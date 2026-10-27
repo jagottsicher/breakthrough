@@ -148,6 +148,7 @@ func (r *Root) newOptionsScreen() {
 	r.optionsCategories.SetChangedFunc(func(index int, _, _ string, _ rune) {
 		r.optionsCategory = index
 		r.renderOptions()
+		r.refreshConsigliereModelCacheIfSelected()
 	})
 
 	r.optionsTable = tview.NewTable()
@@ -420,6 +421,23 @@ func (r *Root) openOptions() {
 	r.showOverlayWithRestore(optionsPage, r.optionsLayout, func() {
 		r.app.SetFocus(r.optionsCategories)
 	})
+	r.refreshConsigliereModelCacheIfSelected()
+}
+
+// refreshConsigliereModelCacheIfSelected triggers
+// refreshConsigliereModelCache only when the "AI Consigliere" category
+// is the one actually showing right now — called from openOptions
+// (covers opening Options already positioned there, e.g. from a
+// previous session in this same run) and from
+// renderOptionCategories' own SetChangedFunc (covers navigating to it
+// after Options is already open). Never unconditional: fetching a
+// provider's model list because someone opened Options to change the
+// color scheme would be a real, surprising network call for no reason
+// the user could see.
+func (r *Root) refreshConsigliereModelCacheIfSelected() {
+	if cat, ok := r.currentOptionCategory(); ok && cat.name == "AI Consigliere" {
+		r.refreshConsigliereModelCache()
+	}
 }
 
 // closeOptions hides the Options screen. Nothing to save or discard —
@@ -445,6 +463,7 @@ func (r *Root) renderOptionCategories() {
 	r.optionsCategories.SetChangedFunc(func(index int, _, _ string, _ rune) {
 		r.optionsCategory = index
 		r.renderOptions()
+		r.refreshConsigliereModelCacheIfSelected()
 	})
 }
 

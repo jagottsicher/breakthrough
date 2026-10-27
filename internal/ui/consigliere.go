@@ -687,6 +687,7 @@ var errConsigliereLocked = errors.New("API key is stored but locked — unlock i
 func (r *Root) buildConsigliereProvider() consigliere.Provider {
 	providerName := r.settings.ConsigliereProvider
 	model := r.settings.ConsigliereModel
+	effort := r.settings.ConsigliereEffort
 	keyFile := r.settings.ConsigliereAPIKeyFile
 	session := r.apiKeySession
 
@@ -709,17 +710,20 @@ func (r *Root) buildConsigliereProvider() consigliere.Provider {
 		return consigliere.OpenAICompat{
 			BaseURL: consigliere.OpenAIDefaultBaseURL,
 			Model:   firstNonEmptyConsigliereModel(model, consigliere.OpenAIDefaultModel),
+			Effort:  effort,
 			APIKey:  keyFunc,
 		}
 	case "deepseek":
 		return consigliere.OpenAICompat{
 			BaseURL: consigliere.DeepSeekDefaultBaseURL,
 			Model:   firstNonEmptyConsigliereModel(model, consigliere.DeepSeekDefaultModel),
+			Effort:  effort,
 			APIKey:  keyFunc,
 		}
 	default: // "anthropic", and anything unrecognized (e.g. a hand-edited config)
 		return consigliere.Anthropic{
 			Model:  model, // "" already means "use AnthropicDefaultModel" — see Anthropic.Reply
+			Effort: effort,
 			APIKey: keyFunc,
 		}
 	}

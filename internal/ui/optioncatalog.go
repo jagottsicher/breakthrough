@@ -1363,6 +1363,12 @@ func optionCategories() []optionCategory {
 					apply: func(r *Root, v string) {
 						r.settings.ConsigliereProvider = v
 						r.persistSetting("consigliere_provider", v)
+						// The Model/Effort rows' own choices are
+						// cached per provider (see consiglieremodels.go)
+						// — switching providers needs its own fetch,
+						// not whatever the previous one already
+						// cached.
+						r.refreshConsigliereModelCache()
 					},
 					choices: func(r *Root) []optionChoice {
 						return []optionChoice{
@@ -1372,17 +1378,40 @@ func optionCategories() []optionCategory {
 						}
 					},
 				},
-				stringOption("consigliere_model", "Model",
-					"Overrides the selected provider's own built-in default model ID. \"\" (the "+
-						"default) means use that default — see internal/consigliere's own "+
-						"Anthropic/OpenAI/DeepSeekDefaultModel constants. Model IDs retire over "+
-						"time; set this if the default one stops working.",
-					func(r *Root) string { return r.settings.ConsigliereModel },
-					func(r *Root, v string) {
+				{
+					key:   "consigliere_model",
+					label: "Model",
+					help: "Overrides the selected provider's own built-in default model ID.\n\n" +
+						"The list is fetched live from the provider's own API — once a key is " +
+						"available (see the \"API key\" rows below) — the first time this " +
+						"category is opened or Provider changes, then cached for the rest of " +
+						"this run. \"(default: ...)\" is always offered too, even before that " +
+						"fetch finishes or if it fails.",
+					value: func(r *Root) string { return r.settings.ConsigliereModel },
+					apply: func(r *Root, v string) {
 						r.settings.ConsigliereModel = v
 						r.persistSetting("consigliere_model", v)
 					},
-				),
+					choices: func(r *Root) []optionChoice { return r.consigliereModelChoices() },
+				},
+				{
+					key:   "consigliere_effort",
+					label: "Effort",
+					help: "Overrides the selected model's own default reasoning effort — " +
+						"\"effort\" for Anthropic, \"reasoning_effort\" for OpenAI/DeepSeek.\n\n" +
+						"For Anthropic and DeepSeek, the available levels come from the same " +
+						"live model list as \"Model\" above, specific to whichever model is " +
+						"currently selected. OpenAI's own API never reports this per model, so " +
+						"its full documented set is always offered there regardless; an " +
+						"unsupported level for a specific OpenAI model is rejected by the " +
+						"request itself.",
+					value: func(r *Root) string { return r.settings.ConsigliereEffort },
+					apply: func(r *Root, v string) {
+						r.settings.ConsigliereEffort = v
+						r.persistSetting("consigliere_effort", v)
+					},
+					choices: func(r *Root) []optionChoice { return r.consigliereEffortChoices() },
+				},
 				stringOption("consigliere_api_key_file", "API key file (plain text)",
 					"An optional path to a plain-text file holding the selected provider's "+
 						"API key — the deliberately unencrypted, opt-in tier: protected only by "+
@@ -1760,6 +1789,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.ConsigliereAPIKeyFile, true
 	case "consigliere_model":
 		return s.ConsigliereModel, true
+	case "consigliere_effort":
+		return s.ConsigliereEffort, true
 	}
 	return "", false
 }

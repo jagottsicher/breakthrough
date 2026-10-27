@@ -43,6 +43,13 @@ type Anthropic struct {
 	BaseURL string
 	// Model overrides AnthropicDefaultModel — "" means the default.
 	Model string
+	// Effort sets output_config.effort on the request ("low",
+	// "medium", "high", "xhigh", or "max" — see
+	// platform.claude.com/docs/en/build-with-claude/effort, checked
+	// 2026-10-27) — "" omits output_config entirely, which is exactly
+	// the model's own documented default behavior, not merely a
+	// fallback value this package picks.
+	Effort string
 	// APIKey resolves the current key immediately before the request
 	// is sent — see KeyFunc's own doc comment for why this is a
 	// function, not a plain string.
@@ -63,10 +70,15 @@ type anthropicMessage struct {
 }
 
 type anthropicRequest struct {
-	Model     string             `json:"model"`
-	MaxTokens int                `json:"max_tokens"`
-	System    string             `json:"system,omitempty"`
-	Messages  []anthropicMessage `json:"messages"`
+	Model        string                 `json:"model"`
+	MaxTokens    int                    `json:"max_tokens"`
+	System       string                 `json:"system,omitempty"`
+	Messages     []anthropicMessage     `json:"messages"`
+	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
+}
+
+type anthropicOutputConfig struct {
+	Effort string `json:"effort"`
 }
 
 type anthropicResponse struct {
@@ -95,6 +107,9 @@ func (p Anthropic) Reply(ctx context.Context, req Request) (string, error) {
 		MaxTokens: anthropicMaxTokens,
 		System:    req.Snapshot,
 		Messages:  toAnthropicMessages(req.History),
+	}
+	if p.Effort != "" {
+		body.OutputConfig = &anthropicOutputConfig{Effort: p.Effort}
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {

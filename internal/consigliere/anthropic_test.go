@@ -85,6 +85,40 @@ func TestAnthropicReplyUsesOverrideModel(t *testing.T) {
 	}
 }
 
+func TestAnthropicReplySetsOutputConfigEffortWhenSet(t *testing.T) {
+	var gotBody anthropicRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"ok"}]}`))
+	}))
+	defer server.Close()
+
+	p := Anthropic{BaseURL: server.URL, Effort: "low", APIKey: func() (string, error) { return "k", nil }}
+	if _, err := p.Reply(context.Background(), Request{}); err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if gotBody.OutputConfig == nil || gotBody.OutputConfig.Effort != "low" {
+		t.Errorf("OutputConfig = %+v, want Effort \"low\"", gotBody.OutputConfig)
+	}
+}
+
+func TestAnthropicReplyOmitsOutputConfigWhenEffortUnset(t *testing.T) {
+	var gotBody anthropicRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"ok"}]}`))
+	}))
+	defer server.Close()
+
+	p := Anthropic{BaseURL: server.URL, APIKey: func() (string, error) { return "k", nil }}
+	if _, err := p.Reply(context.Background(), Request{}); err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if gotBody.OutputConfig != nil {
+		t.Errorf("OutputConfig = %+v, want nil (the model's own documented default)", gotBody.OutputConfig)
+	}
+}
+
 func TestAnthropicReplySurfacesServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

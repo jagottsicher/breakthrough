@@ -718,6 +718,13 @@ func SettingDocs() []SettingDoc {
 			Summary:     `Overrides the selected provider's own built-in default model ID. "" means use that default.`,
 			Implemented: true,
 		},
+		{
+			Key:         "consigliere_effort",
+			Default:     d.ConsigliereEffort,
+			Kind:        KindString,
+			Summary:     `Overrides the selected model's own default reasoning effort. "" omits it, the model's own documented default.`,
+			Implemented: true,
+		},
 	}
 }
 

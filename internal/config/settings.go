@@ -591,6 +591,14 @@ type Settings struct {
 	// time; without this, an outdated built-in literal would need a
 	// breakthrough update to fix instead of a one-line override here.
 	ConsigliereModel string
+
+	// ConsigliereEffort overrides the selected model's own default
+	// reasoning effort ("effort" for Anthropic, "reasoning_effort" for
+	// OpenAI/DeepSeek — see internal/consigliere's own doc comments on
+	// each provider's request shape). "" (the default) omits the
+	// field entirely, which is each provider's own documented default
+	// behavior, not a value this package picks on its own.
+	ConsigliereEffort string
 }
 
 // LabelName returns the display name for color-label id (1-9) — the
@@ -745,6 +753,7 @@ func DefaultSettings() Settings {
 		ConsigliereProvider:   "anthropic",
 		ConsigliereAPIKeyFile: "",
 		ConsigliereModel:      "",
+		ConsigliereEffort:     "",
 	}
 }
 
@@ -961,6 +970,8 @@ func (s *Settings) apply(key, value string) error {
 		s.ConsigliereAPIKeyFile = value
 	case "consigliere_model":
 		s.ConsigliereModel = value
+	case "consigliere_effort":
+		s.ConsigliereEffort = value
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}

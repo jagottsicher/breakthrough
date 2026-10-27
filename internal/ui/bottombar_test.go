@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,6 +17,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/consigliere"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -108,6 +110,16 @@ func TestMain(m *testing.M) {
 	// file instead of a fresh, empty one — a real, reported gap this
 	// override closes the same way the three above it already do.
 	apiKeyStorePath = func() string { return "" }
+
+	// Belt-and-suspenders alongside the blanked env vars above: even
+	// if a key somehow resolved in a test, this still stops
+	// refreshConsigliereModelCache from making a real "list models"
+	// call against a real provider — the same dialFunc-style seam
+	// connectdialog.go already establishes for its own real network
+	// call.
+	listConsigliereModelsFunc = func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+		return nil, errors.New("listConsigliereModelsFunc: no fake installed for this test")
+	}
 
 	// mailDefaultMboxPath: the status bar's own mail badge (see
 	// mailBadgeCount in mail.go) auto-detects the current user's real

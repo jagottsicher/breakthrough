@@ -72,6 +72,40 @@ func TestOpenAICompatReplyOmitsEmptySnapshot(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatReplySetsReasoningEffortWhenSet(t *testing.T) {
+	var gotBody openAICompatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+
+	p := OpenAICompat{BaseURL: server.URL, Model: "m", Effort: "low", APIKey: func() (string, error) { return "k", nil }}
+	if _, err := p.Reply(context.Background(), Request{}); err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if gotBody.ReasoningEffort != "low" {
+		t.Errorf("reasoning_effort = %q, want %q", gotBody.ReasoningEffort, "low")
+	}
+}
+
+func TestOpenAICompatReplyOmitsReasoningEffortWhenUnset(t *testing.T) {
+	var gotRaw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotRaw)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+
+	p := OpenAICompat{BaseURL: server.URL, Model: "m", APIKey: func() (string, error) { return "k", nil }}
+	if _, err := p.Reply(context.Background(), Request{}); err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if _, ok := gotRaw["reasoning_effort"]; ok {
+		t.Errorf("request body has reasoning_effort = %v, want the field omitted entirely", gotRaw["reasoning_effort"])
+	}
+}
+
 func TestOpenAICompatReplySurfacesServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

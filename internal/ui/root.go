@@ -296,6 +296,16 @@ type Root struct {
 	// error (see NewRoot).
 	apiKeySession *apikey.Session
 
+	// consigliereModelCache/consigliereModelFetchInFlight/
+	// consigliereModelFetchErr back the Options screen's own "Model"/
+	// "Effort" rows (see consiglieremodels.go) — keyed by provider
+	// name, populated only by refreshConsigliereModelCache, never by
+	// the rows' own choices functions (see that function's own doc
+	// comment on why a render-path network call would be wrong).
+	consigliereModelCache         map[string][]consigliere.ModelInfo
+	consigliereModelFetchInFlight map[string]bool
+	consigliereModelFetchErr      map[string]error
+
 	// apiKeyDialog* is the "API key (encrypted)" row's own dialog (see
 	// apikeydialog.go) — a fixed widget set, built once, whose actual
 	// fields are rebuilt per apiKeyDialogStep (passphrase vs. key),
@@ -2777,19 +2787,22 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	}
 
 	r := &Root{
-		Pages:          tview.NewPages(),
-		app:            app,
-		startDir:       path,
-		mouseEnabled:   settings.MouseEnabled,
-		panel:          panel,
-		settings:       settings,
-		colorSchemes:   colorSchemes,
-		settingOrigins: settingOrigins,
-		theme:          theme,
-		apiKeySession:  apiKeySession,
-		notify:         notify.NewWithPersistence(notifyPersistPath()),
-		operations:     operations.NewTrackerWithPersistence(operationsPersistPath()),
-		labels:         filelabels.NewWithPersistence(labelsPersistPath()),
+		Pages:                         tview.NewPages(),
+		app:                           app,
+		startDir:                      path,
+		mouseEnabled:                  settings.MouseEnabled,
+		panel:                         panel,
+		settings:                      settings,
+		colorSchemes:                  colorSchemes,
+		settingOrigins:                settingOrigins,
+		theme:                         theme,
+		apiKeySession:                 apiKeySession,
+		consigliereModelCache:         map[string][]consigliere.ModelInfo{},
+		consigliereModelFetchInFlight: map[string]bool{},
+		consigliereModelFetchErr:      map[string]error{},
+		notify:                        notify.NewWithPersistence(notifyPersistPath()),
+		operations:                    operations.NewTrackerWithPersistence(operationsPersistPath()),
+		labels:                        filelabels.NewWithPersistence(labelsPersistPath()),
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
 		// doc comment and the struct field comment above.
