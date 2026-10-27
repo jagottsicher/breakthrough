@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/apikey"
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
 // apiKeyStoreFilename is the encrypted store's own file, inside
@@ -19,6 +21,25 @@ import (
 // several different logins on one machine to share a single AES key
 // under).
 const apiKeyStoreFilename = "apikeys.json"
+
+// apiKeyStorePath is where NewRoot opens the encrypted store from —
+// "" means no user config directory is available at all (see
+// config.UserDir's own doc comment), the same contract
+// userConfigFilePath already follows. A swappable var, like
+// userConfigFilePath/notifyPersistPath/labelsPersistPath/
+// operationsPersistPath, so a test never reads or writes a real
+// ~/.config/breakthrough/apikeys.json on the machine running `go
+// test` (see bottombar_test.go's own TestMain override) — a real,
+// reported gap: a prior test run without this override left a real
+// encrypted store sitting in a developer's actual home directory,
+// with a passphrase no later test could ever reproduce.
+var apiKeyStorePath = func() string {
+	userDir := config.UserDir()
+	if userDir == "" {
+		return ""
+	}
+	return filepath.Join(userDir, apiKeyStoreFilename)
+}
 
 // apiKeyDialogStep is which half of the "store an encrypted API key"
 // flow apiKeyDialogLayout is currently showing — see openAPIKeyDialog.
@@ -73,7 +94,14 @@ func (r *Root) openAPIKeyDialog(provider string) {
 	y := (screenHeight - height) / 2
 	r.apiKeyDialogLayout.SetRect(x, y, width, height)
 	r.renderAPIKeyDialogTitleBar(width)
-	r.showOverlay(apiKeyDialogPage, r.apiKeyDialogLayout)
+	// pushOverlay, not showOverlay: this opens from inside the Options
+	// screen, which is itself an overlay (see openOptions) — showOverlay
+	// would close it first, so Cancel/Escape on this dialog later had
+	// nothing left on the stack to reveal and landed on the panel
+	// instead of back on Options (a real, reported bug). The same
+	// "layer on top, don't replace" shape openHelp/openOwnerGroupPicker
+	// already use for an identical reason.
+	r.pushOverlay(apiKeyDialogPage, r.apiKeyDialogLayout, nil)
 }
 
 // renderAPIKeyDialogTitleBar mirrors renderConnectTitleBar's own
@@ -302,6 +330,15 @@ func (r *Root) setAPIKeyDialogStatus(text string, color tcell.Color) {
 // cancelAPIKeyDialog closes the dialog, clearing whatever was typed —
 // a cancelled passphrase or key never lingers in a hidden widget's own
 // text buffer once the dialog is gone.
+//
+// Always re-renders the Options table on the way out, even though
+// nothing may have actually been set: cancelling right after a
+// successful Unlock (no new key typed, just confirming an existing
+// one) still changed something real — the session is now unlocked —
+// and the "API key (encrypted)" row's own status text
+// (consigliereAPIKeyStatus) depends on that, so leaving the table
+// unrendered would keep showing "not set" until some unrelated
+// action happened to redraw it (a real, reported bug).
 func (r *Root) cancelAPIKeyDialog() {
 	if r.apiKeyDialogPassphraseField != nil {
 		r.apiKeyDialogPassphraseField.SetText("")
@@ -313,6 +350,7 @@ func (r *Root) cancelAPIKeyDialog() {
 		r.apiKeyDialogKeyField.SetText("")
 	}
 	r.hideOverlay()
+	r.renderOptions()
 }
 
 // runAPIKeyDialogOK is the OK button's own action (and Enter in the

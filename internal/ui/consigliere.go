@@ -32,6 +32,13 @@ import (
 
 const consiglierePage = "consigliere"
 
+// consigliereInputPlaceholder is consigliereInput's own normal,
+// ask-a-question placeholder — a named const rather than a literal
+// repeated at both newConsigliereSidebar (initial) and
+// submitConsigliereUnlock (restored after a successful unlock), so
+// the two can never drift apart from each other.
+const consigliereInputPlaceholder = "Ask a question… (Enter to send, Esc to close)"
+
 // consigliereChordFamily is a one-member stand-in for the real "goto"
 // family (chordFamilies' own 'g' entry in keymap.go), started from
 // inside a full-screen modal (Log Audit, Git Breach, ...) on a bare
@@ -113,7 +120,7 @@ func (r *Root) newConsigliereSidebar() {
 	r.consigliereTitleBar.SetMouseCapture(r.captureConsigliereTitleBarMouse)
 
 	r.consigliereInput = tview.NewInputField()
-	r.consigliereInput.SetPlaceholder("Ask a question… (Enter to send, Esc to close)")
+	r.consigliereInput.SetPlaceholder(consigliereInputPlaceholder)
 	r.consigliereInput.SetDoneFunc(r.handleConsigliereInputDone)
 
 	historyRow := tview.NewFlex().SetDirection(tview.FlexColumn).
@@ -479,6 +486,21 @@ func (r *Root) showConsigliere() {
 	r.consigliereMessages = nil
 	r.consigliereInput.SetText("")
 
+	// Forces the passphrase right here, before any question can even
+	// be typed, rather than only discovering the lock once a question
+	// already failed (errConsigliereLocked) — per the user's own
+	// explicit request: if the passphrase has to be entered at all
+	// this run, entering it should be unavoidable at the sidebar's own
+	// start, not an error message after the fact.
+	r.consigliereAwaitingPassphrase = r.consigliereNeedsUnlock()
+	if r.consigliereAwaitingPassphrase {
+		r.consigliereInput.SetMaskCharacter('*')
+		r.consigliereInput.SetPlaceholder("Enter passphrase to unlock the AI Consigliere…")
+	} else {
+		r.consigliereInput.SetMaskCharacter(0)
+		r.consigliereInput.SetPlaceholder(consigliereInputPlaceholder)
+	}
+
 	// Reposition before the first render, not after: consigliereSplashArt
 	// centers itself against consigliereHistory's own current inner
 	// width (see renderConsigliereHistory), which repositionConsigliereSidebar
@@ -489,6 +511,26 @@ func (r *Root) showConsigliere() {
 	r.SendToFront(consiglierePage)
 	r.consigliereVisible = true
 	r.app.SetFocus(r.consigliereInput)
+}
+
+// consigliereNeedsUnlock reports whether the currently selected
+// provider's key can only come from the encrypted tier, and that tier
+// is still locked — exactly the case errConsigliereLocked's own doc
+// comment describes, just checked here before the user ever has to
+// ask a question to discover it. False whenever a higher-priority
+// tier (env var/file) already supplies a key regardless of lock
+// state: forcing a passphrase prompt that would turn out to be
+// unnecessary is exactly the friction this is trying to avoid.
+func (r *Root) consigliereNeedsUnlock() bool {
+	if r.apiKeySession == nil || r.apiKeySession.IsUnlocked() {
+		return false
+	}
+	provider := r.settings.ConsigliereProvider
+	if !r.apiKeySession.HasProvider(provider) {
+		return false
+	}
+	_, tier, err := apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFile, provider, r.apiKeySession)
+	return err == nil && tier == apikey.TierNone
 }
 
 // hideConsigliere closes the sidebar — showConsigliere's own
@@ -556,6 +598,16 @@ func (r *Root) handleConsigliereInputDone(key tcell.Key) {
 		r.hideConsigliere()
 		return
 	}
+	if r.consigliereAwaitingPassphrase {
+		// Forced, per consigliereNeedsUnlock's own doc comment: Tab/
+		// Backtab do nothing here instead of leaving the sidebar (or
+		// jumping to a history that's empty anyway) — Escape (above)
+		// is still the only way out without unlocking first.
+		if key == tcell.KeyEnter {
+			r.submitConsigliereUnlock()
+		}
+		return
+	}
 	if key == tcell.KeyBacktab {
 		// Backward from the first stop in consigliere's own tiny
 		// loop — back to wherever it was opened from.
@@ -610,6 +662,15 @@ func (r *Root) consigliereContextSnapshot() string {
 // failure CLAUDE.md's "keine stillen Fehler" rule rules out.
 var errConsigliereNoAPIKey = errors.New("no API key configured — set one in Options → AI Consigliere")
 
+// errConsigliereLocked is the more specific case of the above: an
+// encrypted entry exists for this provider (apiKeySession.HasProvider
+// says so), it's just not unlocked yet this run — see Session's own
+// "prompt once per session" contract. Telling this apart from
+// errConsigliereNoAPIKey matters: "no API key configured" would
+// wrongly suggest nothing was ever set up at all, when a restart is
+// really the only thing standing between here and a real reply.
+var errConsigliereLocked = errors.New("API key is stored but locked — unlock it in Options → AI Consigliere")
+
 // buildConsigliereProvider constructs the real Provider for whichever
 // backend r.settings.ConsigliereProvider currently names, built fresh
 // on every call rather than cached on Root: the provider/model/key-
@@ -634,10 +695,13 @@ func (r *Root) buildConsigliereProvider() consigliere.Provider {
 		if err != nil {
 			return "", err
 		}
-		if tier == apikey.TierNone {
-			return "", errConsigliereNoAPIKey
+		if tier != apikey.TierNone {
+			return key, nil
 		}
-		return key, nil
+		if session != nil && session.HasProvider(providerName) {
+			return "", errConsigliereLocked
+		}
+		return "", errConsigliereNoAPIKey
 	}
 
 	switch providerName {
@@ -670,6 +734,40 @@ func firstNonEmptyConsigliereModel(override, fallback string) string {
 		return override
 	}
 	return fallback
+}
+
+// submitConsigliereUnlock is Enter's own action while
+// consigliereAwaitingPassphrase is set (see showConsigliere's own doc
+// comment on how the sidebar ends up starting in this mode) — tries
+// the typed text as the encrypted tier's passphrase instead of
+// treating it as a chat question.
+//
+// A blank attempt is quietly ignored rather than treated as a wrong
+// passphrase: Enter on an empty field is far more likely a stray
+// keypress than a deliberate attempt. A wrong passphrase, unlike a
+// real question, never leaves the typed text sitting in the field —
+// retrying the real question later is the normal case, but retrying a
+// rejected passphrase with the exact same (wrong) text would never
+// succeed, so there's nothing worth preserving it for.
+func (r *Root) submitConsigliereUnlock() {
+	passphrase := r.consigliereInput.GetText()
+	if passphrase == "" {
+		return
+	}
+	r.consigliereInput.SetText("")
+
+	if err := r.apiKeySession.Unlock(passphrase); err != nil {
+		if errors.Is(err, apikey.ErrWrongPassphrase) {
+			r.consigliereInput.SetPlaceholder("Wrong passphrase — try again…")
+		} else {
+			r.consigliereInput.SetPlaceholder(err.Error())
+		}
+		return
+	}
+
+	r.consigliereAwaitingPassphrase = false
+	r.consigliereInput.SetMaskCharacter(0)
+	r.consigliereInput.SetPlaceholder(consigliereInputPlaceholder)
 }
 
 // submitConsigliereMessage appends text as a user turn, re-renders the

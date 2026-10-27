@@ -1822,6 +1822,12 @@ type Root struct {
 	consigliereVisible   bool // mirrors detailsSidebarVisible — see showConsigliere/hideConsigliere
 	consigliereMessages  []consigliere.Message
 	consigliereCancel    context.CancelFunc
+	// consigliereAwaitingPassphrase is whether consigliereInput is
+	// currently in passphrase-entry mode (masked, Enter tries
+	// Session.Unlock instead of asking a question) — see
+	// showConsigliere's own doc comment on when that starts, and
+	// submitConsigliereUnlock on what ends it.
+	consigliereAwaitingPassphrase bool
 	// consigliereReturnFocus is captured once, in showConsigliere,
 	// before anything changes focus — see hideConsigliere's own doc
 	// comment.
@@ -2754,15 +2760,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// empty store (see apikey.LoadStore) — so apiKeyStoreWarning only
 	// ever fires for a store that exists but is actually corrupt, same
 	// "keine stillen Fehler" reasoning configWarnings already follows
-	// just below. userDir == "" (no home directory at all — see
-	// config.UserDir's own doc comment) leaves apiKeySession nil
-	// outright: Resolve already treats a nil Session as "this tier
-	// isn't available," the same way it treats an empty envVar/
-	// filePath argument.
+	// just below. An empty apiKeyStorePath() (no home directory at
+	// all, or a test's own override — see that var's own doc comment)
+	// leaves apiKeySession nil outright: Resolve already treats a nil
+	// Session as "this tier isn't available," the same way it treats
+	// an empty envVar/filePath argument.
 	var apiKeySession *apikey.Session
 	var apiKeyStoreWarning string
-	if userDir := config.UserDir(); userDir != "" {
-		session, err := apikey.OpenSession(filepath.Join(userDir, apiKeyStoreFilename))
+	if path := apiKeyStorePath(); path != "" {
+		session, err := apikey.OpenSession(path)
 		if err != nil {
 			apiKeyStoreWarning = fmt.Sprintf("AI Consigliere API key store: %v", err)
 		} else {

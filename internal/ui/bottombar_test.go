@@ -101,6 +101,13 @@ func TestMain(m *testing.M) {
 	notifyPersistPath = func() string { return "" }
 	labelsPersistPath = func() string { return "" }
 	operationsPersistPath = func() string { return "" }
+	// Same reasoning, for the AI Consigliere's own encrypted API-key
+	// store: without this, a test run on a machine that already has a
+	// real ~/.config/breakthrough/apikeys.json (any developer who has
+	// actually used the feature) reads and unlocks against that real
+	// file instead of a fresh, empty one — a real, reported gap this
+	// override closes the same way the three above it already do.
+	apiKeyStorePath = func() string { return "" }
 
 	// mailDefaultMboxPath: the status bar's own mail badge (see
 	// mailBadgeCount in mail.go) auto-detects the current user's real

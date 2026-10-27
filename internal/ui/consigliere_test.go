@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -707,5 +708,144 @@ func TestPushOverlayKeepsConsigliereOnTopOfANewlyOpenedPage(t *testing.T) {
 	names := root.GetPageNames(true)
 	if len(names) == 0 || names[0] != consiglierePage {
 		t.Errorf("visible page draw order = %v, want %q drawn frontmost (index 0)", names, consiglierePage)
+	}
+}
+
+// TestShowConsigliereForcesPassphraseWhenKeyIsLockedAndStored pins the
+// user's own explicit request: if a question can only be answered via
+// the encrypted tier, and that tier is still locked, the sidebar must
+// demand the passphrase right at "gC" — masked input, Enter tries to
+// unlock rather than submitting a question — instead of only
+// surfacing this once a question already failed
+// (errConsigliereLocked).
+func TestShowConsigliereForcesPassphraseWhenKeyIsLockedAndStored(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.apiKeySession = testAPIKeySession(t)
+	if err := root.apiKeySession.Unlock("correct-passphrase"); err != nil {
+		t.Fatalf("seeding Unlock: %v", err)
+	}
+	if err := root.apiKeySession.Set("anthropic", "sk-ant-seed-value"); err != nil {
+		t.Fatalf("seeding Set: %v", err)
+	}
+	root.apiKeySession.Lock() // a fresh run starts locked again
+
+	root.showConsigliere()
+
+	if !root.consigliereAwaitingPassphrase {
+		t.Fatal("showConsigliere should have started in passphrase mode")
+	}
+}
+
+// TestShowConsigliereSkipsPassphraseWhenEnvVarAlreadyProvidesAKey pins
+// the other half: a higher-priority tier already supplying a key
+// means there's nothing to unlock, even if the encrypted tier
+// separately has a locked entry sitting unused.
+func TestShowConsigliereSkipsPassphraseWhenEnvVarAlreadyProvidesAKey(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.apiKeySession = testAPIKeySession(t)
+	if err := root.apiKeySession.Unlock("correct-passphrase"); err != nil {
+		t.Fatalf("seeding Unlock: %v", err)
+	}
+	if err := root.apiKeySession.Set("anthropic", "sk-ant-seed-value"); err != nil {
+		t.Fatalf("seeding Set: %v", err)
+	}
+	root.apiKeySession.Lock()
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-from-env")
+
+	root.showConsigliere()
+
+	if root.consigliereAwaitingPassphrase {
+		t.Error("showConsigliere should not demand a passphrase when the env var already supplies a key")
+	}
+}
+
+// TestSubmitConsigliereUnlockWrongPassphraseStaysLocked pins Enter's
+// own rejection path: a wrong passphrase clears the field and shows a
+// distinct placeholder (see apikey.ErrWrongPassphrase's own doc
+// comment on why that distinction matters), but stays in passphrase
+// mode rather than quietly falling through to treating the next
+// keystroke as a real question.
+func TestSubmitConsigliereUnlockWrongPassphraseStaysLocked(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.apiKeySession = testAPIKeySession(t)
+	if err := root.apiKeySession.Unlock("correct-passphrase"); err != nil {
+		t.Fatalf("seeding Unlock: %v", err)
+	}
+	if err := root.apiKeySession.Set("anthropic", "sk-ant-seed-value"); err != nil {
+		t.Fatalf("seeding Set: %v", err)
+	}
+	root.apiKeySession.Lock()
+	root.showConsigliere()
+
+	root.consigliereInput.SetText("wrong-passphrase")
+	root.submitConsigliereUnlock()
+
+	if !root.consigliereAwaitingPassphrase {
+		t.Error("a wrong passphrase should not leave passphrase mode")
+	}
+	if root.consigliereInput.GetText() != "" {
+		t.Errorf("input text = %q, want cleared after a rejected attempt", root.consigliereInput.GetText())
+	}
+	if root.apiKeySession.IsUnlocked() {
+		t.Error("session should still be locked after a wrong passphrase")
+	}
+}
+
+// TestSubmitConsigliereUnlockCorrectPassphraseUnlocks pins the success
+// path: the sidebar leaves passphrase mode, unmasks the input, and
+// restores its normal placeholder, ready for a real question.
+func TestSubmitConsigliereUnlockCorrectPassphraseUnlocks(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.apiKeySession = testAPIKeySession(t)
+	if err := root.apiKeySession.Unlock("correct-passphrase"); err != nil {
+		t.Fatalf("seeding Unlock: %v", err)
+	}
+	if err := root.apiKeySession.Set("anthropic", "sk-ant-seed-value"); err != nil {
+		t.Fatalf("seeding Set: %v", err)
+	}
+	root.apiKeySession.Lock()
+	root.showConsigliere()
+
+	root.consigliereInput.SetText("correct-passphrase")
+	root.submitConsigliereUnlock()
+
+	if root.consigliereAwaitingPassphrase {
+		t.Error("a correct passphrase should leave passphrase mode")
+	}
+	if !root.apiKeySession.IsUnlocked() {
+		t.Error("session should be unlocked")
+	}
+}
+
+// TestConsigliereAPIKeyStatusDistinguishesLockedFromNotSet pins the
+// user's own explicit request: a stored-but-locked entry must never
+// render as "not set" (which would wrongly suggest nothing was ever
+// configured), and an unlocked one shows a non-reversible last-4-
+// characters hint rather than either the full key or nothing at all.
+func TestConsigliereAPIKeyStatusDistinguishesLockedFromNotSet(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.apiKeySession = testAPIKeySession(t)
+
+	if got := root.consigliereAPIKeyStatus(); got != "not set" {
+		t.Errorf("status with nothing stored = %q, want %q", got, "not set")
+	}
+
+	if err := root.apiKeySession.Unlock("correct-passphrase"); err != nil {
+		t.Fatalf("Unlock: %v", err)
+	}
+	if err := root.apiKeySession.Set("anthropic", "sk-ant-abcd1234"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	root.apiKeySession.Lock()
+
+	if got := root.consigliereAPIKeyStatus(); !strings.Contains(got, "locked") {
+		t.Errorf("status with a locked, stored entry = %q, want it to mention \"locked\", not read as unset", got)
+	}
+
+	if err := root.apiKeySession.Unlock("correct-passphrase"); err != nil {
+		t.Fatalf("Unlock: %v", err)
+	}
+	if got := root.consigliereAPIKeyStatus(); !strings.Contains(got, "1234") {
+		t.Errorf("status while unlocked = %q, want it to hint the stored key's last 4 characters", got)
 	}
 }

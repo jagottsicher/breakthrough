@@ -1441,7 +1441,7 @@ func consigliereEnvVarForProvider(provider string) string {
 // provider's key, or that none does — never the key itself.
 func (r *Root) consigliereAPIKeyStatus() string {
 	provider := r.settings.ConsigliereProvider
-	_, tier, err := apikey.Resolve(
+	key, tier, err := apikey.Resolve(
 		consigliereEnvVarForProvider(provider),
 		r.settings.ConsigliereAPIKeyFile,
 		provider,
@@ -1456,10 +1456,31 @@ func (r *Root) consigliereAPIKeyStatus() string {
 	case apikey.TierFile:
 		return "set via file"
 	case apikey.TierEncrypted:
-		return "stored (encrypted)"
+		return "stored (encrypted)" + consigliereKeySuffixHint(key)
 	default:
+		// TierNone doesn't by itself mean nothing is configured: the
+		// encrypted tier may hold an entry that's simply still locked
+		// this run (see errConsigliereLocked's own doc comment) —
+		// "not set" would wrongly suggest the user has to type the key
+		// in again, when really just the passphrase is missing.
+		if r.apiKeySession != nil && r.apiKeySession.HasProvider(provider) {
+			return "stored, locked — enter the passphrase to use it"
+		}
 		return "not set"
 	}
+}
+
+// consigliereKeySuffixHint renders a last-resort, non-reversible
+// glance-check against the stored key — never the key itself — the
+// same reasoning a credit card's own "ending in 1234" display
+// follows: enough to tell two configured keys apart, or confirm
+// pasting the right one, without the status row ever showing anything
+// that'd be a real problem to glance over someone's shoulder at.
+func consigliereKeySuffixHint(key string) string {
+	if len(key) < 4 {
+		return ""
+	}
+	return " (…" + key[len(key)-4:] + ")"
 }
 
 // labelNameOptions builds the Options screen's own nine "label_N_name"
