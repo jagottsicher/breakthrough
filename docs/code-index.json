@@ -1848,8 +1848,8 @@
     },
     {
       "path": "internal/ui/consigliere.go",
-      "size": 27670,
-      "sha256": "9323289ed91332d274884438d9b0ceb7a47ea2428dc8b7f7455de360cbe3ba48"
+      "size": 28418,
+      "sha256": "1fa407426b3fa2742632ec12a70b82f7340d2a3efea441186aac0277897d4084"
     },
     {
       "path": "internal/ui/consigliere_test.go",
@@ -59139,5 +59139,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "9985dd64938a2d7e2b0d0a1fd3688671fe9f8d1aa544d31f17a278dfab855453"
+  "merkle_root": "a4eae991898febf43afb22e4f2b81ad2066c7f38b9f64c135d1ea842440b2b57"
 }

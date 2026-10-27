@@ -599,11 +599,21 @@ func (r *Root) renderConsigliereHistory() {
 		if i > 0 {
 			b.WriteString("\n\n")
 		}
-		speaker := "You"
+		// Label4Background/Label5Background ("Blue Moon"/"Orange Crush"
+		// — see config.DefaultSettings' own Label4Name/Label5Name) per
+		// the user's own explicit request: neutral, easily told apart,
+		// and both dark/saturated enough that a plain white foreground
+		// (not the theme's own TextColor, which a custom scheme could
+		// set close to either background) stays legible on both — the
+		// same reused-label-color idea renderGitBreachTheme's own
+		// "maximally-distinct" comment already relies on elsewhere,
+		// just picked for being visually neutral here rather than
+		// maximally distinct from a whole set.
+		speaker, labelBackground := "You", r.theme.Label5Background
 		if m.Role == consigliere.RoleAssistant {
-			speaker = "Consigliere"
+			speaker, labelBackground = "Consigliere", r.theme.Label4Background
 		}
-		fmt.Fprintf(&b, "[::b]%s:[::-] %s", speaker, tview.Escape(m.Text))
+		fmt.Fprintf(&b, "[white:%s:b]%s:[-:-:-] %s", colorTag(labelBackground), speaker, tview.Escape(m.Text))
 	}
 	r.consigliereHistory.SetText(b.String())
 	r.consigliereHistory.ScrollToEnd()
