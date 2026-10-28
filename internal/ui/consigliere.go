@@ -151,7 +151,7 @@ func (r *Root) newConsigliereSidebar() {
 func (r *Root) captureConsigliereHistoryKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEscape:
-		r.hideConsigliere()
+		r.closeConsigliereWithConfirm()
 		return nil
 	case tcell.KeyTab, tcell.KeyBacktab:
 		// Only ever reached once a full-screen modal has already
@@ -323,7 +323,7 @@ func (r *Root) dragConsigliereMouseCapture(action tview.MouseAction, event *tcel
 	if action == tview.MouseLeftDown && r.consigliereTitleBar.InRect(x, y) {
 		wx, wy, width, _ := r.consigliereLayout.GetRect()
 		if y == wy && x == wx+toolWindowCloseButtonCol(0, width) {
-			r.hideConsigliere()
+			r.closeConsigliereWithConfirm()
 			return tview.MouseConsumed, nil, true
 		}
 		r.consigliereDragging = true
@@ -436,7 +436,7 @@ func (r *Root) ConsigliereShortcut() {
 // detailsSidebarVisible.
 func (r *Root) toggleConsigliere() {
 	if r.consigliereVisible {
-		r.hideConsigliere()
+		r.closeConsigliereWithConfirm()
 	} else {
 		r.showConsigliere()
 	}
@@ -518,6 +518,33 @@ func (r *Root) consigliereNeedsUnlock() bool {
 	return err == nil && tier == apikey.TierNone
 }
 
+// closeConsigliereWithConfirm is every user-initiated close path's
+// own entry point (the title bar's own close glyph, Escape from
+// either focus stop, and "gC" toggling an already-open sidebar back
+// shut) — hideConsigliere's own direct callers, replaced here per the
+// user's own explicit request: closing discards the current
+// conversation outright (see showConsigliere's own "a fresh session
+// every time" behavior), so a close that would actually lose one now
+// asks first. Skipped entirely once nothing has been asked yet
+// (consigliereMessages still empty) — there is nothing to lose yet,
+// so asking would only be friction for the "opened by mistake, close
+// right away" case.
+func (r *Root) closeConsigliereWithConfirm() {
+	if len(r.consigliereMessages) == 0 {
+		r.hideConsigliere()
+		return
+	}
+	r.openConfirm("Close the AI Consigliere? The current conversation will be lost.", "Yes, close", r.hideConsigliere)
+	// openConfirm's own pushOverlay always re-floats the sidebar above
+	// whatever overlay it just opened (see pushOverlay's own doc
+	// comment — written for ordinary within-task navigation, where the
+	// sidebar is meant to stay on top and reachable). The opposite is
+	// needed here: this confirmation is asking whether to close the
+	// sidebar itself, so it must stay visible and clickable on top of
+	// it, not end up hidden behind it.
+	r.SendToFront(confirmPage)
+}
+
 // hideConsigliere closes the sidebar — showConsigliere's own
 // counterpart, hideDetailsSidebar's own shape. Cancels whatever reply
 // is still in flight (see submitConsigliereMessage) so a provider call
@@ -580,7 +607,7 @@ func (r *Root) hideConsigliere() {
 // tabbed into as a dead end.
 func (r *Root) handleConsigliereInputDone(key tcell.Key) {
 	if key == tcell.KeyEscape {
-		r.hideConsigliere()
+		r.closeConsigliereWithConfirm()
 		return
 	}
 	if r.consigliereAwaitingPassphrase {

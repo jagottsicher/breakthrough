@@ -6,6 +6,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/consigliere"
 )
 
 // drawConsigliereLayout forces a real Flex layout pass (via a
@@ -61,6 +63,69 @@ func TestEscapeInConsigliereInputClosesTheSidebar(t *testing.T) {
 
 	if root.consigliereVisible {
 		t.Error("Escape should have closed the sidebar")
+	}
+}
+
+// TestClosingConsigliereWithAnActiveConversationAsksFirst pins the
+// user's own explicit request: closing the sidebar discards the whole
+// conversation outright (see showConsigliere's own "fresh session
+// every time" behavior), so once a real exchange exists, every
+// user-initiated close path must ask before actually losing it.
+func TestClosingConsigliereWithAnActiveConversationAsksFirst(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.showConsigliere()
+	root.consigliereMessages = []consigliere.Message{{Role: consigliere.RoleUser, Text: "hello"}}
+
+	root.handleConsigliereInputDone(tcell.KeyEscape)
+
+	if !root.consigliereVisible {
+		t.Error("the sidebar should still be open, pending the confirmation")
+	}
+	if root.activePage != confirmPage {
+		t.Errorf("activePage = %q, want the confirmation dialog open", root.activePage)
+	}
+
+	root.acceptConfirm()
+
+	if root.consigliereVisible {
+		t.Error("confirming should have closed the sidebar")
+	}
+}
+
+// TestClosingConsigliereWithAnActiveConversationCancelLeavesItOpen is
+// the other half: declining the confirmation must leave the
+// conversation exactly as it was, not lose it anyway.
+func TestClosingConsigliereWithAnActiveConversationCancelLeavesItOpen(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.showConsigliere()
+	root.consigliereMessages = []consigliere.Message{{Role: consigliere.RoleUser, Text: "hello"}}
+
+	root.handleConsigliereInputDone(tcell.KeyEscape)
+	root.cancelConfirm()
+
+	if !root.consigliereVisible {
+		t.Error("cancelling the confirmation should have left the sidebar open")
+	}
+	if len(root.consigliereMessages) != 1 {
+		t.Errorf("consigliereMessages = %v, want the conversation untouched", root.consigliereMessages)
+	}
+}
+
+// TestClosingConsigliereWithNoMessagesSkipsTheConfirmation pins the
+// other side of the same fix: with nothing asked yet, there is nothing
+// to lose, so closing stays immediate rather than adding friction to
+// the "opened by mistake" case.
+func TestClosingConsigliereWithNoMessagesSkipsTheConfirmation(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.showConsigliere()
+
+	root.handleConsigliereInputDone(tcell.KeyEscape)
+
+	if root.consigliereVisible {
+		t.Error("closing with no messages yet should not have asked for confirmation")
+	}
+	if root.activePage == confirmPage {
+		t.Error("no confirmation dialog should have opened")
 	}
 }
 
