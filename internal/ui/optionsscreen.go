@@ -847,8 +847,27 @@ func (r *Root) editOptionValue(opt optionSpec) {
 	}
 
 	r.optionsInput.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyTab && opt.pathCompletion {
+			// Tab's own usual meaning in this dialog — cancel without
+			// applying, same as Escape — is suspended just for the
+			// rows that opt in (see optionSpec.pathCompletion's own
+			// doc comment); every other row keeps it.
+			r.completeOptionsInputPath()
+			return
+		}
 		if key == tcell.KeyEnter {
-			if value := strings.TrimSpace(r.optionsInput.GetText()); value != "" {
+			value := strings.TrimSpace(r.optionsInput.GetText())
+			if opt.pathCompletion {
+				resolved, ok := r.validateOptionsInputPath(value)
+				if !ok {
+					return // the rejection's own error is already shown; stay open to fix it
+				}
+				opt.apply(r, resolved)
+				r.hideOverlay()
+				r.renderOptions()
+				return
+			}
+			if value != "" {
 				opt.apply(r, value)
 			}
 		}
@@ -863,6 +882,98 @@ func (r *Root) editOptionValue(opt optionSpec) {
 	r.optionsInput.SetRect(x, y, width, height)
 
 	r.pushOverlay(optionsInputPage, r.optionsInput, nil)
+}
+
+// validateOptionsInputPath validates value for a pathCompletion row's
+// own commit: "" is always valid — it's how the file tier gets
+// unset — anything else must resolve (via r.panel.resolvePath, so "~"
+// and a path relative to the panel's own current directory both work
+// the same way typing them into the panel's own path bar would) to a
+// real, existing regular file. Returns the resolved, absolute path to
+// persist on success, deliberately never the raw typed text: a
+// relative value would otherwise keep meaning "whatever's at this
+// name relative to wherever the panel happens to be" rather than one
+// fixed file, and silently resolve to something different the next
+// time the panel's own directory differs.
+//
+// On failure, shows the rejection itself (layered on top via
+// showTransientErrorOverOverlay, not showError — see that function's
+// own doc comment on why: showError's plain showOverlay would close
+// this dialog, and Options underneath it, the exact overlay-stack bug
+// already fixed once for the encrypted-key dialog) and returns
+// ok=false, leaving this one open so the user can fix it rather than
+// having a wrong value silently closed over.
+func (r *Root) validateOptionsInputPath(value string) (resolved string, ok bool) {
+	if value == "" {
+		return "", true
+	}
+	resolved = r.panel.resolvePath(value)
+	info, err := os.Stat(resolved)
+	switch {
+	case err != nil:
+		r.showTransientErrorOverOverlay(fmt.Errorf("%s: %w", resolved, err))
+		return "", false
+	case info.IsDir():
+		r.showTransientErrorOverOverlay(fmt.Errorf("%s is a directory, not a file", resolved))
+		return "", false
+	case !info.Mode().IsRegular():
+		r.showTransientErrorOverOverlay(fmt.Errorf("%s is not a regular file", resolved))
+		return "", false
+	}
+	return resolved, true
+}
+
+// completeOptionsInputPath is Tab's own action for a pathCompletion
+// row's edit dialog — Panel.completions' own single-field shape (no
+// row/col cursor math, unlike completeBashLine's multi-line case)
+// needs nothing more than the field's current text.
+func (r *Root) completeOptionsInputPath() {
+	word := r.optionsInput.GetText()
+	matches := r.panel.completions(word)
+	if len(matches) == 0 {
+		return
+	}
+	completed := longestCommonPrefix(matches)
+	if completed != word {
+		r.optionsInput.SetText(completed)
+		return
+	}
+	if len(matches) == 1 {
+		return // the one match is already exactly what's typed
+	}
+	r.openOptionsInputCompletionPicker(matches)
+}
+
+// openOptionsInputCompletionPicker is completeOptionsInputPath's own
+// ambiguous-match case — openCompletionPicker's identical shape for
+// r.optionsInput instead of r.bashLine, anchored under the input
+// field rather than bashLine's own cursor position. A plain
+// pushOverlay, not pushOverlayReturningFocusTo: that one exists for
+// the empty-stack case (see its own doc comment), which doesn't apply
+// here — closing the picker reveals r.optionsInput's own still-open
+// pushOverlay frame underneath, whose default restore already
+// refocuses it without any extra help.
+func (r *Root) openOptionsInputCompletionPicker(matches []string) {
+	r.picker.Clear()
+	for _, m := range matches {
+		match := m
+		r.picker.AddItem(completionBasename(match), "", 0, func() {
+			r.hideOverlay()
+			r.optionsInput.SetText(match)
+		})
+	}
+	r.picker.SetDoneFunc(func() {
+		r.hideOverlay()
+	})
+
+	width, height := listSize(r.picker)
+	inputX, inputY, _, inputHeight := r.optionsInput.GetRect()
+	x, y, width, height := r.clampToScreen(inputX, inputY+inputHeight, width, height)
+	r.picker.SetRect(x, y, width, height)
+	r.picker.SetCurrentItem(0)
+	r.picker.SetOffset(0, 0)
+
+	r.pushOverlay(pickerPage, r.picker, nil)
 }
 
 // showOptionInfo opens the small centered window explaining one setting

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/gdamore/tcell/v2"
@@ -111,6 +112,17 @@ type optionSpec struct {
 	// config.SettingDocs entry of its own — see
 	// TestOptionCatalogMatchesSettingDocs' own secretAction exemption.
 	secretAction func(*Root)
+
+	// pathCompletion marks a KindString row whose editOptionValue
+	// dialog should offer Tab path completion (see
+	// completeOptionsInputPath) instead of Tab's own default meaning
+	// there, "cancel without applying" — every other row keeps that
+	// default; this is scoped to just the rows that opt in, the same
+	// way secretAction only changes activateOptionRow's dispatch for
+	// the rows that set it. Also gates editOptionValue's own commit-
+	// time validation (see validateOptionsInputPath): a non-empty
+	// value must resolve to a real, existing regular file.
+	pathCompletion bool
 }
 
 // doc returns the config-package metadata for this setting — its kind,
@@ -136,6 +148,14 @@ type optionCategory struct {
 // call sites that need it.
 func withSection(section string, opt optionSpec) optionSpec {
 	opt.section = section
+	return opt
+}
+
+// withPathCompletion stamps opt with pathCompletion (see optionSpec's
+// own doc comment) — the same small wrapper shape withSection already
+// establishes for a field only a handful of options ever set.
+func withPathCompletion(opt optionSpec) optionSpec {
+	opt.pathCompletion = true
 	return opt
 }
 
@@ -1412,20 +1432,24 @@ func optionCategories() []optionCategory {
 					},
 					choices: func(r *Root) []optionChoice { return r.consigliereEffortChoices() },
 				},
-				stringOption("consigliere_api_key_file", "API key file (plain text)",
+				withPathCompletion(stringOption("consigliere_api_key_file", "API key file (plain text)",
 					"An optional path to a plain-text file holding the selected provider's "+
 						"API key — the deliberately unencrypted, opt-in tier: protected only by "+
 						"this file's own permissions, nothing more. \"\" (the default) means this "+
 						"tier isn't configured; a well-known environment variable "+
 						"(ANTHROPIC_API_KEY/OPENAI_API_KEY/DEEPSEEK_API_KEY, matching the "+
 						"provider above) always takes priority over it, and \"API key "+
-						"(encrypted)\" below is the fallback beneath it.",
+						"(encrypted)\" below is the fallback beneath it.\n\n"+
+						"Tab completes a path while typing. A non-empty value must resolve to "+
+						"a real, existing file — stored as an absolute path regardless of what "+
+						"was typed, so it keeps meaning the same file on a later run even if "+
+						"the panel is somewhere else by then.",
 					func(r *Root) string { return r.settings.ConsigliereAPIKeyFile },
 					func(r *Root, v string) {
 						r.settings.ConsigliereAPIKeyFile = v
 						r.persistSetting("consigliere_api_key_file", v)
 					},
-				),
+				)),
 				{
 					key:   "consigliere_api_key_secret",
 					label: "API key (encrypted)",
@@ -1483,7 +1507,7 @@ func (r *Root) consigliereAPIKeyStatus() string {
 	case apikey.TierEnv:
 		return "set via " + consigliereEnvVarForProvider(provider)
 	case apikey.TierFile:
-		return "set via file"
+		return "set via file" + consigliereFilePermissionWarning(r.settings.ConsigliereAPIKeyFile)
 	case apikey.TierEncrypted:
 		return "stored (encrypted)" + consigliereKeySuffixHint(key)
 	default:
@@ -1497,6 +1521,34 @@ func (r *Root) consigliereAPIKeyStatus() string {
 		}
 		return "not set"
 	}
+}
+
+// consigliereFilePermissionWarning reports, for the status row only,
+// when the plain-text key file's own permissions are looser than
+// 0600 — deliberately a report, not an enforced rule: the encrypted
+// store *enforces* 0600 via Store.save (there's no legitimate reason
+// for it to ever be anything else), but this is the deliberately
+// unencrypted, opt-in tier — its whole point is "protected only by
+// this file's own permissions, nothing more" (see the row's own help
+// text), so refusing to use a looser file outright would be enforcing
+// a security property on a tier whose entire premise is that the
+// user is already managing that themselves. Surfaced here instead,
+// where the user is already looking at this tier's own live status.
+// "" (no warning) covers a missing/unreadable file too — Resolve's
+// own error, surfaced elsewhere, already covers that case; this
+// doesn't duplicate it.
+func consigliereFilePermissionWarning(path string) string {
+	if path == "" {
+		return ""
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		return fmt.Sprintf(" (⚠ permissions %04o, want 0600)", mode)
+	}
+	return ""
 }
 
 // consigliereKeySuffixHint renders a last-resort, non-reversible
