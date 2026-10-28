@@ -637,17 +637,18 @@ func (r *Root) handleConsigliereInputDone(key tcell.Key) {
 // context here already follows.
 const (
 	consigliereMaxDocChunks = 3
-	// consigliereMaxDocChunkChars was originally 600 — a real, reported
-	// bug: several of this corpus's own sections run 1,000-7,000+
-	// characters (the "Tabs" section alone is ~1,300), so that cap was
-	// silently cutting the actual answer out of a chunk that had
-	// already been correctly retrieved — in "how do I open a new tab"
-	// specifically, the one sentence saying the switcher's own last
-	// row creates one. 1,500 covers most real sections close to
-	// completely, while still bounding the handful of genuinely huge
-	// ones (Settings reference, Copy/Cut/Paste) rather than sending
-	// them in full on every matching question.
-	consigliereMaxDocChunkChars = 1500
+	// consigliereMaxDocChunkChars was originally 600, then 1,500 — two
+	// real, reported rounds of the same bug: several of this corpus's
+	// own sections run 1,000-7,000+ characters, so a flat cap kept
+	// silently cutting the actual answer out of an already-correctly-
+	// retrieved chunk. The "Log Audit screen" section specifically has
+	// ~1,660 characters of table rows alone (two separate key tables),
+	// past even the 1,500 cap, which is what truncateDocChunkBody's
+	// own table-priority logic exists for — 2,500 is sized to fit that
+	// chunk's own tables in full, with roughly 800 characters left for
+	// intro prose, rather than chasing the next individually-measured
+	// section as each one gets reported.
+	consigliereMaxDocChunkChars = 2500
 )
 
 // consigliereDocSnapshot runs question against r.docSearchIndex (see
@@ -684,7 +685,7 @@ func (r *Root) consigliereDocSnapshot(ctx context.Context, provider consigliere.
 	var b strings.Builder
 	b.WriteString("Relevant documentation:\n")
 	for _, c := range chunks {
-		fmt.Fprintf(&b, "- %s: %s\n", c.Heading, truncateRunes(c.Body, consigliereMaxDocChunkChars))
+		fmt.Fprintf(&b, "- %s: %s\n", c.Heading, truncateDocChunkBody(c.Body, consigliereMaxDocChunkChars))
 	}
 	return strings.TrimSpace(b.String())
 }
@@ -754,6 +755,51 @@ func truncateRunes(s string, max int) string {
 		return s
 	}
 	return string(runes[:max]) + "…"
+}
+
+// truncateDocChunkBody caps body at roughly max characters, like
+// truncateRunes, but prioritizes keeping any Markdown table ("| Key |
+// Action |"-style rows) intact over plain prose: this corpus's own
+// longer reference sections consistently put their actual key/filter-
+// field table well after an explanatory preamble (Log Audit's own
+// "Step 1"/"Step 2" mechanics, for one real, reported case), so naive
+// left-to-right truncation was cutting the one part that actually
+// answers a question before ever reaching it, despite the chunk
+// itself having already been correctly retrieved.
+//
+// Reorders prose before table (the table's own rows always come
+// last), which is harmless here: these chunks are never shown to a
+// person, only fed to a model as reference material, and the model
+// doesn't need "Step 1 ... Step 2 ... | Key | Action |" in exactly
+// that order to use the table correctly.
+func truncateDocChunkBody(body string, max int) string {
+	if len([]rune(body)) <= max {
+		return body
+	}
+
+	var tableLines, proseLines []string
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "|") {
+			tableLines = append(tableLines, line)
+		} else {
+			proseLines = append(proseLines, line)
+		}
+	}
+	if len(tableLines) == 0 {
+		return truncateRunes(body, max)
+	}
+
+	table := strings.Join(tableLines, "\n")
+	tableLen := len([]rune(table))
+	if tableLen >= max {
+		// The table alone doesn't fit either — plain truncation is at
+		// least predictable, rather than risking cutting the table
+		// itself at a point that drops whichever row actually matters.
+		return truncateRunes(body, max)
+	}
+
+	prose := truncateRunes(strings.Join(proseLines, "\n"), max-tableLen-1) // -1 for the joining newline
+	return strings.TrimSpace(prose) + "\n" + table
 }
 
 // joinConsigliereSnapshotParts joins the view-specific context
