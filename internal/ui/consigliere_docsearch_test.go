@@ -46,8 +46,8 @@ func TestConsigliereDocSnapshotFindsRelevantDocumentation(t *testing.T) {
 	if !strings.Contains(got, "Relevant documentation:") {
 		t.Fatalf("snapshot = %q, want it to mention it found documentation", got)
 	}
-	if !strings.Contains(got, "Log Audit") {
-		t.Errorf("snapshot = %q, want it to surface the Log Audit section", got)
+	if !strings.Contains(got, "Log Holepunch") {
+		t.Errorf("snapshot = %q, want it to surface the Log Holepunch section", got)
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 func TestSearchRanksTheMostRelevantChunkFirst(t *testing.T) {
 	idx := NewIndex([]Chunk{
 		{Heading: "Compress", Body: "Compress a file or directory into an archive format."},
-		{Heading: "Log Audit screen", Body: "The Time field accepts a relative expression, such as 2 hours ago or 7 days, as well as absolute moments."},
+		{Heading: "Log Holepunch screen", Body: "The Time field accepts a relative expression, such as 2 hours ago or 7 days, as well as absolute moments."},
 		{Heading: "Rsync", Body: "Synchronize files between two directories or hosts."},
 	})
 
@@ -17,8 +17,8 @@ func TestSearchRanksTheMostRelevantChunkFirst(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d results, want 1", len(got))
 	}
-	if got[0].Heading != "Log Audit screen" {
-		t.Errorf("top result = %q, want %q", got[0].Heading, "Log Audit screen")
+	if got[0].Heading != "Log Holepunch screen" {
+		t.Errorf("top result = %q, want %q", got[0].Heading, "Log Holepunch screen")
 	}
 }
 
@@ -83,17 +83,17 @@ func TestNewDefaultIndexBuildsFromTheRealEmbeddedUserGuide(t *testing.T) {
 		t.Fatal("NewDefaultIndex produced an empty index")
 	}
 
-	got := idx.Search("relative time expression log audit", 3)
+	got := idx.Search("relative time expression log holepunch", 3)
 	if len(got) == 0 {
 		t.Fatal("search for a documented topic returned nothing")
 	}
 	var found bool
 	for _, c := range got {
-		if strings.Contains(c.Heading, "Log Audit") {
+		if strings.Contains(c.Heading, "Log Holepunch") {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("results = %+v, want the Log Audit section among the top matches", got)
+		t.Errorf("results = %+v, want the Log Holepunch section among the top matches", got)
 	}
 }

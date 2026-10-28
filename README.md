@@ -67,7 +67,7 @@ within 30 seconds, a Simulate form (`t`, every backend including
 nftables) that reports which rule, if any, decides a hypothetical
 request, an Action
 Log screen (`jl`) browsing the real activity log with keyword/time
-filtering, a Log Audit screen (`jL`) reading and merging *other* log
+filtering, a Log Holepunch screen (`jL`) reading and merging *other* log
 files found in whichever directory the active panel currently shows,
 a Git breach dashboard (`jg`) for staging, committing, and diffing the
 local git repository containing the active panel's own current
@@ -1191,7 +1191,7 @@ Lightning Network ⚡️ using the sponsor button above.
   browses the real log file itself — newest entries first, with a
   keyword filter (full text over the message) and a time-range filter
   reusing the panel's own Modified-time filter syntax.
-- Log Audit (`jL`): reads *other* log files on disk — whichever
+- Log Holepunch (`jL`): reads *other* log files on disk — whichever
   directory the active panel currently shows, no arguments or flags.
   Discovers logrotate families (`access.log`, `access.log.1`,
   `access.log.2.gz`, ...), lets you check which ones to include, then

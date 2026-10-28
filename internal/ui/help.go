@@ -939,9 +939,11 @@ var helpText = strings.TrimLeft(`
                      with the original, unparsed line, but only when
                      it actually differs from the extracted message
     r               Re-read the same files
-    f               Toggle follow: re-reads the same files every two
-                     seconds and keeps rendering, the cursor following
-                     along if it was already on the last row
+    f               Toggle follow (the same idea as "tail -f", merged
+                     live across every selected file at once): re-reads
+                     the same files every two seconds and keeps
+                     rendering, the cursor following along if it was
+                     already on the last row
     s               Statistics: counts by level and by source (top 10),
                      over whatever currently matches the three filters
     Esc             Back to file selection

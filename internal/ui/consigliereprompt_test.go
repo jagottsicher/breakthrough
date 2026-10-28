@@ -55,8 +55,8 @@ func TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage(t *testing.T) {
 
 	got := root.consigliereContextSnapshot()
 
-	if !strings.Contains(got, "Log Audit") {
-		t.Errorf("snapshot = %q, want a Log Audit snapshot even though consigliereExitPage still names the selection screen", got)
+	if !strings.Contains(got, "Log Holepunch") {
+		t.Errorf("snapshot = %q, want a Log Holepunch snapshot even though consigliereExitPage still names the selection screen", got)
 	}
 }
 
@@ -70,7 +70,7 @@ func TestLogAuditContextSnapshotIncludesDirectoryAndFilters(t *testing.T) {
 
 	got := root.logAuditContextSnapshot()
 
-	for _, want := range []string{"Log Audit", "/var/log/myapp", "timeout", "error", "2026-10-01", "2026-10-28"} {
+	for _, want := range []string{"Log Holepunch", "/var/log/myapp", "timeout", "error", "2026-10-01", "2026-10-28"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("snapshot = %q, want it to contain %q", got, want)
 		}

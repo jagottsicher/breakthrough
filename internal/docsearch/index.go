@@ -111,6 +111,32 @@ func (idx *Index) Search(query string, topN int) []Chunk {
 	return out
 }
 
+// ChunkByHeadingContains returns the first chunk whose Heading
+// contains substr (case-insensitive), and true — or a zero Chunk and
+// false if substr is "" or nothing matches. Exists for the one case
+// plain BM25 ranking isn't reliable enough for on its own: when the
+// caller already knows, with certainty, which section names the
+// screen the question was actually asked from (see
+// Root.consigliereDocSearchViewHint), a short chunk that only
+// mentions that section's name once in passing can still outrank the
+// actual, longer section for a query sharing little else with it —
+// BM25's own length normalization rewards the shorter chunk's higher
+// term density over the stronger, but diluted-by-length, heading
+// match. Call sites that know the current screen should prepend this
+// result rather than trust ranking alone to surface it.
+func (idx *Index) ChunkByHeadingContains(substr string) (Chunk, bool) {
+	if substr == "" {
+		return Chunk{}, false
+	}
+	lower := strings.ToLower(substr)
+	for _, c := range idx.chunks {
+		if strings.Contains(strings.ToLower(c.Heading), lower) {
+			return c, true
+		}
+	}
+	return Chunk{}, false
+}
+
 // stopwords are dropped from every tokenize call, both when indexing
 // and when querying — a real, measured gap this list closes: without
 // it, a natural-language question like "how do I search the last 3

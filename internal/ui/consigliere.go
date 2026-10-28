@@ -31,6 +31,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/apikey"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
+	"github.com/jagottsicher/breakthrough/internal/docsearch"
 )
 
 const consiglierePage = "consigliere"
@@ -641,7 +642,7 @@ const (
 	// real, reported rounds of the same bug: several of this corpus's
 	// own sections run 1,000-7,000+ characters, so a flat cap kept
 	// silently cutting the actual answer out of an already-correctly-
-	// retrieved chunk. The "Log Audit screen" section specifically has
+	// retrieved chunk. The "Log Holepunch screen" section specifically has
 	// ~1,660 characters of table rows alone (two separate key tables),
 	// past even the 1,500 cap, which is what truncateDocChunkBody's
 	// own table-priority logic exists for — 2,500 is sized to fit that
@@ -663,6 +664,20 @@ func (r *Root) consigliereDocSnapshot(ctx context.Context, provider consigliere.
 	}
 	hint := r.consigliereDocSearchViewHint()
 	chunks := r.docSearchIndex.Search(appendConsigliereDocSearchHint(question, hint), consigliereMaxDocChunks)
+	// A real, reported case: even with hint appended to the query, a
+	// short, unrelated chunk that only mentions the current screen's
+	// own name once in passing (a cross-reference sentence, not its
+	// own topic) could still outrank that screen's actual section —
+	// BM25 ranking alone isn't a strong enough guarantee here, unlike
+	// the hint itself, which names the live, actually-open screen with
+	// certainty. Force that screen's own section to the front rather
+	// than leaving it to ranking, same "guaranteed over probabilistic"
+	// reasoning logAuditViewerAvailableActions above already follows.
+	if hint != "" {
+		if hc, ok := r.docSearchIndex.ChunkByHeadingContains(hint); ok {
+			chunks = prependDocChunk(hc, chunks, consigliereMaxDocChunks)
+		}
+	}
 	if len(chunks) == 0 {
 		// BM25 only ever matches shared vocabulary — this corpus is
 		// English-only, so a question asked in a language it isn't
@@ -692,27 +707,47 @@ func (r *Root) consigliereDocSnapshot(ctx context.Context, provider consigliere.
 
 // consigliereDocSearchViewHint names the current screen in plain
 // English terms matching this corpus's own section headings (e.g.
-// "Log Audit screen", not the "jL" chord) — appended to every doc
+// "Log Holepunch screen", not the "jL" chord) — appended to every doc
 // search query (see appendConsigliereDocSearchHint) so a question
 // asked while actually looking at one of two similarly-purposed
 // screens retrieves that one's own section, not whichever one
 // happens to share more vocabulary with the raw question text alone.
 // A real, reported case: "wie suche ich nach exception in den
-// letzten drei Tagen" while on Log Audit retrieved the Action Log's
-// own section instead ("jl" vs "jL" — easy to conflate on vocabulary
-// alone, never on which screen the question was actually asked from).
-// "" for the bare file panel and anything else "gC" might reach from,
-// where no such disambiguation is needed — the same switch
-// consigliereContextSnapshot's own dispatch already uses.
+// letzten drei Tagen" while on Log Holepunch retrieved the Action
+// Log's own section instead ("jl" vs "jL" — easy to conflate on
+// vocabulary alone, never on which screen the question was actually
+// asked from). "" for the bare file panel and anything else "gC"
+// might reach from, where no such disambiguation is needed — the
+// same switch consigliereContextSnapshot's own dispatch already uses.
 func (r *Root) consigliereDocSearchViewHint() string {
 	switch r.activePage {
 	case logAuditSelectionPage, logAuditViewerPage, logAuditDetailPage, logAuditStatsPage:
-		return "Log Audit screen"
+		return "Log Holepunch screen"
 	case gitBreachPage:
 		return "Git Breach"
 	default:
 		return ""
 	}
+}
+
+// prependDocChunk puts chunk at the front of chunks — removing any
+// existing occurrence of it first (same Heading+Source, which is
+// enough to identify it since both come from the same Index) — and
+// caps the result back down to max, so forcing a guaranteed chunk to
+// the front never grows the result past consigliereMaxDocChunks.
+func prependDocChunk(chunk docsearch.Chunk, chunks []docsearch.Chunk, max int) []docsearch.Chunk {
+	out := make([]docsearch.Chunk, 0, len(chunks)+1)
+	out = append(out, chunk)
+	for _, c := range chunks {
+		if c.Heading == chunk.Heading && c.Source == chunk.Source {
+			continue
+		}
+		out = append(out, c)
+	}
+	if len(out) > max {
+		out = out[:max]
+	}
+	return out
 }
 
 // appendConsigliereDocSearchHint appends hint to query, space-
@@ -761,7 +796,7 @@ func truncateRunes(s string, max int) string {
 // truncateRunes, but prioritizes keeping any Markdown table ("| Key |
 // Action |"-style rows) intact over plain prose: this corpus's own
 // longer reference sections consistently put their actual key/filter-
-// field table well after an explanatory preamble (Log Audit's own
+// field table well after an explanatory preamble (Log Holepunch's own
 // "Step 1"/"Step 2" mechanics, for one real, reported case), so naive
 // left-to-right truncation was cutting the one part that actually
 // answers a question before ever reaching it, despite the chunk
@@ -868,7 +903,7 @@ func (r *Root) panelContextSnapshot() string {
 	return strings.TrimSpace(b.String())
 }
 
-// logAuditContextSnapshot describes whichever Log Audit page is
+// logAuditContextSnapshot describes whichever Log Holepunch page is
 // actually showing right now (selection, viewer, detail, or stats —
 // see consigliereContextSnapshot's own switch): the log directory,
 // the visible timeline range, whatever keyword/time/level filter is
@@ -891,7 +926,7 @@ func (r *Root) panelContextSnapshot() string {
 // to a third-party provider.
 func (r *Root) logAuditContextSnapshot() string {
 	var b strings.Builder
-	b.WriteString("Current view: Log Audit.\n")
+	b.WriteString("Current view: Log Holepunch.\n")
 	if r.logAuditDir != "" {
 		fmt.Fprintf(&b, "Log directory: %s\n", r.logAuditDir)
 	}
@@ -911,12 +946,12 @@ func (r *Root) logAuditContextSnapshot() string {
 	return strings.TrimSpace(b.String())
 }
 
-// logAuditViewerAvailableActions is Log Audit's own fields and keys,
-// verified directly against captureLogAuditViewerTableKey and the
-// Keyword/Time/Level fields' own SetDoneFunc wiring in
+// logAuditViewerAvailableActions is Log Holepunch's own fields and
+// keys, verified directly against captureLogAuditViewerTableKey and
+// the Keyword/Time/Level fields' own SetDoneFunc wiring in
 // logauditscreen.go, not recalled from the user guide — this is a
 // second, independent statement of the same facts
-// docs/user-guide.md's own "Log Audit screen" section makes, the same
+// docs/user-guide.md's own "Log Holepunch screen" section makes, the same
 // "verified against source, kept deliberately redundant with the
 // docs" status internal/ui/help.go's own helpText already has. Needs
 // updating by hand if that key handling ever changes; nothing
@@ -928,7 +963,7 @@ const logAuditViewerAvailableActions = `Available fields and keys on this screen
 - Tab / Shift+Tab: move between Filter, Time, Level, the timeline, and the list.
 - e: jump to the next error. w: jump to the next warning.
 - Enter (on the list): show the current entry's full text.
-- r: re-read the same files. f: toggle follow mode. s: show statistics.
+- r: re-read the same files. f: toggle follow mode (the "tail -f" equivalent, merged live across every selected file at once). s: show statistics.
 - Escape: close, back to file selection.`
 
 // gitBreachContextSnapshot describes the repository Git Breach has
