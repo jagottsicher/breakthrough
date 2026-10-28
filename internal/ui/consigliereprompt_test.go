@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 )
@@ -58,6 +60,22 @@ func TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage(t *testing.T) {
 
 	if !strings.Contains(got, "Log Holepunch") {
 		t.Errorf("snapshot = %q, want a Log Holepunch snapshot even though consigliereExitPage still names the selection screen", got)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToFirewall pins the
+// dispatch switch's own Firewall case — easy to leave out by mistake
+// (it would then silently fall back to the generic bare-panel
+// snapshot) since nothing else here would catch that.
+func TestConsigliereContextSnapshotDispatchesToFirewall(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = firewallPage
+	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendUFW}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Firewall.") {
+		t.Errorf("snapshot = %q, want the Firewall snapshot, not the generic panel one", got)
 	}
 }
 
@@ -228,5 +246,106 @@ func TestGitBreachContextSnapshotCapsRecentCommits(t *testing.T) {
 
 	if got := strings.Count(got, "distinct-subject"); got != consigliereMaxRecentCommits {
 		t.Errorf("snapshot mentions %d commit subjects, want exactly the cap of %d", got, consigliereMaxRecentCommits)
+	}
+}
+
+// TestFirewallContextSnapshotOmitsRuleContentByDefault pins the
+// ordinary, privacy-preserving case: even with a real ruleset loaded,
+// only the backend and a count are included unless Machiavelli Mode
+// has been explicitly turned on — a full ruleset describes this
+// host's complete inbound attack surface, the same reasoning
+// Log Holepunch's log lines and Git Breach's diff content already
+// follow.
+func TestFirewallContextSnapshotOmitsRuleContentByDefault(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.firewallSnapshot = firewall.Snapshot{
+		Backend: firewall.BackendUFW,
+		Rules: []firewall.Rule{
+			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow, Protocol: "tcp", PortFrom: 22, PortTo: 22, Source: "10.0.0.0/8"},
+		},
+	}
+
+	got := root.firewallContextSnapshot()
+
+	for _, want := range []string{"Firewall", "ufw", "1 rules configured"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "10.0.0.0/8") {
+		t.Errorf("snapshot = %q, must not contain actual rule content without Machiavelli Mode", got)
+	}
+}
+
+// TestFirewallContextSnapshotIncludesRulesUnderMachiavelliMode pins
+// the explicit, opted-in exception: once the user has turned the mode
+// on, the full ruleset is forwarded verbatim.
+func TestFirewallContextSnapshotIncludesRulesUnderMachiavelliMode(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereHardcoreMode = true
+	root.firewallSnapshot = firewall.Snapshot{
+		Backend: firewall.BackendUFW,
+		Rules: []firewall.Rule{
+			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow, Protocol: "tcp", PortFrom: 22, PortTo: 22, Source: "10.0.0.0/8"},
+			{Order: 2, Direction: firewall.DirectionIn, Action: firewall.ActionDeny, Protocol: "tcp", PortFrom: 22, PortTo: 22,
+				ShadowedByOrder: 1, ShadowedByAction: firewall.ActionAllow},
+		},
+	}
+
+	got := root.firewallContextSnapshot()
+
+	for _, want := range []string{"ALLOW", "10.0.0.0/8", "shadowed by #1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q under Machiavelli Mode", got, want)
+		}
+	}
+}
+
+// TestFirewallContextSnapshotReportsNoBackendActive pins the other
+// real case: no supported firewall is currently governing traffic at
+// all, which must read as a clear statement, not an empty or
+// confusing snapshot.
+func TestFirewallContextSnapshotReportsNoBackendActive(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendNone}
+
+	got := root.firewallContextSnapshot()
+
+	if !strings.Contains(got, "No supported firewall backend") {
+		t.Errorf("snapshot = %q, want it to clearly state no backend is active", got)
+	}
+}
+
+// TestFirewallContextSnapshotReportsReadError pins the real,
+// live-observed case (no permission to read the ruleset, the common
+// case on a non-root dev run): the error itself is surfaced, not a
+// silently empty or misleading snapshot.
+func TestFirewallContextSnapshotReportsReadError(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.firewallErr = errors.New("permission denied (you must be root)")
+
+	got := root.firewallContextSnapshot()
+
+	if !strings.Contains(got, "permission denied") {
+		t.Errorf("snapshot = %q, want it to surface the read error", got)
+	}
+}
+
+// TestFirewallContextSnapshotCapsRuleList pins the same cap-list
+// discipline every other snapshot builder here already follows, once
+// Machiavelli Mode is on.
+func TestFirewallContextSnapshotCapsRuleList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereHardcoreMode = true
+	var rules []firewall.Rule
+	for i := 0; i < consigliereMaxFirewallRules+5; i++ {
+		rules = append(rules, firewall.Rule{Order: i + 1, Action: firewall.ActionAllow, Source: "distinct-source"})
+	}
+	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendUFW, Rules: rules}
+
+	got := root.firewallContextSnapshot()
+
+	if got := strings.Count(got, "distinct-source"); got != consigliereMaxFirewallRules {
+		t.Errorf("snapshot mentions %d rules, want exactly the cap of %d", got, consigliereMaxFirewallRules)
 	}
 }

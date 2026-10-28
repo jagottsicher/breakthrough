@@ -1823,12 +1823,13 @@ Along with the question itself, every request includes:
 - A description of whatever's currently on screen — the file panel's
   own directory and marked files, Log Holepunch's own directory/time
   range/filters plus a fixed list of every field and key that screen
-  offers, or Git Breach's own repository root, branch, ahead/behind
+  offers, Git Breach's own repository root, branch, ahead/behind
   count, staged/unstaged/untracked/conflict counts, and a handful of
-  recent commit subjects. Never a log line's own text, a diff's own
-  content, or a file's own content — only metadata already visible in
-  each screen's own headers (see "Machiavelli Mode" below for the one
-  deliberate exception).
+  recent commit subjects, or Firewall's own current backend and rule
+  count. Never a log line's own text, a diff's own content, a full
+  firewall ruleset, or a file's own content — only metadata already
+  visible in each screen's own headers (see "Machiavelli Mode" below
+  for the one deliberate exception to that).
 - Whatever sections of breakthrough's own documentation (the built-in
   help plus this guide) best match the question, found by a local,
   lexical search — no embeddings, no index built from a network call.
@@ -1866,14 +1867,16 @@ prompt" overwrites it back to that default, after confirming.
 
 ### Machiavelli Mode
 
-Off by default. Log Holepunch's and Git Breach's own context (see
-above) normally never includes an actual log line's or diff's own
-text — only filter/commit metadata. Turning this on lets Log Holepunch
-forward the lines currently matching the Filter/Time/Level fields,
-verbatim, capped at 50 lines per question, and lets Git Breach forward
-whatever diff is currently shown in Main, capped at 300 lines. Real
-log lines and real diffs can carry credentials, IP addresses, names,
-or other personal data that would otherwise never leave this machine.
+Off by default. Log Holepunch's, Git Breach's, and Firewall's own
+context (see above) normally never includes an actual log line's or
+diff's own text, or the ruleset itself — only filter/commit metadata
+and a rule count. Turning this on lets Log Holepunch forward the
+lines currently matching the Filter/Time/Level fields, verbatim,
+capped at 50 lines per question; Git Breach forward whatever diff is
+currently shown in Main, capped at 300 lines; and Firewall forward
+its full ruleset, capped at 50 rules. Real log lines, diffs, and
+firewall rules can carry credentials, IP addresses, internal network
+layout, or other data that would otherwise never leave this machine.
 
 Turning it on requires scrolling a full warning to its own end before
 the confirming choice does anything — a question short enough to

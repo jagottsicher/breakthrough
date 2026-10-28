@@ -488,12 +488,13 @@ var helpText = strings.TrimLeft(`
   Along with the question itself, every request includes a
   description of whatever's currently on screen (the file panel's own
   directory and marked files, Log Holepunch's own directory/filters
-  plus a fixed list of every field and key that screen offers, or Git
+  plus a fixed list of every field and key that screen offers, Git
   Breach's own branch/ahead-behind/staged/unstaged/untracked/conflict
-  counts and recent commit subjects — never a log line's, diff's, or
-  file's own content), whatever documentation sections a local,
-  lexical search over this help text and the online guide finds
-  relevant, and the system prompt.
+  counts and recent commit subjects, or Firewall's own current
+  backend and rule count — never a log line's, diff's, full ruleset's,
+  or file's own content), whatever documentation sections a local,
+  lexical search over this help text
+  and the online guide finds relevant, and the system prompt.
 
   Configured entirely under Options → AI Consigliere: Provider,
   Model, Effort, the API key (environment variable, an opt-in
@@ -502,9 +503,9 @@ var helpText = strings.TrimLeft(`
   an editable/resettable system prompt, and "Machiavelli Mode"
   — off by default, gated behind a warning you have to scroll to the
   end of before it does anything — which lets Log Holepunch forward
-  the lines currently matching its own filters, and Git Breach
-  forward whatever diff is currently shown in Main, both verbatim
-  rather than just their usual metadata.
+  the lines currently matching its own filters, Git Breach forward
+  whatever diff is currently shown in Main, and Firewall forward its
+  full ruleset, all verbatim rather than just their usual metadata.
 
 [::b]Status bar (the bottom line, purely informational)[::-]
 

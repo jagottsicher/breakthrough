@@ -32,6 +32,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
 	"github.com/jagottsicher/breakthrough/internal/docsearch"
+	"github.com/jagottsicher/breakthrough/internal/firewall"
 )
 
 const consiglierePage = "consigliere"
@@ -913,6 +914,8 @@ func (r *Root) consigliereContextSnapshot() string {
 		return r.logAuditContextSnapshot()
 	case gitBreachPage:
 		return r.gitBreachContextSnapshot()
+	case firewallPage:
+		return r.firewallContextSnapshot()
 	default: // "" (the bare panel) and anything else "gC" might someday reach from
 		return r.panelContextSnapshot()
 	}
@@ -1134,6 +1137,80 @@ func (r *Root) consigliereMachiavelliGitBreachDiff() string {
 	b.WriteString("\n")
 	if len(lines) > n {
 		fmt.Fprintf(&b, "(%d further diff lines not shown)\n", len(lines)-n)
+	}
+	return b.String()
+}
+
+// consigliereMaxFirewallRules caps how many rules
+// firewallContextSnapshot lists individually — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxFirewallRules = 50
+
+// firewallContextSnapshot describes the Firewall screen: which real
+// backend currently governs traffic, and how many rules it has —
+// never the ruleset itself by default, the same boundary Log
+// Holepunch's log lines and Git Breach's diff content already keep,
+// with Machiavelli Mode as the identical opt-in exception (see
+// consigliereMachiavelliFirewallRules): a full ruleset describes this
+// host's complete inbound attack surface (source/destination CIDR,
+// open ports, internal subnet/VPN layout), not something to hand a
+// third-party provider on every question asked from this screen
+// without the user explicitly choosing to.
+func (r *Root) firewallContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Firewall.\n")
+	if r.firewallErr != nil {
+		fmt.Fprintf(&b, "Could not read the current ruleset: %v\n", r.firewallErr)
+		return strings.TrimSpace(b.String())
+	}
+	if r.firewallSnapshot.Backend == firewall.BackendNone {
+		b.WriteString("No supported firewall backend (ufw/nftables/iptables) is currently active on this host.\n")
+		return strings.TrimSpace(b.String())
+	}
+	fmt.Fprintf(&b, "Backend: %s\n", r.firewallSnapshot.Backend)
+	fmt.Fprintf(&b, "%d rules configured.\n", len(r.firewallSnapshot.Rules))
+	if r.settings.ConsigliereHardcoreMode {
+		b.WriteString(r.consigliereMachiavelliFirewallRules())
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// consigliereMachiavelliFirewallRules renders the actual ruleset,
+// verbatim, once Machiavelli Mode is on — the full rule list (source/
+// destination CIDR, port, interface) is withheld by default here the
+// same way a log line or diff's own content already is, since it
+// describes this host's complete inbound attack surface rather than
+// something as low-stakes as a rule count: an admin's own LAN/VPN
+// layout is exactly what a silently-included context would otherwise
+// hand to a third-party provider on every single question asked from
+// this screen, not just ones actually about the ruleset.
+func (r *Root) consigliereMachiavelliFirewallRules() string {
+	rules := r.firewallSnapshot.Rules
+	if len(rules) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nMachiavelli Mode is on — the full ruleset is forwarded verbatim:\n")
+	n := len(rules)
+	if n > consigliereMaxFirewallRules {
+		n = consigliereMaxFirewallRules
+	}
+	for _, rule := range rules[:n] {
+		shadowed := ""
+		if rule.ShadowedByOrder != 0 {
+			shadowed = fmt.Sprintf(" [shadowed by #%d %s]", rule.ShadowedByOrder, rule.ShadowedByAction)
+		}
+		protocol := rule.Protocol
+		if protocol == "" {
+			protocol = "any"
+		}
+		fmt.Fprintf(&b, "#%d %s %s %s port=%s from=%s to=%s via=%s%s\n",
+			rule.Order, rule.Direction, rule.Action, protocol,
+			rule.PortLabel(r.firewallServices), rule.SourceLabel(), rule.DestinationLabel(), rule.InterfaceLabel(), shadowed)
+	}
+	if len(rules) > n {
+		fmt.Fprintf(&b, "(%d further rules not shown)\n", len(rules)-n)
 	}
 	return b.String()
 }
