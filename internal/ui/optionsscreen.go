@@ -782,10 +782,21 @@ func (r *Root) activateOptionRow(row int) {
 	case opt.secretAction != nil:
 		opt.secretAction(r)
 	case doc.Kind == config.KindBool:
+		next := opt.value(r) != "true"
+		if next && opt.confirmEnable != "" {
+			// Only the false->true direction asks — turning a risk
+			// back off needs no ceremony, only turning it on does
+			// (see optionSpec.confirmEnable's own doc comment).
+			r.openConfirm(opt.confirmEnable, "Yes, enable", func() {
+				opt.apply(r, "true")
+				r.renderOptions()
+			})
+			return
+		}
 		// Toggled in place — no dialog for a two-state value, since
 		// picking from a list of exactly "Yes" and "No" is pure
 		// ceremony.
-		opt.apply(r, strconv.FormatBool(opt.value(r) != "true"))
+		opt.apply(r, strconv.FormatBool(next))
 		r.renderOptions()
 	case opt.choices != nil:
 		r.cycleOptionChoice(opt)

@@ -725,6 +725,13 @@ func SettingDocs() []SettingDoc {
 			Summary:     `Overrides the selected model's own default reasoning effort. "" omits it, the model's own documented default.`,
 			Implemented: true,
 		},
+		{
+			Key:         "consigliere_hardcore_mode",
+			Default:     strconv.FormatBool(d.ConsigliereHardcoreMode),
+			Kind:        KindBool,
+			Summary:     `"Machiavelli Mode": lets a per-view context snapshot forward actual log line content, not just filter metadata, to the configured AI provider. Off by default; the Options screen requires confirming a dedicated privacy warning before turning it on.`,
+			Implemented: true,
+		},
 	}
 }
 

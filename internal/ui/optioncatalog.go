@@ -123,6 +123,14 @@ type optionSpec struct {
 	// time validation (see validateOptionsInputPath): a non-empty
 	// value must resolve to a real, existing regular file.
 	pathCompletion bool
+
+	// confirmEnable, when non-empty, marks a KindBool row that must be
+	// confirmed before switching it from false to true — currently
+	// only Machiavelli Mode (consigliere_hardcore_mode). Turning it
+	// back off stays immediate, the same as every other boolean here;
+	// only the riskier direction asks first. activateOptionRow shows
+	// this text via openConfirm instead of toggling in place.
+	confirmEnable string
 }
 
 // doc returns the config-package metadata for this setting — its kind,
@@ -156,6 +164,14 @@ func withSection(section string, opt optionSpec) optionSpec {
 // establishes for a field only a handful of options ever set.
 func withPathCompletion(opt optionSpec) optionSpec {
 	opt.pathCompletion = true
+	return opt
+}
+
+// withConfirmEnable marks a KindBool optionSpec as needing the given
+// warning confirmed before it's turned on (see optionSpec.confirmEnable's
+// own doc comment) — currently only Machiavelli Mode.
+func withConfirmEnable(opt optionSpec, warning string) optionSpec {
+	opt.confirmEnable = warning
 	return opt
 }
 
@@ -1465,6 +1481,25 @@ func optionCategories() []optionCategory {
 					value:        func(r *Root) string { return r.consigliereAPIKeyStatus() },
 					secretAction: func(r *Root) { r.openAPIKeyDialog(r.settings.ConsigliereProvider) },
 				},
+				withConfirmEnable(boolOption("consigliere_hardcore_mode", "Machiavelli Mode",
+					"Lets Log Holepunch/Action Log's own context snapshot forward the "+
+						"actual matched log line content to the configured AI provider, not "+
+						"just filter metadata as it does by default. A real log line can "+
+						"contain credentials, IP addresses, names, or other personal data — "+
+						"this is what makes that reachable by a third-party provider rather "+
+						"than withheld. Off by default; turning it off again is immediate, no "+
+						"confirmation needed.",
+					false,
+					func(r *Root) bool { return r.settings.ConsigliereHardcoreMode },
+					func(r *Root, b bool) {
+						r.settings.ConsigliereHardcoreMode = b
+						r.persistSetting("consigliere_hardcore_mode", strconv.FormatBool(b))
+					}),
+					"Turn on Machiavelli Mode?\n\nLog Holepunch/Action Log will then send "+
+						"actual matched log line content — potentially including real "+
+						"credentials or personal data — to the configured AI provider, not "+
+						"just filter metadata. This cannot be undone once a request has "+
+						"already gone out."),
 			},
 		},
 	}
@@ -1843,6 +1878,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.ConsigliereModel, true
 	case "consigliere_effort":
 		return s.ConsigliereEffort, true
+	case "consigliere_hardcore_mode":
+		return strconv.FormatBool(s.ConsigliereHardcoreMode), true
 	}
 	return "", false
 }

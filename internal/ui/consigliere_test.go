@@ -289,6 +289,30 @@ func TestConsigliereTitleBarReflectsHistoryFocusOnly(t *testing.T) {
 	}
 }
 
+// TestConsigliereTitleBarShowsMachiavelliModeRegardlessOfFocus pins
+// the unmissable reminder: while Machiavelli Mode is on, the title
+// bar's own warning color and label override the ordinary
+// focused/unfocused look entirely, rather than only showing on one of
+// the two states.
+func TestConsigliereTitleBarShowsMachiavelliModeRegardlessOfFocus(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereHardcoreMode = true
+	root.showConsigliere()
+
+	theme := root.theme
+	if got := root.consigliereTitleBar.GetBackgroundColor(); got != theme.ErrorBackground {
+		t.Errorf("title bar background with the input focused = %v, want ErrorBackground", got)
+	}
+	if !strings.Contains(root.consigliereTitleBar.GetText(false), "MACHIAVELLI") {
+		t.Errorf("title bar text = %q, want it to mention Machiavelli Mode", root.consigliereTitleBar.GetText(false))
+	}
+
+	root.app.SetFocus(root.consigliereHistory)
+	if got := root.consigliereTitleBar.GetBackgroundColor(); got != theme.ErrorBackground {
+		t.Errorf("title bar background with the history focused = %v, want ErrorBackground still", got)
+	}
+}
+
 // TestShowConsigliereLeavesAnOpenDetailsSidebarOpen and
 // TestShowDetailsSidebarLeavesAnOpenConsigliereOpen pin the user's own
 // explicit request: the two no longer need to be mutually exclusive —

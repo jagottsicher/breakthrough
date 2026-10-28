@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jagottsicher/breakthrough/internal/git"
+	"github.com/jagottsicher/breakthrough/internal/logview"
 )
 
 func TestPanelContextSnapshotIncludesDirectoryAndMarkedFiles(t *testing.T) {
@@ -92,6 +93,55 @@ func TestLogAuditContextSnapshotAlwaysIncludesAvailableActions(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("snapshot = %q, want it to always contain %q", got, want)
 		}
+	}
+}
+
+// TestLogAuditContextSnapshotOmitsLogLinesByDefault pins the ordinary,
+// privacy-preserving case: even with real entries loaded and the
+// viewer open, no actual log line text is forwarded unless
+// Machiavelli Mode has been explicitly turned on.
+func TestLogAuditContextSnapshotOmitsLogLinesByDefault(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = logAuditViewerPage
+	root.logAuditAllEntries = []logview.Entry{{Raw: "2026-10-28 secret=topsecret123 user logged in"}}
+
+	got := root.logAuditContextSnapshot()
+
+	if strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, must not contain actual log line text without Machiavelli Mode", got)
+	}
+}
+
+// TestLogAuditContextSnapshotIncludesMatchedLinesUnderMachiavelliMode
+// pins the explicit, opted-in exception: once the user has turned the
+// mode on, the viewer's own currently-matching lines are forwarded
+// verbatim.
+func TestLogAuditContextSnapshotIncludesMatchedLinesUnderMachiavelliMode(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = logAuditViewerPage
+	root.settings.ConsigliereHardcoreMode = true
+	root.logAuditAllEntries = []logview.Entry{{Raw: "2026-10-28 secret=topsecret123 user logged in"}}
+
+	got := root.logAuditContextSnapshot()
+
+	if !strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, want the matched log line forwarded under Machiavelli Mode", got)
+	}
+}
+
+// TestLogAuditContextSnapshotMachiavelliModeOnlyAppliesToTheViewerPage
+// pins the scope: the selection screen has no matched entries of its
+// own to leak, so the mode must not do anything there even if it's on.
+func TestLogAuditContextSnapshotMachiavelliModeOnlyAppliesToTheViewerPage(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = logAuditSelectionPage
+	root.settings.ConsigliereHardcoreMode = true
+	root.logAuditAllEntries = []logview.Entry{{Raw: "2026-10-28 secret=topsecret123 user logged in"}}
+
+	got := root.logAuditContextSnapshot()
+
+	if strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, must not include log lines outside the viewer page", got)
 	}
 }
 

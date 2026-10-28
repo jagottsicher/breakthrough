@@ -449,11 +449,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		// "a live theme switch mid-focus must not show the wrong one
 		// until the next blur/focus cycle" hazard detailsTitleBar's
 		// own identical block documents.
-		if r.consigliereHistory.HasFocus() {
-			r.consigliereTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		} else {
-			r.consigliereTitleBar.SetBackgroundColor(theme.InputBackground)
-		}
+		r.consigliereTitleBar.SetBackgroundColor(r.consigliereTitleBarBackground(r.consigliereHistory.HasFocus()))
 		r.consigliereTitleBar.SetTextColor(theme.Text)
 	}
 	if r.consigliereInput != nil {

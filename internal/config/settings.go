@@ -599,6 +599,19 @@ type Settings struct {
 	// field entirely, which is each provider's own documented default
 	// behavior, not a value this package picks on its own.
 	ConsigliereEffort string
+
+	// ConsigliereHardcoreMode ("Machiavelli Mode" in the Options
+	// screen's own label — see optioncatalog.go) lets a per-view
+	// context snapshot forward actual log line content — not just
+	// filter metadata — to the "gC" sidebar's own provider, when that
+	// view's own snapshot builder opts into checking it (currently
+	// only logAuditContextSnapshot). False by default; turning it on
+	// requires confirming a dedicated warning first (see
+	// optioncatalog.go's own confirmEnable wiring) since real
+	// credentials or personal data in a log line could otherwise reach
+	// a third-party provider. Turning it back off needs no such
+	// confirmation.
+	ConsigliereHardcoreMode bool
 }
 
 // LabelName returns the display name for color-label id (1-9) — the
@@ -750,10 +763,11 @@ func DefaultSettings() Settings {
 		Label8Name: "Pink Panther",
 		Label9Name: "Lime Disease",
 
-		ConsigliereProvider:   "anthropic",
-		ConsigliereAPIKeyFile: "",
-		ConsigliereModel:      "",
-		ConsigliereEffort:     "",
+		ConsigliereProvider:     "anthropic",
+		ConsigliereAPIKeyFile:   "",
+		ConsigliereModel:        "",
+		ConsigliereEffort:       "",
+		ConsigliereHardcoreMode: false,
 	}
 }
 
@@ -972,6 +986,8 @@ func (s *Settings) apply(key, value string) error {
 		s.ConsigliereModel = value
 	case "consigliere_effort":
 		s.ConsigliereEffort = value
+	case "consigliere_hardcore_mode":
+		return parseBool(&s.ConsigliereHardcoreMode)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}

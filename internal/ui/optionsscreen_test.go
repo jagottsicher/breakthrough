@@ -160,6 +160,77 @@ func TestToggleOptionAppliesLiveAndPersists(t *testing.T) {
 	}
 }
 
+// TestConfirmEnableOptionAsksBeforeTurningOn pins Machiavelli Mode's
+// own gate: activating the row while it's off must not apply anything
+// yet, only open the confirmation — accepting it is what actually
+// flips the setting.
+func TestConfirmEnableOptionAsksBeforeTurningOn(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
+	if !ok {
+		t.Fatal("no consigliere_hardcore_mode row")
+	}
+
+	r.activateOptionRow(row)
+
+	if r.settings.ConsigliereHardcoreMode {
+		t.Error("turning it on should not have applied yet, pending confirmation")
+	}
+	if r.activePage != confirmPage {
+		t.Errorf("activePage = %q, want the confirmation dialog open", r.activePage)
+	}
+
+	r.acceptConfirm()
+
+	if !r.settings.ConsigliereHardcoreMode {
+		t.Error("confirming should have turned it on")
+	}
+}
+
+// TestConfirmEnableOptionCancelLeavesItOff is the other half: declining
+// the confirmation must leave the setting untouched.
+func TestConfirmEnableOptionCancelLeavesItOff(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
+	if !ok {
+		t.Fatal("no consigliere_hardcore_mode row")
+	}
+
+	r.activateOptionRow(row)
+	r.cancelConfirm()
+
+	if r.settings.ConsigliereHardcoreMode {
+		t.Error("cancelling the confirmation should have left it off")
+	}
+}
+
+// TestConfirmEnableOptionTurningOffNeedsNoConfirmation pins the
+// asymmetry: only switching it on is gated — switching back off is
+// exactly as immediate as every other boolean option.
+func TestConfirmEnableOptionTurningOffNeedsNoConfirmation(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.settings.ConsigliereHardcoreMode = true
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
+	if !ok {
+		t.Fatal("no consigliere_hardcore_mode row")
+	}
+
+	r.activateOptionRow(row)
+
+	if r.settings.ConsigliereHardcoreMode {
+		t.Error("turning it off should have applied immediately, no confirmation")
+	}
+	if r.activePage == confirmPage {
+		t.Error("no confirmation dialog should have opened for turning it off")
+	}
+}
+
 // TestDefaultHintAppearsOnlyWhileTheValueDiffers pins the column that
 // replaced the old origin one, and the exact complaint that prompted it:
 // toggling a setting twice puts the default value back, and the hint has
