@@ -1968,8 +1968,8 @@
     },
     {
       "path": "internal/ui/consigliere.go",
-      "size": 51381,
-      "sha256": "b889798072ba25e4bc6596c6f815fb226cdeda85b210992d252e34ddb31df625"
+      "size": 53596,
+      "sha256": "d92f9245a9b02ae2aa66e21ba677ae5683ae3e2dbb887ef76309ed3ce6d85d55"
     },
     {
       "path": "internal/ui/consigliere_docsearch_hint_test.go",
@@ -2008,8 +2008,8 @@
     },
     {
       "path": "internal/ui/consigliereprompt_test.go",
-      "size": 4000,
-      "sha256": "ed165373b0d04062c1f376c762f8318104e30155bf504aa7ad42adbe410bd89b"
+      "size": 4797,
+      "sha256": "96c5cebd5cfb231da18969ef5425077f8fdad654ae892ffcbaece839e65d645b"
     },
     {
       "path": "internal/ui/consiglieresplash.go",
@@ -31345,7 +31345,14 @@
       "name": "logAuditContextSnapshot",
       "kind": "method",
       "receiver": "*Root",
-      "line": 880
+      "line": 892
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/consigliere.go",
+      "name": "logAuditViewerAvailableActions",
+      "kind": "const",
+      "line": 924
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31353,21 +31360,21 @@
       "name": "gitBreachContextSnapshot",
       "kind": "method",
       "receiver": "*Root",
-      "line": 906
+      "line": 939
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "errConsigliereNoAPIKey",
       "kind": "var",
-      "line": 943
+      "line": 976
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "errConsigliereLocked",
       "kind": "var",
-      "line": 952
+      "line": 985
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31375,14 +31382,14 @@
       "name": "buildConsigliereProvider",
       "kind": "method",
       "receiver": "*Root",
-      "line": 967
+      "line": 1000
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "firstNonEmptyConsigliereModel",
       "kind": "function",
-      "line": 1016
+      "line": 1049
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31390,7 +31397,7 @@
       "name": "submitConsigliereUnlock",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1036
+      "line": 1069
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31398,7 +31405,7 @@
       "name": "submitConsigliereMessage",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1064
+      "line": 1097
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31406,7 +31413,7 @@
       "name": "renderConsigliereHistory",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1112
+      "line": 1145
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32043,16 +32050,23 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliereprompt_test.go",
+      "name": "TestLogAuditContextSnapshotAlwaysIncludesAvailableActions",
+      "kind": "function",
+      "line": 86
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/consigliereprompt_test.go",
       "name": "TestGitBreachContextSnapshotIncludesStatusAndCommits",
       "kind": "function",
-      "line": 80
+      "line": 98
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliereprompt_test.go",
       "name": "TestGitBreachContextSnapshotCapsRecentCommits",
       "kind": "function",
-      "line": 103
+      "line": 121
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -61416,5 +61430,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "39fa15af450f38f55ad1fb9bcc283bfcffa8dd55699be9ebbd3dc9435f28ad09"
+  "merkle_root": "d5b12cc6b899c1ae40c24c4b075c99f825065c47a9707fdc00aae48a2deac4d7"
 }

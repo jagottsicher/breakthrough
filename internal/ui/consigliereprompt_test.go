@@ -77,6 +77,24 @@ func TestLogAuditContextSnapshotIncludesDirectoryAndFilters(t *testing.T) {
 	}
 }
 
+// TestLogAuditContextSnapshotAlwaysIncludesAvailableActions pins the
+// user's own explicit request: this view's own fields/keys must be
+// present even when nothing has been typed into any filter yet —
+// unlike the live filter values above, which are only reported once
+// set, the screen's own available actions are a fixed fact about
+// this screen, not something that depends on current state.
+func TestLogAuditContextSnapshotAlwaysIncludesAvailableActions(t *testing.T) {
+	root := newPlainKeyRoot(t) // no filters set at all
+
+	got := root.logAuditContextSnapshot()
+
+	for _, want := range []string{"Time field", "2 hours ago", "Level field", "Tab / Shift+Tab", "Escape"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to always contain %q", got, want)
+		}
+	}
+}
+
 func TestGitBreachContextSnapshotIncludesStatusAndCommits(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.gitBreachRoot = "/home/jens/project"

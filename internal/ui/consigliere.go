@@ -871,12 +871,24 @@ func (r *Root) panelContextSnapshot() string {
 // logAuditContextSnapshot describes whichever Log Audit page is
 // actually showing right now (selection, viewer, detail, or stats —
 // see consigliereContextSnapshot's own switch): the log directory,
-// the visible timeline range, and whatever keyword/time/level filter
-// is currently set. Deliberately never includes a single log line's
-// own text — logAuditKeywordField etc. are the filter *controls*, not
-// the matched entries themselves, and a real credential or secret
-// sitting in a log line is exactly the kind of thing this must never
-// forward to a third-party provider.
+// the visible timeline range, whatever keyword/time/level filter is
+// currently set, and — unlike those live values, which only exist
+// once something is actually typed — a fixed, always-present list of
+// every field and key this screen itself offers (see
+// logAuditViewerAvailableActions's own doc comment on why this is
+// hardcoded here rather than left to the documentation search to
+// surface): a real, reported case asked the exact same question from
+// both the file panel and this screen, and wanted a broad answer from
+// the first and a concrete, this-screen-specific one from the second
+// — the live UI state is the one source that's never a guess about
+// which screen is actually open right now, unlike a BM25 search's own
+// best-effort ranking.
+//
+// Deliberately never includes a single log line's own text —
+// logAuditKeywordField etc. are the filter *controls*, not the
+// matched entries themselves, and a real credential or secret sitting
+// in a log line is exactly the kind of thing this must never forward
+// to a third-party provider.
 func (r *Root) logAuditContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Log Audit.\n")
@@ -887,16 +899,37 @@ func (r *Root) logAuditContextSnapshot() string {
 		fmt.Fprintf(&b, "Visible time range: %s to %s\n", r.logAuditTimelineStartLabel, r.logAuditTimelineEndLabel)
 	}
 	if kw := strings.TrimSpace(r.logAuditKeywordField.GetText()); kw != "" {
-		fmt.Fprintf(&b, "Keyword filter: %s\n", kw)
+		fmt.Fprintf(&b, "Current keyword filter: %s\n", kw)
 	}
 	if lvl := strings.TrimSpace(r.logAuditLevelField.GetText()); lvl != "" {
-		fmt.Fprintf(&b, "Level filter: %s\n", lvl)
+		fmt.Fprintf(&b, "Current level filter: %s\n", lvl)
 	}
 	if tf := strings.TrimSpace(r.logAuditTimeField.GetText()); tf != "" {
-		fmt.Fprintf(&b, "Time filter: %s\n", tf)
+		fmt.Fprintf(&b, "Current time filter: %s\n", tf)
 	}
+	b.WriteString(logAuditViewerAvailableActions)
 	return strings.TrimSpace(b.String())
 }
+
+// logAuditViewerAvailableActions is Log Audit's own fields and keys,
+// verified directly against captureLogAuditViewerTableKey and the
+// Keyword/Time/Level fields' own SetDoneFunc wiring in
+// logauditscreen.go, not recalled from the user guide — this is a
+// second, independent statement of the same facts
+// docs/user-guide.md's own "Log Audit screen" section makes, the same
+// "verified against source, kept deliberately redundant with the
+// docs" status internal/ui/help.go's own helpText already has. Needs
+// updating by hand if that key handling ever changes; nothing
+// enforces the two stay in sync automatically.
+const logAuditViewerAvailableActions = `Available fields and keys on this screen:
+- Filter field: case-insensitive substring over Source and Message, narrows the list live.
+- Time field: "before <moment>", "after <moment>", or "between <moment> and <moment>"; a moment is an absolute date/time or a relative one ("7 days", "2 hours ago", "30 minutes"); a bare relative moment on its own ("last 7 days") means "within that span".
+- Level field (>=): a minimum severity — "warn" shows WARN and everything worse.
+- Tab / Shift+Tab: move between Filter, Time, Level, the timeline, and the list.
+- e: jump to the next error. w: jump to the next warning.
+- Enter (on the list): show the current entry's full text.
+- r: re-read the same files. f: toggle follow mode. s: show statistics.
+- Escape: close, back to file selection.`
 
 // gitBreachContextSnapshot describes the repository Git Breach has
 // open: its root, current branch (plus ahead/behind if any), the
