@@ -221,6 +221,18 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	styleList(r.activityLogNoticeList, theme)
 	r.activityLogNoticeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.activityLogNoticeTitleBar.SetTextColor(theme.TextColor)
+
+	// scrollAcknowledgeNotice (see scrollacknowledge.go) — same
+	// "single-layer, always-modal, fixed FocusedBackground" reasoning
+	// as confirmDialog/quitConfirm just above; the message itself gets
+	// consigliereHistory's own ordinary SurfaceBackground/TextColor
+	// pairing, not activityLogNotice's red error one, since this isn't
+	// an error notice.
+	styleList(r.scrollAcknowledgeList, theme)
+	r.scrollAcknowledgeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.scrollAcknowledgeTitleBar.SetTextColor(theme.TextColor)
+	r.scrollAcknowledgeMessageView.SetBackgroundColor(theme.SurfaceBackground)
+	r.scrollAcknowledgeMessageView.SetTextColor(theme.TextColor)
 	// ErrorBackground/Text, the same pairing errorView itself already
 	// uses (see this function's own call just below) — the user's own
 	// explicit request that this notice's message read "in rot (wie die

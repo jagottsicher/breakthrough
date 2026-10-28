@@ -786,8 +786,12 @@ func (r *Root) activateOptionRow(row int) {
 		if next && opt.confirmEnable != "" {
 			// Only the false->true direction asks — turning a risk
 			// back off needs no ceremony, only turning it on does
-			// (see optionSpec.confirmEnable's own doc comment).
-			r.openConfirm(opt.confirmEnable, "Yes, enable", func() {
+			// (see optionSpec.confirmEnable's own doc comment). A
+			// scroll-to-acknowledge notice, not a one-line openConfirm
+			// question — per the user's own explicit request that a
+			// warning this real actually has to be read, not just
+			// reflexively accepted.
+			r.openScrollAcknowledgeNotice(opt.label, opt.confirmEnable, "Yes, I've read this — enable", func() {
 				opt.apply(r, "true")
 				r.renderOptions()
 			})

@@ -162,10 +162,11 @@ func TestToggleOptionAppliesLiveAndPersists(t *testing.T) {
 
 // TestConfirmEnableOptionAsksBeforeTurningOn pins Machiavelli Mode's
 // own gate: activating the row while it's off must not apply anything
-// yet, only open the confirmation — accepting it is what actually
-// flips the setting.
+// yet, only open the scroll-to-acknowledge notice — accepting it (once
+// scrolled to the end) is what actually flips the setting.
 func TestConfirmEnableOptionAsksBeforeTurningOn(t *testing.T) {
 	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
 	selectOptionCategory(t, r, "AI Consigliere")
 
 	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
@@ -176,23 +177,27 @@ func TestConfirmEnableOptionAsksBeforeTurningOn(t *testing.T) {
 	r.activateOptionRow(row)
 
 	if r.settings.ConsigliereHardcoreMode {
-		t.Error("turning it on should not have applied yet, pending confirmation")
+		t.Error("turning it on should not have applied yet, pending the notice")
 	}
-	if r.activePage != confirmPage {
-		t.Errorf("activePage = %q, want the confirmation dialog open", r.activePage)
+	if r.activePage != scrollAcknowledgePage {
+		t.Errorf("activePage = %q, want the scroll-to-acknowledge notice open", r.activePage)
 	}
 
-	r.acceptConfirm()
+	r.scrollAcknowledgeMessageView.ScrollTo(r.scrollAcknowledgeScrollbar.maxOffset(), 0) // ScrollToEnd only resolves on the next real Draw, which tests never trigger
+	r.acceptScrollAcknowledgeNotice()
 
 	if !r.settings.ConsigliereHardcoreMode {
-		t.Error("confirming should have turned it on")
+		t.Error("confirming after scrolling to the end should have turned it on")
 	}
 }
 
-// TestConfirmEnableOptionCancelLeavesItOff is the other half: declining
-// the confirmation must leave the setting untouched.
-func TestConfirmEnableOptionCancelLeavesItOff(t *testing.T) {
+// TestConfirmEnableOptionWithoutScrollingDoesNothing pins the actual
+// gate the user asked for: confirming before reaching the end of the
+// warning must not apply anything, unlike a plain openConfirm question
+// that would.
+func TestConfirmEnableOptionWithoutScrollingDoesNothing(t *testing.T) {
 	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
 	selectOptionCategory(t, r, "AI Consigliere")
 
 	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
@@ -201,10 +206,39 @@ func TestConfirmEnableOptionCancelLeavesItOff(t *testing.T) {
 	}
 
 	r.activateOptionRow(row)
-	r.cancelConfirm()
+	r.acceptScrollAcknowledgeNotice() // never scrolled
 
 	if r.settings.ConsigliereHardcoreMode {
-		t.Error("cancelling the confirmation should have left it off")
+		t.Error("confirming without scrolling to the end should not have turned it on")
+	}
+	// The rejection's own explanation layers on top (showTransientErrorOverOverlay),
+	// the same "don't close what's underneath" reasoning
+	// validateOptionsInputPath's identical case already follows —
+	// activePage is now the transient error, but the notice underneath
+	// must still be open, not closed over.
+	if r.activePage != errorPage {
+		t.Errorf("activePage = %q, want the rejection's own explanation layered on top", r.activePage)
+	}
+	assertPageVisible(t, r, scrollAcknowledgePage)
+}
+
+// TestConfirmEnableOptionCancelLeavesItOff is the other half: declining
+// the notice must leave the setting untouched.
+func TestConfirmEnableOptionCancelLeavesItOff(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
+	if !ok {
+		t.Fatal("no consigliere_hardcore_mode row")
+	}
+
+	r.activateOptionRow(row)
+	r.cancelScrollAcknowledgeNotice()
+
+	if r.settings.ConsigliereHardcoreMode {
+		t.Error("cancelling the notice should have left it off")
 	}
 }
 
@@ -224,10 +258,10 @@ func TestConfirmEnableOptionTurningOffNeedsNoConfirmation(t *testing.T) {
 	r.activateOptionRow(row)
 
 	if r.settings.ConsigliereHardcoreMode {
-		t.Error("turning it off should have applied immediately, no confirmation")
+		t.Error("turning it off should have applied immediately, no notice")
 	}
-	if r.activePage == confirmPage {
-		t.Error("no confirmation dialog should have opened for turning it off")
+	if r.activePage == scrollAcknowledgePage {
+		t.Error("no scroll-to-acknowledge notice should have opened for turning it off")
 	}
 }
 
