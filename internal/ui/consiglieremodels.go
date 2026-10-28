@@ -27,6 +27,10 @@ var listConsigliereModelsFunc = func(ctx context.Context, providerName, key stri
 		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.OpenAIDefaultBaseURL, nil)
 	case "deepseek":
 		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.DeepSeekDefaultBaseURL, nil)
+	case "gemini":
+		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.GeminiDefaultBaseURL, nil)
+	case "ollama":
+		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.OllamaDefaultBaseURL, nil)
 	default:
 		return consigliere.ListAnthropicModels(ctx, key, consigliere.AnthropicDefaultBaseURL, nil)
 	}
@@ -57,13 +61,24 @@ func (r *Root) refreshConsigliereModelCache() {
 		return
 	}
 
-	key, tier, err := apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFile, provider, r.apiKeySession)
-	if err == nil && tier == apikey.TierNone {
-		err = errConsigliereNoAPIKey
-	}
-	if err != nil {
-		r.consigliereModelFetchErr[provider] = err
-		return
+	// Ollama's own local server never checks a key at all (see
+	// OllamaDefaultBaseURL's own doc comment) — the usual
+	// apikey.Resolve gate would otherwise always report
+	// errConsigliereNoAPIKey for it and never even attempt the fetch,
+	// since nothing is ever configured in Options for a provider that
+	// needs nothing there.
+	key := "ollama"
+	if !consigliereProviderNeedsNoKey(provider) {
+		var tier apikey.Tier
+		var err error
+		key, tier, err = apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFile, provider, r.apiKeySession)
+		if err == nil && tier == apikey.TierNone {
+			err = errConsigliereNoAPIKey
+		}
+		if err != nil {
+			r.consigliereModelFetchErr[provider] = err
+			return
+		}
 	}
 
 	r.consigliereModelFetchInFlight[provider] = true
@@ -108,6 +123,10 @@ func consigliereDefaultModelFor(provider string) string {
 		return consigliere.OpenAIDefaultModel
 	case "deepseek":
 		return consigliere.DeepSeekDefaultModel
+	case "gemini":
+		return consigliere.GeminiDefaultModel
+	case "ollama":
+		return consigliere.OllamaDefaultModel
 	default:
 		return consigliere.AnthropicDefaultModel
 	}

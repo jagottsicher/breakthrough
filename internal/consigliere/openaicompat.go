@@ -17,8 +17,11 @@ import (
 // (consigliere_model) if this one stops working.
 const OpenAIDefaultModel = "gpt-6-astra"
 
-// OpenAIDefaultBaseURL is OpenAI's own API host.
-const OpenAIDefaultBaseURL = "https://api.openai.com"
+// OpenAIDefaultBaseURL is OpenAI's own API host, including its own
+// "/v1" version segment — see the doc comment on Reply's own url
+// construction for why that segment now lives in BaseURL itself
+// rather than being appended unconditionally.
+const OpenAIDefaultBaseURL = "https://api.openai.com/v1"
 
 // DeepSeekDefaultModel is used when OpenAICompat.Model is "" and
 // BaseURL is DeepSeekDefaultBaseURL — the higher-capability general-
@@ -31,7 +34,43 @@ const DeepSeekDefaultModel = "deepseek-v4-pro"
 // OpenAI-API-compatible (same endpoint path, same request/response
 // shape, same Bearer auth), which is exactly why it shares
 // OpenAICompat with OpenAI itself rather than needing its own file.
-const DeepSeekDefaultBaseURL = "https://api.deepseek.com"
+const DeepSeekDefaultBaseURL = "https://api.deepseek.com/v1"
+
+// GeminiDefaultModel is used when OpenAICompat.Model is "" and
+// BaseURL is GeminiDefaultBaseURL — Google's own current flagship
+// model (ai.google.dev/gemini-api/docs/models, checked 2026-10-28).
+// Override via consigliere_model if this changes.
+const GeminiDefaultModel = "gemini-4-argon"
+
+// GeminiDefaultBaseURL is Gemini's own OpenAI-compatible endpoint
+// (ai.google.dev/gemini-api/docs/openai, checked 2026-10-28) — unlike
+// OpenAI/DeepSeek, its own "openai" compatibility shim already carries
+// the version segment itself ("/v1beta/openai", not "/v1"), which is
+// exactly why BaseURL now carries its own full prefix up to (not
+// including) "/chat/completions"/"/models" instead of Reply assuming
+// "/v1/..." for every provider.
+const GeminiDefaultBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
+
+// OllamaDefaultModel is offered as a starting point only — unlike
+// every other provider here, Ollama has no universal default that
+// just works: it only replies with whatever models have actually
+// been pulled locally (`ollama pull <name>`), which this package has
+// no way to know in advance. "llama3.1" is Ollama's own
+// library's current top listing (ollama.com/library, checked
+// 2026-10-28), not a guarantee it's present on this machine — the
+// Options screen's own live model list (fetched from this same local
+// server) is the real source of truth once Ollama is actually
+// running.
+const OllamaDefaultModel = "llama3.1"
+
+// OllamaDefaultBaseURL is Ollama's own local server, OpenAI-compatible
+// endpoint (docs.ollama.com/api/openai-compatibility, checked
+// 2026-10-28) — same URL shape as OpenAI/DeepSeek, and the same
+// "api_key required by the client library, but never actually
+// checked" contract every local Ollama install has, which is why
+// internal/ui supplies a constant placeholder KeyFunc for this
+// provider rather than ever consulting internal/apikey for it.
+const OllamaDefaultBaseURL = "http://localhost:11434/v1"
 
 // Unlike Anthropic's own max_tokens, this package doesn't set an
 // output-length cap on an OpenAICompat request: it's optional there,
@@ -108,7 +147,11 @@ func (p OpenAICompat) Reply(ctx context.Context, req Request) (string, error) {
 		return "", fmt.Errorf("consigliere: encoding request: %w", err)
 	}
 
-	url := p.BaseURL + "/v1/chat/completions"
+	// "/chat/completions", not "/v1/chat/completions": BaseURL now
+	// carries its own version/compatibility-shim segment (see
+	// GeminiDefaultBaseURL's own doc comment on why that can't be a
+	// fixed "/v1" assumed here for every provider).
+	url := p.BaseURL + "/chat/completions"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return "", fmt.Errorf("consigliere: building request: %w", err)

@@ -209,6 +209,52 @@ func TestSubmitConsigliereMessageShowsTheQuestionImmediately(t *testing.T) {
 	}
 }
 
+// TestBuildConsigliereProviderForGeminiUsesGeminiDefaults pins the
+// provider-specific wiring buildConsigliereProvider adds for Gemini —
+// same OpenAICompat shape OpenAI/DeepSeek already use, pointed at
+// Gemini's own OpenAI-compatible endpoint and default model.
+func TestBuildConsigliereProviderForGeminiUsesGeminiDefaults(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "gemini"
+
+	got, ok := root.buildConsigliereProvider().(consigliere.OpenAICompat)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.OpenAICompat", root.buildConsigliereProvider())
+	}
+	if got.BaseURL != consigliere.GeminiDefaultBaseURL {
+		t.Errorf("BaseURL = %q, want %q", got.BaseURL, consigliere.GeminiDefaultBaseURL)
+	}
+	if got.Model != consigliere.GeminiDefaultModel {
+		t.Errorf("Model = %q, want %q", got.Model, consigliere.GeminiDefaultModel)
+	}
+}
+
+// TestBuildConsigliereProviderForOllamaNeedsNoRealKey pins the one
+// deliberate exception to every other provider here: Ollama's own
+// KeyFunc must succeed with a placeholder, never consulting
+// internal/apikey (and therefore never erroring with
+// errConsigliereNoAPIKey) even though nothing at all is configured in
+// Options for it.
+func TestBuildConsigliereProviderForOllamaNeedsNoRealKey(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "ollama"
+
+	got, ok := root.buildConsigliereProvider().(consigliere.OpenAICompat)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.OpenAICompat", root.buildConsigliereProvider())
+	}
+	if got.BaseURL != consigliere.OllamaDefaultBaseURL {
+		t.Errorf("BaseURL = %q, want %q", got.BaseURL, consigliere.OllamaDefaultBaseURL)
+	}
+	key, err := got.APIKey()
+	if err != nil {
+		t.Fatalf("APIKey() = _, %v, want no error even with nothing configured", err)
+	}
+	if key == "" {
+		t.Error("APIKey() returned an empty string, want the documented placeholder")
+	}
+}
+
 // TestTabInConsigliereInputMovesFocusToHistory pins the sidebar's own
 // real keyboard path to the scrollable history: InputField's own
 // SetDoneFunc claims Tab before it could ever reach CycleFocusShortcut
@@ -929,6 +975,18 @@ func TestSubmitConsigliereUnlockCorrectPassphraseUnlocks(t *testing.T) {
 // render as "not set" (which would wrongly suggest nothing was ever
 // configured), and an unlocked one shows a non-reversible last-4-
 // characters hint rather than either the full key or nothing at all.
+// TestConsigliereAPIKeyStatusNotRequiredForOllama pins the status
+// row's own wording for the one provider that needs no key at all —
+// "not set" would wrongly read as something still to configure.
+func TestConsigliereAPIKeyStatusNotRequiredForOllama(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "ollama"
+
+	if got := root.consigliereAPIKeyStatus(); got != "not required (local server)" {
+		t.Errorf("status for ollama = %q, want %q", got, "not required (local server)")
+	}
+}
+
 func TestConsigliereAPIKeyStatusDistinguishesLockedFromNotSet(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.apiKeySession = testAPIKeySession(t)

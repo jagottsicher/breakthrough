@@ -33,6 +33,56 @@ func rootWithConsigliereKey(t *testing.T) *Root {
 	return r
 }
 
+// TestConsigliereProviderNeedsNoKeyOnlyTrueForOllama pins the one
+// deliberate exception to the usual three-tier key chain — Ollama's
+// own local server never checks a key at all (see
+// OllamaDefaultBaseURL's own doc comment); every other provider still
+// needs a real one.
+func TestConsigliereProviderNeedsNoKeyOnlyTrueForOllama(t *testing.T) {
+	for _, provider := range []string{"anthropic", "openai", "deepseek", "gemini"} {
+		if consigliereProviderNeedsNoKey(provider) {
+			t.Errorf("consigliereProviderNeedsNoKey(%q) = true, want false", provider)
+		}
+	}
+	if !consigliereProviderNeedsNoKey("ollama") {
+		t.Error(`consigliereProviderNeedsNoKey("ollama") = false, want true`)
+	}
+}
+
+// TestRefreshConsigliereModelCacheFetchesForOllamaWithoutAnyKeyConfigured
+// pins the real bug the usual apikey.Resolve gate would otherwise
+// cause: Ollama has nothing to configure in Options at all, so the
+// fetch must still be attempted (not skipped as "no API key") with
+// the placeholder key every Ollama OpenAI-compat client is documented
+// to need.
+func TestRefreshConsigliereModelCacheFetchesForOllamaWithoutAnyKeyConfigured(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.settings.ConsigliereProvider = "ollama"
+	type call struct{ providerName, key string }
+	calls := make(chan call, 1)
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+		calls <- call{providerName, key}
+		return nil, nil
+	})
+
+	r.refreshConsigliereModelCache()
+
+	select {
+	case got := <-calls:
+		if got.providerName != "ollama" {
+			t.Errorf("fetch called with provider %q, want %q", got.providerName, "ollama")
+		}
+		if got.key == "" {
+			t.Error("fetch called with an empty key — want the documented placeholder, not a blank Authorization header")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("fetch was never called — want it attempted even though nothing is configured in Options")
+	}
+	if err := r.consigliereModelFetchErr["ollama"]; err != nil {
+		t.Errorf("consigliereModelFetchErr[ollama] = %v, want none", err)
+	}
+}
+
 // TestRefreshConsigliereModelCacheCallsFetchWithResolvedKey pins the
 // synchronous half: a key is actually available, so the fetch is
 // attempted (not skipped) with the right provider/key pair, and

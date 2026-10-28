@@ -163,7 +163,9 @@ type openAICompatModelEntry struct {
 // for both OpenAI and DeepSeek, the same split Anthropic/OpenAICompat
 // already draw for the Reply path itself.
 func ListOpenAICompatModels(ctx context.Context, apiKey, baseURL string, client *http.Client) ([]ModelInfo, error) {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/v1/models", nil)
+	// "/models", not "/v1/models" — see OpenAICompat.Reply's own doc
+	// comment on why baseURL already carries its own version segment.
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
 	if err != nil {
 		return nil, fmt.Errorf("consigliere: building models request: %w", err)
 	}

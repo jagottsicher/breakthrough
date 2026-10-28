@@ -1411,10 +1411,12 @@ func optionCategories() []optionCategory {
 				{
 					key:   "consigliere_provider",
 					label: "Provider",
-					help: "Which AI backend the sidebar's own real provider call uses.\n\n" +
-						"Only selects which provider's own API key is looked up (see \"API key\" " +
-						"below) — see internal/consigliere's own doc comment for the current " +
-						"state of the actual provider call itself.",
+					help: "Which AI backend the sidebar's own real provider call uses, and " +
+						"which provider's own API key is looked up (see \"API key\" below).\n\n" +
+						"Ollama needs no key at all — it talks to a local server " +
+						"(http://localhost:11434 by default) instead of a real API, so \"API " +
+						"key file\"/\"API key (encrypted)\" below are simply unused while it's " +
+						"selected.",
 					value: func(r *Root) string { return r.settings.ConsigliereProvider },
 					apply: func(r *Root, v string) {
 						r.settings.ConsigliereProvider = v
@@ -1431,6 +1433,8 @@ func optionCategories() []optionCategory {
 							{value: "anthropic", label: "Anthropic (Claude)"},
 							{value: "openai", label: "OpenAI (ChatGPT)"},
 							{value: "deepseek", label: "DeepSeek"},
+							{value: "gemini", label: "Google (Gemini)"},
+							{value: "ollama", label: "Ollama (local)"},
 						}
 					},
 				},
@@ -1535,7 +1539,12 @@ func consigliereEnvVarForProvider(provider string) string {
 		return "OPENAI_API_KEY"
 	case "deepseek":
 		return "DEEPSEEK_API_KEY"
+	case "gemini":
+		return "GEMINI_API_KEY"
 	default:
+		// "ollama" falls through here too — it needs no key at all
+		// (see OllamaDefaultBaseURL's own doc comment), so there's no
+		// environment variable to name.
 		return ""
 	}
 }
@@ -1543,8 +1552,21 @@ func consigliereEnvVarForProvider(provider string) string {
 // consigliereAPIKeyStatus is the "API key (encrypted)" row's own live
 // value: which tier (see apikey.Tier) currently supplies the selected
 // provider's key, or that none does — never the key itself.
+// consigliereProviderNeedsNoKey reports whether provider's own
+// server never checks a key at all — currently only Ollama's local
+// server (see OllamaDefaultBaseURL's own doc comment). The one place
+// this app's usual three-tier key chain (environment variable, file,
+// encrypted) doesn't apply: a locally running server with nothing to
+// authenticate against.
+func consigliereProviderNeedsNoKey(provider string) bool {
+	return provider == "ollama"
+}
+
 func (r *Root) consigliereAPIKeyStatus() string {
 	provider := r.settings.ConsigliereProvider
+	if consigliereProviderNeedsNoKey(provider) {
+		return "not required (local server)"
+	}
 	key, tier, err := apikey.Resolve(
 		consigliereEnvVarForProvider(provider),
 		r.settings.ConsigliereAPIKeyFile,
