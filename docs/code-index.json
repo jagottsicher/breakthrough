@@ -1968,8 +1968,8 @@
     },
     {
       "path": "internal/ui/consigliere.go",
-      "size": 59832,
-      "sha256": "649358004ef8c07b2ee77e51e65f76abd323de6f22c3e03c6ed0436ace98da94"
+      "size": 59833,
+      "sha256": "3c0bc6b3d117a45682c007e550324ad2c7d95733033c7421a4398a63fd9da945"
     },
     {
       "path": "internal/ui/consigliere_docsearch_hint_test.go",
@@ -61568,5 +61568,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "0bef06489653a4b410e09c18d43d2be96ba60e824a10364b382792db1bd3f038"
+  "merkle_root": "42dd1ddad8e475294133adbce3740a4ae5ab44527c74244260cb11ec4cc6161f"
 }
