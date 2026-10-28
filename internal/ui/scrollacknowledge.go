@@ -123,6 +123,18 @@ func (r *Root) openScrollAcknowledgeNotice(title, message, confirmLabel string, 
 	r.pushOverlay(scrollAcknowledgePage, r.scrollAcknowledgeLayout, func() {
 		r.app.SetFocus(r.scrollAcknowledgeMessageView)
 	})
+	// pushOverlay's own "AI Consigliere sidebar isn't part of
+	// overlayStack" re-float (see its own doc comment in root.go) sends
+	// consiglierePage back to front whenever r.consigliereVisible —
+	// right, for ordinary navigation, but wrong here: this notice can
+	// be opened from Options while the sidebar is still open (it's
+	// non-modal), and the sidebar is docked flush right, overlapping
+	// exactly the dialog's own right edge — where the close glyph
+	// lives. A real, reported bug: the glyph looked present but never
+	// responded to a click, because the sidebar was actually the
+	// front-most page there, not this notice. closeConsigliereWithConfirm
+	// already fixes the identical case for openConfirm the same way.
+	r.SendToFront(scrollAcknowledgePage)
 }
 
 // canAcknowledgeScrollNotice reports whether the message has been
@@ -182,25 +194,17 @@ func (r *Root) captureScrollAcknowledgeMessageKey(event *tcell.EventKey) *tcell.
 // captureScrollAcknowledgeTitleBarMouse makes the header's own "✕"
 // act exactly like Cancel on a left click — the same shape
 // captureConsigliereTitleBarMouse/activityLogNoticeTitleBarMouseCapture
-// already establish elsewhere. A real, reported miss: clicking the
-// glyph didn't always register. TestScrollAcknowledgeTitleBarRectResolvesAfterDraw
-// confirms Flex resolves this title bar's own rect correctly, so the
-// exact cause wasn't pinned down (a live reproduction attempt was
-// inconclusive, muddied by an unrelated test-harness artifact) —
-// accepting one column past the computed position is a defensive,
-// low-risk widening rather than a confirmed fix: nothing else sits in
-// that column to accidentally trigger, and toolWindowCloseGlyph's own
-// doc comment already documents this exact glyph rendering
-// double-width in at least one real terminal before, which this would
-// cover if that turns out to be the real cause here too.
+// already establish elsewhere. A real, reported miss (the glyph never
+// responded) turned out to be a Z-order bug, not a geometry one — see
+// openScrollAcknowledgeNotice's own SendToFront call for the actual
+// fix; this handler's own math was correct all along.
 func (r *Root) captureScrollAcknowledgeTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if action != tview.MouseLeftDown {
 		return action, event
 	}
 	x, y, width, _ := r.scrollAcknowledgeTitleBar.GetRect()
 	clickX, clickY := event.Position()
-	closeCol := x + toolWindowCloseButtonCol(0, width)
-	if clickY == y && (clickX == closeCol || clickX == closeCol+1) {
+	if clickY == y && clickX == x+toolWindowCloseButtonCol(0, width) {
 		r.cancelScrollAcknowledgeNotice()
 		return tview.MouseConsumed, nil
 	}
