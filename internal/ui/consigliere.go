@@ -1148,13 +1148,15 @@ func (r *Root) consigliereMachiavelliGitBreachDiff() string {
 const consigliereMaxFirewallRules = 50
 
 // firewallContextSnapshot describes the Firewall screen: which real
-// backend currently governs traffic, and the ruleset itself —
-// included by default, unlike Log Holepunch's log lines or Git
-// Breach's diff content, both gated behind Machiavelli Mode. A
-// firewall rule is structured network policy (source/destination
-// CIDR, port, action), not personal data or a credential; withholding
-// it the same way would make a concrete question like "how do I
-// secure this" impossible to answer with anything but generic advice.
+// backend currently governs traffic, and how many rules it has —
+// never the ruleset itself by default, the same boundary Log
+// Holepunch's log lines and Git Breach's diff content already keep,
+// with Machiavelli Mode as the identical opt-in exception (see
+// consigliereMachiavelliFirewallRules): a full ruleset describes this
+// host's complete inbound attack surface (source/destination CIDR,
+// open ports, internal subnet/VPN layout), not something to hand a
+// third-party provider on every question asked from this screen
+// without the user explicitly choosing to.
 func (r *Root) firewallContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Firewall.\n")
@@ -1167,8 +1169,29 @@ func (r *Root) firewallContextSnapshot() string {
 		return strings.TrimSpace(b.String())
 	}
 	fmt.Fprintf(&b, "Backend: %s\n", r.firewallSnapshot.Backend)
+	fmt.Fprintf(&b, "%d rules configured.\n", len(r.firewallSnapshot.Rules))
+	if r.settings.ConsigliereHardcoreMode {
+		b.WriteString(r.consigliereMachiavelliFirewallRules())
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// consigliereMachiavelliFirewallRules renders the actual ruleset,
+// verbatim, once Machiavelli Mode is on — the full rule list (source/
+// destination CIDR, port, interface) is withheld by default here the
+// same way a log line or diff's own content already is, since it
+// describes this host's complete inbound attack surface rather than
+// something as low-stakes as a rule count: an admin's own LAN/VPN
+// layout is exactly what a silently-included context would otherwise
+// hand to a third-party provider on every single question asked from
+// this screen, not just ones actually about the ruleset.
+func (r *Root) consigliereMachiavelliFirewallRules() string {
 	rules := r.firewallSnapshot.Rules
-	fmt.Fprintf(&b, "%d rules:\n", len(rules))
+	if len(rules) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nMachiavelli Mode is on — the full ruleset is forwarded verbatim:\n")
 	n := len(rules)
 	if n > consigliereMaxFirewallRules {
 		n = consigliereMaxFirewallRules
@@ -1189,7 +1212,7 @@ func (r *Root) firewallContextSnapshot() string {
 	if len(rules) > n {
 		fmt.Fprintf(&b, "(%d further rules not shown)\n", len(rules)-n)
 	}
-	return strings.TrimSpace(b.String())
+	return b.String()
 }
 
 // errConsigliereNoAPIKey is what buildConsigliereProvider's own

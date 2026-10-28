@@ -96,6 +96,35 @@ func TestTabFromScrollAcknowledgeMessageReachesTheListAndBack(t *testing.T) {
 	}
 }
 
+// TestScrollAcknowledgeTitleBarRectResolvesAfterDraw pins the one
+// assumption the close-glyph click handler depends on: that Flex
+// actually resolves the title bar's own rect to match
+// scrollAcknowledgeLayout's (x, y, width), not a stale or zero one —
+// the same "Flex only resolves a child's own rect during Draw" gotcha
+// drawConsigliereLayout's own doc comment documents elsewhere. If
+// this ever stops holding, the click handler's own math is reading
+// the wrong rect regardless of how forgiving its column check is.
+func TestScrollAcknowledgeTitleBarRectResolvesAfterDraw(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
+	r.openScrollAcknowledgeNotice("Title", "message", "Yes, enable", func() {})
+	wantX, wantY, wantWidth, _ := r.scrollAcknowledgeLayout.GetRect()
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 40)
+	r.scrollAcknowledgeLayout.Draw(screen)
+
+	gotX, gotY, gotWidth, gotHeight := r.scrollAcknowledgeTitleBar.GetRect()
+	if gotX != wantX || gotY != wantY || gotWidth != wantWidth || gotHeight != 1 {
+		t.Errorf("title bar rect after Draw = (%d,%d,%d,%d), want (%d,%d,%d,1)",
+			gotX, gotY, gotWidth, gotHeight, wantX, wantY, wantWidth)
+	}
+}
+
 // TestScrollAcknowledgeTitleBarCloseGlyphClickCancels pins a real,
 // reported bug: the title bar used to be plain text with no close
 // glyph at all, unlike every sibling dialog's own clickable "✕".
@@ -120,13 +149,11 @@ func TestScrollAcknowledgeTitleBarCloseGlyphClickCancels(t *testing.T) {
 	}
 }
 
-// TestScrollAcknowledgeTitleBarCloseGlyphToleratesOneColumnOff pins a
-// real, reported miss: clicking the glyph's own column exactly
-// sometimes didn't register — this dialog sits much further from the
-// screen edge than the two other close-glyph title bars in this app,
-// and the glyph itself is already documented elsewhere as rendering
-// double-width in at least one real terminal. One column of
-// tolerance past the expected position must still count.
+// TestScrollAcknowledgeTitleBarCloseGlyphToleratesOneColumnOff pins
+// the defensive, one-column-wider hit area added after a real,
+// reported miss whose exact cause wasn't pinned down (see
+// captureScrollAcknowledgeTitleBarMouse's own doc comment) — a click
+// one column past the computed position must still count.
 func TestScrollAcknowledgeTitleBarCloseGlyphToleratesOneColumnOff(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	r.SetRect(0, 0, 100, 40)

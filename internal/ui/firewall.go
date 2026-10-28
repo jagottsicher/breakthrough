@@ -333,6 +333,27 @@ func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 		r.closeFirewall()
 		return nil
 	}
+	// Tab/Backtab reach the AI Consigliere sidebar — see
+	// startConsigliereChord's own doc comment in consigliere.go and
+	// captureLogAuditSelectionTableKey's own identical shape.
+	// firewallTable is this screen's only real focus target, so it's
+	// responsible for its own entry point into the sidebar, the same
+	// "single-node ring" case Log Audit's selection/detail screens
+	// already have. A no-op whenever the sidebar isn't even open.
+	if r.consigliereVisible {
+		if event.Key() == tcell.KeyTab {
+			r.app.SetFocus(r.consigliereInput)
+			return nil
+		}
+		if event.Key() == tcell.KeyBacktab {
+			if r.consigliereScrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliereHistory)
+			} else {
+				r.app.SetFocus(r.consigliereInput)
+			}
+			return nil
+		}
+	}
 	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
 		r.reloadFirewall()
 		return nil
@@ -343,6 +364,15 @@ func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 	if event.Key() == tcell.KeyRune && event.Rune() == 't' {
 		r.openFirewallSimulate()
+		return nil
+	}
+	// "gC" reaches the AI Consigliere from here too — see
+	// startConsigliereChord's own doc comment in consigliere.go.
+	// firewallTable is a *tview.Table, which (unlike a *tview.TextView)
+	// has no built-in meaning for a bare 'g' to begin with, so nothing
+	// existing is lost by claiming it here.
+	if event.Key() == tcell.KeyRune && event.Rune() == 'g' {
+		r.startConsigliereChord(nil)
 		return nil
 	}
 	return event

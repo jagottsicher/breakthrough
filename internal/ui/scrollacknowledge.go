@@ -182,15 +182,17 @@ func (r *Root) captureScrollAcknowledgeMessageKey(event *tcell.EventKey) *tcell.
 // captureScrollAcknowledgeTitleBarMouse makes the header's own "✕"
 // act exactly like Cancel on a left click — the same shape
 // captureConsigliereTitleBarMouse/activityLogNoticeTitleBarMouseCapture
-// already establish elsewhere. A real, reported miss: this dialog's
-// own close column sits much further from the left edge than those
-// two (a centered, fixed-width box rather than one docked flush to a
-// screen edge), and toolWindowCloseGlyph's own doc comment already
-// documents this exact glyph rendering double-width in at least one
-// real terminal before — accepting the one column after the
-// "expected" single-width position too, not just an exact match,
-// covers that without any downside (nothing else sits there to
-// accidentally trigger).
+// already establish elsewhere. A real, reported miss: clicking the
+// glyph didn't always register. TestScrollAcknowledgeTitleBarRectResolvesAfterDraw
+// confirms Flex resolves this title bar's own rect correctly, so the
+// exact cause wasn't pinned down (a live reproduction attempt was
+// inconclusive, muddied by an unrelated test-harness artifact) —
+// accepting one column past the computed position is a defensive,
+// low-risk widening rather than a confirmed fix: nothing else sits in
+// that column to accidentally trigger, and toolWindowCloseGlyph's own
+// doc comment already documents this exact glyph rendering
+// double-width in at least one real terminal before, which this would
+// cover if that turns out to be the real cause here too.
 func (r *Root) captureScrollAcknowledgeTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if action != tview.MouseLeftDown {
 		return action, event

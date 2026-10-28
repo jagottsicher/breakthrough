@@ -78,6 +78,34 @@ func TestCaptureFirewallKeyEscapeClosesTheScreen(t *testing.T) {
 	}
 }
 
+// TestGCReachesAIConsigliereFromFirewall pins a real, reported gap:
+// unlike Log Audit/Git Breach, the Firewall screen's own key capture
+// never called startConsigliereChord at all, so "gC" — and therefore
+// the Firewall ruleset context this screen's own consigliere snapshot
+// now carries — was completely unreachable from here.
+func TestGCReachesAIConsigliereFromFirewall(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	isolateFirewallRead(t, firewall.Snapshot{Backend: firewall.BackendNone}, nil)
+	r.openFirewall()
+
+	if got := r.captureFirewallKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone)); got != nil {
+		t.Fatalf("capture('g') = %v, want nil (consumed, chord started)", got)
+	}
+	if r.pendingChord != 'g' {
+		t.Fatalf("pendingChord = %q, want 'g'", string(r.pendingChord))
+	}
+
+	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
+		t.Fatal("the resolving 'C' should have been consumed")
+	}
+	if !r.consigliereVisible {
+		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
+	}
+}
+
 // TestFirewallHintArrowButtonClickMovesTheSelection pins the user's own
 // explicit further request that even a grouped arrow key ("↑"/"↓" both
 // under "move") be its own real, independently clickable button — a
