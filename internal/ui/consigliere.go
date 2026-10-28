@@ -506,7 +506,7 @@ func (r *Root) showConsigliere() {
 	r.consigliereAwaitingPassphrase = r.consigliereNeedsUnlock()
 	if r.consigliereAwaitingPassphrase {
 		r.consigliereInput.SetMaskCharacter('*')
-		r.consigliereInput.SetPlaceholder("Enter passphrase to unlock the AI Consigliere…")
+		r.consigliereInput.SetPlaceholder("Enter passphrase to unleash the AI Consigliere…")
 	} else {
 		r.consigliereInput.SetMaskCharacter(0)
 		r.consigliereInput.SetPlaceholder(consigliereInputPlaceholder)
