@@ -428,21 +428,21 @@ func TestClickOnConsigliereDoesNotCloseTheHostOverlay(t *testing.T) {
 	}
 }
 
-// TestClickOutsideConsigliereWithNothingElseOpenClosesIt pins the
-// other half of the same fix: with nothing else open at all, a click
-// outside the sidebar must still close it — the standing claim this
-// package's own doc comments already made ("a click outside" closes
-// it), which activePage == "" used to short-circuit before ever
-// reaching Consigliere-specific handling.
-func TestClickOutsideConsigliereWithNothingElseOpenClosesIt(t *testing.T) {
+// TestClickOutsideConsigliereWithNothingElseOpenLeavesItOpen pins a
+// real, reported bug fix: unlike every modal overlay's own "click
+// outside closes it" convention (captureOutsideClick), the sidebar is
+// deliberately non-modal and must stay open through a click on the
+// panel underneath — only its own close glyph or Escape should close
+// it (see captureOutsideClick's own doc comment).
+func TestClickOutsideConsigliereWithNothingElseOpenLeavesItOpen(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.SetRect(0, 0, 100, 40)
 	root.showConsigliere()
 
 	root.captureOutsideClick(tview.MouseLeftClick, tcellMouseEventAt(0, 0))
 
-	if root.consigliereVisible {
-		t.Error("a click outside the sidebar, with nothing else open, should have closed it")
+	if !root.consigliereVisible {
+		t.Error("a click outside the sidebar, with nothing else open, should not have closed it")
 	}
 }
 

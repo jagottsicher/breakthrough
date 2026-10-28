@@ -4107,25 +4107,23 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 
 	// The AI Consigliere sidebar is non-modal (see consigliere.go's own
 	// doc comment — it isn't part of overlayStack/activeWidget at all),
-	// so neither of the two checks below would otherwise ever know
-	// about it. Two real, separate bugs this fixes: a click landing on
-	// the sidebar itself, while some other modal (Log Audit, Git
-	// Breach, ...) is the active overlay, used to read as "outside
-	// that overlay" and close *it* — never consigliereLayout's own
-	// rect, which this now checks first, same priority the drag guards
-	// above already get. And with nothing else open at all
-	// (activePage == ""), a click outside the sidebar used to be a
-	// pure no-op — this is also what actually makes good on every
-	// other doc comment in this package already claiming "a click
-	// outside" closes it.
-	if r.consigliereVisible {
-		if primitiveContains(r.consigliereLayout, x, y) {
-			return action, event // landed on the sidebar itself
-		}
-		if r.activePage == "" && (action == tview.MouseLeftClick || action == tview.MouseRightClick) {
-			r.hideConsigliere()
-			return tview.MouseConsumed, nil
-		}
+	// so the check below would otherwise never know about it. Fixes a
+	// real bug: a click landing on the sidebar itself, while some other
+	// modal (Log Audit, Git Breach, ...) is the active overlay, used to
+	// read as "outside that overlay" and close *it* — never
+	// consigliereLayout's own rect, which this now checks first, same
+	// priority the drag guards above already get.
+	//
+	// Deliberately does *not* close the sidebar on a click outside it,
+	// unlike every modal overlay's own "click outside closes it"
+	// convention (captureOutsideClick) — per the user's own explicit
+	// request: this sidebar is meant to stay open while the user keeps
+	// interacting with the panel underneath (e.g. marking files for it
+	// to see in context), so only the title bar's own close glyph
+	// (dragConsigliereMouseCapture) or Escape (handleConsigliereInputDone)
+	// closes it.
+	if r.consigliereVisible && primitiveContains(r.consigliereLayout, x, y) {
+		return action, event // landed on the sidebar itself
 	}
 
 	if r.activePage == "" {
