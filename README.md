@@ -72,7 +72,11 @@ files found in whichever directory the active panel currently shows,
 a Git breach dashboard (`jg`) for staging, committing, and diffing the
 local git repository containing the active panel's own current
 directory — its own diff pane toggles between a unified pager and a
-side-by-side view (`v`) — a Sessions screen (`js`) listing local GNU screen, tmux, and
+side-by-side view (`v`) — an AI Consigliere chat sidebar (`gC`,
+reachable from anywhere in the app) talking to a real Anthropic/
+OpenAI/DeepSeek provider about whatever's currently on screen, with
+an opt-in "Machiavelli Mode" for forwarding actual Log Holepunch
+content rather than just metadata — a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once
@@ -1228,4 +1232,19 @@ Lightning Network ⚡️ using the sponsor button above.
   scroll position for the whole session. "c" commits whatever is
   currently staged. Local working trees only — there is no
   command-execution channel to run git against a remote session.
+- AI Consigliere (`gC`): a non-modal chat sidebar reachable from
+  anywhere in the app — the file panel, Log Holepunch, Git breach, a
+  remote connection — docked flush right, a third of the screen's own
+  width and half that many characters tall, vertically centered. Talks
+  to a real Anthropic/OpenAI/DeepSeek provider (API key via an
+  environment variable, an opt-in plain-text file, or encrypted under
+  a passphrase asked for once per run), with live model/reasoning-
+  effort selection and an editable, resettable system prompt. Every
+  question carries a description of whatever screen is currently open
+  (never a log line's, diff's, or file's own content) plus whichever
+  sections of breakthrough's own documentation a local, lexical search
+  finds relevant. "Machiavelli Mode", off by default and gated behind
+  a scroll-to-the-end warning, is the one opt-in exception: it lets Log
+  Holepunch forward the lines currently matching its own filters,
+  verbatim.
 

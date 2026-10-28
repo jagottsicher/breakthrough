@@ -374,7 +374,10 @@ func chordFamilies() []chordFamily {
 			// keyboard focus, so "gC" typed again is just two
 			// characters of the next question, not a second chord —
 			// see toggleConsigliere's own doc comment for the real
-			// close paths (Escape, the close glyph, a click outside).
+			// close paths (Escape, the close glyph, or "gC" again once
+			// the input regains focus — each confirmed first once a
+			// real conversation is in progress, see
+			// closeConsigliereWithConfirm).
 			{'C', "AI Consigliere", func(r *Root) { r.toggleConsigliere() }},
 			// "Direct SSH shell…" ("go ssh"), right after Connect: the
 			// same "go to a whole further place" role, just landing in

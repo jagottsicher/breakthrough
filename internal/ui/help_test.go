@@ -250,10 +250,17 @@ func TestAboutTextDefaultsMatchPlainBuild(t *testing.T) {
 	}
 }
 
-// TestHelpTextNeverMentionsAI is a regression guard for this project's
-// own strict rule against any AI/assistant attribution anywhere in its
-// own output — the About section is exactly the kind of place that
-// convention could otherwise slip into unnoticed.
+// TestHelpTextNeverMentionsAI is a regression guard for this
+// project's own strict rule against crediting this app's own
+// creation to an AI coding tool anywhere in its output — the About
+// section is exactly the kind of place that convention could
+// otherwise slip into unnoticed. "anthropic" is deliberately not in
+// this list: the AI Consigliere section legitimately names Anthropic
+// as one of three real, user-chosen providers (see Options → AI
+// Consigliere), the same way it names OpenAI/DeepSeek — a reference
+// this guard was never meant to catch, unlike "claude" (this tool's
+// own name, which the product has no legitimate reason to ever say)
+// or an outright "AI-generated" credit.
 func TestHelpTextNeverMentionsAI(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -262,7 +269,7 @@ func TestHelpTextNeverMentionsAI(t *testing.T) {
 	}
 
 	got := strings.ToLower(r.fullHelpText())
-	for _, bad := range []string{"claude", "anthropic", "ai-generated", "ai generated"} {
+	for _, bad := range []string{"claude", "ai-generated", "ai generated"} {
 		if strings.Contains(got, bad) {
 			t.Errorf("help text contains %q, which must never appear here", bad)
 		}

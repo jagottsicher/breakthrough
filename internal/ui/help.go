@@ -99,9 +99,8 @@ var helpText = strings.TrimLeft(`
                 mail/mailx, whichever is installed — configurable
                 under Options) ·
                 g: Bash prompt (same as plain ":") · gC AI Consigliere
-                (chat advisor overlay, text tips only, reachable from
-                any view — currently a placeholder reply, no real
-                provider wired up yet)
+                (chat sidebar reachable from any view — see its own
+                section below)
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
                 mw Open with… · mt tail -f · ma Select all · mA Deselect all ·
@@ -466,6 +465,43 @@ var helpText = strings.TrimLeft(`
   and Tab again moves focus back to the panel. A click anywhere in the
   sidebar that isn't one of its own click zones also focuses it, the
   same way.
+
+[::b]AI Consigliere ("gC")[::-]
+
+  A chat sidebar talking to a real AI provider (Anthropic, OpenAI, or
+  DeepSeek) about whatever's currently on screen — reachable from
+  anywhere in the app, not just the file panel: inside Log Holepunch
+  or Git Breach, from a remote connection, anywhere "gC" is pressed.
+  Docked flush against the right edge, a third of the screen's own
+  width and half that many characters tall, vertically centered on
+  the whole screen — non-modal, so it stays open and reachable while
+  navigating the rest of the app underneath it, the same way the
+  Details sidebar above does.
+
+  "gC" again (once the sidebar's own input has focus), the title
+  bar's own "✕", or Escape all close it — each asks for confirmation
+  first if there's already a real conversation in it, since closing
+  starts a completely fresh session next time; with nothing asked
+  yet, closing is immediate.
+
+  Along with the question itself, every request includes a
+  description of whatever's currently on screen (the file panel's own
+  directory and marked files, Log Holepunch's own directory/filters
+  plus a fixed list of every field and key that screen offers, or Git
+  Breach's own branch/ahead-behind/staged/unstaged/untracked/conflict
+  counts and recent commit subjects — never a log line's, diff's, or
+  file's own content), whatever documentation sections a local,
+  lexical search over this help text and the online guide finds
+  relevant, and the system prompt.
+
+  Configured entirely under Options → AI Consigliere: Provider,
+  Model, Effort, the API key (environment variable, an opt-in
+  plain-text file, or encrypted under a passphrase asked for once per
+  run), an editable/resettable system prompt, and "Machiavelli Mode"
+  — off by default, gated behind a warning you have to scroll to the
+  end of before it does anything — which lets Log Holepunch forward
+  the lines currently matching its own filters verbatim, rather than
+  just their metadata.
 
 [::b]Status bar (the bottom line, purely informational)[::-]
 
