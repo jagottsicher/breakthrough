@@ -1066,8 +1066,10 @@ const logAuditViewerAvailableActions = `Available fields and keys on this screen
 // gitBreachContextSnapshot describes the repository Git Breach has
 // open: its root, current branch (plus ahead/behind if any), the
 // Staged/Unstaged/Untracked/Conflicts counts, and a handful of recent
-// commit subjects — never a diff's own content or a commit's full
-// body, only metadata already visible in the screen's own headers.
+// commit subjects — only metadata already visible in the screen's
+// own headers, never a diff's own content or a commit's full body,
+// with Machiavelli Mode as the one deliberate exception (see
+// consigliereMachiavelliGitBreachDiff).
 func (r *Root) gitBreachContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Git Breach.\n")
@@ -1093,7 +1095,47 @@ func (r *Root) gitBreachContextSnapshot() string {
 		}
 		fmt.Fprintf(&b, "Recent commits: %s\n", strings.Join(subjects, "; "))
 	}
+	if r.settings.ConsigliereHardcoreMode {
+		b.WriteString(r.consigliereMachiavelliGitBreachDiff())
+	}
 	return strings.TrimSpace(b.String())
+}
+
+// consigliereMachiavelliMaxDiffLines caps how many lines of the
+// currently shown diff consigliereMachiavelliGitBreachDiff forwards —
+// same reasoning as consigliereMachiavelliMaxLogLines: this is
+// already an explicit, confirmed opt-in, but an unbounded multi-file
+// commit diff would still blow past any provider's own context
+// budget for no benefit.
+const consigliereMachiavelliMaxDiffLines = 300
+
+// consigliereMachiavelliGitBreachDiff renders Main's own currently
+// shown diff, verbatim, once Machiavelli Mode is on — "" whenever
+// nothing real is actually shown there (no selection, a conflict row,
+// cancelled) rather than forwarding an empty diff block. The same
+// explicit exception this function's own caller
+// (gitBreachContextSnapshot) makes to the rest of this app's usual
+// "never a line's own content"
+// rule: a diff, like a log line, can carry real secrets (a changed
+// .env file, a hardcoded credential being added or removed) that
+// would otherwise never leave this machine.
+func (r *Root) consigliereMachiavelliGitBreachDiff() string {
+	if r.gitBreachDiffRawText == "" {
+		return ""
+	}
+	lines := strings.Split(r.gitBreachDiffRawText, "\n")
+	var b strings.Builder
+	b.WriteString("\nMachiavelli Mode is on — the diff currently shown in Main is forwarded verbatim:\n")
+	n := len(lines)
+	if n > consigliereMachiavelliMaxDiffLines {
+		n = consigliereMachiavelliMaxDiffLines
+	}
+	b.WriteString(strings.Join(lines[:n], "\n"))
+	b.WriteString("\n")
+	if len(lines) > n {
+		fmt.Fprintf(&b, "(%d further diff lines not shown)\n", len(lines)-n)
+	}
+	return b.String()
 }
 
 // errConsigliereNoAPIKey is what buildConsigliereProvider's own
