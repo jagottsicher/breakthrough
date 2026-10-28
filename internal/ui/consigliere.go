@@ -31,6 +31,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/apikey"
+	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
 	"github.com/jagottsicher/breakthrough/internal/docsearch"
@@ -931,6 +932,8 @@ func (r *Root) consigliereContextSnapshot() string {
 		return r.transferCenterContextSnapshot()
 	case toolboxPage:
 		return r.toolboxContextSnapshot()
+	case compareTreePage:
+		return r.compareTreeContextSnapshot()
 	default: // "" (the bare panel) and anything else "gC" might someday reach from
 		return r.panelContextSnapshot()
 	}
@@ -1534,6 +1537,68 @@ func countToolboxEntries(rows []toolboxDisplayRow) int {
 		}
 	}
 	return n
+}
+
+// consigliereMaxCompareTreeEntries caps how many non-identical
+// entries compareTreeContextSnapshot lists — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxCompareTreeEntries = 50
+
+// compareTreeContextSnapshot describes the Compare Faultline screen:
+// the two roots being compared (already as visible as the panel's
+// own current directory), the running stats, and each differing
+// entry's own relative path and verdict. Never gated behind
+// Machiavelli Mode — a relative path shared between two local
+// directories is the same risk tier Git Breach's own file status list
+// already sends by default, not a real absolute filesystem path or
+// file content.
+func (r *Root) compareTreeContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Compare Faultline.\n")
+	fmt.Fprintf(&b, "Comparing %s against %s.\n", r.compareTreeA, r.compareTreeB)
+	fmt.Fprintf(&b, "%s\n", strings.TrimSpace(compareTreeStatusText(r.compareTreeStats)))
+
+	var diffs []string
+	for _, e := range r.compareTreeEntries {
+		if e.Verdict == compare.Identical {
+			continue
+		}
+		diffs = append(diffs, fmt.Sprintf("%s: %s", e.RelPath, compareTreeVerdictLabel(e.Verdict)))
+	}
+	if len(diffs) > 0 {
+		n := len(diffs)
+		if n > consigliereMaxCompareTreeEntries {
+			n = consigliereMaxCompareTreeEntries
+		}
+		for _, d := range diffs[:n] {
+			fmt.Fprintf(&b, "%s\n", d)
+		}
+		if len(diffs) > n {
+			fmt.Fprintf(&b, "(%d further entries not shown)\n", len(diffs)-n)
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// compareTreeVerdictLabel is compareTreeContextSnapshot's own
+// human-readable name for e.Verdict — compareTreeRowMark's own
+// glyphs aren't meaningful outside the table they're drawn in.
+func compareTreeVerdictLabel(v compare.Verdict) string {
+	switch v {
+	case compare.Differs:
+		return "differs"
+	case compare.Uncertain:
+		return "uncertain (same size, different mtime)"
+	case compare.OnlyInA:
+		return "only in A"
+	case compare.OnlyInB:
+		return "only in B"
+	case compare.Errored:
+		return "error"
+	default:
+		return "identical"
+	}
 }
 
 // errConsigliereNoAPIKey is what buildConsigliereProvider's own

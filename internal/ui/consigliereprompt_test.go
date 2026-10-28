@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/logview"
@@ -705,5 +706,64 @@ func TestConsigliereContextSnapshotDispatchesToToolbox(t *testing.T) {
 
 	if !strings.Contains(got, "Current view: Toolbox.") {
 		t.Errorf("snapshot = %q, want the Toolbox snapshot, not the generic panel one", got)
+	}
+}
+
+// TestCompareTreeContextSnapshotIncludesDifferingEntries pins the
+// ungated case: a relative path shared between two local directories
+// is the same risk tier Git Breach's own file status list already
+// sends by default, so it is never withheld behind Machiavelli Mode.
+func TestCompareTreeContextSnapshotIncludesDifferingEntries(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.compareTreeA, root.compareTreeB = "/tmp/a", "/tmp/b"
+	root.compareTreeStats = compare.Stats{Differs: 1, OnlyInA: 1}
+	root.compareTreeEntries = []compare.Entry{
+		{RelPath: "changed.txt", Verdict: compare.Differs},
+		{RelPath: "only-a.txt", Verdict: compare.OnlyInA},
+		{RelPath: "same.txt", Verdict: compare.Identical},
+	}
+
+	got := root.compareTreeContextSnapshot()
+
+	for _, want := range []string{"Compare Faultline", "/tmp/a", "/tmp/b", "changed.txt: differs", "only-a.txt: only in A"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "same.txt") {
+		t.Errorf("snapshot = %q, must not list an identical entry", got)
+	}
+}
+
+// TestCompareTreeContextSnapshotCapsEntryList pins the same
+// anthropicMaxTokens-style cap every other list-returning snapshot
+// here already follows.
+func TestCompareTreeContextSnapshotCapsEntryList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	for i := 0; i < consigliereMaxCompareTreeEntries+5; i++ {
+		root.compareTreeEntries = append(root.compareTreeEntries, compare.Entry{
+			RelPath: fmt.Sprintf("file-%d.txt", i),
+			Verdict: compare.Differs,
+		})
+	}
+
+	got := root.compareTreeContextSnapshot()
+
+	if !strings.Contains(got, "5 further entries not shown") {
+		t.Errorf("snapshot = %q, want it to mention the 5 truncated entries", got)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToCompareTree pins the
+// dispatch switch's own Compare Faultline case.
+func TestConsigliereContextSnapshotDispatchesToCompareTree(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = compareTreePage
+	root.compareTreeEntries = []compare.Entry{{RelPath: "a.txt", Verdict: compare.Differs}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Compare Faultline.") {
+		t.Errorf("snapshot = %q, want the Compare Faultline snapshot, not the generic panel one", got)
 	}
 }
