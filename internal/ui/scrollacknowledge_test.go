@@ -149,25 +149,26 @@ func TestScrollAcknowledgeTitleBarCloseGlyphClickCancels(t *testing.T) {
 	}
 }
 
-// TestScrollAcknowledgeTitleBarCloseGlyphToleratesOneColumnOff pins
-// the defensive, one-column-wider hit area added after a real,
-// reported miss whose exact cause wasn't pinned down (see
-// captureScrollAcknowledgeTitleBarMouse's own doc comment) — a click
-// one column past the computed position must still count.
-func TestScrollAcknowledgeTitleBarCloseGlyphToleratesOneColumnOff(t *testing.T) {
+// TestScrollAcknowledgeNoticeStaysInFrontOfAnOpenConsigliereSidebar
+// pins the real, reported bug: the close glyph looked present but
+// never responded to a click. The actual cause was Z-order, not
+// geometry — this notice can be opened from Options while the
+// AI Consigliere sidebar is still open (it's non-modal), and
+// pushOverlay's own "keep the sidebar on top of ordinary navigation"
+// re-float (see its own doc comment in root.go) was sending the
+// sidebar back in front of this notice too, right over its own right
+// edge — exactly where the sidebar is docked and exactly where the
+// close glyph lives. closeConsigliereWithConfirm already has the
+// identical fix for openConfirm.
+func TestScrollAcknowledgeNoticeStaysInFrontOfAnOpenConsigliereSidebar(t *testing.T) {
 	r, _ := newOptionsRoot(t)
-	r.SetRect(0, 0, 100, 40)
+	r.SetRect(0, 0, 220, 50)
+	r.showConsigliere()
+
 	r.openScrollAcknowledgeNotice("Title", "message", "Yes, enable", func() {})
 
-	x, y, width, _ := r.scrollAcknowledgeTitleBar.GetRect()
-	closeX := x + toolWindowCloseButtonCol(0, width) + 1
-	captured, _ := r.captureScrollAcknowledgeTitleBarMouse(tview.MouseLeftDown, tcell.NewEventMouse(closeX, y, tcell.ButtonNone, 0))
-
-	if captured != tview.MouseConsumed {
-		t.Error("clicking one column past the close glyph should still consume the click")
-	}
-	if r.activePage == scrollAcknowledgePage {
-		t.Error("clicking one column past the close glyph should still have closed the notice")
+	if front, _ := r.GetFrontPage(); front != scrollAcknowledgePage {
+		t.Errorf("front page = %q, want %q to stay on top of the sidebar", front, scrollAcknowledgePage)
 	}
 }
 

@@ -2583,13 +2583,13 @@
     },
     {
       "path": "internal/ui/scrollacknowledge.go",
-      "size": 10181,
-      "sha256": "bfb2c17e940fb6c2459ef6ffd45dd5e815b08acea45eda41e138bb9e032cf12b"
+      "size": 10416,
+      "sha256": "fbe5bb79cce6529a4cb1c974626c4c960f743703832367a79230328eb3db2519"
     },
     {
       "path": "internal/ui/scrollacknowledge_test.go",
-      "size": 7805,
-      "sha256": "b5b141354430633daa245da91e64dbaedcab46dfb8df09abc0cbd7e081cf936c"
+      "size": 7876,
+      "sha256": "6b87e831fb0173fad29f8d3023aa8b56ad2e7e5b8b2c5c72ba7eaa85ac8853d6"
     },
     {
       "path": "internal/ui/scrollbar.go",
@@ -51961,7 +51961,7 @@
       "name": "canAcknowledgeScrollNotice",
       "kind": "method",
       "receiver": "*Root",
-      "line": 133
+      "line": 145
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -51969,7 +51969,7 @@
       "name": "acceptScrollAcknowledgeNotice",
       "kind": "method",
       "receiver": "*Root",
-      "line": 146
+      "line": 158
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -51977,7 +51977,7 @@
       "name": "cancelScrollAcknowledgeNotice",
       "kind": "method",
       "receiver": "*Root",
-      "line": 161
+      "line": 173
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -51985,7 +51985,7 @@
       "name": "captureScrollAcknowledgeMessageKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 170
+      "line": 182
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -51993,7 +51993,7 @@
       "name": "captureScrollAcknowledgeTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 196
+      "line": 201
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -52001,7 +52001,7 @@
       "name": "captureScrollAcknowledgeListKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 214
+      "line": 218
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -52055,16 +52055,16 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/scrollacknowledge_test.go",
-      "name": "TestScrollAcknowledgeTitleBarCloseGlyphToleratesOneColumnOff",
+      "name": "TestScrollAcknowledgeNoticeStaysInFrontOfAnOpenConsigliereSidebar",
       "kind": "function",
-      "line": 157
+      "line": 163
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/scrollacknowledge_test.go",
       "name": "TestEscapeFromScrollAcknowledgeMessageCancels",
       "kind": "function",
-      "line": 177
+      "line": 178
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -61981,5 +61981,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "b69d26c75a340080f7c600bb8cd35e23c7c015aefc55b4dce759b2aaf760e915"
+  "merkle_root": "e19f5b9ab97b684fcba1d06c3c2172b2bf585c1465d6ea5be7b6a8efeb730f0e"
 }
