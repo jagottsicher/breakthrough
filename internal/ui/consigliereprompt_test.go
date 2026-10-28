@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 )
@@ -58,6 +59,22 @@ func TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage(t *testing.T) {
 
 	if !strings.Contains(got, "Log Holepunch") {
 		t.Errorf("snapshot = %q, want a Log Holepunch snapshot even though consigliereExitPage still names the selection screen", got)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToFirewall pins the
+// dispatch switch's own Firewall case — easy to leave out by mistake
+// (it would then silently fall back to the generic bare-panel
+// snapshot) since nothing else here would catch that.
+func TestConsigliereContextSnapshotDispatchesToFirewall(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = firewallPage
+	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendUFW}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Firewall.") {
+		t.Errorf("snapshot = %q, want the Firewall snapshot, not the generic panel one", got)
 	}
 }
 
@@ -228,5 +245,62 @@ func TestGitBreachContextSnapshotCapsRecentCommits(t *testing.T) {
 
 	if got := strings.Count(got, "distinct-subject"); got != consigliereMaxRecentCommits {
 		t.Errorf("snapshot mentions %d commit subjects, want exactly the cap of %d", got, consigliereMaxRecentCommits)
+	}
+}
+
+// TestFirewallContextSnapshotIncludesBackendAndRules pins the real
+// ruleset being included by default — unlike Log Holepunch's log
+// lines or Git Breach's diff content, a firewall rule is structured
+// network policy, not a credential, so there's nothing to gate behind
+// Machiavelli Mode here.
+func TestFirewallContextSnapshotIncludesBackendAndRules(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.firewallSnapshot = firewall.Snapshot{
+		Backend: firewall.BackendUFW,
+		Rules: []firewall.Rule{
+			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow, Protocol: "tcp", PortFrom: 22, PortTo: 22, Source: "10.0.0.0/8"},
+			{Order: 2, Direction: firewall.DirectionIn, Action: firewall.ActionDeny, Protocol: "tcp", PortFrom: 22, PortTo: 22,
+				ShadowedByOrder: 1, ShadowedByAction: firewall.ActionAllow},
+		},
+	}
+
+	got := root.firewallContextSnapshot()
+
+	for _, want := range []string{"Firewall", "ufw", "2 rules", "ALLOW", "10.0.0.0/8", "shadowed by #1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+// TestFirewallContextSnapshotReportsNoBackendActive pins the other
+// real case: no supported firewall is currently governing traffic at
+// all, which must read as a clear statement, not an empty or
+// confusing snapshot.
+func TestFirewallContextSnapshotReportsNoBackendActive(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendNone}
+
+	got := root.firewallContextSnapshot()
+
+	if !strings.Contains(got, "No supported firewall backend") {
+		t.Errorf("snapshot = %q, want it to clearly state no backend is active", got)
+	}
+}
+
+// TestFirewallContextSnapshotCapsRuleList pins the same cap-list
+// discipline every other snapshot builder here already follows.
+func TestFirewallContextSnapshotCapsRuleList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	var rules []firewall.Rule
+	for i := 0; i < consigliereMaxFirewallRules+5; i++ {
+		rules = append(rules, firewall.Rule{Order: i + 1, Action: firewall.ActionAllow, Source: "distinct-source"})
+	}
+	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendUFW, Rules: rules}
+
+	got := root.firewallContextSnapshot()
+
+	if got := strings.Count(got, "distinct-source"); got != consigliereMaxFirewallRules {
+		t.Errorf("snapshot mentions %d rules, want exactly the cap of %d", got, consigliereMaxFirewallRules)
 	}
 }

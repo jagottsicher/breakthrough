@@ -120,6 +120,30 @@ func TestScrollAcknowledgeTitleBarCloseGlyphClickCancels(t *testing.T) {
 	}
 }
 
+// TestScrollAcknowledgeTitleBarCloseGlyphToleratesOneColumnOff pins a
+// real, reported miss: clicking the glyph's own column exactly
+// sometimes didn't register — this dialog sits much further from the
+// screen edge than the two other close-glyph title bars in this app,
+// and the glyph itself is already documented elsewhere as rendering
+// double-width in at least one real terminal. One column of
+// tolerance past the expected position must still count.
+func TestScrollAcknowledgeTitleBarCloseGlyphToleratesOneColumnOff(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
+	r.openScrollAcknowledgeNotice("Title", "message", "Yes, enable", func() {})
+
+	x, y, width, _ := r.scrollAcknowledgeTitleBar.GetRect()
+	closeX := x + toolWindowCloseButtonCol(0, width) + 1
+	captured, _ := r.captureScrollAcknowledgeTitleBarMouse(tview.MouseLeftDown, tcell.NewEventMouse(closeX, y, tcell.ButtonNone, 0))
+
+	if captured != tview.MouseConsumed {
+		t.Error("clicking one column past the close glyph should still consume the click")
+	}
+	if r.activePage == scrollAcknowledgePage {
+		t.Error("clicking one column past the close glyph should still have closed the notice")
+	}
+}
+
 // TestEscapeFromScrollAcknowledgeMessageCancels pins Escape as a
 // cancel path from either focus stop, the same as every other
 // dialog's convention here.

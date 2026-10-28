@@ -182,14 +182,23 @@ func (r *Root) captureScrollAcknowledgeMessageKey(event *tcell.EventKey) *tcell.
 // captureScrollAcknowledgeTitleBarMouse makes the header's own "✕"
 // act exactly like Cancel on a left click — the same shape
 // captureConsigliereTitleBarMouse/activityLogNoticeTitleBarMouseCapture
-// already establish elsewhere.
+// already establish elsewhere. A real, reported miss: this dialog's
+// own close column sits much further from the left edge than those
+// two (a centered, fixed-width box rather than one docked flush to a
+// screen edge), and toolWindowCloseGlyph's own doc comment already
+// documents this exact glyph rendering double-width in at least one
+// real terminal before — accepting the one column after the
+// "expected" single-width position too, not just an exact match,
+// covers that without any downside (nothing else sits there to
+// accidentally trigger).
 func (r *Root) captureScrollAcknowledgeTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if action != tview.MouseLeftDown {
 		return action, event
 	}
 	x, y, width, _ := r.scrollAcknowledgeTitleBar.GetRect()
 	clickX, clickY := event.Position()
-	if clickY == y && clickX == x+toolWindowCloseButtonCol(0, width) {
+	closeCol := x + toolWindowCloseButtonCol(0, width)
+	if clickY == y && (clickX == closeCol || clickX == closeCol+1) {
 		r.cancelScrollAcknowledgeNotice()
 		return tview.MouseConsumed, nil
 	}

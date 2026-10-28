@@ -488,12 +488,14 @@ var helpText = strings.TrimLeft(`
   Along with the question itself, every request includes a
   description of whatever's currently on screen (the file panel's own
   directory and marked files, Log Holepunch's own directory/filters
-  plus a fixed list of every field and key that screen offers, or Git
+  plus a fixed list of every field and key that screen offers, Git
   Breach's own branch/ahead-behind/staged/unstaged/untracked/conflict
-  counts and recent commit subjects — never a log line's, diff's, or
-  file's own content), whatever documentation sections a local,
-  lexical search over this help text and the online guide finds
-  relevant, and the system prompt.
+  counts and recent commit subjects, or Firewall's own current
+  backend and full ruleset — included by default, unlike every other
+  view here, since a rule is network policy, not personal data; never
+  a log line's, diff's, or file's own content otherwise), whatever
+  documentation sections a local, lexical search over this help text
+  and the online guide finds relevant, and the system prompt.
 
   Configured entirely under Options → AI Consigliere: Provider,
   Model, Effort, the API key (environment variable, an opt-in

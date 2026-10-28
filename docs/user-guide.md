@@ -1823,12 +1823,17 @@ Along with the question itself, every request includes:
 - A description of whatever's currently on screen — the file panel's
   own directory and marked files, Log Holepunch's own directory/time
   range/filters plus a fixed list of every field and key that screen
-  offers, or Git Breach's own repository root, branch, ahead/behind
+  offers, Git Breach's own repository root, branch, ahead/behind
   count, staged/unstaged/untracked/conflict counts, and a handful of
-  recent commit subjects. Never a log line's own text, a diff's own
-  content, or a file's own content — only metadata already visible in
-  each screen's own headers (see "Machiavelli Mode" below for the one
-  deliberate exception).
+  recent commit subjects, or Firewall's own current backend and full
+  ruleset (every rule's own direction/action/protocol/port/source/
+  destination/interface, and whether it's shadowed) — unlike every
+  other view here, included by default rather than gated, since a
+  firewall rule is structured network policy, not personal data or a
+  credential. Never a log line's own text, a diff's own content, or a
+  file's own content — only metadata already visible in each screen's
+  own headers (see "Machiavelli Mode" below for the one deliberate
+  exception to that).
 - Whatever sections of breakthrough's own documentation (the built-in
   help plus this guide) best match the question, found by a local,
   lexical search — no embeddings, no index built from a network call.
