@@ -9,6 +9,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/logview"
+	"github.com/jagottsicher/breakthrough/internal/mounts"
 )
 
 func TestPanelContextSnapshotIncludesDirectoryAndMarkedFiles(t *testing.T) {
@@ -347,5 +348,68 @@ func TestFirewallContextSnapshotCapsRuleList(t *testing.T) {
 
 	if got := strings.Count(got, "distinct-source"); got != consigliereMaxFirewallRules {
 		t.Errorf("snapshot mentions %d rules, want exactly the cap of %d", got, consigliereMaxFirewallRules)
+	}
+}
+
+// TestMountsContextSnapshotIncludesEntries pins the real mount table
+// being included by default — unlike Firewall's own ruleset, a mount
+// entry says at most "this box talks to this remote host", already
+// exactly as visible the moment the panel itself browses into it.
+func TestMountsContextSnapshotIncludesEntries(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.mountsEntries = []mounts.Entry{
+		{Target: "/mnt/home", Source: "family-nas:/export/home", Fstype: "nfs4", Persistent: true},
+	}
+
+	got := root.mountsContextSnapshot()
+
+	for _, want := range []string{"Mounts", "1 mounts", "family-nas:/export/home", "/mnt/home", "nfs4", "survives reboot"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+// TestMountsContextSnapshotReportsReadError pins the real error case:
+// a failed findmnt read is surfaced, not a silently empty snapshot.
+func TestMountsContextSnapshotReportsReadError(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.mountsErr = errors.New("findmnt: command not found")
+
+	got := root.mountsContextSnapshot()
+
+	if !strings.Contains(got, "findmnt: command not found") {
+		t.Errorf("snapshot = %q, want it to surface the read error", got)
+	}
+}
+
+// TestMountsContextSnapshotCapsEntryList pins the same cap-list
+// discipline every other snapshot builder here already follows.
+func TestMountsContextSnapshotCapsEntryList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	var entries []mounts.Entry
+	for i := 0; i < consigliereMaxMountEntries+5; i++ {
+		entries = append(entries, mounts.Entry{Target: "distinct-target", Source: "src", Fstype: "ext4"})
+	}
+	root.mountsEntries = entries
+
+	got := root.mountsContextSnapshot()
+
+	if got := strings.Count(got, "distinct-target"); got != consigliereMaxMountEntries {
+		t.Errorf("snapshot mentions %d mounts, want exactly the cap of %d", got, consigliereMaxMountEntries)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToMounts pins the dispatch
+// switch's own Mounts case.
+func TestConsigliereContextSnapshotDispatchesToMounts(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = mountsPage
+	root.mountsEntries = []mounts.Entry{{Target: "/mnt/home"}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Mounts.") {
+		t.Errorf("snapshot = %q, want the Mounts snapshot, not the generic panel one", got)
 	}
 }

@@ -916,6 +916,8 @@ func (r *Root) consigliereContextSnapshot() string {
 		return r.gitBreachContextSnapshot()
 	case firewallPage:
 		return r.firewallContextSnapshot()
+	case mountsPage:
+		return r.mountsContextSnapshot()
 	default: // "" (the bare panel) and anything else "gC" might someday reach from
 		return r.panelContextSnapshot()
 	}
@@ -1213,6 +1215,47 @@ func (r *Root) consigliereMachiavelliFirewallRules() string {
 		fmt.Fprintf(&b, "(%d further rules not shown)\n", len(rules)-n)
 	}
 	return b.String()
+}
+
+// consigliereMaxMountEntries caps how many mount entries
+// mountsContextSnapshot lists individually — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxMountEntries = 50
+
+// mountsContextSnapshot describes the Mounts screen: every real
+// mount's own target/source/filesystem type and whether it would
+// survive a reboot. Included by default, unlike Firewall's own
+// ruleset — the two aren't the same risk: a firewall rule enumerates
+// this host's complete inbound attack surface, while a mount entry
+// says at most "this box talks to <remote host>", already exactly as
+// visible the moment the panel itself browses into that mount point
+// (see panelContextSnapshot, which already sends the current
+// directory by default).
+func (r *Root) mountsContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Mounts.\n")
+	if r.mountsErr != nil {
+		fmt.Fprintf(&b, "Could not read the current mount table: %v\n", r.mountsErr)
+		return strings.TrimSpace(b.String())
+	}
+	entries := r.mountsEntries
+	fmt.Fprintf(&b, "%d mounts:\n", len(entries))
+	n := len(entries)
+	if n > consigliereMaxMountEntries {
+		n = consigliereMaxMountEntries
+	}
+	for _, e := range entries[:n] {
+		persistent := "not in fstab"
+		if e.Persistent {
+			persistent = "in fstab, survives reboot"
+		}
+		fmt.Fprintf(&b, "%s on %s (%s, %s)\n", e.Source, e.Target, e.Fstype, persistent)
+	}
+	if len(entries) > n {
+		fmt.Fprintf(&b, "(%d further mounts not shown)\n", len(entries)-n)
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // errConsigliereNoAPIKey is what buildConsigliereProvider's own
