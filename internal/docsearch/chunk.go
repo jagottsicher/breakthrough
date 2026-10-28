@@ -31,24 +31,43 @@ type Chunk struct {
 // Heading, rather than being dropped, so a document that opens with
 // unheaded introductory text isn't silently excluded from search.
 func ParseMarkdownChunks(markdown, source string) []Chunk {
-	lines := strings.Split(markdown, "\n")
+	return parseChunks(markdown, source, markdownHeadingText)
+}
+
+// ParseTviewBoldHeadingChunks splits text into one Chunk per
+// "[::b]...[::-]" line — the Help overlay's own section-heading
+// convention (see internal/ui/help.go's helpText), bold tview color
+// tags standing in for Markdown's "#" since that text is rendered
+// directly by a tview.TextView, never through a Markdown renderer.
+// Same splitting rule as ParseMarkdownChunks otherwise, including
+// text before the first heading becoming its own empty-Heading chunk.
+func ParseTviewBoldHeadingChunks(text, source string) []Chunk {
+	return parseChunks(text, source, tviewBoldHeadingText)
+}
+
+// parseChunks is ParseMarkdownChunks/ParseTviewBoldHeadingChunks' own
+// shared body — only how a single line is recognized as a heading
+// (and what text it carries) actually differs between the two
+// corpora this package indexes.
+func parseChunks(text, source string, headingText func(line string) (string, bool)) []Chunk {
+	lines := strings.Split(text, "\n")
 
 	var chunks []Chunk
 	heading := ""
 	var body []string
 
 	flush := func() {
-		text := strings.TrimSpace(strings.Join(body, "\n"))
-		if heading == "" && text == "" {
+		bodyText := strings.TrimSpace(strings.Join(body, "\n"))
+		if heading == "" && bodyText == "" {
 			return // nothing before the very first heading — not a real chunk
 		}
-		chunks = append(chunks, Chunk{Heading: heading, Body: text, Source: source})
+		chunks = append(chunks, Chunk{Heading: heading, Body: bodyText, Source: source})
 	}
 
 	for _, line := range lines {
-		if isMarkdownHeading(line) {
+		if h, ok := headingText(line); ok {
 			flush()
-			heading = strings.TrimSpace(strings.TrimLeft(line, "#"))
+			heading = h
 			body = nil
 			continue
 		}
@@ -59,17 +78,33 @@ func ParseMarkdownChunks(markdown, source string) []Chunk {
 	return chunks
 }
 
-// isMarkdownHeading reports whether line is an ATX-style Markdown
-// heading ("#" through "######" followed by a space or end of line) —
-// the only heading syntax this corpus's own docs actually use (never
+// markdownHeadingText recognizes an ATX-style Markdown heading ("#"
+// through "######" followed by a space or end of line) — the only
+// heading syntax this corpus's own docs actually use (never
 // Setext-style "Title\n=====" underlines), verified against
 // docs/user-guide.md directly rather than handling a syntax it
 // doesn't need.
-func isMarkdownHeading(line string) bool {
+func markdownHeadingText(line string) (string, bool) {
 	trimmed := strings.TrimLeft(line, "#")
 	n := len(line) - len(trimmed)
 	if n == 0 || n > 6 {
-		return false
+		return "", false
 	}
-	return trimmed == "" || strings.HasPrefix(trimmed, " ")
+	if trimmed != "" && !strings.HasPrefix(trimmed, " ") {
+		return "", false
+	}
+	return strings.TrimSpace(trimmed), true
+}
+
+// tviewBoldHeadingText recognizes a line that is, after trimming
+// surrounding whitespace, exactly "[::b]<text>[::-]" with nothing
+// else on it — helpText's own heading convention, verified directly
+// against internal/ui/help.go rather than assumed.
+func tviewBoldHeadingText(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	const open, close = "[::b]", "[::-]"
+	if !strings.HasPrefix(trimmed, open) || !strings.HasSuffix(trimmed, close) {
+		return "", false
+	}
+	return trimmed[len(open) : len(trimmed)-len(close)], true
 }

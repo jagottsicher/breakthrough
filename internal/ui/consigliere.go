@@ -636,8 +636,18 @@ func (r *Root) handleConsigliereInputDone(key tcell.Key) {
 // same anthropicMaxTokens-style reasoning every other capped piece of
 // context here already follows.
 const (
-	consigliereMaxDocChunks     = 3
-	consigliereMaxDocChunkChars = 600
+	consigliereMaxDocChunks = 3
+	// consigliereMaxDocChunkChars was originally 600 — a real, reported
+	// bug: several of this corpus's own sections run 1,000-7,000+
+	// characters (the "Tabs" section alone is ~1,300), so that cap was
+	// silently cutting the actual answer out of a chunk that had
+	// already been correctly retrieved — in "how do I open a new tab"
+	// specifically, the one sentence saying the switcher's own last
+	// row creates one. 1,500 covers most real sections close to
+	// completely, while still bounding the handful of genuinely huge
+	// ones (Settings reference, Copy/Cut/Paste) rather than sending
+	// them in full on every matching question.
+	consigliereMaxDocChunkChars = 1500
 )
 
 // consigliereDocSnapshot runs question against r.docSearchIndex (see
@@ -646,11 +656,27 @@ const (
 // which would mean the embed itself is broken) or nothing matched at
 // all, in which case this contributes nothing to the snapshot rather
 // than padding it with irrelevant sections.
-func (r *Root) consigliereDocSnapshot(question string) string {
+func (r *Root) consigliereDocSnapshot(ctx context.Context, provider consigliere.Provider, question string) string {
 	if r.docSearchIndex == nil {
 		return ""
 	}
 	chunks := r.docSearchIndex.Search(question, consigliereMaxDocChunks)
+	if len(chunks) == 0 {
+		// BM25 only ever matches shared vocabulary — this corpus is
+		// English-only, so a question asked in a language it isn't
+		// written in (confirmed with a real report: a German question
+		// about opening a tab shared only the word "tab" with the
+		// English docs) would otherwise silently retrieve nothing, not
+		// because nothing relevant exists, but because no query term
+		// happens to appear in the corpus at all. Retried once, in
+		// English, via the same provider/key already resolved for the
+		// real reply — a second real network call, only ever made when
+		// the direct search found literally zero matches, not on every
+		// question.
+		if translated := r.translateConsigliereQueryToEnglish(ctx, provider, question); translated != "" {
+			chunks = r.docSearchIndex.Search(translated, consigliereMaxDocChunks)
+		}
+	}
 	if len(chunks) == 0 {
 		return ""
 	}
@@ -660,6 +686,28 @@ func (r *Root) consigliereDocSnapshot(question string) string {
 		fmt.Fprintf(&b, "- %s: %s\n", c.Heading, truncateRunes(c.Body, consigliereMaxDocChunkChars))
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// translateConsigliereQueryToEnglish asks provider itself to
+// translate question — reusing Provider.Reply directly rather than
+// adding a second HTTP code path, with a Request carrying nothing but
+// the translation instruction (no History, no System, no Snapshot):
+// this is a standalone, single-turn request, never part of the real
+// conversation. "" on any failure (network error, empty reply) — the
+// caller's own fallback is simply "no documentation found," not
+// surfacing a second error for a best-effort retry.
+func (r *Root) translateConsigliereQueryToEnglish(ctx context.Context, provider consigliere.Provider, question string) string {
+	req := consigliere.Request{
+		History: []consigliere.Message{{
+			Role: consigliere.RoleUser,
+			Text: "Translate the following into English. Reply with only the translation, nothing else:\n\n" + question,
+		}},
+	}
+	translated, err := provider.Reply(ctx, req)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(translated)
 }
 
 // truncateRunes caps s at max runes (not bytes, to never split a
@@ -943,14 +991,24 @@ func (r *Root) submitConsigliereMessage(text string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	r.consigliereCancel = cancel
 
-	req := consigliere.Request{
-		History:  r.consigliereMessages,
-		Snapshot: joinConsigliereSnapshotParts(r.consigliereContextSnapshot(), r.consigliereDocSnapshot(text)),
-		System:   config.LoadConsigliereSystemPrompt(consigliereSystemPromptPath()),
-	}
+	// Snapshotted now, not inside the goroutine below: history/view
+	// state reflect this exact moment, the same "rebuilt fresh on
+	// every new question" promise Request's own doc comment already
+	// makes — consigliereDocSnapshot is the one piece that moves into
+	// the goroutine itself, since its own translation fallback may
+	// make a real network call (see its own doc comment), which must
+	// never block the UI thread.
+	history := r.consigliereMessages
+	viewSnapshot := r.consigliereContextSnapshot()
+	systemPrompt := config.LoadConsigliereSystemPrompt(consigliereSystemPromptPath())
 	provider := r.buildConsigliereProvider()
 
 	r.safeGo("AI Consigliere reply", func() { r.consigliereCancel = nil }, func() {
+		req := consigliere.Request{
+			History:  history,
+			Snapshot: joinConsigliereSnapshotParts(viewSnapshot, r.consigliereDocSnapshot(ctx, provider, text)),
+			System:   systemPrompt,
+		}
 		reply, err := provider.Reply(ctx, req)
 		r.app.QueueUpdateDraw(func() {
 			if ctx.Err() != nil {

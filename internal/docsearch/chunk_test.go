@@ -68,7 +68,7 @@ func TestParseMarkdownChunksKeepsTextBeforeTheFirstHeadingAsItsOwnChunk(t *testi
 }
 
 func TestParseMarkdownChunksIgnoresHeadingLikeTextInsideAFence(t *testing.T) {
-	// Deliberately NOT special-cased (see isMarkdownHeading's own doc
+	// Deliberately NOT special-cased (see markdownHeadingText's own doc
 	// comment): this corpus's own docs never put a "#" inside a code
 	// fence at the start of a line, so this test pins the simpler,
 	// current behavior rather than a requirement — a `# comment` line
@@ -82,7 +82,7 @@ func TestParseMarkdownChunksIgnoresHeadingLikeTextInsideAFence(t *testing.T) {
 	}
 }
 
-func TestIsMarkdownHeadingRejectsNonHeadingHashUsage(t *testing.T) {
+func TestMarkdownHeadingTextRejectsNonHeadingHashUsage(t *testing.T) {
 	cases := []struct {
 		line string
 		want bool
@@ -96,8 +96,28 @@ func TestIsMarkdownHeadingRejectsNonHeadingHashUsage(t *testing.T) {
 		{"#", true}, // bare "#" with nothing after it
 	}
 	for _, c := range cases {
-		if got := isMarkdownHeading(c.line); got != c.want {
-			t.Errorf("isMarkdownHeading(%q) = %v, want %v", c.line, got, c.want)
+		_, got := markdownHeadingText(c.line)
+		if got != c.want {
+			t.Errorf("markdownHeadingText(%q) ok = %v, want %v", c.line, got, c.want)
+		}
+	}
+}
+
+func TestTviewBoldHeadingTextRecognizesExactSyntaxOnly(t *testing.T) {
+	cases := []struct {
+		line string
+		want bool
+	}{
+		{"[::b]Keyboard — plain letters[::-]", true},
+		{"  [::b]Indented heading[::-]  ", true}, // surrounding whitespace trimmed
+		{"[::b]Unterminated", false},
+		{"not a heading at all", false},
+		{"some [::b]inline[::-] bold, not a whole-line heading", false},
+	}
+	for _, c := range cases {
+		_, got := tviewBoldHeadingText(c.line)
+		if got != c.want {
+			t.Errorf("tviewBoldHeadingText(%q) ok = %v, want %v", c.line, got, c.want)
 		}
 	}
 }

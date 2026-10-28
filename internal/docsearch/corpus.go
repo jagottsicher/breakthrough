@@ -14,17 +14,22 @@ const userGuideFilename = "docs/user-guide.md"
 
 // NewDefaultIndex builds an Index over breakthrough's own embedded
 // user guide (see docsembed's own doc comment on why that embed has
-// to live at the module root). The only error path is
+// to live at the module root), plus whatever extra chunks the caller
+// supplies — internal/ui's own NewRoot passes in internal/ui/help.go's
+// helpText this way (parsed via ParseTviewBoldHeadingChunks), since
+// docsearch can't import internal/ui itself without an import cycle
+// (internal/ui already imports docsearch). The only error path is
 // docsembed.FS.ReadFile failing, which would mean the embed itself is
 // broken — a build-time problem, not something a normal run should
 // ever actually hit.
-func NewDefaultIndex() (*Index, error) {
+func NewDefaultIndex(extra ...Chunk) (*Index, error) {
 	data, err := docsembed.FS.ReadFile(userGuideFilename)
 	if err != nil {
 		return nil, fmt.Errorf("docsearch: reading embedded %s: %w", userGuideFilename, err)
 	}
 	chunks := ParseMarkdownChunks(string(data), "user-guide.md")
 	chunks = dropChunk(chunks, "Contents")
+	chunks = append(chunks, extra...)
 	return NewIndex(chunks), nil
 }
 
