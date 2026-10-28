@@ -115,8 +115,8 @@ func (r *Root) newConsigliereSidebar() {
 	// newDetailsSidebarView already establishes for Details, reused
 	// here for the identical reason (applyTheme's own re-derivation
 	// of this, for a live theme switch mid-focus, lives in theme.go).
-	r.consigliereHistory.SetFocusFunc(func() { r.consigliereTitleBar.SetBackgroundColor(r.theme.InputFocusedBackground) })
-	r.consigliereHistory.SetBlurFunc(func() { r.consigliereTitleBar.SetBackgroundColor(r.theme.InputBackground) })
+	r.consigliereHistory.SetFocusFunc(func() { r.consigliereTitleBar.SetBackgroundColor(r.consigliereTitleBarBackground(true)) })
+	r.consigliereHistory.SetBlurFunc(func() { r.consigliereTitleBar.SetBackgroundColor(r.consigliereTitleBarBackground(false)) })
 	r.consigliereScrollbar = newVerticalScrollbarForTextView(r, r.consigliereHistory)
 
 	r.consigliereTitleBar = newPlainTitleBar("AI Consigliere")
@@ -265,13 +265,39 @@ func (r *Root) consigliereCurrentHostEdges() (backward, forward tview.Primitive)
 // already follow, reused here rather than duplicated with a different
 // number.
 func (r *Root) renderConsigliereTitleBar(width int) {
-	const label = " AI Consigliere "
+	label := " AI Consigliere "
+	// Machiavelli Mode's own unmissable reminder: unlike every other
+	// per-session detail, this one must stay visible in the title bar
+	// itself for as long as it's on, not just noted once in Options —
+	// see consigliereTitleBarBackground for the matching background
+	// color, which overrides the ordinary focused/unfocused one for
+	// the same reason.
+	if r.settings.ConsigliereHardcoreMode {
+		label = " AI Consigliere · MACHIAVELLI "
+	}
 	closeCol := toolWindowCloseButtonCol(0, width)
 	padding := closeCol - len(label)
 	if padding < 0 {
 		padding = 0
 	}
 	r.consigliereTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
+	r.consigliereTitleBar.SetBackgroundColor(r.consigliereTitleBarBackground(r.consigliereHistory.HasFocus()))
+}
+
+// consigliereTitleBarBackground is the title bar's own background for
+// the given focus state — the ordinary focused/unfocused pair every
+// other call site here already used directly, except while
+// Machiavelli Mode is on, which forces the warning color regardless
+// of focus: a reminder that must survive every focus change, not
+// blink back to normal the instant history loses focus.
+func (r *Root) consigliereTitleBarBackground(focused bool) tcell.Color {
+	if r.settings.ConsigliereHardcoreMode {
+		return r.theme.ErrorBackground
+	}
+	if focused {
+		return r.theme.InputFocusedBackground
+	}
+	return r.theme.InputBackground
 }
 
 // captureConsigliereTitleBarMouse is dragConsigliereMouseCapture's own
@@ -480,7 +506,7 @@ func (r *Root) showConsigliere() {
 	r.consigliereAwaitingPassphrase = r.consigliereNeedsUnlock()
 	if r.consigliereAwaitingPassphrase {
 		r.consigliereInput.SetMaskCharacter('*')
-		r.consigliereInput.SetPlaceholder("Enter passphrase to unlock the AI Consigliere…")
+		r.consigliereInput.SetPlaceholder("Enter passphrase to unleash the AI Consigliere…")
 	} else {
 		r.consigliereInput.SetMaskCharacter(0)
 		r.consigliereInput.SetPlaceholder(consigliereInputPlaceholder)
@@ -946,11 +972,15 @@ func (r *Root) panelContextSnapshot() string {
 // which screen is actually open right now, unlike a BM25 search's own
 // best-effort ranking.
 //
-// Deliberately never includes a single log line's own text —
+// Never includes a single log line's own text by default —
 // logAuditKeywordField etc. are the filter *controls*, not the
 // matched entries themselves, and a real credential or secret sitting
 // in a log line is exactly the kind of thing this must never forward
-// to a third-party provider.
+// to a third-party provider without the user explicitly having
+// opted in. The one deliberate exception is Machiavelli Mode (see
+// consigliereMachiavelliLogLines), which the Options screen only lets
+// the user turn on after confirming a dedicated warning naming this
+// exact risk.
 func (r *Root) logAuditContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Log Holepunch.\n")
@@ -970,7 +1000,47 @@ func (r *Root) logAuditContextSnapshot() string {
 		fmt.Fprintf(&b, "Current time filter: %s\n", tf)
 	}
 	b.WriteString(logAuditViewerAvailableActions)
+	if r.activePage == logAuditViewerPage && r.settings.ConsigliereHardcoreMode {
+		b.WriteString(r.consigliereMachiavelliLogLines())
+	}
 	return strings.TrimSpace(b.String())
+}
+
+// consigliereMachiavelliMaxLogLines caps how many actual log lines
+// consigliereMachiavelliLogLines forwards — this is already an
+// explicit, confirmed opt-in (see optioncatalog.go's own
+// withConfirmEnable wiring), but an unbounded dump of a large,
+// loosely-filtered log would still blow past any provider's own
+// context budget and cost real money per question for no benefit.
+const consigliereMachiavelliMaxLogLines = 50
+
+// consigliereMachiavelliLogLines renders up to
+// consigliereMachiavelliMaxLogLines of the entries currently matching
+// the Keyword/Time/Level filters, verbatim (Entry.Raw, not just the
+// extracted Message) — Machiavelli Mode's own, explicit exception to
+// this screen's usual rule against ever forwarding a log line's own
+// text (see logAuditContextSnapshot's own doc comment). Reuses
+// logAuditVisibleEntries so this always matches exactly what the
+// table itself is showing, never a separately-computed approximation
+// of it.
+func (r *Root) consigliereMachiavelliLogLines() string {
+	shown, _, _ := r.logAuditVisibleEntries()
+	if len(shown) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nMachiavelli Mode is on — the following currently-matching log lines are forwarded verbatim:\n")
+	n := len(shown)
+	if n > consigliereMachiavelliMaxLogLines {
+		n = consigliereMachiavelliMaxLogLines
+	}
+	for _, e := range shown[:n] {
+		fmt.Fprintf(&b, "- %s\n", e.Raw)
+	}
+	if len(shown) > n {
+		fmt.Fprintf(&b, "(%d further matching lines not shown)\n", len(shown)-n)
+	}
+	return b.String()
 }
 
 // logAuditViewerAvailableActions is Log Holepunch's own fields and

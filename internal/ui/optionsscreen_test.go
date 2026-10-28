@@ -160,6 +160,111 @@ func TestToggleOptionAppliesLiveAndPersists(t *testing.T) {
 	}
 }
 
+// TestConfirmEnableOptionAsksBeforeTurningOn pins Machiavelli Mode's
+// own gate: activating the row while it's off must not apply anything
+// yet, only open the scroll-to-acknowledge notice — accepting it (once
+// scrolled to the end) is what actually flips the setting.
+func TestConfirmEnableOptionAsksBeforeTurningOn(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
+	if !ok {
+		t.Fatal("no consigliere_hardcore_mode row")
+	}
+
+	r.activateOptionRow(row)
+
+	if r.settings.ConsigliereHardcoreMode {
+		t.Error("turning it on should not have applied yet, pending the notice")
+	}
+	if r.activePage != scrollAcknowledgePage {
+		t.Errorf("activePage = %q, want the scroll-to-acknowledge notice open", r.activePage)
+	}
+
+	r.scrollAcknowledgeMessageView.ScrollTo(r.scrollAcknowledgeScrollbar.maxOffset(), 0) // ScrollToEnd only resolves on the next real Draw, which tests never trigger
+	r.acceptScrollAcknowledgeNotice()
+
+	if !r.settings.ConsigliereHardcoreMode {
+		t.Error("confirming after scrolling to the end should have turned it on")
+	}
+}
+
+// TestConfirmEnableOptionWithoutScrollingDoesNothing pins the actual
+// gate the user asked for: confirming before reaching the end of the
+// warning must not apply anything, unlike a plain openConfirm question
+// that would.
+func TestConfirmEnableOptionWithoutScrollingDoesNothing(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
+	if !ok {
+		t.Fatal("no consigliere_hardcore_mode row")
+	}
+
+	r.activateOptionRow(row)
+	r.acceptScrollAcknowledgeNotice() // never scrolled
+
+	if r.settings.ConsigliereHardcoreMode {
+		t.Error("confirming without scrolling to the end should not have turned it on")
+	}
+	// The rejection's own explanation layers on top (showTransientErrorOverOverlay),
+	// the same "don't close what's underneath" reasoning
+	// validateOptionsInputPath's identical case already follows —
+	// activePage is now the transient error, but the notice underneath
+	// must still be open, not closed over.
+	if r.activePage != errorPage {
+		t.Errorf("activePage = %q, want the rejection's own explanation layered on top", r.activePage)
+	}
+	assertPageVisible(t, r, scrollAcknowledgePage)
+}
+
+// TestConfirmEnableOptionCancelLeavesItOff is the other half: declining
+// the notice must leave the setting untouched.
+func TestConfirmEnableOptionCancelLeavesItOff(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
+	if !ok {
+		t.Fatal("no consigliere_hardcore_mode row")
+	}
+
+	r.activateOptionRow(row)
+	r.cancelScrollAcknowledgeNotice()
+
+	if r.settings.ConsigliereHardcoreMode {
+		t.Error("cancelling the notice should have left it off")
+	}
+}
+
+// TestConfirmEnableOptionTurningOffNeedsNoConfirmation pins the
+// asymmetry: only switching it on is gated — switching back off is
+// exactly as immediate as every other boolean option.
+func TestConfirmEnableOptionTurningOffNeedsNoConfirmation(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.settings.ConsigliereHardcoreMode = true
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
+	if !ok {
+		t.Fatal("no consigliere_hardcore_mode row")
+	}
+
+	r.activateOptionRow(row)
+
+	if r.settings.ConsigliereHardcoreMode {
+		t.Error("turning it off should have applied immediately, no notice")
+	}
+	if r.activePage == scrollAcknowledgePage {
+		t.Error("no scroll-to-acknowledge notice should have opened for turning it off")
+	}
+}
+
 // TestDefaultHintAppearsOnlyWhileTheValueDiffers pins the column that
 // replaced the old origin one, and the exact complaint that prompted it:
 // toggling a setting twice puts the default value back, and the hint has
@@ -995,6 +1100,13 @@ func TestResetConfirmationNamesTheAction(t *testing.T) {
 // reset everything", the two list items actually left.
 func TestConfirmDialogWidthCoversLongQuestion(t *testing.T) {
 	r, _ := newOptionsRoot(t)
+	// A real terminal size, not the tiny 15x10 default an unsized test
+	// Root otherwise has — openConfirm now clamps its own dialog to the
+	// screen (see its own doc comment on the colored-stripes bug that
+	// fixed), so this test needs a screen roomy enough that the
+	// question genuinely fits without clamping, the same as any actual
+	// terminal this dialog would ever appear on.
+	r.SetRect(0, 0, 100, 40)
 
 	r.resetAllOptions()
 
@@ -1005,6 +1117,26 @@ func TestConfirmDialogWidthCoversLongQuestion(t *testing.T) {
 			layoutWidth, headerWidth, r.confirmDialogTitleBar.GetText(true))
 	}
 	r.cancelConfirm()
+}
+
+// TestConfirmDialogClampsAMessageWiderThanTheScreen pins a real,
+// reported bug: a question longer than the screen itself used to
+// leave the dialog's own x deeply negative and its width past the
+// screen's edge entirely — tview rendered that as corrupted, flashing
+// stripes rather than a readable (even if truncated) dialog.
+func TestConfirmDialogClampsAMessageWiderThanTheScreen(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 40, 20) // deliberately narrower than the message below
+
+	r.openConfirm(strings.Repeat("word ", 40), "Yes", func() {})
+
+	x, _, width, _ := r.confirmDialogLayout.GetRect()
+	if x < 0 {
+		t.Errorf("confirmDialogLayout x = %d, want it clamped to never go negative", x)
+	}
+	if width > 40 {
+		t.Errorf("confirmDialogLayout width = %d, want it clamped to the 40-wide screen", width)
+	}
 }
 
 // TestResetLeavesTheOptionsScreenOpen pins a real bug found by driving

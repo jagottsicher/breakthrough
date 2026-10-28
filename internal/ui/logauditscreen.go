@@ -734,6 +734,35 @@ func (r *Root) renderLogAuditFocusIndicator(focused bool) {
 	r.logAuditFocusIndicator.SetBackgroundColor(background)
 }
 
+// logAuditVisibleEntries filters r.logAuditAllEntries down to whatever
+// currently matches the Keyword/Time/Level fields — factored out of
+// renderLogAuditViewer so consigliereLogAuditMatchedLines (Machiavelli
+// Mode's own context snapshot addition) can reuse the exact same
+// filtering the table itself shows, rather than risking the two
+// drifting apart. Also returns the real error/warning counts across
+// every entry (not just the shown ones) — renderLogAuditViewer's own
+// title bar needs those regardless of the current filter.
+func (r *Root) logAuditVisibleEntries() (shown []logview.Entry, errCount, warnCount int) {
+	keyword := r.logAuditKeywordField.GetText()
+	query, hasQuery := logAuditKeywordQuery(keyword)
+	timeExpr := r.logAuditTimeField.GetText()
+	levelText := r.logAuditLevelField.GetText()
+	now := time.Now()
+
+	for _, e := range r.logAuditAllEntries {
+		switch e.Level {
+		case logview.LevelError, logview.LevelFatal:
+			errCount++
+		case logview.LevelWarn:
+			warnCount++
+		}
+		if logAuditEntryVisible(e, query, hasQuery, timeExpr, levelText, now) {
+			shown = append(shown, e)
+		}
+	}
+	return shown, errCount, warnCount
+}
+
 // renderLogAuditViewer fills the viewer table with every entry
 // matching the keyword field, Time/Level/Source/Message columns, the
 // matched keyword highlighted in Source/Message via logAuditHighlight
@@ -775,28 +804,13 @@ func (r *Root) renderLogAuditViewer() {
 
 	keyword := r.logAuditKeywordField.GetText()
 	query, hasQuery := logAuditKeywordQuery(keyword)
-	timeExpr := r.logAuditTimeField.GetText()
-	levelText := r.logAuditLevelField.GetText()
-	now := time.Now()
 
 	var highlightTerms []string
 	if hasQuery {
 		highlightTerms = query.PositiveTerms()
 	}
 
-	var shown []logview.Entry
-	errCount, warnCount := 0, 0
-	for _, e := range r.logAuditAllEntries {
-		switch e.Level {
-		case logview.LevelError, logview.LevelFatal:
-			errCount++
-		case logview.LevelWarn:
-			warnCount++
-		}
-		if logAuditEntryVisible(e, query, hasQuery, timeExpr, levelText, now) {
-			shown = append(shown, e)
-		}
-	}
+	shown, errCount, warnCount := r.logAuditVisibleEntries()
 
 	title := fmt.Sprintf(" Log Holepunch — %d events │ %d files │ %d skipped │ %d errors │ %d warnings",
 		len(r.logAuditAllEntries), r.logAuditFiles, r.logAuditSkipped, errCount, warnCount)

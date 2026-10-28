@@ -123,6 +123,18 @@ type optionSpec struct {
 	// time validation (see validateOptionsInputPath): a non-empty
 	// value must resolve to a real, existing regular file.
 	pathCompletion bool
+
+	// confirmEnable, when non-empty, marks a KindBool row that must be
+	// confirmed before switching it from false to true — currently
+	// only Machiavelli Mode (consigliere_hardcore_mode). Turning it
+	// back off stays immediate, the same as every other boolean here;
+	// only the riskier direction asks first. activateOptionRow shows
+	// this text via openScrollAcknowledgeNotice (see scrollacknowledge.go)
+	// instead of toggling in place — a warning real enough to need
+	// confirming at all is long enough to want scrolled through, not
+	// just reflexively accepted the way a short openConfirm question
+	// would let it be.
+	confirmEnable string
 }
 
 // doc returns the config-package metadata for this setting — its kind,
@@ -158,6 +170,30 @@ func withPathCompletion(opt optionSpec) optionSpec {
 	opt.pathCompletion = true
 	return opt
 }
+
+// withConfirmEnable marks a KindBool optionSpec as needing the given
+// warning confirmed before it's turned on (see optionSpec.confirmEnable's
+// own doc comment) — currently only Machiavelli Mode.
+func withConfirmEnable(opt optionSpec, warning string) optionSpec {
+	opt.confirmEnable = warning
+	return opt
+}
+
+// machiavelliModeWarning is consigliere_hardcore_mode's own
+// confirmEnable text — long enough to need actually scrolling through
+// in openScrollAcknowledgeNotice's own fixed-size box (see
+// scrollacknowledge.go), per the user's own explicit request that a
+// warning this real not be reflexively accepted via a single short
+// question.
+const machiavelliModeWarning = `Machiavelli Mode lets Log Holepunch/Action Log forward the actual matched log line content — not just the filter metadata it sends by default — to whichever AI provider is configured above.
+
+Real log files very often contain things you would not otherwise want to leave this machine: passwords typed into forms, API keys and session tokens, private IP addresses, employee or customer names, email addresses, or other personal data that happened to get written into a line by whatever produced it.
+
+Once a question is sent with this mode on, that content has already left breakthrough and gone to a third-party provider over the network. There is no way to recall it afterwards, no matter what you do here next.
+
+Turning this back off (any time, right here in Options) only stops it from happening on the next question — it does not undo anything already sent.
+
+Scroll down to the end of this notice, then confirm below only if you have actually read it and accept that risk yourself.`
 
 // statusBarSegmentOption builds one Status bar toggle: like
 // boolOption, but always persists under key and refreshes the status
@@ -1465,6 +1501,21 @@ func optionCategories() []optionCategory {
 					value:        func(r *Root) string { return r.consigliereAPIKeyStatus() },
 					secretAction: func(r *Root) { r.openAPIKeyDialog(r.settings.ConsigliereProvider) },
 				},
+				withConfirmEnable(boolOption("consigliere_hardcore_mode", "Machiavelli Mode",
+					"Lets Log Holepunch/Action Log's own context snapshot forward the "+
+						"actual matched log line content to the configured AI provider, not "+
+						"just filter metadata as it does by default. A real log line can "+
+						"contain credentials, IP addresses, names, or other personal data — "+
+						"this is what makes that reachable by a third-party provider rather "+
+						"than withheld. Off by default; turning it off again is immediate, no "+
+						"confirmation needed.",
+					false,
+					func(r *Root) bool { return r.settings.ConsigliereHardcoreMode },
+					func(r *Root, b bool) {
+						r.settings.ConsigliereHardcoreMode = b
+						r.persistSetting("consigliere_hardcore_mode", strconv.FormatBool(b))
+					}),
+					machiavelliModeWarning),
 			},
 		},
 	}
@@ -1843,6 +1894,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.ConsigliereModel, true
 	case "consigliere_effort":
 		return s.ConsigliereEffort, true
+	case "consigliere_hardcore_mode":
+		return strconv.FormatBool(s.ConsigliereHardcoreMode), true
 	}
 	return "", false
 }

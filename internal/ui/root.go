@@ -46,6 +46,7 @@ const (
 	pickerPage            = "owner-group-picker"
 	quitConfirmPage       = "quit-confirm"
 	confirmPage           = "confirm"
+	scrollAcknowledgePage = "scroll-acknowledge"
 	activityLogNoticePage = "activity-log-notice"
 	sedReplacePage        = "sed-replace"
 	sedPreviewPage        = "sed-preview"
@@ -1149,6 +1150,21 @@ type Root struct {
 	confirmDialogTitleBar *tview.TextView
 	confirmDialogLayout   *tview.Flex
 	pendingConfirm        func()
+
+	// scrollAcknowledge* backs openScrollAcknowledgeNotice (see
+	// scrollacknowledge.go): a longer warning the user must actually
+	// scroll through before the confirming item does anything, for the
+	// one case openConfirm's single-line question isn't enough for —
+	// currently only consigliere_hardcore_mode ("Machiavelli Mode").
+	// scrollAcknowledgeOnConfirm is acceptScrollAcknowledgeNotice's own
+	// action, set fresh by openScrollAcknowledgeNotice each time, the
+	// same role pendingConfirm plays for confirmDialog above.
+	scrollAcknowledgeLayout      *tview.Flex
+	scrollAcknowledgeTitleBar    *tview.TextView
+	scrollAcknowledgeMessageView *tview.TextView
+	scrollAcknowledgeScrollbar   *verticalScrollbar
+	scrollAcknowledgeList        *tview.List
+	scrollAcknowledgeOnConfirm   func()
 
 	// activityLogNotice*/activityLogNoticeDontShowAgain back the
 	// startup notice shown when the activity log falls back to a
@@ -2806,7 +2822,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// means the embed itself is broken (see docsearch.NewDefaultIndex's
 	// own doc comment) — surfaced the same way apiKeyStoreWarning is,
 	// not fatal to starting breakthrough at all.
-	docSearchIndex, docSearchErr := docsearch.NewDefaultIndex(docsearch.ParseTviewBoldHeadingChunks(helpText, "help")...)
+	docSearchIndex, docSearchErr := defaultDocSearchIndex()
 	var docSearchWarning string
 	if docSearchErr != nil {
 		docSearchWarning = fmt.Sprintf("AI Consigliere documentation search: %v", docSearchErr)
@@ -2942,6 +2958,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.confirmDialogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.confirmDialogTitleBar, 1, 0, false).
 		AddItem(r.confirmDialog, 0, 1, true)
+
+	r.newScrollAcknowledgeNoticeViews()
 
 	// Header bar: "Important note" plus a clickable "✕" — both close
 	// exactly like Cancel (see gitBreachBlockFocusSteal's own sibling
@@ -3370,6 +3388,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirmLayout, false, false)
 	r.AddPage(confirmPage, r.confirmDialogLayout, false, false)
+	r.AddPage(scrollAcknowledgePage, r.scrollAcknowledgeLayout, false, false)
 	r.AddPage(activityLogNoticePage, r.activityLogNoticeLayout, false, false)
 	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
 	r.AddPage(pastePausePage, r.pastePauseDialogLayout, false, false)
