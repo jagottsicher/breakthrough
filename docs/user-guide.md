@@ -27,6 +27,7 @@ material, always matching the version you are actually running.
 - [Tool windows](#tool-windows)
 - [Mounts](#mounts)
 - [Firewall](#firewall)
+- [Git Breach](#git-breach)
 - [Sessions](#sessions)
 - [Email](#email)
 - [SSH Keys](#ssh-keys)
@@ -35,6 +36,7 @@ material, always matching the version you are actually running.
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
 - [The Details sidebar](#the-details-sidebar)
+- [AI Consigliere](#ai-consigliere)
 - [Remote connections (SFTP)](#remote-connections-sftp)
 - [Properties](#properties)
 - [Copy, Cut and Paste](#copy-cut-and-paste)
@@ -1314,6 +1316,53 @@ the matching rule's own number, action, protocol, port, and source, or
 says plainly that nothing matches — falling through to the backend's
 own default policy, which this app doesn't read.
 
+## Git Breach
+
+`j` then `g`. Resolves the git repository containing the active
+panel's own current directory — parent directories included, the
+same way a real `git status` typed there would find it — and opens a
+dashboard on it: several boxes at once rather than one full-screen
+list.
+
+| Box | Shows |
+|---|---|
+| Status | Branch, ahead/behind, a one-line summary |
+| Files | Staged/unstaged/untracked changes (Conflicts first, if any), real syntax coloring on every change |
+| Branches | Every local branch, the current one marked |
+| Commits | The most recent commits, newest first, each colored by its own author, with a lane/branch graph; loads 200 at a time, fetching 200 more automatically once you reach the last loaded row |
+| Stash | Every stashed change, newest first |
+
+Main, on the right, shows the diff of whichever box currently has
+keyboard focus — Files' own staged/unstaged diff (background tinted
+green/red for added/removed lines), the raw content for an untracked
+file, or a Commits/Stash row's own full diff across every file it
+touched. `v` (with Main focused) toggles between a unified pager and a
+side-by-side pane pair.
+
+| Key | Action |
+|---|---|
+| `Tab` / `Shift+Tab` | Switch focus between Files, Branches, Commits and Stash |
+| `Space` | (Files) Stage/unstage the row under the cursor |
+| `Right` | (Files/Commits/Stash) Jump into Main's own diff |
+| `Enter` | (Branches) Check out the branch under the cursor, confirming first if the working tree isn't clean |
+| `Enter` / `Space` | (Commits) Jump into Main's own diff |
+| `d` | (Branches) Delete the branch under the cursor, after confirming — refuses on an unmerged branch the same way `git` itself does |
+| `a` | (Stash) Apply the entry under the cursor (never pops it) |
+| `d` | (Stash) Drop the entry under the cursor, after confirming |
+| `c` | Commit whatever is currently staged, after typing a message |
+| `r` | Re-read status/branches/commits/stash |
+| `Esc` | Back out of Main's own diff, or close the dashboard from anywhere else |
+
+Selecting a Files/Commits/Stash row you haven't viewed yet this
+session starts its diff fresh at the top; returning to one you have —
+even after visiting several others — picks back up exactly where you
+left its scroll, for the whole breakthrough session.
+
+Local only: there's no command-execution channel to run git against a
+remote session, so `jg` refuses visibly on a remote-connected panel or
+inside an archive view rather than reading the wrong repository on
+this machine under the same-looking path.
+
 ## Sessions
 
 `j` then `s`. A full-screen table listing this host's own local GNU
@@ -1746,6 +1795,86 @@ synchronously — one syscall, and
 it is what the sidebar shows first anyway. `Tab` moves keyboard focus into the sidebar so its own
 scrolling works; `Tab` again comes back. The `>` button in its corner
 closes it.
+
+## AI Consigliere
+
+A chat sidebar talking to a real AI provider (Anthropic, OpenAI, or
+DeepSeek) about whatever's currently on screen — reachable with `gC`
+from anywhere in the app, not just the file panel: inside Log
+Holepunch or Git Breach, from a remote connection, anywhere `gC` is
+pressed. Docked flush against the right edge, a third of the screen's
+own width and half that many characters tall (roughly square, since a
+terminal's own character cells are about twice as tall as wide),
+vertically centered on the whole screen — non-modal, so it stays open
+and reachable while navigating the rest of the app underneath it, the
+same way the Details sidebar (`I`) does.
+
+`gC` again (once the sidebar's own input has focus), the title bar's
+own "✕", or Escape all close it — each asks for confirmation first if
+there's already a real conversation in it, since closing starts a
+completely fresh session next time; with nothing asked yet, closing
+is immediate.
+
+### What it sees
+
+Along with the question itself, every request includes:
+
+- A description of whatever's currently on screen — the file panel's
+  own directory and marked files, Log Holepunch's own directory/time
+  range/filters plus a fixed list of every field and key that screen
+  offers, or Git Breach's own repository root, branch, ahead/behind
+  count, staged/unstaged/untracked/conflict counts, and a handful of
+  recent commit subjects. Never a log line's own text, a diff's own
+  content, or a file's own content — only metadata already visible in
+  each screen's own headers (see "Machiavelli Mode" below for the one
+  deliberate exception).
+- Whatever sections of breakthrough's own documentation (the built-in
+  help plus this guide) best match the question, found by a local,
+  lexical search — no embeddings, no index built from a network call.
+  A question in a language other than English falls back to asking
+  the same provider for a translation first, only if the direct search
+  found nothing at all.
+- The system prompt (see below).
+
+### Options → AI Consigliere
+
+| Setting | What it does |
+|---|---|
+| Provider | `anthropic`, `openai`, or `deepseek` |
+| Model | Overrides the provider's own default — the dropdown is filled from that provider's own live model list, fetched once a real API key is configured |
+| Effort | Overrides the model's own default reasoning effort; Anthropic/DeepSeek offer whichever levels that specific model actually supports, OpenAI's own fixed set otherwise (its API never reports this per model) |
+| API key file (plain text) | An optional path to a plain-text file holding the key — Tab completes a path while typing, a non-empty value must resolve to a real file, and this row warns (without blocking) if the file's own permissions are looser than 0600 |
+| API key (encrypted) | Stores the key encrypted under a passphrase you choose, asked for once per run and kept in memory only — never written to disk |
+| Machiavelli Mode | See below |
+
+Resolution order for the key actually used: a well-known environment
+variable (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`DEEPSEEK_API_KEY`,
+matching the provider above) first, then the plain-text file, then the
+encrypted tier. If the encrypted tier is what ends up supplying the
+key and it's still locked this run, opening the sidebar forces a
+passphrase prompt right there before any question can be typed,
+rather than only discovering the lock after a question already
+failed.
+
+Two buttons, also under this category: "Edit system prompt" opens
+`~/.config/breakthrough/consigliere-system-prompt.txt` (created with a
+sensible default the first time) in your own `$EDITOR`; "Reset system
+prompt" overwrites it back to that default, after confirming.
+
+### Machiavelli Mode
+
+Off by default. Log Holepunch's own context (see above) normally never
+includes an actual log line's text — only filter metadata. Turning
+this on lets it forward the lines currently matching the Filter/Time/
+Level fields, verbatim, capped at 50 lines per question. Real log
+lines can carry credentials, IP addresses, names, or other personal
+data that would otherwise never leave this machine.
+
+Turning it on requires scrolling a full warning to its own end before
+the confirming choice does anything — a question short enough to
+reflexively dismiss isn't the point here. Turning it back off is
+immediate, no ceremony; while it's on, the sidebar's own title bar
+stays in a warning color as a standing reminder.
 
 ## Remote connections (SFTP)
 
