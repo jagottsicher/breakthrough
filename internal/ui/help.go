@@ -468,8 +468,9 @@ var helpText = strings.TrimLeft(`
 
 [::b]AI Consigliere ("gC")[::-]
 
-  A chat sidebar talking to a real AI provider (Anthropic, OpenAI, or
-  DeepSeek) about whatever's currently on screen — reachable from
+  A chat sidebar talking to a real AI provider (Anthropic, OpenAI,
+  DeepSeek, or Gemini — or a local Ollama server, no API key needed
+  at all) about whatever's currently on screen — reachable from
   anywhere in the app, not just the file panel: inside Log Holepunch
   or Git Breach, from a remote connection, anywhere "gC" is pressed.
   Docked flush against the right edge, a third of the screen's own
@@ -497,7 +498,8 @@ var helpText = strings.TrimLeft(`
   Configured entirely under Options → AI Consigliere: Provider,
   Model, Effort, the API key (environment variable, an opt-in
   plain-text file, or encrypted under a passphrase asked for once per
-  run), an editable/resettable system prompt, and "Machiavelli Mode"
+  run — none of this applies to Ollama, which needs no key at all),
+  an editable/resettable system prompt, and "Machiavelli Mode"
   — off by default, gated behind a warning you have to scroll to the
   end of before it does anything — which lets Log Holepunch forward
   the lines currently matching its own filters verbatim, rather than

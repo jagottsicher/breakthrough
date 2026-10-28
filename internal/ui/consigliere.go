@@ -1165,6 +1165,26 @@ func (r *Root) buildConsigliereProvider() consigliere.Provider {
 			Effort:  effort,
 			APIKey:  keyFunc,
 		}
+	case "gemini":
+		return consigliere.OpenAICompat{
+			BaseURL: consigliere.GeminiDefaultBaseURL,
+			Model:   firstNonEmptyConsigliereModel(model, consigliere.GeminiDefaultModel),
+			Effort:  effort,
+			APIKey:  keyFunc,
+		}
+	case "ollama":
+		// No real key, ever (see OllamaDefaultBaseURL's own doc
+		// comment) — a constant placeholder, never internal/apikey at
+		// all, so a local server with nothing configured in Options
+		// still works immediately rather than reporting
+		// errConsigliereNoAPIKey for a credential this provider never
+		// needed in the first place.
+		return consigliere.OpenAICompat{
+			BaseURL: consigliere.OllamaDefaultBaseURL,
+			Model:   firstNonEmptyConsigliereModel(model, consigliere.OllamaDefaultModel),
+			Effort:  effort,
+			APIKey:  func() (string, error) { return "ollama", nil },
+		}
 	default: // "anthropic", and anything unrecognized (e.g. a hand-edited config)
 		return consigliere.Anthropic{
 			Model:  model, // "" already means "use AnthropicDefaultModel" — see Anthropic.Reply

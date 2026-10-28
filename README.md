@@ -74,9 +74,9 @@ local git repository containing the active panel's own current
 directory — its own diff pane toggles between a unified pager and a
 side-by-side view (`v`) — an AI Consigliere chat sidebar (`gC`,
 reachable from anywhere in the app) talking to a real Anthropic/
-OpenAI/DeepSeek provider about whatever's currently on screen, with
-an opt-in "Machiavelli Mode" for forwarding actual Log Holepunch
-content rather than just metadata — a Sessions screen (`js`) listing local GNU screen, tmux, and
+OpenAI/DeepSeek/Gemini provider, or a local Ollama server, about
+whatever's currently on screen, with an opt-in "Machiavelli Mode" for
+forwarding actual Log Holepunch content rather than just metadata — a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once
@@ -1236,9 +1236,10 @@ Lightning Network ⚡️ using the sponsor button above.
   anywhere in the app — the file panel, Log Holepunch, Git breach, a
   remote connection — docked flush right, a third of the screen's own
   width and half that many characters tall, vertically centered. Talks
-  to a real Anthropic/OpenAI/DeepSeek provider (API key via an
+  to a real Anthropic/OpenAI/DeepSeek/Gemini provider (API key via an
   environment variable, an opt-in plain-text file, or encrypted under
-  a passphrase asked for once per run), with live model/reasoning-
+  a passphrase asked for once per run), or a local Ollama server
+  (no key needed at all), with live model/reasoning-
   effort selection and an editable, resettable system prompt. Every
   question carries a description of whatever screen is currently open
   (never a log line's, diff's, or file's own content) plus whichever

@@ -41,8 +41,8 @@ func TestOpenAICompatReplySendsExpectedRequestAndParsesReply(t *testing.T) {
 		t.Fatalf("Reply = %q", got)
 	}
 
-	if gotPath != "/v1/chat/completions" {
-		t.Errorf("path = %q, want /v1/chat/completions", gotPath)
+	if gotPath != "/chat/completions" {
+		t.Errorf("path = %q, want /chat/completions", gotPath)
 	}
 	if gotAuth != "Bearer sk-oa-test-key" {
 		t.Errorf("authorization = %q", gotAuth)

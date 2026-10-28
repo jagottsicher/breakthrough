@@ -1798,8 +1798,9 @@ closes it.
 
 ## AI Consigliere
 
-A chat sidebar talking to a real AI provider (Anthropic, OpenAI, or
-DeepSeek) about whatever's currently on screen — reachable with `gC`
+A chat sidebar talking to a real AI provider (Anthropic, OpenAI,
+DeepSeek, or Gemini — or a local Ollama server, no API key needed at
+all) about whatever's currently on screen — reachable with `gC`
 from anywhere in the app, not just the file panel: inside Log
 Holepunch or Git Breach, from a remote connection, anywhere `gC` is
 pressed. Docked flush against the right edge, a third of the screen's
@@ -1840,7 +1841,7 @@ Along with the question itself, every request includes:
 
 | Setting | What it does |
 |---|---|
-| Provider | `anthropic`, `openai`, or `deepseek` |
+| Provider | `anthropic`, `openai`, `deepseek`, `gemini`, or `ollama` (a local server, no API key needed) |
 | Model | Overrides the provider's own default — the dropdown is filled from that provider's own live model list, fetched once a real API key is configured |
 | Effort | Overrides the model's own default reasoning effort; Anthropic/DeepSeek offer whichever levels that specific model actually supports, OpenAI's own fixed set otherwise (its API never reports this per model) |
 | API key file (plain text) | An optional path to a plain-text file holding the key — Tab completes a path while typing, a non-empty value must resolve to a real file, and this row warns (without blocking) if the file's own permissions are looser than 0600 |
@@ -1848,13 +1849,15 @@ Along with the question itself, every request includes:
 | Machiavelli Mode | See below |
 
 Resolution order for the key actually used: a well-known environment
-variable (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`DEEPSEEK_API_KEY`,
-matching the provider above) first, then the plain-text file, then the
-encrypted tier. If the encrypted tier is what ends up supplying the
-key and it's still locked this run, opening the sidebar forces a
-passphrase prompt right there before any question can be typed,
-rather than only discovering the lock after a question already
-failed.
+variable (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`DEEPSEEK_API_KEY`/
+`GEMINI_API_KEY`, matching the provider above) first, then the
+plain-text file, then the encrypted tier. If the encrypted tier is
+what ends up supplying the key and it's still locked this run,
+opening the sidebar forces a passphrase prompt right there before any
+question can be typed, rather than only discovering the lock after a
+question already failed. Ollama needs none of this at all — it talks
+to a local server (`http://localhost:11434` by default) instead of a
+real API, so none of the three tiers above ever apply to it.
 
 Two buttons, also under this category: "Edit system prompt" opens
 `~/.config/breakthrough/consigliere-system-prompt.txt` (created with a
