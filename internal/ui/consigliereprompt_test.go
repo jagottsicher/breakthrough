@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/logview"
@@ -539,5 +540,60 @@ func TestConsigliereContextSnapshotDispatchesToSSHKeys(t *testing.T) {
 
 	if !strings.Contains(got, "Current view: SSH Keys.") {
 		t.Errorf("snapshot = %q, want the SSH Keys snapshot, not the generic panel one", got)
+	}
+}
+
+// TestActivityLogContextSnapshotOmitsMessagesByDefault pins the
+// ordinary, privacy-preserving case: even with real entries loaded,
+// only the total count and a category breakdown are included unless
+// Machiavelli Mode has been explicitly turned on — an entry's own
+// Message is a real file path from the user's own filesystem, the
+// same risk category a Log Holepunch log line already has.
+func TestActivityLogContextSnapshotOmitsMessagesByDefault(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activityLogAllEntries = []activitylog.Entry{
+		{Level: activitylog.LevelActions, Category: activitylog.CategoryFileOps, Message: "copied /home/jens/topsecret123.txt"},
+	}
+
+	got := root.activityLogContextSnapshot()
+
+	for _, want := range []string{"Action Log", "1 entries", "fileops: 1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, must not contain an entry's own Message without Machiavelli Mode", got)
+	}
+}
+
+// TestActivityLogContextSnapshotIncludesMessagesUnderMachiavelliMode
+// pins the explicit, opted-in exception: once the user has turned the
+// mode on, the currently-matching entries are forwarded verbatim.
+func TestActivityLogContextSnapshotIncludesMessagesUnderMachiavelliMode(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereHardcoreMode = true
+	root.activityLogAllEntries = []activitylog.Entry{
+		{Level: activitylog.LevelActions, Category: activitylog.CategoryFileOps, Message: "copied /home/jens/topsecret123.txt"},
+	}
+
+	got := root.activityLogContextSnapshot()
+
+	if !strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, want the matched entry forwarded under Machiavelli Mode", got)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToActivityLog pins the
+// dispatch switch's own Action Log case.
+func TestConsigliereContextSnapshotDispatchesToActivityLog(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = activityLogPage
+	root.activityLogAllEntries = []activitylog.Entry{{Message: "copied a.txt"}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Action Log.") {
+		t.Errorf("snapshot = %q, want the Action Log snapshot, not the generic panel one", got)
 	}
 }

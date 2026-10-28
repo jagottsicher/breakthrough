@@ -24,10 +24,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/apikey"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
@@ -923,6 +925,8 @@ func (r *Root) consigliereContextSnapshot() string {
 		return r.sessionsContextSnapshot()
 	case sshKeysPage:
 		return r.sshKeysContextSnapshot()
+	case activityLogPage:
+		return r.activityLogContextSnapshot()
 	default: // "" (the bare panel) and anything else "gC" might someday reach from
 		return r.panelContextSnapshot()
 	}
@@ -1346,6 +1350,78 @@ func (r *Root) sshKeysContextSnapshot() string {
 		fmt.Fprintf(&b, "(%d further key pairs not shown)\n", len(pairs)-n)
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// activityLogContextSnapshot describes the Action Log screen: the
+// total entry count and a breakdown by category — never an entry's
+// own Message by default, since that free-text field carries real
+// file paths from the user's own filesystem (see Entry's own doc
+// comment in internal/activitylog), the same risk category a Log
+// Holepunch log line already has. Machiavelli Mode is the identical
+// opt-in exception (see consigliereMachiavelliActionLogEntries).
+func (r *Root) activityLogContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Action Log.\n")
+	if r.activityLogReadErr != nil {
+		fmt.Fprintf(&b, "Could not read the real log file: %v\n", r.activityLogReadErr)
+		return strings.TrimSpace(b.String())
+	}
+	entries := r.activityLogAllEntries
+	fmt.Fprintf(&b, "%d entries.\n", len(entries))
+	byCategory := map[activitylog.Category]int{}
+	for _, e := range entries {
+		byCategory[e.Category]++
+	}
+	if len(byCategory) > 0 {
+		var parts []string
+		for cat, n := range byCategory {
+			parts = append(parts, fmt.Sprintf("%s: %d", cat, n))
+		}
+		sort.Strings(parts)
+		fmt.Fprintf(&b, "By category: %s\n", strings.Join(parts, ", "))
+	}
+	if kw := strings.TrimSpace(r.activityLogKeywordField.GetText()); kw != "" {
+		fmt.Fprintf(&b, "Current keyword filter: %s\n", kw)
+	}
+	if tf := strings.TrimSpace(r.activityLogTimeField.GetText()); tf != "" {
+		fmt.Fprintf(&b, "Current time filter: %s\n", tf)
+	}
+	if r.settings.ConsigliereHardcoreMode {
+		b.WriteString(r.consigliereMachiavelliActionLogEntries())
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// consigliereMaxActionLogEntries caps how many entries
+// consigliereMachiavelliActionLogEntries forwards — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxActionLogEntries = 50
+
+// consigliereMachiavelliActionLogEntries renders the entries
+// currently matching the Keyword/Time filters, verbatim (including
+// each one's own Message, real file paths and all), once Machiavelli
+// Mode is on — reuses filterActivityLogEntries so this always matches
+// exactly what the table itself is showing.
+func (r *Root) consigliereMachiavelliActionLogEntries() string {
+	matching := filterActivityLogEntries(r.activityLogAllEntries,
+		r.activityLogKeywordField.GetText(), r.activityLogTimeField.GetText(), time.Now())
+	if len(matching) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nMachiavelli Mode is on — the following currently-matching entries are forwarded verbatim:\n")
+	n := len(matching)
+	if n > consigliereMaxActionLogEntries {
+		n = consigliereMaxActionLogEntries
+	}
+	for _, e := range matching[:n] {
+		fmt.Fprintf(&b, "- [%s] %s: %s\n", e.Level, e.Category, e.Message)
+	}
+	if len(matching) > n {
+		fmt.Fprintf(&b, "(%d further matching entries not shown)\n", len(matching)-n)
+	}
+	return b.String()
 }
 
 // errConsigliereNoAPIKey is what buildConsigliereProvider's own
