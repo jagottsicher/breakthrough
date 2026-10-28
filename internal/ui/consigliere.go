@@ -348,33 +348,20 @@ func (r *Root) moveConsigliere(x, y int) {
 
 // consigliereSize sizes the sidebar against the whole screen (Root's
 // own rect — see detailsSidebarSize's own doc comment on why Details
-// uses the same base rather than clampToPanel): at least a third of
-// the screen's width, full height top to bottom minus
-// detailsSidebarBottomRows at the very end — the exact same floor/
-// bottom-margin Details itself uses, reused rather than duplicated
-// with different numbers, since both dock against the same screen
-// edge above the same three reserved bottom rows (bashConsole/
-// buttonBar/statusBar).
-//
-// One row taller while docked over a full-screen modal (Log Audit,
-// Git Breach, ... — r.activePage != "") than over the bare file
-// panel — per the user's own explicit request, left at exactly
-// Details' own height in the bare-panel case specifically, rather
-// than changed everywhere. repositionConsigliereSidebar's own matching
-// one-row-lower y position is the other half of this.
+// uses the same base rather than clampToPanel): a third of the
+// screen's own width, and half that many characters tall — per the
+// user's own explicit request, deliberately not a literal
+// width==height square: a terminal's own character cells are roughly
+// twice as tall as they are wide, so half the width's own character
+// count is what actually reads as visually square, not a literal
+// equal count of columns and rows.
 func (r *Root) consigliereSize() (width, height int) {
-	_, _, screenWidth, screenHeight := r.GetRect()
+	_, _, screenWidth, _ := r.GetRect()
 	width = screenWidth / 3
 	if width < consigliereMinWidth {
 		width = consigliereMinWidth
 	}
-	height = screenHeight - detailsSidebarBottomRows
-	if r.activePage != "" {
-		height++
-	}
-	if height < 1 {
-		height = screenHeight
-	}
+	height = width / 2
 	return width, height
 }
 
@@ -396,33 +383,27 @@ func (r *Root) consigliereHistoryContentWidth() int {
 }
 
 // repositionConsigliereSidebar (re)computes the sidebar's own rect
-// from consigliereSize, flush against the right edge of the screen —
-// repositionDetailsSidebar's own exact shape, just for
-// consigliereLayout instead of detailsSidebarLayout. Hooked into
-// Root's own resize handling (see handleBeforeDraw) so a live terminal
-// resize keeps it correctly positioned while open, the same as
-// Details.
-//
-// Starts one row lower while docked over a full-screen modal than
-// over the bare file panel — see consigliereSize's own doc comment
-// for the matching one-row-taller height this pairs with, and for why
-// the bare-panel case is deliberately left exactly as it already was.
+// from consigliereSize: flush against the right edge of the screen
+// horizontally, centered on the whole screen vertically — per the
+// user's own explicit request, the same regardless of whether this is
+// docked over the bare file panel or a full-screen modal (Log Audit,
+// Git Breach, ...), unlike the old fill-the-column shape this
+// replaced. Hooked into Root's own resize handling (see
+// handleBeforeDraw) so a live terminal resize keeps it correctly
+// positioned while open.
 //
 // Once the user has actually dragged the sidebar
 // (consigliereManuallyPositioned — see moveConsigliere), a resize no
-// longer re-docks it flush right: that would silently undo the move
-// on every live terminal resize, the same "a drag must not keep
-// snapping back" expectation a toolWindow's own manuallyResized
+// longer re-docks it flush right/centered: that would silently undo
+// the move on every live terminal resize, the same "a drag must not
+// keep snapping back" expectation a toolWindow's own manuallyResized
 // already protects, just for position instead of size. The current
 // x/y is kept as-is and only re-clamped, so it still can't end up
 // off-screen.
 func (r *Root) repositionConsigliereSidebar() {
 	width, height := r.consigliereSize()
-	_, _, screenWidth, _ := r.GetRect()
-	x, y := screenWidth-width, 0
-	if r.activePage != "" {
-		y = 1
-	}
+	_, _, screenWidth, screenHeight := r.GetRect()
+	x, y := screenWidth-width, (screenHeight-height)/2
 	if r.consigliereManuallyPositioned {
 		x, y, _, _ = r.consigliereLayout.GetRect()
 	}

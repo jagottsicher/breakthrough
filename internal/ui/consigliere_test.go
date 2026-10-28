@@ -540,48 +540,64 @@ func TestBacktabInConsigliereHistoryReturnsToInput(t *testing.T) {
 	}
 }
 
-// TestConsigliereSizeUnchangedOverTheBarePanel pins the user's own
-// explicit request: the sidebar's own size/position over the bare
-// file panel must stay exactly what it already was — matching
-// Details' own geometry there — even after the one-row-taller,
-// one-row-lower adjustment below for every full-screen modal.
-func TestConsigliereSizeUnchangedOverTheBarePanel(t *testing.T) {
+// TestConsigliereSizeIsAThirdOfScreenWidthAndHalfThatTall pins the
+// user's own explicit request: width is a third of the whole screen,
+// height is half that many characters — the ratio that reads as
+// visually square given a terminal's own roughly-2:1 character cell,
+// not a literal width==height count.
+func TestConsigliereSizeIsAThirdOfScreenWidthAndHalfThatTall(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.SetRect(0, 0, 120, 40)
 
-	_, wantHeight := root.detailsSidebarSize()
-	_, gotHeight := root.consigliereSize()
-	if gotHeight != wantHeight {
-		t.Errorf("consigliereSize height over the bare panel = %d, want %d (Details' own, unchanged)", gotHeight, wantHeight)
-	}
+	width, height := root.consigliereSize()
 
-	root.showConsigliere()
-	_, y, _, _ := root.consigliereLayout.GetRect()
-	if y != 0 {
-		t.Errorf("consigliereLayout y over the bare panel = %d, want 0 (unchanged)", y)
+	if want := 120 / 3; width != want {
+		t.Errorf("width = %d, want %d (a third of the screen)", width, want)
+	}
+	if want := width / 2; height != want {
+		t.Errorf("height = %d, want %d (half the width)", height, want)
 	}
 }
 
-// TestConsigliereSizeOneRowTallerAndLowerOverAModal pins the other
-// half: one row taller, starting one row lower, once docked over a
-// full-screen modal (Help stands in for Log Audit/Git Breach — the
-// activePage != "" condition is generic, not screen-specific).
-func TestConsigliereSizeOneRowTallerAndLowerOverAModal(t *testing.T) {
+// TestConsigliereSizeSameOverTheBarePanelAndAModal pins that this
+// geometry — unlike the old fill-the-column shape it replaced — no
+// longer depends on whether the sidebar is docked over the bare file
+// panel or a full-screen modal (Help stands in for Log Audit/Git
+// Breach here).
+func TestConsigliereSizeSameOverTheBarePanelAndAModal(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.SetRect(0, 0, 120, 40)
 
-	_, barePanelHeight := root.consigliereSize()
+	barePanelWidth, barePanelHeight := root.consigliereSize()
 
 	root.openHelp()
-	_, modalHeight := root.consigliereSize()
-	if modalHeight != barePanelHeight+1 {
-		t.Errorf("consigliereSize height over a modal = %d, want %d (one more than over the bare panel)", modalHeight, barePanelHeight+1)
+	modalWidth, modalHeight := root.consigliereSize()
+
+	if modalWidth != barePanelWidth || modalHeight != barePanelHeight {
+		t.Errorf("size over a modal = (%d, %d), want the same (%d, %d) as over the bare panel", modalWidth, modalHeight, barePanelWidth, barePanelHeight)
 	}
+}
+
+// TestConsigliereLayoutDockedRightAndCenteredVertically pins
+// repositionConsigliereSidebar's own placement: flush against the
+// right edge, vertically centered on the whole screen.
+func TestConsigliereLayoutDockedRightAndCenteredVertically(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 120, 40)
 
 	root.showConsigliere()
-	_, y, _, _ := root.consigliereLayout.GetRect()
-	if y != 1 {
-		t.Errorf("consigliereLayout y over a modal = %d, want 1", y)
+
+	width, height := root.consigliereSize()
+	x, y, gotWidth, gotHeight := root.consigliereLayout.GetRect()
+
+	if gotWidth != width || gotHeight != height {
+		t.Errorf("consigliereLayout size = (%d, %d), want (%d, %d) from consigliereSize", gotWidth, gotHeight, width, height)
+	}
+	if wantX := 120 - width; x != wantX {
+		t.Errorf("consigliereLayout x = %d, want %d (flush right)", x, wantX)
+	}
+	if wantY := (40 - height) / 2; y != wantY {
+		t.Errorf("consigliereLayout y = %d, want %d (vertically centered on the whole screen)", y, wantY)
 	}
 }
 
@@ -682,9 +698,11 @@ func TestConsigliereManuallyPositionedResetsOnFreshOpen(t *testing.T) {
 	if root.consigliereManuallyPositioned {
 		t.Error("a fresh session should not inherit the previous one's manual position")
 	}
-	wantX, wantY, _, _ := root.consigliereLayout.GetRect()
-	if wantX != 100-func() int { w, _ := root.consigliereSize(); return w }() || wantY != 0 {
-		t.Errorf("fresh session should be docked flush right at y=0, got (%d, %d)", wantX, wantY)
+	width, height := root.consigliereSize()
+	wantX, wantY := 100-width, (40-height)/2
+	gotX, gotY, _, _ := root.consigliereLayout.GetRect()
+	if gotX != wantX || gotY != wantY {
+		t.Errorf("fresh session should be docked flush right, vertically centered — got (%d, %d), want (%d, %d)", gotX, gotY, wantX, wantY)
 	}
 }
 

@@ -1968,8 +1968,8 @@
     },
     {
       "path": "internal/ui/consigliere.go",
-      "size": 45479,
-      "sha256": "be0a01c809d2fdfae5408a1ce772295607ba3034180742eed10f7c39280405ca"
+      "size": 44845,
+      "sha256": "ea645892da44835dc6d49f9d4f70b43f987ce1df295c9fc7871a76988f12704b"
     },
     {
       "path": "internal/ui/consigliere_docsearch_test.go",
@@ -1978,8 +1978,8 @@
     },
     {
       "path": "internal/ui/consigliere_test.go",
-      "size": 33274,
-      "sha256": "cb0221e6d914471ed3f8492cfebff83f10d9c7d51008ef36858c180cb294dbb8"
+      "size": 34015,
+      "sha256": "5bd5deb13c882c9fff7d75d6d9d750c255f86897bfb1c8fb18d33cdb698c5796"
     },
     {
       "path": "internal/ui/consiglieremodels.go",
@@ -31137,7 +31137,7 @@
       "name": "consigliereSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 365
+      "line": 358
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31145,7 +31145,7 @@
       "name": "consigliereHistoryContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 393
+      "line": 380
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31153,7 +31153,7 @@
       "name": "repositionConsigliereSidebar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 419
+      "line": 403
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31161,7 +31161,7 @@
       "name": "ConsigliereShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 445
+      "line": 426
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31169,7 +31169,7 @@
       "name": "toggleConsigliere",
       "kind": "method",
       "receiver": "*Root",
-      "line": 455
+      "line": 436
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31177,7 +31177,7 @@
       "name": "showConsigliere",
       "kind": "method",
       "receiver": "*Root",
-      "line": 472
+      "line": 453
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31185,7 +31185,7 @@
       "name": "consigliereNeedsUnlock",
       "kind": "method",
       "receiver": "*Root",
-      "line": 527
+      "line": 508
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31193,7 +31193,7 @@
       "name": "hideConsigliere",
       "kind": "method",
       "receiver": "*Root",
-      "line": 549
+      "line": 530
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31201,21 +31201,21 @@
       "name": "handleConsigliereInputDone",
       "kind": "method",
       "receiver": "*Root",
-      "line": 599
+      "line": 580
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "consigliereMaxDocChunks",
       "kind": "const",
-      "line": 658
+      "line": 639
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "consigliereMaxDocChunkChars",
       "kind": "const",
-      "line": 659
+      "line": 640
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31223,21 +31223,21 @@
       "name": "consigliereDocSnapshot",
       "kind": "method",
       "receiver": "*Root",
-      "line": 668
+      "line": 649
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "truncateRunes",
       "kind": "function",
-      "line": 687
+      "line": 668
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "joinConsigliereSnapshotParts",
       "kind": "function",
-      "line": 702
+      "line": 683
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31245,21 +31245,21 @@
       "name": "consigliereContextSnapshot",
       "kind": "method",
       "receiver": "*Root",
-      "line": 712
+      "line": 693
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "consigliereMaxMarkedPaths",
       "kind": "const",
-      "line": 730
+      "line": 711
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "consigliereMaxRecentCommits",
       "kind": "const",
-      "line": 731
+      "line": 712
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31267,7 +31267,7 @@
       "name": "panelContextSnapshot",
       "kind": "method",
       "receiver": "*Root",
-      "line": 739
+      "line": 720
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31275,7 +31275,7 @@
       "name": "logAuditContextSnapshot",
       "kind": "method",
       "receiver": "*Root",
-      "line": 770
+      "line": 751
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31283,21 +31283,21 @@
       "name": "gitBreachContextSnapshot",
       "kind": "method",
       "receiver": "*Root",
-      "line": 796
+      "line": 777
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "errConsigliereNoAPIKey",
       "kind": "var",
-      "line": 833
+      "line": 814
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "errConsigliereLocked",
       "kind": "var",
-      "line": 842
+      "line": 823
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31305,14 +31305,14 @@
       "name": "buildConsigliereProvider",
       "kind": "method",
       "receiver": "*Root",
-      "line": 857
+      "line": 838
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere.go",
       "name": "firstNonEmptyConsigliereModel",
       "kind": "function",
-      "line": 906
+      "line": 887
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31320,7 +31320,7 @@
       "name": "submitConsigliereUnlock",
       "kind": "method",
       "receiver": "*Root",
-      "line": 926
+      "line": 907
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31328,7 +31328,7 @@
       "name": "submitConsigliereMessage",
       "kind": "method",
       "receiver": "*Root",
-      "line": 954
+      "line": 935
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31336,7 +31336,7 @@
       "name": "renderConsigliereHistory",
       "kind": "method",
       "receiver": "*Root",
-      "line": 992
+      "line": 973
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31565,86 +31565,93 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
-      "name": "TestConsigliereSizeUnchangedOverTheBarePanel",
+      "name": "TestConsigliereSizeIsAThirdOfScreenWidthAndHalfThatTall",
       "kind": "function",
       "line": 548
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
-      "name": "TestConsigliereSizeOneRowTallerAndLowerOverAModal",
+      "name": "TestConsigliereSizeSameOverTheBarePanelAndAModal",
       "kind": "function",
-      "line": 569
+      "line": 567
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/consigliere_test.go",
+      "name": "TestConsigliereLayoutDockedRightAndCenteredVertically",
+      "kind": "function",
+      "line": 584
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
       "name": "TestConsigliereTitleBarCloseGlyphClickClosesIt",
       "kind": "function",
-      "line": 592
+      "line": 608
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
       "name": "TestDraggingConsigliereTitleBarMovesIt",
       "kind": "function",
-      "line": 616
+      "line": 632
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
       "name": "TestConsigliereManuallyPositionedSurvivesResize",
       "kind": "function",
-      "line": 653
+      "line": 669
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
       "name": "TestConsigliereManuallyPositionedResetsOnFreshOpen",
       "kind": "function",
-      "line": 673
+      "line": 689
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
       "name": "TestPushOverlayKeepsConsigliereOnTopOfANewlyOpenedPage",
       "kind": "function",
-      "line": 700
+      "line": 718
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
       "name": "TestShowConsigliereForcesPassphraseWhenKeyIsLockedAndStored",
       "kind": "function",
-      "line": 721
+      "line": 739
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
       "name": "TestShowConsigliereSkipsPassphraseWhenEnvVarAlreadyProvidesAKey",
       "kind": "function",
-      "line": 743
+      "line": 761
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
       "name": "TestSubmitConsigliereUnlockWrongPassphraseStaysLocked",
       "kind": "function",
-      "line": 768
+      "line": 786
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
       "name": "TestSubmitConsigliereUnlockCorrectPassphraseUnlocks",
       "kind": "function",
-      "line": 797
+      "line": 815
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliere_test.go",
       "name": "TestConsigliereAPIKeyStatusDistinguishesLockedFromNotSet",
       "kind": "function",
-      "line": 825
+      "line": 843
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -61246,5 +61253,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "e4a2832c9fa6c080c758664356006387b298e3597b161da784dabb596f0c2acd"
+  "merkle_root": "07e032f5f41709442a8ada37900cd56a1d7540682d2a14017957c5bd43ae0c1d"
 }
