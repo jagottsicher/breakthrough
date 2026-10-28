@@ -2077,6 +2077,16 @@
       "sha256": "d4c2d4babb9e46d00c5ccc69484fa671b3e3b66f39576d8bc410427c37f201b2"
     },
     {
+      "path": "internal/ui/docsearchindex.go",
+      "size": 1541,
+      "sha256": "5c5194379e84f4731f200bad8162ffa55f263e8e70c4bbdf946da4fc57797d7b"
+    },
+    {
+      "path": "internal/ui/docsearchindex_test.go",
+      "size": 895,
+      "sha256": "747be9d311890bb2796301db4d6fd330b8a2ccf2bf4e5a309de4d8272100b30e"
+    },
+    {
       "path": "internal/ui/duplicate.go",
       "size": 36295,
       "sha256": "9763c671ddfc70c665c71859c185c6a8d2513e0d33a2e25b7ad089a085a8700c"
@@ -2543,8 +2553,8 @@
     },
     {
       "path": "internal/ui/root.go",
-      "size": 279271,
-      "sha256": "406dc51bb5e014764d88a88987182740e02b036fa0bbe3daa9abf77406c09913"
+      "size": 279209,
+      "sha256": "e037f2e073cf7114fb44ce17e611e560abf9e07d175829ae90595bf301edec7e"
     },
     {
       "path": "internal/ui/root_test.go",
@@ -4132,6 +4142,8 @@
         "internal/ui/dirpicker.go",
         "internal/ui/dirpicker_test.go",
         "internal/ui/doc.go",
+        "internal/ui/docsearchindex.go",
+        "internal/ui/docsearchindex_test.go",
         "internal/ui/duplicate.go",
         "internal/ui/duplicate_test.go",
         "internal/ui/easteregg.go",
@@ -33866,14 +33878,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
@@ -33965,6 +33977,41 @@
       "name": "TestOpenDirPickerHandlesUnreadableStart",
       "kind": "function",
       "line": 198
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/docsearchindex.go",
+      "name": "defaultDocSearchIndexOnce",
+      "kind": "var",
+      "line": 22
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/docsearchindex.go",
+      "name": "defaultDocSearchIndexVal",
+      "kind": "var",
+      "line": 23
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/docsearchindex.go",
+      "name": "defaultDocSearchIndexErr",
+      "kind": "var",
+      "line": 24
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/docsearchindex.go",
+      "name": "defaultDocSearchIndex",
+      "kind": "function",
+      "line": 31
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/docsearchindex_test.go",
+      "name": "TestDefaultDocSearchIndexIsSharedAcrossRoots",
+      "kind": "function",
+      "line": 12
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -38345,14 +38392,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
@@ -61735,5 +61782,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "48f907814e10ba301ab7c2b504d774aefba1ad490634110dcfa3fb8354aa82a5"
+  "merkle_root": "1663fe9e54a08973fbe623ef8e172aaec42aa0730092d2572cfec1c6f51c4156"
 }

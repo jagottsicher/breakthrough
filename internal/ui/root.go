@@ -2822,7 +2822,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// means the embed itself is broken (see docsearch.NewDefaultIndex's
 	// own doc comment) — surfaced the same way apiKeyStoreWarning is,
 	// not fatal to starting breakthrough at all.
-	docSearchIndex, docSearchErr := docsearch.NewDefaultIndex(docsearch.ParseTviewBoldHeadingChunks(helpText, "help")...)
+	docSearchIndex, docSearchErr := defaultDocSearchIndex()
 	var docSearchWarning string
 	if docSearchErr != nil {
 		docSearchWarning = fmt.Sprintf("AI Consigliere documentation search: %v", docSearchErr)
