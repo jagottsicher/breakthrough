@@ -1233,21 +1233,27 @@ Lightning Network ⚡️ using the sponsor button above.
   scroll position for the whole session. "c" commits whatever is
   currently staged. Local working trees only — there is no
   command-execution channel to run git against a remote session.
-- AI Consigliere (`gC`): a non-modal chat sidebar reachable from
-  anywhere in the app — the file panel, Log Holepunch, Git breach, a
-  remote connection — docked flush right, a third of the screen's own
-  width and half that many characters tall, vertically centered. Talks
-  to a real Anthropic/OpenAI/DeepSeek/Gemini provider (API key via an
-  environment variable, an opt-in plain-text file, or encrypted under
-  a passphrase asked for once per run), or a local Ollama server
-  (no key needed at all), with live model/reasoning-
+- AI Consigliere (`gC`): a non-modal chat sidebar reachable from the
+  file panel and every full-screen catalog screen — Log Holepunch, Git
+  Breach, Firewall, Mounts, Sessions, SSH Keys, Action Log, Undertow,
+  Toolbox, Compare Faultline, a remote connection — docked flush
+  right, a third of the screen's own width and half that many
+  characters tall, vertically centered. Not reachable from the
+  Viewer/Look screen (`g`/`G` already mean goto-top/goto-bottom
+  there), terminal tabs (keystrokes go to the shell), or one-shot
+  dialogs. Talks to a real Anthropic/OpenAI/DeepSeek/Gemini provider
+  (API key via an environment variable, an opt-in plain-text file, or
+  encrypted under a passphrase asked for once per run), or a local
+  Ollama server (no key needed at all), with live model/reasoning-
   effort selection and an editable, resettable system prompt. Every
   question carries a description of whatever screen is currently open
-  (never a log line's, diff's, or file's own content) plus whichever
-  sections of breakthrough's own documentation a local, lexical search
-  finds relevant. "Machiavelli Mode", off by default and gated behind
-  a scroll-to-the-end warning, is the one opt-in exception: it lets Log
-  Holepunch forward the lines currently matching its own filters, Git
-  Breach forward whatever diff is currently shown in Main, and
-  Firewall forward its full ruleset, all verbatim.
+  — counts and metadata, never a log line's, diff's, rule's, or file's
+  own content — plus whichever sections of breakthrough's own
+  documentation a local, lexical search finds relevant. "Machiavelli
+  Mode", off by default and gated behind a scroll-to-the-end warning,
+  is the one opt-in exception: it lets Log Holepunch forward the lines
+  currently matching its own filters, Git Breach forward whatever diff
+  is currently shown in Main, Firewall forward its full ruleset,
+  Action Log forward the matching entries' own messages, and Undertow
+  forward every operation's own source/target path, all verbatim.
 
