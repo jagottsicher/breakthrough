@@ -25,13 +25,17 @@ type Message struct {
 }
 
 // Request is everything one call to Provider.Reply needs: the
-// conversation so far, plus the current view's own curated context
-// snapshot (see feature_ideas.txt's "AdvisorContext()") — rebuilt fresh
-// from the live view state on every new question, never the one
-// captured when the overlay was first opened.
+// conversation so far, the current view's own curated context
+// snapshot (see feature_ideas.txt's "AdvisorContext()") — rebuilt
+// fresh from the live view state on every new question, never the
+// one captured when the overlay was first opened — and System, the
+// user's own fixed, editable system prompt (see internal/config's
+// DefaultConsigliereSystemPrompt), which doesn't change per question
+// the way Snapshot does.
 type Request struct {
 	History  []Message
 	Snapshot string
+	System   string
 }
 
 // Provider answers one Consigliere question. A real implementation
@@ -96,4 +100,23 @@ func firstNonEmpty(override, fallback string) string {
 		return override
 	}
 	return fallback
+}
+
+// combineConsigliereSystem joins Request.System (fixed instructions)
+// and Request.Snapshot (per-question view context) into the one
+// string each provider's own single "system" slot actually expects —
+// System first, then a blank line, then Snapshot, so the model sees
+// its own standing instructions before the specific situation they
+// apply to this question. Either half being empty is omitted outright
+// rather than leaving a stray blank line or sending an empty system
+// prompt when there's really nothing to say.
+func combineConsigliereSystem(system, snapshot string) string {
+	switch {
+	case system == "":
+		return snapshot
+	case snapshot == "":
+		return system
+	default:
+		return system + "\n\n" + snapshot
+	}
 }

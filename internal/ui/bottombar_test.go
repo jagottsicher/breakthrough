@@ -120,6 +120,11 @@ func TestMain(m *testing.M) {
 	listConsigliereModelsFunc = func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
 		return nil, errors.New("listConsigliereModelsFunc: no fake installed for this test")
 	}
+	// Same reasoning as apiKeyStorePath above, for the AI Consigliere's
+	// own editable system prompt file: never read or write a real
+	// ~/.config/breakthrough/consigliere-system-prompt.txt during
+	// tests.
+	consigliereSystemPromptPath = func() string { return "" }
 
 	// mailDefaultMboxPath: the status bar's own mail badge (see
 	// mailBadgeCount in mail.go) auto-detects the current user's real

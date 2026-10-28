@@ -21,12 +21,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/apikey"
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
 )
 
@@ -648,7 +651,115 @@ func (r *Root) handleConsigliereInputDone(key tcell.Key) {
 // Breach/etc.) is next branch's work, not this slice's — only the chat
 // mechanics (history/scrolling/input) are being judged here.
 func (r *Root) consigliereContextSnapshot() string {
-	return "Placeholder context — no real view snapshot wired up yet (see feature_ideas.txt)."
+	switch r.activePage {
+	case logAuditSelectionPage, logAuditViewerPage, logAuditDetailPage, logAuditStatsPage:
+		return r.logAuditContextSnapshot()
+	case gitBreachPage:
+		return r.gitBreachContextSnapshot()
+	default: // "" (the bare panel) and anything else "gC" might someday reach from
+		return r.panelContextSnapshot()
+	}
+}
+
+// consigliereMaxMarkedPaths/consigliereMaxRecentCommits cap how much
+// of a long list actually goes into a snapshot — the same
+// anthropicMaxTokens-style reasoning: hundreds of marked files or a
+// deep commit history would bloat every single question's own token
+// cost for little real benefit over "N files marked"/"N commits,
+// most recent: ...".
+const (
+	consigliereMaxMarkedPaths   = 20
+	consigliereMaxRecentCommits = 10
+)
+
+// panelContextSnapshot describes the bare file panel: the current
+// directory and, if any, the marked files' own names — never their
+// contents, the same boundary every snapshot builder here keeps (see
+// logAuditContextSnapshot's own doc comment on why that matters most
+// there).
+func (r *Root) panelContextSnapshot() string {
+	p := r.panel
+	if p == nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Current view: file panel.\nDirectory: %s\n", p.path)
+	if len(p.selected) > 0 {
+		names := make([]string, 0, len(p.selected))
+		for path := range p.selected {
+			names = append(names, filepath.Base(path))
+		}
+		sort.Strings(names)
+		shown := names
+		if len(shown) > consigliereMaxMarkedPaths {
+			shown = shown[:consigliereMaxMarkedPaths]
+		}
+		fmt.Fprintf(&b, "Marked files (%d total): %s\n", len(names), strings.Join(shown, ", "))
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// logAuditContextSnapshot describes whichever Log Audit page is
+// actually showing right now (selection, viewer, detail, or stats —
+// see consigliereContextSnapshot's own switch): the log directory,
+// the visible timeline range, and whatever keyword/time/level filter
+// is currently set. Deliberately never includes a single log line's
+// own text — logAuditKeywordField etc. are the filter *controls*, not
+// the matched entries themselves, and a real credential or secret
+// sitting in a log line is exactly the kind of thing this must never
+// forward to a third-party provider.
+func (r *Root) logAuditContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Log Audit.\n")
+	if r.logAuditDir != "" {
+		fmt.Fprintf(&b, "Log directory: %s\n", r.logAuditDir)
+	}
+	if r.logAuditTimelineStartLabel != "" || r.logAuditTimelineEndLabel != "" {
+		fmt.Fprintf(&b, "Visible time range: %s to %s\n", r.logAuditTimelineStartLabel, r.logAuditTimelineEndLabel)
+	}
+	if kw := strings.TrimSpace(r.logAuditKeywordField.GetText()); kw != "" {
+		fmt.Fprintf(&b, "Keyword filter: %s\n", kw)
+	}
+	if lvl := strings.TrimSpace(r.logAuditLevelField.GetText()); lvl != "" {
+		fmt.Fprintf(&b, "Level filter: %s\n", lvl)
+	}
+	if tf := strings.TrimSpace(r.logAuditTimeField.GetText()); tf != "" {
+		fmt.Fprintf(&b, "Time filter: %s\n", tf)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// gitBreachContextSnapshot describes the repository Git Breach has
+// open: its root, current branch (plus ahead/behind if any), the
+// Staged/Unstaged/Untracked/Conflicts counts, and a handful of recent
+// commit subjects — never a diff's own content or a commit's full
+// body, only metadata already visible in the screen's own headers.
+func (r *Root) gitBreachContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Git Breach.\n")
+	if r.gitBreachRoot != "" {
+		fmt.Fprintf(&b, "Repository: %s\n", r.gitBreachRoot)
+	}
+	fmt.Fprintf(&b, "Branch: %s", r.gitBreachStatus.Branch)
+	if r.gitBreachStatus.Ahead > 0 || r.gitBreachStatus.Behind > 0 {
+		fmt.Fprintf(&b, " (ahead %d, behind %d)", r.gitBreachStatus.Ahead, r.gitBreachStatus.Behind)
+	}
+	b.WriteString("\n")
+	fmt.Fprintf(&b, "Staged: %d, Unstaged: %d, Untracked: %d, Conflicts: %d\n",
+		len(r.gitBreachStatus.Staged), len(r.gitBreachStatus.Unstaged),
+		len(r.gitBreachStatus.Untracked), len(r.gitBreachStatus.Conflicts))
+	if len(r.gitBreachCommits) > 0 {
+		n := len(r.gitBreachCommits)
+		if n > consigliereMaxRecentCommits {
+			n = consigliereMaxRecentCommits
+		}
+		subjects := make([]string, 0, n)
+		for _, c := range r.gitBreachCommits[:n] {
+			subjects = append(subjects, c.Subject)
+		}
+		fmt.Fprintf(&b, "Recent commits: %s\n", strings.Join(subjects, "; "))
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // errConsigliereNoAPIKey is what buildConsigliereProvider's own
@@ -795,6 +906,7 @@ func (r *Root) submitConsigliereMessage(text string) {
 	req := consigliere.Request{
 		History:  r.consigliereMessages,
 		Snapshot: r.consigliereContextSnapshot(),
+		System:   config.LoadConsigliereSystemPrompt(consigliereSystemPromptPath()),
 	}
 	provider := r.buildConsigliereProvider()
 

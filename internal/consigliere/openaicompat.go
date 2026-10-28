@@ -87,9 +87,10 @@ type openAICompatErrorBody struct {
 	Message string `json:"message"`
 }
 
-// Reply implements Provider. req.Snapshot, unlike Anthropic's own
-// separate "system" field, becomes the first message with role
-// "system" — the Chat Completions API's own equivalent slot (see
+// Reply implements Provider. req.System and req.Snapshot (combined
+// via combineConsigliereSystem), unlike Anthropic's own separate
+// "system" field, become the first message with role "system" — the
+// Chat Completions API's own equivalent slot (see
 // toOpenAICompatMessages).
 func (p OpenAICompat) Reply(ctx context.Context, req Request) (string, error) {
 	key, err := resolveKey(p.APIKey)
@@ -142,14 +143,16 @@ func (p OpenAICompat) Reply(ctx context.Context, req Request) (string, error) {
 	return parsed.Choices[0].Message.Content, nil
 }
 
-// toOpenAICompatMessages prepends req.Snapshot as a "system" message
-// (skipped if empty — an empty system message is pure noise, not a
-// real instruction), then translates the chat history the same way
-// toAnthropicMessages does for Anthropic's own messages array.
+// toOpenAICompatMessages prepends req.System+req.Snapshot (combined
+// via combineConsigliereSystem) as a single "system" message —
+// skipped entirely if both are empty, since an empty system message
+// is pure noise, not a real instruction — then translates the chat
+// history the same way toAnthropicMessages does for Anthropic's own
+// messages array.
 func toOpenAICompatMessages(req Request) []openAICompatMessage {
 	out := make([]openAICompatMessage, 0, len(req.History)+1)
-	if req.Snapshot != "" {
-		out = append(out, openAICompatMessage{Role: "system", Content: req.Snapshot})
+	if sys := combineConsigliereSystem(req.System, req.Snapshot); sys != "" {
+		out = append(out, openAICompatMessage{Role: "system", Content: sys})
 	}
 	for _, m := range req.History {
 		role := "user"

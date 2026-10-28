@@ -276,6 +276,15 @@ func (r *Root) newOptionsButtons() *tview.Flex {
 		// an action, not a value. The whole row of buttons is always
 		// visible regardless of category, the same as the three above.
 		{&r.optionsRemoveOrphanLabelsBtn, "Remove orphaned labels", r.startOrphanLabelScan},
+		// Same "always visible, acts on one specific category"
+		// reasoning as "New color scheme" above — the AI Consigliere's
+		// own system prompt is a whole file (see
+		// config.UserConsigliereSystemPromptFile), not a single-line
+		// setting editOptionValue's own input field could edit, so it
+		// gets its own editor-opening action here instead of a row in
+		// the settings table.
+		{&r.optionsEditSystemPromptBtn, "Edit system prompt", r.editConsigliereSystemPrompt},
+		{&r.optionsResetSystemPromptBtn, "Reset system prompt", r.resetConsigliereSystemPrompt},
 	}
 
 	row := tview.NewFlex().SetDirection(tview.FlexColumn)
@@ -302,6 +311,8 @@ func (r *Root) optionsButtonList() []*tview.Button {
 		r.optionsEditFileBtn,
 		r.optionsNewSchemeBtn,
 		r.optionsRemoveOrphanLabelsBtn,
+		r.optionsEditSystemPromptBtn,
+		r.optionsResetSystemPromptBtn,
 	}
 }
 

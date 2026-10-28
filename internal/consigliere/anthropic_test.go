@@ -152,3 +152,35 @@ func TestAnthropicReplyPropagatesKeyFuncError(t *testing.T) {
 		t.Fatalf("Reply = %v, want %v", err, wantErr)
 	}
 }
+
+func TestAnthropicReplyCombinesSystemAndSnapshot(t *testing.T) {
+	cases := []struct {
+		name     string
+		system   string
+		snapshot string
+		want     string
+	}{
+		{"both set", "Be terse.", "dir: /tmp", "Be terse.\n\ndir: /tmp"},
+		{"system only", "Be terse.", "", "Be terse."},
+		{"snapshot only", "", "dir: /tmp", "dir: /tmp"},
+		{"neither set", "", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var gotBody anthropicRequest
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewDecoder(r.Body).Decode(&gotBody)
+				_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"ok"}]}`))
+			}))
+			defer server.Close()
+
+			p := Anthropic{BaseURL: server.URL, APIKey: func() (string, error) { return "k", nil }}
+			if _, err := p.Reply(context.Background(), Request{System: c.system, Snapshot: c.snapshot}); err != nil {
+				t.Fatalf("Reply: %v", err)
+			}
+			if gotBody.System != c.want {
+				t.Errorf("system = %q, want %q", gotBody.System, c.want)
+			}
+		})
+	}
+}

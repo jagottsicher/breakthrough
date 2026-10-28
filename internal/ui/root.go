@@ -348,6 +348,8 @@ type Root struct {
 	optionsEditFileBtn           *tview.Button
 	optionsNewSchemeBtn          *tview.Button
 	optionsRemoveOrphanLabelsBtn *tview.Button
+	optionsEditSystemPromptBtn   *tview.Button
+	optionsResetSystemPromptBtn  *tview.Button
 	optionsCategory              int
 	optionsInfo                  *tview.TextView
 	optionsInput                 *tview.InputField

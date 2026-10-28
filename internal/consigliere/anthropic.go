@@ -91,11 +91,12 @@ type anthropicErrorBody struct {
 	Message string `json:"message"`
 }
 
-// Reply implements Provider. req.Snapshot goes in the Messages API's
-// own top-level "system" field (a real system prompt slot, distinct
-// from the messages array, which only ever carries user/assistant
-// turns) — not folded into the first message, which would make it
-// look like something the human said.
+// Reply implements Provider. req.System and req.Snapshot (combined
+// via combineConsigliereSystem) go in the Messages API's own
+// top-level "system" field (a real system prompt slot, distinct from
+// the messages array, which only ever carries user/assistant turns)
+// — not folded into the first message, which would make it look like
+// something the human said.
 func (p Anthropic) Reply(ctx context.Context, req Request) (string, error) {
 	key, err := resolveKey(p.APIKey)
 	if err != nil {
@@ -105,7 +106,7 @@ func (p Anthropic) Reply(ctx context.Context, req Request) (string, error) {
 	body := anthropicRequest{
 		Model:     firstNonEmpty(p.Model, AnthropicDefaultModel),
 		MaxTokens: anthropicMaxTokens,
-		System:    req.Snapshot,
+		System:    combineConsigliereSystem(req.System, req.Snapshot),
 		Messages:  toAnthropicMessages(req.History),
 	}
 	if p.Effort != "" {

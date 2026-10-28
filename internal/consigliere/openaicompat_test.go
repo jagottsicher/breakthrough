@@ -72,6 +72,50 @@ func TestOpenAICompatReplyOmitsEmptySnapshot(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatReplyCombinesSystemAndSnapshot(t *testing.T) {
+	cases := []struct {
+		name     string
+		system   string
+		snapshot string
+		want     []string // expected system-message contents, "" if none expected at all
+	}{
+		{"both set", "Be terse.", "dir: /tmp", []string{"Be terse.\n\ndir: /tmp"}},
+		{"system only", "Be terse.", "", []string{"Be terse."}},
+		{"snapshot only", "", "dir: /tmp", []string{"dir: /tmp"}},
+		{"neither set", "", "", nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var gotBody openAICompatRequest
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewDecoder(r.Body).Decode(&gotBody)
+				_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+			}))
+			defer server.Close()
+
+			p := OpenAICompat{BaseURL: server.URL, Model: "m", APIKey: func() (string, error) { return "k", nil }}
+			if _, err := p.Reply(context.Background(), Request{System: c.system, Snapshot: c.snapshot}); err != nil {
+				t.Fatalf("Reply: %v", err)
+			}
+
+			var gotSystem []string
+			for _, m := range gotBody.Messages {
+				if m.Role == "system" {
+					gotSystem = append(gotSystem, m.Content)
+				}
+			}
+			if len(gotSystem) != len(c.want) {
+				t.Fatalf("system messages = %v, want %v", gotSystem, c.want)
+			}
+			for i := range c.want {
+				if gotSystem[i] != c.want[i] {
+					t.Errorf("system message %d = %q, want %q", i, gotSystem[i], c.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestOpenAICompatReplySetsReasoningEffortWhenSet(t *testing.T) {
 	var gotBody openAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
