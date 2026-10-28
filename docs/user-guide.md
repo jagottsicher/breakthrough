@@ -1866,12 +1866,14 @@ prompt" overwrites it back to that default, after confirming.
 
 ### Machiavelli Mode
 
-Off by default. Log Holepunch's own context (see above) normally never
-includes an actual log line's text — only filter metadata. Turning
-this on lets it forward the lines currently matching the Filter/Time/
-Level fields, verbatim, capped at 50 lines per question. Real log
-lines can carry credentials, IP addresses, names, or other personal
-data that would otherwise never leave this machine.
+Off by default. Log Holepunch's and Git Breach's own context (see
+above) normally never includes an actual log line's or diff's own
+text — only filter/commit metadata. Turning this on lets Log Holepunch
+forward the lines currently matching the Filter/Time/Level fields,
+verbatim, capped at 50 lines per question, and lets Git Breach forward
+whatever diff is currently shown in Main, capped at 300 lines. Real
+log lines and real diffs can carry credentials, IP addresses, names,
+or other personal data that would otherwise never leave this machine.
 
 Turning it on requires scrolling a full warning to its own end before
 the confirming choice does anything — a question short enough to

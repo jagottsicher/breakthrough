@@ -185,9 +185,9 @@ func withConfirmEnable(opt optionSpec, warning string) optionSpec {
 // scrollacknowledge.go), per the user's own explicit request that a
 // warning this real not be reflexively accepted via a single short
 // question.
-const machiavelliModeWarning = `Machiavelli Mode lets Log Holepunch/Action Log forward the actual matched log line content — not just the filter metadata it sends by default — to whichever AI provider is configured above.
+const machiavelliModeWarning = `Machiavelli Mode lets Log Holepunch forward the actual matched log line content, and Git Breach forward whatever diff is currently shown in Main — not just the filter/commit metadata either sends by default — to whichever AI provider is configured above.
 
-Real log files very often contain things you would not otherwise want to leave this machine: passwords typed into forms, API keys and session tokens, private IP addresses, employee or customer names, email addresses, or other personal data that happened to get written into a line by whatever produced it.
+Real log files and real diffs very often contain things you would not otherwise want to leave this machine: passwords typed into forms, API keys and session tokens, private IP addresses, employee or customer names, email addresses, or other personal data that happened to get written into a line (or added/removed in a diff) by whatever produced it.
 
 Once a question is sent with this mode on, that content has already left breakthrough and gone to a third-party provider over the network. There is no way to recall it afterwards, no matter what you do here next.
 
@@ -1506,13 +1506,14 @@ func optionCategories() []optionCategory {
 					secretAction: func(r *Root) { r.openAPIKeyDialog(r.settings.ConsigliereProvider) },
 				},
 				withConfirmEnable(boolOption("consigliere_hardcore_mode", "Machiavelli Mode",
-					"Lets Log Holepunch/Action Log's own context snapshot forward the "+
-						"actual matched log line content to the configured AI provider, not "+
-						"just filter metadata as it does by default. A real log line can "+
-						"contain credentials, IP addresses, names, or other personal data — "+
-						"this is what makes that reachable by a third-party provider rather "+
-						"than withheld. Off by default; turning it off again is immediate, no "+
-						"confirmation needed.",
+					"Lets Log Holepunch's own context snapshot forward the actual "+
+						"matched log line content, and Git Breach's own forward whatever "+
+						"diff is currently shown in Main, to the configured AI provider — "+
+						"not just filter metadata/commit metadata as both do by default. A "+
+						"real log line or diff can contain credentials, IP addresses, names, "+
+						"or other personal data — this is what makes that reachable by a "+
+						"third-party provider rather than withheld. Off by default; turning "+
+						"it off again is immediate, no confirmation needed.",
 					false,
 					func(r *Root) bool { return r.settings.ConsigliereHardcoreMode },
 					func(r *Root, b bool) {

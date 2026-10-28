@@ -76,7 +76,8 @@ side-by-side view (`v`) — an AI Consigliere chat sidebar (`gC`,
 reachable from anywhere in the app) talking to a real Anthropic/
 OpenAI/DeepSeek/Gemini provider, or a local Ollama server, about
 whatever's currently on screen, with an opt-in "Machiavelli Mode" for
-forwarding actual Log Holepunch content rather than just metadata — a Sessions screen (`js`) listing local GNU screen, tmux, and
+forwarding actual Log Holepunch/Git breach diff content rather than
+just metadata — a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once
@@ -1246,6 +1247,7 @@ Lightning Network ⚡️ using the sponsor button above.
   sections of breakthrough's own documentation a local, lexical search
   finds relevant. "Machiavelli Mode", off by default and gated behind
   a scroll-to-the-end warning, is the one opt-in exception: it lets Log
-  Holepunch forward the lines currently matching its own filters,
+  Holepunch forward the lines currently matching its own filters, and
+  Git Breach forward whatever diff is currently shown in Main, both
   verbatim.
 

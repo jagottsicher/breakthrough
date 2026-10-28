@@ -502,8 +502,9 @@ var helpText = strings.TrimLeft(`
   an editable/resettable system prompt, and "Machiavelli Mode"
   — off by default, gated behind a warning you have to scroll to the
   end of before it does anything — which lets Log Holepunch forward
-  the lines currently matching its own filters verbatim, rather than
-  just their metadata.
+  the lines currently matching its own filters, and Git Breach
+  forward whatever diff is currently shown in Main, both verbatim
+  rather than just their usual metadata.
 
 [::b]Status bar (the bottom line, purely informational)[::-]
 

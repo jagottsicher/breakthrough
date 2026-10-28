@@ -168,6 +168,55 @@ func TestGitBreachContextSnapshotIncludesStatusAndCommits(t *testing.T) {
 	}
 }
 
+// TestGitBreachContextSnapshotOmitsDiffContentByDefault pins the
+// ordinary, privacy-preserving case: even with a real diff currently
+// shown in Main, no actual diff content is forwarded unless
+// Machiavelli Mode has been explicitly turned on.
+func TestGitBreachContextSnapshotOmitsDiffContentByDefault(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.gitBreachStatus = git.Status{Branch: "main"}
+	root.gitBreachDiffRawText = "-	topsecret123\n+	newsecret456"
+
+	got := root.gitBreachContextSnapshot()
+
+	if strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, must not contain actual diff content without Machiavelli Mode", got)
+	}
+}
+
+// TestGitBreachContextSnapshotIncludesDiffUnderMachiavelliMode pins
+// the explicit, opted-in exception: once the user has turned the mode
+// on, whatever diff is currently shown in Main is forwarded verbatim.
+func TestGitBreachContextSnapshotIncludesDiffUnderMachiavelliMode(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.gitBreachStatus = git.Status{Branch: "main"}
+	root.settings.ConsigliereHardcoreMode = true
+	root.gitBreachDiffRawText = "-	topsecret123\n+	newsecret456"
+
+	got := root.gitBreachContextSnapshot()
+
+	if !strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, want the diff forwarded under Machiavelli Mode", got)
+	}
+}
+
+// TestGitBreachContextSnapshotOmitsDiffWhenNothingShown pins the
+// other edge: Machiavelli Mode being on doesn't forward anything if
+// Main isn't actually showing real diff content right now (no
+// selection, a conflict row, a cancelled fetch).
+func TestGitBreachContextSnapshotOmitsDiffWhenNothingShown(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.gitBreachStatus = git.Status{Branch: "main"}
+	root.settings.ConsigliereHardcoreMode = true
+	root.gitBreachDiffRawText = ""
+
+	got := root.gitBreachContextSnapshot()
+
+	if strings.Contains(got, "Machiavelli") {
+		t.Errorf("snapshot = %q, must not mention Machiavelli Mode when nothing real is shown", got)
+	}
+}
+
 func TestGitBreachContextSnapshotCapsRecentCommits(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.gitBreachStatus = git.Status{Branch: "main"}
