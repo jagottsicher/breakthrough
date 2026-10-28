@@ -2539,7 +2539,7 @@ screen itself changed.
 |---|---|
 | `jl` | Open the Action Log screen |
 | Keyword field | Filter by a case-insensitive substring of the message |
-| Time field | Filter by when it happened — the exact same `before`/`after`/`between ... and ...`/relative ("last 7 days") expressions the panel's own Modified-time filter already accepts |
+| Time field | Filter by when it happened — a typed expression: `before <moment>`, `after <moment>`, or `between <moment> and <moment>`. A moment is an absolute date/time, or a relative one such as `7 days`, `2 hours ago`, or `30 minutes`; typing a relative moment on its own (`last 7 days`) is shorthand for "within that span". Exact same syntax as the panel's own Modified-time filter — see [Filtering](#filtering) for the full unit list. |
 | `Tab` / `Shift+Tab` | Move between Keyword, Time, and the list |
 | `r` | Re-read the real log file (while the list has focus) |
 | `Escape` | Close the screen, from any of the three |
@@ -2601,7 +2601,7 @@ updating live regardless.
 | Key | Action |
 |---|---|
 | Filter field | Case-insensitive substring over Source and Message, narrowing the list live and highlighting every match |
-| Time field | Same `before`/`after`/`between ... and ...`/relative expressions the Action Log's own Time field already accepts |
+| Time field | Filter by when the entry happened — `before <moment>`, `after <moment>`, or `between <moment> and <moment>`, where a moment is an absolute date/time or a relative one such as `7 days`, `2 hours ago`, or `30 minutes`; a relative moment on its own (`last 7 days`) is shorthand for "within that span". Exact same syntax as the Action Log's own Time field (and the panel's own Modified-time filter — see [Filtering](#filtering)). |
 | Level field (`>=`) | A *minimum* severity ("warn" shows WARN and everything worse — ERROR, FATAL — not just exact matches); an entry with no recognized level never passes this filter, even "trace" |
 | `Tab` / `Shift+Tab` | Move between Filter, Time, Level, the timeline, and the list |
 | `e` | Jump to the next error (wraps around) |
