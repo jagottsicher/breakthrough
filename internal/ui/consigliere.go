@@ -650,6 +650,65 @@ func (r *Root) handleConsigliereInputDone(key tcell.Key) {
 // Consigliere" entry for the open follow-up on reaching Log Audit/Git
 // Breach/etc.) is next branch's work, not this slice's — only the chat
 // mechanics (history/scrolling/input) are being judged here.
+// consigliereMaxDocChunks/consigliereMaxDocChunkChars cap how much of
+// the documentation search's own results go into a snapshot — the
+// same anthropicMaxTokens-style reasoning every other capped piece of
+// context here already follows.
+const (
+	consigliereMaxDocChunks     = 3
+	consigliereMaxDocChunkChars = 600
+)
+
+// consigliereDocSnapshot runs question against r.docSearchIndex (see
+// NewRoot) and renders whichever documentation sections actually
+// matched — "" if the index isn't built (NewDefaultIndex failed,
+// which would mean the embed itself is broken) or nothing matched at
+// all, in which case this contributes nothing to the snapshot rather
+// than padding it with irrelevant sections.
+func (r *Root) consigliereDocSnapshot(question string) string {
+	if r.docSearchIndex == nil {
+		return ""
+	}
+	chunks := r.docSearchIndex.Search(question, consigliereMaxDocChunks)
+	if len(chunks) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Relevant documentation:\n")
+	for _, c := range chunks {
+		fmt.Fprintf(&b, "- %s: %s\n", c.Heading, truncateRunes(c.Body, consigliereMaxDocChunkChars))
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// truncateRunes caps s at max runes (not bytes, to never split a
+// multi-byte UTF-8 character), appending "…" when it actually cut
+// something off.
+func truncateRunes(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
+}
+
+// joinConsigliereSnapshotParts joins the view-specific context
+// (consigliereContextSnapshot) and the documentation search's own
+// result (consigliereDocSnapshot) into the one Snapshot string
+// Request carries — blank-line separated, each part omitted outright
+// if empty rather than leaving a stray blank line, the same
+// "omit-if-empty" shape combineConsigliereSystem already establishes
+// in internal/consigliere for an identical two-piece join.
+func joinConsigliereSnapshotParts(parts ...string) string {
+	var nonEmpty []string
+	for _, p := range parts {
+		if p != "" {
+			nonEmpty = append(nonEmpty, p)
+		}
+	}
+	return strings.Join(nonEmpty, "\n\n")
+}
+
 func (r *Root) consigliereContextSnapshot() string {
 	switch r.activePage {
 	case logAuditSelectionPage, logAuditViewerPage, logAuditDetailPage, logAuditStatsPage:
@@ -905,7 +964,7 @@ func (r *Root) submitConsigliereMessage(text string) {
 
 	req := consigliere.Request{
 		History:  r.consigliereMessages,
-		Snapshot: r.consigliereContextSnapshot(),
+		Snapshot: joinConsigliereSnapshotParts(r.consigliereContextSnapshot(), r.consigliereDocSnapshot(text)),
 		System:   config.LoadConsigliereSystemPrompt(consigliereSystemPromptPath()),
 	}
 	provider := r.buildConsigliereProvider()

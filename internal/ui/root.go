@@ -19,6 +19,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
+	"github.com/jagottsicher/breakthrough/internal/docsearch"
 	"github.com/jagottsicher/breakthrough/internal/easteregg"
 	"github.com/jagottsicher/breakthrough/internal/filelabels"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
@@ -295,6 +296,15 @@ type Root struct {
 	// in which case that tier is simply unavailable rather than an
 	// error (see NewRoot).
 	apiKeySession *apikey.Session
+
+	// docSearchIndex is the AI Consigliere's own lexical search over
+	// breakthrough's embedded documentation (see internal/docsearch
+	// and consigliereDocSnapshot) — nil only if docsearch.NewDefaultIndex
+	// itself failed, which would mean the embed is broken (a build-time
+	// problem, not a runtime one); consigliereDocSnapshot treats that
+	// the same as "nothing matched," contributing nothing rather than
+	// failing the question.
+	docSearchIndex *docsearch.Index
 
 	// consigliereModelCache/consigliereModelFetchInFlight/
 	// consigliereModelFetchErr back the Options screen's own "Model"/
@@ -2788,6 +2798,20 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		}
 	}
 
+	// The AI Consigliere's own documentation search (see
+	// internal/docsearch) — built once here rather than lazily on
+	// first use, since it's small and fast enough that there's no real
+	// cost to paying for it up front, and doing so here keeps every
+	// later caller free of a "build it if nil" check. A failure here
+	// means the embed itself is broken (see docsearch.NewDefaultIndex's
+	// own doc comment) — surfaced the same way apiKeyStoreWarning is,
+	// not fatal to starting breakthrough at all.
+	docSearchIndex, docSearchErr := docsearch.NewDefaultIndex()
+	var docSearchWarning string
+	if docSearchErr != nil {
+		docSearchWarning = fmt.Sprintf("AI Consigliere documentation search: %v", docSearchErr)
+	}
+
 	r := &Root{
 		Pages:                         tview.NewPages(),
 		app:                           app,
@@ -2799,6 +2823,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		settingOrigins:                settingOrigins,
 		theme:                         theme,
 		apiKeySession:                 apiKeySession,
+		docSearchIndex:                docSearchIndex,
 		consigliereModelCache:         map[string][]consigliere.ModelInfo{},
 		consigliereModelFetchInFlight: map[string]bool{},
 		consigliereModelFetchErr:      map[string]error{},
@@ -3472,6 +3497,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	}
 	if apiKeyStoreWarning != "" {
 		startupNotices = append(startupNotices, apiKeyStoreWarning)
+	}
+	if docSearchWarning != "" {
+		startupNotices = append(startupNotices, docSearchWarning)
 	}
 	// Pushes its own notify.CategoryTrash toast directly (see its own
 	// doc comment) rather than adding to startupNotices/showError —
