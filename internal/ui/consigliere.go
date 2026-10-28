@@ -660,7 +660,8 @@ func (r *Root) consigliereDocSnapshot(ctx context.Context, provider consigliere.
 	if r.docSearchIndex == nil {
 		return ""
 	}
-	chunks := r.docSearchIndex.Search(question, consigliereMaxDocChunks)
+	hint := r.consigliereDocSearchViewHint()
+	chunks := r.docSearchIndex.Search(appendConsigliereDocSearchHint(question, hint), consigliereMaxDocChunks)
 	if len(chunks) == 0 {
 		// BM25 only ever matches shared vocabulary — this corpus is
 		// English-only, so a question asked in a language it isn't
@@ -674,7 +675,7 @@ func (r *Root) consigliereDocSnapshot(ctx context.Context, provider consigliere.
 		// the direct search found literally zero matches, not on every
 		// question.
 		if translated := r.translateConsigliereQueryToEnglish(ctx, provider, question); translated != "" {
-			chunks = r.docSearchIndex.Search(translated, consigliereMaxDocChunks)
+			chunks = r.docSearchIndex.Search(appendConsigliereDocSearchHint(translated, hint), consigliereMaxDocChunks)
 		}
 	}
 	if len(chunks) == 0 {
@@ -686,6 +687,40 @@ func (r *Root) consigliereDocSnapshot(ctx context.Context, provider consigliere.
 		fmt.Fprintf(&b, "- %s: %s\n", c.Heading, truncateRunes(c.Body, consigliereMaxDocChunkChars))
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// consigliereDocSearchViewHint names the current screen in plain
+// English terms matching this corpus's own section headings (e.g.
+// "Log Audit screen", not the "jL" chord) — appended to every doc
+// search query (see appendConsigliereDocSearchHint) so a question
+// asked while actually looking at one of two similarly-purposed
+// screens retrieves that one's own section, not whichever one
+// happens to share more vocabulary with the raw question text alone.
+// A real, reported case: "wie suche ich nach exception in den
+// letzten drei Tagen" while on Log Audit retrieved the Action Log's
+// own section instead ("jl" vs "jL" — easy to conflate on vocabulary
+// alone, never on which screen the question was actually asked from).
+// "" for the bare file panel and anything else "gC" might reach from,
+// where no such disambiguation is needed — the same switch
+// consigliereContextSnapshot's own dispatch already uses.
+func (r *Root) consigliereDocSearchViewHint() string {
+	switch r.activePage {
+	case logAuditSelectionPage, logAuditViewerPage, logAuditDetailPage, logAuditStatsPage:
+		return "Log Audit screen"
+	case gitBreachPage:
+		return "Git Breach"
+	default:
+		return ""
+	}
+}
+
+// appendConsigliereDocSearchHint appends hint to query, space-
+// separated, or returns query unchanged if hint is "".
+func appendConsigliereDocSearchHint(query, hint string) string {
+	if hint == "" {
+		return query
+	}
+	return query + " " + hint
 }
 
 // translateConsigliereQueryToEnglish asks provider itself to
