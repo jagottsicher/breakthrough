@@ -604,16 +604,19 @@ func chordFamilies() []chordFamily {
 			// browsing breakthrough's own recorded actions, nothing about
 			// it changed but the label.
 			{'l', "Action Log", func(r *Root) { r.openActivityLog() }},
-			{'s', "Sessions", func(r *Root) { r.openSessions() }},
-			{'k', "SSH Keys", func(r *Root) { r.openSSHKeys() }},
 			// "Log Holepunch" — capital L, this family's own second
 			// capitalized member alongside "jE" (see its own doc comment
 			// above for that convention): reads *other* log files on
 			// disk (internal/logview), scoped to wherever the active
 			// panel currently is rather than a fixed destination — see
 			// logaudit.go's own doc comment on openLogAudit for why that
-			// makes it unlike every other member of this family.
+			// makes it unlike every other member of this family. Kept
+			// right next to "jl" (Action Log) rather than further down
+			// the list — the user's own explicit request, since the two
+			// are each other's closest sibling in purpose.
 			{'L', "Log Holepunch", func(r *Root) { r.openLogAudit() }},
+			{'s', "Sessions", func(r *Root) { r.openSessions() }},
+			{'k', "SSH Keys", func(r *Root) { r.openSSHKeys() }},
 			// "t" for... not an obvious mnemonic for "Undertow" on its
 			// own, but it was already "t" for "Transfers" before this
 			// screen's own display name picked up the same disruptive-
