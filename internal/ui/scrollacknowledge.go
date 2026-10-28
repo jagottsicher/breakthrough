@@ -13,6 +13,7 @@ package ui
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -25,6 +26,7 @@ import (
 // contract confirmDialog already follows.
 func (r *Root) newScrollAcknowledgeNoticeViews() {
 	r.scrollAcknowledgeTitleBar = newPlainTitleBar("")
+	r.scrollAcknowledgeTitleBar.SetMouseCapture(r.captureScrollAcknowledgeTitleBarMouse)
 
 	r.scrollAcknowledgeMessageView = tview.NewTextView()
 	r.scrollAcknowledgeMessageView.SetWrap(true)
@@ -72,7 +74,6 @@ const (
 // why it did nothing, rather than silently ignoring the attempt.
 func (r *Root) openScrollAcknowledgeNotice(title, message, confirmLabel string, onConfirm func()) {
 	r.scrollAcknowledgeOnConfirm = onConfirm
-	r.scrollAcknowledgeTitleBar.SetText(" " + title + " ")
 	r.scrollAcknowledgeMessageView.SetText(message)
 	r.scrollAcknowledgeMessageView.ScrollToBeginning()
 	r.scrollAcknowledgeList.SetItemText(1, confirmLabel, "")
@@ -82,6 +83,20 @@ func (r *Root) openScrollAcknowledgeNotice(title, message, confirmLabel string, 
 	x, y, width, height := r.clampToScreen(
 		(screenWidth-scrollAcknowledgeWidth)/2, (screenHeight-scrollAcknowledgeHeight)/2,
 		scrollAcknowledgeWidth, scrollAcknowledgeHeight)
+
+	// A real, reported bug: this title bar used to be plain text with
+	// no close glyph at all, unlike every sibling dialog's own
+	// (activityLogNotice, Log Holepunch, Help, ...) clickable "✕" —
+	// toolWindowCloseButtonCol's own one-column-in-from-the-edge
+	// convention, reused here rather than duplicated with a different
+	// number (see renderConsigliereTitleBar's own identical shape).
+	label := " " + title + " "
+	closeCol := toolWindowCloseButtonCol(0, width)
+	padding := closeCol - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	r.scrollAcknowledgeTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
 
 	r.scrollAcknowledgeLayout.SetRect(x, y, width, height)
 	// Flex only resolves a child's own rect during Draw, never
@@ -162,6 +177,23 @@ func (r *Root) captureScrollAcknowledgeMessageKey(event *tcell.EventKey) *tcell.
 		return nil
 	}
 	return event
+}
+
+// captureScrollAcknowledgeTitleBarMouse makes the header's own "✕"
+// act exactly like Cancel on a left click — the same shape
+// captureConsigliereTitleBarMouse/activityLogNoticeTitleBarMouseCapture
+// already establish elsewhere.
+func (r *Root) captureScrollAcknowledgeTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftDown {
+		return action, event
+	}
+	x, y, width, _ := r.scrollAcknowledgeTitleBar.GetRect()
+	clickX, clickY := event.Position()
+	if clickY == y && clickX == x+toolWindowCloseButtonCol(0, width) {
+		r.cancelScrollAcknowledgeNotice()
+		return tview.MouseConsumed, nil
+	}
+	return action, event
 }
 
 // captureScrollAcknowledgeListKey is the message view's own Tab in

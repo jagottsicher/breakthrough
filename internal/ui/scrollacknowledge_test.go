@@ -96,6 +96,30 @@ func TestTabFromScrollAcknowledgeMessageReachesTheListAndBack(t *testing.T) {
 	}
 }
 
+// TestScrollAcknowledgeTitleBarCloseGlyphClickCancels pins a real,
+// reported bug: the title bar used to be plain text with no close
+// glyph at all, unlike every sibling dialog's own clickable "✕".
+func TestScrollAcknowledgeTitleBarCloseGlyphClickCancels(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
+	called := false
+	r.openScrollAcknowledgeNotice("Title", "message", "Yes, enable", func() { called = true })
+
+	x, y, width, _ := r.scrollAcknowledgeTitleBar.GetRect()
+	closeX := x + toolWindowCloseButtonCol(0, width)
+	captured, _ := r.captureScrollAcknowledgeTitleBarMouse(tview.MouseLeftDown, tcell.NewEventMouse(closeX, y, tcell.ButtonNone, 0))
+
+	if captured != tview.MouseConsumed {
+		t.Error("clicking the close glyph should consume the click")
+	}
+	if r.activePage == scrollAcknowledgePage {
+		t.Error("clicking the close glyph should have closed the notice")
+	}
+	if called {
+		t.Error("clicking the close glyph must never run onConfirm")
+	}
+}
+
 // TestEscapeFromScrollAcknowledgeMessageCancels pins Escape as a
 // cancel path from either focus stop, the same as every other
 // dialog's convention here.
