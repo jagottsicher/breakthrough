@@ -12,6 +12,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/mounts"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
+	"github.com/jagottsicher/breakthrough/internal/operations"
 	"github.com/jagottsicher/breakthrough/internal/sshkeys"
 )
 
@@ -595,5 +596,83 @@ func TestConsigliereContextSnapshotDispatchesToActivityLog(t *testing.T) {
 
 	if !strings.Contains(got, "Current view: Action Log.") {
 		t.Errorf("snapshot = %q, want the Action Log snapshot, not the generic panel one", got)
+	}
+}
+
+// TestTransferCenterContextSnapshotOmitsPathsByDefault pins the
+// ordinary, privacy-preserving case: even with real operations
+// loaded, only the total count and a type breakdown are included
+// unless Machiavelli Mode has been explicitly turned on — an
+// operation's own Source/Target is a real file path from the user's
+// own filesystem, the same risk category an Action Log entry's own
+// Message already has.
+func TestTransferCenterContextSnapshotOmitsPathsByDefault(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.transferCenterOps = []operations.Operation{
+		{Type: "paste", Source: "/home/jens/topsecret123.txt", Target: "/mnt/backup"},
+	}
+
+	got := root.transferCenterContextSnapshot()
+
+	for _, want := range []string{"Undertow", "1 operations", "paste: 1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, must not contain an operation's own Source/Target without Machiavelli Mode", got)
+	}
+}
+
+// TestTransferCenterContextSnapshotIncludesPathsUnderMachiavelliMode
+// pins the explicit, opted-in exception: once the user has turned the
+// mode on, the current operations' own Source/Target are forwarded
+// verbatim.
+func TestTransferCenterContextSnapshotIncludesPathsUnderMachiavelliMode(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereHardcoreMode = true
+	root.transferCenterOps = []operations.Operation{
+		{Type: "paste", Source: "/home/jens/topsecret123.txt", Target: "/mnt/backup"},
+	}
+
+	got := root.transferCenterContextSnapshot()
+
+	if !strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, want the operation's own Source forwarded under Machiavelli Mode", got)
+	}
+}
+
+// TestTransferCenterContextSnapshotCapsOperationList pins the same
+// anthropicMaxTokens-style cap every other list-returning snapshot
+// here already follows.
+func TestTransferCenterContextSnapshotCapsOperationList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereHardcoreMode = true
+	for i := 0; i < consigliereMaxTransferCenterOps+5; i++ {
+		root.transferCenterOps = append(root.transferCenterOps, operations.Operation{
+			Type:   "paste",
+			Source: fmt.Sprintf("/src/%d", i),
+			Target: "/dst",
+		})
+	}
+
+	got := root.transferCenterContextSnapshot()
+
+	if !strings.Contains(got, "5 further operations not shown") {
+		t.Errorf("snapshot = %q, want it to mention the 5 truncated operations", got)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToTransferCenter pins the
+// dispatch switch's own Undertow case.
+func TestConsigliereContextSnapshotDispatchesToTransferCenter(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = transferCenterPage
+	root.transferCenterOps = []operations.Operation{{Type: "paste", Source: "/a", Target: "/b"}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Undertow.") {
+		t.Errorf("snapshot = %q, want the Undertow snapshot, not the generic panel one", got)
 	}
 }

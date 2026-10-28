@@ -927,6 +927,8 @@ func (r *Root) consigliereContextSnapshot() string {
 		return r.sshKeysContextSnapshot()
 	case activityLogPage:
 		return r.activityLogContextSnapshot()
+	case transferCenterPage:
+		return r.transferCenterContextSnapshot()
 	default: // "" (the bare panel) and anything else "gC" might someday reach from
 		return r.panelContextSnapshot()
 	}
@@ -1420,6 +1422,64 @@ func (r *Root) consigliereMachiavelliActionLogEntries() string {
 	}
 	if len(matching) > n {
 		fmt.Fprintf(&b, "(%d further matching entries not shown)\n", len(matching)-n)
+	}
+	return b.String()
+}
+
+// transferCenterContextSnapshot describes the Undertow screen: the
+// total operation count and a breakdown by type/state — never an
+// operation's own Source/Target by default, real file paths from the
+// user's own filesystem, the same risk category an Action Log entry's
+// Message already has. Machiavelli Mode is the identical opt-in
+// exception (see consigliereMachiavelliTransferCenterOperations).
+func (r *Root) transferCenterContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Undertow.\n")
+	ops := r.transferCenterOps
+	fmt.Fprintf(&b, "%d operations.\n", len(ops))
+	byType := map[string]int{}
+	for _, op := range ops {
+		byType[op.Type]++
+	}
+	if len(byType) > 0 {
+		var parts []string
+		for t, n := range byType {
+			parts = append(parts, fmt.Sprintf("%s: %d", t, n))
+		}
+		sort.Strings(parts)
+		fmt.Fprintf(&b, "By type: %s\n", strings.Join(parts, ", "))
+	}
+	if r.settings.ConsigliereHardcoreMode {
+		b.WriteString(r.consigliereMachiavelliTransferCenterOperations())
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// consigliereMaxTransferCenterOps caps how many operations
+// consigliereMachiavelliTransferCenterOperations forwards — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxTransferCenterOps = 50
+
+// consigliereMachiavelliTransferCenterOperations renders every
+// current operation's own Source/Target, verbatim, once Machiavelli
+// Mode is on.
+func (r *Root) consigliereMachiavelliTransferCenterOperations() string {
+	ops := r.transferCenterOps
+	if len(ops) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nMachiavelli Mode is on — every operation's own source/target is forwarded verbatim:\n")
+	n := len(ops)
+	if n > consigliereMaxTransferCenterOps {
+		n = consigliereMaxTransferCenterOps
+	}
+	for _, op := range ops[:n] {
+		fmt.Fprintf(&b, "- %s: %s -> %s (%s, %s)\n", op.Type, op.Source, op.Target, op.State, op.Outcome)
+	}
+	if len(ops) > n {
+		fmt.Fprintf(&b, "(%d further operations not shown)\n", len(ops)-n)
 	}
 	return b.String()
 }
