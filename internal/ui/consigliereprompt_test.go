@@ -676,3 +676,34 @@ func TestConsigliereContextSnapshotDispatchesToTransferCenter(t *testing.T) {
 		t.Errorf("snapshot = %q, want the Undertow snapshot, not the generic panel one", got)
 	}
 }
+
+// TestToolboxContextSnapshotIncludesEntries pins the ungated case:
+// the catalog is a fixed, built-in list of tool names and
+// descriptions, never a live read of this host's own state, so it is
+// always forwarded in full, with no Machiavelli Mode gate.
+func TestToolboxContextSnapshotIncludesEntries(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openNetworkTools()
+
+	got := root.toolboxContextSnapshot()
+
+	if !strings.Contains(got, "Toolbox") {
+		t.Errorf("snapshot = %q, want it to mention the Toolbox view", got)
+	}
+	if !strings.Contains(got, "Ping:") {
+		t.Errorf("snapshot = %q, want it to list the Ping entry", got)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToToolbox pins the dispatch
+// switch's own Toolbox case.
+func TestConsigliereContextSnapshotDispatchesToToolbox(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openNetworkTools()
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Toolbox.") {
+		t.Errorf("snapshot = %q, want the Toolbox snapshot, not the generic panel one", got)
+	}
+}

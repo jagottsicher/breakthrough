@@ -777,6 +777,24 @@ func (r *Root) captureToolboxKey(event *tcell.EventKey) *tcell.EventKey {
 		r.closeToolbox()
 		return nil
 	}
+	if r.consigliereVisible {
+		if event.Key() == tcell.KeyTab {
+			r.app.SetFocus(r.consigliereInput)
+			return nil
+		}
+		if event.Key() == tcell.KeyBacktab {
+			if r.consigliereScrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliereHistory)
+			} else {
+				r.app.SetFocus(r.consigliereInput)
+			}
+			return nil
+		}
+	}
+	if event.Key() == tcell.KeyRune && event.Rune() == 'g' {
+		r.startConsigliereChord(nil)
+		return nil
+	}
 	return event
 }
 

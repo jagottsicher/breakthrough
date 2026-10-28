@@ -929,6 +929,8 @@ func (r *Root) consigliereContextSnapshot() string {
 		return r.activityLogContextSnapshot()
 	case transferCenterPage:
 		return r.transferCenterContextSnapshot()
+	case toolboxPage:
+		return r.toolboxContextSnapshot()
 	default: // "" (the bare panel) and anything else "gC" might someday reach from
 		return r.panelContextSnapshot()
 	}
@@ -1482,6 +1484,56 @@ func (r *Root) consigliereMachiavelliTransferCenterOperations() string {
 		fmt.Fprintf(&b, "(%d further operations not shown)\n", len(ops)-n)
 	}
 	return b.String()
+}
+
+// consigliereMaxToolboxEntries caps how many catalog entries
+// toolboxContextSnapshot lists — the same anthropicMaxTokens-style
+// reasoning every other capped list here already follows.
+const consigliereMaxToolboxEntries = 50
+
+// toolboxContextSnapshot describes the Toolbox screen: the real
+// commands currently listed in r.toolboxRows (whichever category or
+// categories are open) and their own static help text. Unlike every
+// other gated screen above, this is never withheld behind Machiavelli
+// Mode — the catalog is a fixed, built-in list of tool names and
+// descriptions (lsblk, nmap, dig, ...), never a live read of this
+// host's own filesystem, network, or process state.
+func (r *Root) toolboxContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Toolbox.\n")
+	var entries []string
+	for _, row := range r.toolboxRows {
+		switch {
+		case row.isEntry():
+			entries = append(entries, fmt.Sprintf("%s: %s", row.entry.label, row.entry.help))
+		case row.header != "":
+			entries = append(entries, "-- "+row.header+" --")
+		}
+	}
+	fmt.Fprintf(&b, "%d entries available:\n", countToolboxEntries(r.toolboxRows))
+	n := len(entries)
+	if n > consigliereMaxToolboxEntries {
+		n = consigliereMaxToolboxEntries
+	}
+	for _, e := range entries[:n] {
+		fmt.Fprintf(&b, "%s\n", e)
+	}
+	if len(entries) > n {
+		fmt.Fprintf(&b, "(%d further lines not shown)\n", len(entries)-n)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// countToolboxEntries counts only the real, runnable rows in rows —
+// headers and blank spacers aren't entries of their own.
+func countToolboxEntries(rows []toolboxDisplayRow) int {
+	n := 0
+	for _, row := range rows {
+		if row.isEntry() {
+			n++
+		}
+	}
+	return n
 }
 
 // errConsigliereNoAPIKey is what buildConsigliereProvider's own
