@@ -24,15 +24,19 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/apikey"
+	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
 	"github.com/jagottsicher/breakthrough/internal/docsearch"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
+	"github.com/jagottsicher/breakthrough/internal/multiplex"
 )
 
 const consiglierePage = "consigliere"
@@ -916,6 +920,20 @@ func (r *Root) consigliereContextSnapshot() string {
 		return r.gitBreachContextSnapshot()
 	case firewallPage:
 		return r.firewallContextSnapshot()
+	case mountsPage:
+		return r.mountsContextSnapshot()
+	case sessionsPage:
+		return r.sessionsContextSnapshot()
+	case sshKeysPage:
+		return r.sshKeysContextSnapshot()
+	case activityLogPage:
+		return r.activityLogContextSnapshot()
+	case transferCenterPage:
+		return r.transferCenterContextSnapshot()
+	case toolboxPage:
+		return r.toolboxContextSnapshot()
+	case compareTreePage:
+		return r.compareTreeContextSnapshot()
 	default: // "" (the bare panel) and anything else "gC" might someday reach from
 		return r.panelContextSnapshot()
 	}
@@ -1213,6 +1231,374 @@ func (r *Root) consigliereMachiavelliFirewallRules() string {
 		fmt.Fprintf(&b, "(%d further rules not shown)\n", len(rules)-n)
 	}
 	return b.String()
+}
+
+// consigliereMaxMountEntries caps how many mount entries
+// mountsContextSnapshot lists individually — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxMountEntries = 50
+
+// mountsContextSnapshot describes the Mounts screen: every real
+// mount's own target/source/filesystem type and whether it would
+// survive a reboot. Included by default, unlike Firewall's own
+// ruleset — the two aren't the same risk: a firewall rule enumerates
+// this host's complete inbound attack surface, while a mount entry
+// says at most "this box talks to <remote host>", already exactly as
+// visible the moment the panel itself browses into that mount point
+// (see panelContextSnapshot, which already sends the current
+// directory by default).
+func (r *Root) mountsContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Mounts.\n")
+	if r.mountsErr != nil {
+		fmt.Fprintf(&b, "Could not read the current mount table: %v\n", r.mountsErr)
+		return strings.TrimSpace(b.String())
+	}
+	entries := r.mountsEntries
+	fmt.Fprintf(&b, "%d mounts:\n", len(entries))
+	n := len(entries)
+	if n > consigliereMaxMountEntries {
+		n = consigliereMaxMountEntries
+	}
+	for _, e := range entries[:n] {
+		persistent := "not in fstab"
+		if e.Persistent {
+			persistent = "in fstab, survives reboot"
+		}
+		fmt.Fprintf(&b, "%s on %s (%s, %s)\n", e.Source, e.Target, e.Fstype, persistent)
+	}
+	if len(entries) > n {
+		fmt.Fprintf(&b, "(%d further mounts not shown)\n", len(entries)-n)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// consigliereMaxSessions caps how many sessions sessionsContextSnapshot
+// lists individually — the same anthropicMaxTokens-style reasoning
+// every other capped list here already follows.
+const consigliereMaxSessions = 50
+
+// sessionsContextSnapshot describes the Sessions screen: every real
+// GNU screen/tmux/Zellij session's own name, backend, and attach
+// status. Included by default — a session name is a similar risk to
+// a Git Breach commit subject (already sent by default), not a
+// credential or network topology.
+func (r *Root) sessionsContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Sessions.\n")
+	if r.sessionsErr != nil {
+		fmt.Fprintf(&b, "Could not read the current session list: %v\n", r.sessionsErr)
+		return strings.TrimSpace(b.String())
+	}
+	sessions := r.sessionsList
+	fmt.Fprintf(&b, "%d sessions:\n", len(sessions))
+	n := len(sessions)
+	if n > consigliereMaxSessions {
+		n = consigliereMaxSessions
+	}
+	for _, s := range sessions[:n] {
+		status := "unknown"
+		switch s.Status {
+		case multiplex.StatusAttached:
+			status = "attached"
+		case multiplex.StatusDetached:
+			status = "detached"
+		}
+		fmt.Fprintf(&b, "%s (%s, %s)\n", s.Name, s.Backend, status)
+	}
+	if len(sessions) > n {
+		fmt.Fprintf(&b, "(%d further sessions not shown)\n", len(sessions)-n)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// consigliereMaxSSHKeys caps how many key pairs
+// sshKeysContextSnapshot lists individually — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxSSHKeys = 50
+
+// sshKeysContextSnapshot describes the SSH Keys screen: every real
+// local key pair's own name, type/size, encryption/permission state,
+// and whether it's currently loaded in the agent — never the key
+// material itself, which this screen's own design never reads back
+// out in the first place (see sshkeys.KeyPair's own doc comment), so
+// there is nothing to gate behind Machiavelli Mode here.
+func (r *Root) sshKeysContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: SSH Keys.\n")
+	if r.sshKeysErr != nil {
+		fmt.Fprintf(&b, "Could not read the current key inventory: %v\n", r.sshKeysErr)
+		return strings.TrimSpace(b.String())
+	}
+	pairs := r.sshKeysPairs
+	fmt.Fprintf(&b, "%d key pairs:\n", len(pairs))
+	n := len(pairs)
+	if n > consigliereMaxSSHKeys {
+		n = consigliereMaxSSHKeys
+	}
+	for _, k := range pairs[:n] {
+		encrypted := "not encrypted"
+		if k.Encrypted {
+			encrypted = "passphrase-encrypted"
+		}
+		agent := "not loaded in agent"
+		if k.AgentLoaded {
+			agent = "loaded in agent"
+		}
+		permWarning := ""
+		if k.PrivatePermissiveWarning {
+			permWarning = " [permissive private key mode]"
+		}
+		fmt.Fprintf(&b, "%s: %s %d-bit, %s, %s%s\n", k.Name, k.Type, k.Bits, encrypted, agent, permWarning)
+	}
+	if len(pairs) > n {
+		fmt.Fprintf(&b, "(%d further key pairs not shown)\n", len(pairs)-n)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// activityLogContextSnapshot describes the Action Log screen: the
+// total entry count and a breakdown by category — never an entry's
+// own Message by default, since that free-text field carries real
+// file paths from the user's own filesystem (see Entry's own doc
+// comment in internal/activitylog), the same risk category a Log
+// Holepunch log line already has. Machiavelli Mode is the identical
+// opt-in exception (see consigliereMachiavelliActionLogEntries).
+func (r *Root) activityLogContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Action Log.\n")
+	if r.activityLogReadErr != nil {
+		fmt.Fprintf(&b, "Could not read the real log file: %v\n", r.activityLogReadErr)
+		return strings.TrimSpace(b.String())
+	}
+	entries := r.activityLogAllEntries
+	fmt.Fprintf(&b, "%d entries.\n", len(entries))
+	byCategory := map[activitylog.Category]int{}
+	for _, e := range entries {
+		byCategory[e.Category]++
+	}
+	if len(byCategory) > 0 {
+		var parts []string
+		for cat, n := range byCategory {
+			parts = append(parts, fmt.Sprintf("%s: %d", cat, n))
+		}
+		sort.Strings(parts)
+		fmt.Fprintf(&b, "By category: %s\n", strings.Join(parts, ", "))
+	}
+	if kw := strings.TrimSpace(r.activityLogKeywordField.GetText()); kw != "" {
+		fmt.Fprintf(&b, "Current keyword filter: %s\n", kw)
+	}
+	if tf := strings.TrimSpace(r.activityLogTimeField.GetText()); tf != "" {
+		fmt.Fprintf(&b, "Current time filter: %s\n", tf)
+	}
+	if r.settings.ConsigliereHardcoreMode {
+		b.WriteString(r.consigliereMachiavelliActionLogEntries())
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// consigliereMaxActionLogEntries caps how many entries
+// consigliereMachiavelliActionLogEntries forwards — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxActionLogEntries = 50
+
+// consigliereMachiavelliActionLogEntries renders the entries
+// currently matching the Keyword/Time filters, verbatim (including
+// each one's own Message, real file paths and all), once Machiavelli
+// Mode is on — reuses filterActivityLogEntries so this always matches
+// exactly what the table itself is showing.
+func (r *Root) consigliereMachiavelliActionLogEntries() string {
+	matching := filterActivityLogEntries(r.activityLogAllEntries,
+		r.activityLogKeywordField.GetText(), r.activityLogTimeField.GetText(), time.Now())
+	if len(matching) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nMachiavelli Mode is on — the following currently-matching entries are forwarded verbatim:\n")
+	n := len(matching)
+	if n > consigliereMaxActionLogEntries {
+		n = consigliereMaxActionLogEntries
+	}
+	for _, e := range matching[:n] {
+		fmt.Fprintf(&b, "- [%s] %s: %s\n", e.Level, e.Category, e.Message)
+	}
+	if len(matching) > n {
+		fmt.Fprintf(&b, "(%d further matching entries not shown)\n", len(matching)-n)
+	}
+	return b.String()
+}
+
+// transferCenterContextSnapshot describes the Undertow screen: the
+// total operation count and a breakdown by type/state — never an
+// operation's own Source/Target by default, real file paths from the
+// user's own filesystem, the same risk category an Action Log entry's
+// Message already has. Machiavelli Mode is the identical opt-in
+// exception (see consigliereMachiavelliTransferCenterOperations).
+func (r *Root) transferCenterContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Undertow.\n")
+	ops := r.transferCenterOps
+	fmt.Fprintf(&b, "%d operations.\n", len(ops))
+	byType := map[string]int{}
+	for _, op := range ops {
+		byType[op.Type]++
+	}
+	if len(byType) > 0 {
+		var parts []string
+		for t, n := range byType {
+			parts = append(parts, fmt.Sprintf("%s: %d", t, n))
+		}
+		sort.Strings(parts)
+		fmt.Fprintf(&b, "By type: %s\n", strings.Join(parts, ", "))
+	}
+	if r.settings.ConsigliereHardcoreMode {
+		b.WriteString(r.consigliereMachiavelliTransferCenterOperations())
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// consigliereMaxTransferCenterOps caps how many operations
+// consigliereMachiavelliTransferCenterOperations forwards — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxTransferCenterOps = 50
+
+// consigliereMachiavelliTransferCenterOperations renders every
+// current operation's own Source/Target, verbatim, once Machiavelli
+// Mode is on.
+func (r *Root) consigliereMachiavelliTransferCenterOperations() string {
+	ops := r.transferCenterOps
+	if len(ops) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nMachiavelli Mode is on — every operation's own source/target is forwarded verbatim:\n")
+	n := len(ops)
+	if n > consigliereMaxTransferCenterOps {
+		n = consigliereMaxTransferCenterOps
+	}
+	for _, op := range ops[:n] {
+		fmt.Fprintf(&b, "- %s: %s -> %s (%s, %s)\n", op.Type, op.Source, op.Target, op.State, op.Outcome)
+	}
+	if len(ops) > n {
+		fmt.Fprintf(&b, "(%d further operations not shown)\n", len(ops)-n)
+	}
+	return b.String()
+}
+
+// consigliereMaxToolboxEntries caps how many catalog entries
+// toolboxContextSnapshot lists — the same anthropicMaxTokens-style
+// reasoning every other capped list here already follows.
+const consigliereMaxToolboxEntries = 50
+
+// toolboxContextSnapshot describes the Toolbox screen: the real
+// commands currently listed in r.toolboxRows (whichever category or
+// categories are open) and their own static help text. Unlike every
+// other gated screen above, this is never withheld behind Machiavelli
+// Mode — the catalog is a fixed, built-in list of tool names and
+// descriptions (lsblk, nmap, dig, ...), never a live read of this
+// host's own filesystem, network, or process state.
+func (r *Root) toolboxContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Toolbox.\n")
+	var entries []string
+	for _, row := range r.toolboxRows {
+		switch {
+		case row.isEntry():
+			entries = append(entries, fmt.Sprintf("%s: %s", row.entry.label, row.entry.help))
+		case row.header != "":
+			entries = append(entries, "-- "+row.header+" --")
+		}
+	}
+	fmt.Fprintf(&b, "%d entries available:\n", countToolboxEntries(r.toolboxRows))
+	n := len(entries)
+	if n > consigliereMaxToolboxEntries {
+		n = consigliereMaxToolboxEntries
+	}
+	for _, e := range entries[:n] {
+		fmt.Fprintf(&b, "%s\n", e)
+	}
+	if len(entries) > n {
+		fmt.Fprintf(&b, "(%d further lines not shown)\n", len(entries)-n)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// countToolboxEntries counts only the real, runnable rows in rows —
+// headers and blank spacers aren't entries of their own.
+func countToolboxEntries(rows []toolboxDisplayRow) int {
+	n := 0
+	for _, row := range rows {
+		if row.isEntry() {
+			n++
+		}
+	}
+	return n
+}
+
+// consigliereMaxCompareTreeEntries caps how many non-identical
+// entries compareTreeContextSnapshot lists — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxCompareTreeEntries = 50
+
+// compareTreeContextSnapshot describes the Compare Faultline screen:
+// the two roots being compared (already as visible as the panel's
+// own current directory), the running stats, and each differing
+// entry's own relative path and verdict. Never gated behind
+// Machiavelli Mode — a relative path shared between two local
+// directories is the same risk tier Git Breach's own file status list
+// already sends by default, not a real absolute filesystem path or
+// file content.
+func (r *Root) compareTreeContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Compare Faultline.\n")
+	fmt.Fprintf(&b, "Comparing %s against %s.\n", r.compareTreeA, r.compareTreeB)
+	fmt.Fprintf(&b, "%s\n", strings.TrimSpace(compareTreeStatusText(r.compareTreeStats)))
+
+	var diffs []string
+	for _, e := range r.compareTreeEntries {
+		if e.Verdict == compare.Identical {
+			continue
+		}
+		diffs = append(diffs, fmt.Sprintf("%s: %s", e.RelPath, compareTreeVerdictLabel(e.Verdict)))
+	}
+	if len(diffs) > 0 {
+		n := len(diffs)
+		if n > consigliereMaxCompareTreeEntries {
+			n = consigliereMaxCompareTreeEntries
+		}
+		for _, d := range diffs[:n] {
+			fmt.Fprintf(&b, "%s\n", d)
+		}
+		if len(diffs) > n {
+			fmt.Fprintf(&b, "(%d further entries not shown)\n", len(diffs)-n)
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// compareTreeVerdictLabel is compareTreeContextSnapshot's own
+// human-readable name for e.Verdict — compareTreeRowMark's own
+// glyphs aren't meaningful outside the table they're drawn in.
+func compareTreeVerdictLabel(v compare.Verdict) string {
+	switch v {
+	case compare.Differs:
+		return "differs"
+	case compare.Uncertain:
+		return "uncertain (same size, different mtime)"
+	case compare.OnlyInA:
+		return "only in A"
+	case compare.OnlyInB:
+		return "only in B"
+	case compare.Errored:
+		return "error"
+	default:
+		return "identical"
+	}
 }
 
 // errConsigliereNoAPIKey is what buildConsigliereProvider's own

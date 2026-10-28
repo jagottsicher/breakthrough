@@ -287,6 +287,26 @@ func compareTreeRowOf(t *testing.T, r *Root, relPath string) int {
 	return -1
 }
 
+func TestGCReachesAIConsigliereFromCompareTree(t *testing.T) {
+	r, dirA, dirB := newCompareTreePair(t)
+	r.openCompareTree(dirA, dirB)
+	finishCompareTreeWalk(t, r)
+
+	if got := r.captureCompareTreeKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone)); got != nil {
+		t.Fatalf("capture('g') = %v, want nil (consumed, chord started)", got)
+	}
+	if r.pendingChord != 'g' {
+		t.Fatalf("pendingChord = %q, want 'g'", string(r.pendingChord))
+	}
+
+	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
+		t.Fatal("the resolving 'C' should have been consumed")
+	}
+	if !r.consigliereVisible {
+		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
+	}
+}
+
 func contains(list []string, want string) bool {
 	for _, s := range list {
 		if s == want {

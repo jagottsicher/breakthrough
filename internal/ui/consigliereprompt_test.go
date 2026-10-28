@@ -6,9 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/logview"
+	"github.com/jagottsicher/breakthrough/internal/mounts"
+	"github.com/jagottsicher/breakthrough/internal/multiplex"
+	"github.com/jagottsicher/breakthrough/internal/operations"
+	"github.com/jagottsicher/breakthrough/internal/sshkeys"
 )
 
 func TestPanelContextSnapshotIncludesDirectoryAndMarkedFiles(t *testing.T) {
@@ -347,5 +353,417 @@ func TestFirewallContextSnapshotCapsRuleList(t *testing.T) {
 
 	if got := strings.Count(got, "distinct-source"); got != consigliereMaxFirewallRules {
 		t.Errorf("snapshot mentions %d rules, want exactly the cap of %d", got, consigliereMaxFirewallRules)
+	}
+}
+
+// TestMountsContextSnapshotIncludesEntries pins the real mount table
+// being included by default — unlike Firewall's own ruleset, a mount
+// entry says at most "this box talks to this remote host", already
+// exactly as visible the moment the panel itself browses into it.
+func TestMountsContextSnapshotIncludesEntries(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.mountsEntries = []mounts.Entry{
+		{Target: "/mnt/home", Source: "family-nas:/export/home", Fstype: "nfs4", Persistent: true},
+	}
+
+	got := root.mountsContextSnapshot()
+
+	for _, want := range []string{"Mounts", "1 mounts", "family-nas:/export/home", "/mnt/home", "nfs4", "survives reboot"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+// TestMountsContextSnapshotReportsReadError pins the real error case:
+// a failed findmnt read is surfaced, not a silently empty snapshot.
+func TestMountsContextSnapshotReportsReadError(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.mountsErr = errors.New("findmnt: command not found")
+
+	got := root.mountsContextSnapshot()
+
+	if !strings.Contains(got, "findmnt: command not found") {
+		t.Errorf("snapshot = %q, want it to surface the read error", got)
+	}
+}
+
+// TestMountsContextSnapshotCapsEntryList pins the same cap-list
+// discipline every other snapshot builder here already follows.
+func TestMountsContextSnapshotCapsEntryList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	var entries []mounts.Entry
+	for i := 0; i < consigliereMaxMountEntries+5; i++ {
+		entries = append(entries, mounts.Entry{Target: "distinct-target", Source: "src", Fstype: "ext4"})
+	}
+	root.mountsEntries = entries
+
+	got := root.mountsContextSnapshot()
+
+	if got := strings.Count(got, "distinct-target"); got != consigliereMaxMountEntries {
+		t.Errorf("snapshot mentions %d mounts, want exactly the cap of %d", got, consigliereMaxMountEntries)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToMounts pins the dispatch
+// switch's own Mounts case.
+func TestConsigliereContextSnapshotDispatchesToMounts(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = mountsPage
+	root.mountsEntries = []mounts.Entry{{Target: "/mnt/home"}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Mounts.") {
+		t.Errorf("snapshot = %q, want the Mounts snapshot, not the generic panel one", got)
+	}
+}
+
+// TestSessionsContextSnapshotIncludesSessions pins the real session
+// list being included by default — a session name is a similar risk
+// to a Git Breach commit subject, already sent by default.
+func TestSessionsContextSnapshotIncludesSessions(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.sessionsList = []multiplex.Session{
+		{Name: "work", Backend: multiplex.BackendTmux, Status: multiplex.StatusAttached},
+	}
+
+	got := root.sessionsContextSnapshot()
+
+	for _, want := range []string{"Sessions", "1 sessions", "work", "tmux", "attached"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+// TestSessionsContextSnapshotReportsReadError pins the real error
+// case: neither backend installed is surfaced, not a silently empty
+// snapshot.
+func TestSessionsContextSnapshotReportsReadError(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.sessionsErr = errors.New("neither screen nor tmux nor zellij is installed")
+
+	got := root.sessionsContextSnapshot()
+
+	if !strings.Contains(got, "neither screen nor tmux nor zellij is installed") {
+		t.Errorf("snapshot = %q, want it to surface the read error", got)
+	}
+}
+
+// TestSessionsContextSnapshotCapsSessionList pins the same cap-list
+// discipline every other snapshot builder here already follows.
+func TestSessionsContextSnapshotCapsSessionList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	var sessions []multiplex.Session
+	for i := 0; i < consigliereMaxSessions+5; i++ {
+		sessions = append(sessions, multiplex.Session{Name: "distinct-session", Backend: multiplex.BackendScreen})
+	}
+	root.sessionsList = sessions
+
+	got := root.sessionsContextSnapshot()
+
+	if got := strings.Count(got, "distinct-session"); got != consigliereMaxSessions {
+		t.Errorf("snapshot mentions %d sessions, want exactly the cap of %d", got, consigliereMaxSessions)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToSessions pins the
+// dispatch switch's own Sessions case.
+func TestConsigliereContextSnapshotDispatchesToSessions(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = sessionsPage
+	root.sessionsList = []multiplex.Session{{Name: "work"}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Sessions.") {
+		t.Errorf("snapshot = %q, want the Sessions snapshot, not the generic panel one", got)
+	}
+}
+
+// TestSSHKeysContextSnapshotIncludesKeyPairs pins the real key
+// inventory being included by default — never the key material
+// itself, which this screen's own design never reads back out in the
+// first place.
+func TestSSHKeysContextSnapshotIncludesKeyPairs(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.sshKeysPairs = []sshkeys.KeyPair{
+		{Name: "id_ed25519", Type: "ed25519", Bits: 256, Encrypted: true, AgentLoaded: true},
+	}
+
+	got := root.sshKeysContextSnapshot()
+
+	for _, want := range []string{"SSH Keys", "1 key pairs", "id_ed25519", "ed25519", "256-bit", "passphrase-encrypted", "loaded in agent"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+// TestSSHKeysContextSnapshotReportsReadError pins the real error
+// case: a failed scan is surfaced, not a silently empty snapshot.
+func TestSSHKeysContextSnapshotReportsReadError(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.sshKeysErr = errors.New("reading ~/.ssh: permission denied")
+
+	got := root.sshKeysContextSnapshot()
+
+	if !strings.Contains(got, "permission denied") {
+		t.Errorf("snapshot = %q, want it to surface the read error", got)
+	}
+}
+
+// TestSSHKeysContextSnapshotCapsKeyList pins the same cap-list
+// discipline every other snapshot builder here already follows.
+func TestSSHKeysContextSnapshotCapsKeyList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	var pairs []sshkeys.KeyPair
+	for i := 0; i < consigliereMaxSSHKeys+5; i++ {
+		pairs = append(pairs, sshkeys.KeyPair{Name: "distinct-key"})
+	}
+	root.sshKeysPairs = pairs
+
+	got := root.sshKeysContextSnapshot()
+
+	if got := strings.Count(got, "distinct-key"); got != consigliereMaxSSHKeys {
+		t.Errorf("snapshot mentions %d key pairs, want exactly the cap of %d", got, consigliereMaxSSHKeys)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToSSHKeys pins the dispatch
+// switch's own SSH Keys case.
+func TestConsigliereContextSnapshotDispatchesToSSHKeys(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = sshKeysPage
+	root.sshKeysPairs = []sshkeys.KeyPair{{Name: "id_ed25519"}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: SSH Keys.") {
+		t.Errorf("snapshot = %q, want the SSH Keys snapshot, not the generic panel one", got)
+	}
+}
+
+// TestActivityLogContextSnapshotOmitsMessagesByDefault pins the
+// ordinary, privacy-preserving case: even with real entries loaded,
+// only the total count and a category breakdown are included unless
+// Machiavelli Mode has been explicitly turned on — an entry's own
+// Message is a real file path from the user's own filesystem, the
+// same risk category a Log Holepunch log line already has.
+func TestActivityLogContextSnapshotOmitsMessagesByDefault(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activityLogAllEntries = []activitylog.Entry{
+		{Level: activitylog.LevelActions, Category: activitylog.CategoryFileOps, Message: "copied /home/jens/topsecret123.txt"},
+	}
+
+	got := root.activityLogContextSnapshot()
+
+	for _, want := range []string{"Action Log", "1 entries", "fileops: 1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, must not contain an entry's own Message without Machiavelli Mode", got)
+	}
+}
+
+// TestActivityLogContextSnapshotIncludesMessagesUnderMachiavelliMode
+// pins the explicit, opted-in exception: once the user has turned the
+// mode on, the currently-matching entries are forwarded verbatim.
+func TestActivityLogContextSnapshotIncludesMessagesUnderMachiavelliMode(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereHardcoreMode = true
+	root.activityLogAllEntries = []activitylog.Entry{
+		{Level: activitylog.LevelActions, Category: activitylog.CategoryFileOps, Message: "copied /home/jens/topsecret123.txt"},
+	}
+
+	got := root.activityLogContextSnapshot()
+
+	if !strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, want the matched entry forwarded under Machiavelli Mode", got)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToActivityLog pins the
+// dispatch switch's own Action Log case.
+func TestConsigliereContextSnapshotDispatchesToActivityLog(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = activityLogPage
+	root.activityLogAllEntries = []activitylog.Entry{{Message: "copied a.txt"}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Action Log.") {
+		t.Errorf("snapshot = %q, want the Action Log snapshot, not the generic panel one", got)
+	}
+}
+
+// TestTransferCenterContextSnapshotOmitsPathsByDefault pins the
+// ordinary, privacy-preserving case: even with real operations
+// loaded, only the total count and a type breakdown are included
+// unless Machiavelli Mode has been explicitly turned on — an
+// operation's own Source/Target is a real file path from the user's
+// own filesystem, the same risk category an Action Log entry's own
+// Message already has.
+func TestTransferCenterContextSnapshotOmitsPathsByDefault(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.transferCenterOps = []operations.Operation{
+		{Type: "paste", Source: "/home/jens/topsecret123.txt", Target: "/mnt/backup"},
+	}
+
+	got := root.transferCenterContextSnapshot()
+
+	for _, want := range []string{"Undertow", "1 operations", "paste: 1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, must not contain an operation's own Source/Target without Machiavelli Mode", got)
+	}
+}
+
+// TestTransferCenterContextSnapshotIncludesPathsUnderMachiavelliMode
+// pins the explicit, opted-in exception: once the user has turned the
+// mode on, the current operations' own Source/Target are forwarded
+// verbatim.
+func TestTransferCenterContextSnapshotIncludesPathsUnderMachiavelliMode(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereHardcoreMode = true
+	root.transferCenterOps = []operations.Operation{
+		{Type: "paste", Source: "/home/jens/topsecret123.txt", Target: "/mnt/backup"},
+	}
+
+	got := root.transferCenterContextSnapshot()
+
+	if !strings.Contains(got, "topsecret123") {
+		t.Errorf("snapshot = %q, want the operation's own Source forwarded under Machiavelli Mode", got)
+	}
+}
+
+// TestTransferCenterContextSnapshotCapsOperationList pins the same
+// anthropicMaxTokens-style cap every other list-returning snapshot
+// here already follows.
+func TestTransferCenterContextSnapshotCapsOperationList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereHardcoreMode = true
+	for i := 0; i < consigliereMaxTransferCenterOps+5; i++ {
+		root.transferCenterOps = append(root.transferCenterOps, operations.Operation{
+			Type:   "paste",
+			Source: fmt.Sprintf("/src/%d", i),
+			Target: "/dst",
+		})
+	}
+
+	got := root.transferCenterContextSnapshot()
+
+	if !strings.Contains(got, "5 further operations not shown") {
+		t.Errorf("snapshot = %q, want it to mention the 5 truncated operations", got)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToTransferCenter pins the
+// dispatch switch's own Undertow case.
+func TestConsigliereContextSnapshotDispatchesToTransferCenter(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = transferCenterPage
+	root.transferCenterOps = []operations.Operation{{Type: "paste", Source: "/a", Target: "/b"}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Undertow.") {
+		t.Errorf("snapshot = %q, want the Undertow snapshot, not the generic panel one", got)
+	}
+}
+
+// TestToolboxContextSnapshotIncludesEntries pins the ungated case:
+// the catalog is a fixed, built-in list of tool names and
+// descriptions, never a live read of this host's own state, so it is
+// always forwarded in full, with no Machiavelli Mode gate.
+func TestToolboxContextSnapshotIncludesEntries(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openNetworkTools()
+
+	got := root.toolboxContextSnapshot()
+
+	if !strings.Contains(got, "Toolbox") {
+		t.Errorf("snapshot = %q, want it to mention the Toolbox view", got)
+	}
+	if !strings.Contains(got, "Ping:") {
+		t.Errorf("snapshot = %q, want it to list the Ping entry", got)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToToolbox pins the dispatch
+// switch's own Toolbox case.
+func TestConsigliereContextSnapshotDispatchesToToolbox(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.openNetworkTools()
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Toolbox.") {
+		t.Errorf("snapshot = %q, want the Toolbox snapshot, not the generic panel one", got)
+	}
+}
+
+// TestCompareTreeContextSnapshotIncludesDifferingEntries pins the
+// ungated case: a relative path shared between two local directories
+// is the same risk tier Git Breach's own file status list already
+// sends by default, so it is never withheld behind Machiavelli Mode.
+func TestCompareTreeContextSnapshotIncludesDifferingEntries(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.compareTreeA, root.compareTreeB = "/tmp/a", "/tmp/b"
+	root.compareTreeStats = compare.Stats{Differs: 1, OnlyInA: 1}
+	root.compareTreeEntries = []compare.Entry{
+		{RelPath: "changed.txt", Verdict: compare.Differs},
+		{RelPath: "only-a.txt", Verdict: compare.OnlyInA},
+		{RelPath: "same.txt", Verdict: compare.Identical},
+	}
+
+	got := root.compareTreeContextSnapshot()
+
+	for _, want := range []string{"Compare Faultline", "/tmp/a", "/tmp/b", "changed.txt: differs", "only-a.txt: only in A"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "same.txt") {
+		t.Errorf("snapshot = %q, must not list an identical entry", got)
+	}
+}
+
+// TestCompareTreeContextSnapshotCapsEntryList pins the same
+// anthropicMaxTokens-style cap every other list-returning snapshot
+// here already follows.
+func TestCompareTreeContextSnapshotCapsEntryList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	for i := 0; i < consigliereMaxCompareTreeEntries+5; i++ {
+		root.compareTreeEntries = append(root.compareTreeEntries, compare.Entry{
+			RelPath: fmt.Sprintf("file-%d.txt", i),
+			Verdict: compare.Differs,
+		})
+	}
+
+	got := root.compareTreeContextSnapshot()
+
+	if !strings.Contains(got, "5 further entries not shown") {
+		t.Errorf("snapshot = %q, want it to mention the 5 truncated entries", got)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToCompareTree pins the
+// dispatch switch's own Compare Faultline case.
+func TestConsigliereContextSnapshotDispatchesToCompareTree(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = compareTreePage
+	root.compareTreeEntries = []compare.Entry{{RelPath: "a.txt", Verdict: compare.Differs}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Compare Faultline.") {
+		t.Errorf("snapshot = %q, want the Compare Faultline snapshot, not the generic panel one", got)
 	}
 }

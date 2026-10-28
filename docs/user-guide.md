@@ -1800,10 +1800,14 @@ closes it.
 
 A chat sidebar talking to a real AI provider (Anthropic, OpenAI,
 DeepSeek, or Gemini — or a local Ollama server, no API key needed at
-all) about whatever's currently on screen — reachable with `gC`
-from anywhere in the app, not just the file panel: inside Log
-Holepunch or Git Breach, from a remote connection, anywhere `gC` is
-pressed. Docked flush against the right edge, a third of the screen's
+all) about whatever's currently on screen — reachable with `gC` from
+the file panel and every full-screen catalog screen: Log Holepunch,
+Git Breach, Firewall, Mounts, Sessions, SSH Keys, Action Log,
+Undertow, Toolbox, Compare Faultline, a remote connection, anywhere
+`gC` is pressed. Not reachable from the Viewer/Look screen (`g`/`G`
+already mean goto-top/goto-bottom there), terminal tabs (keystrokes go
+to the shell underneath), or one-shot dialogs. Docked flush against
+the right edge, a third of the screen's
 own width and half that many characters tall (roughly square, since a
 terminal's own character cells are about twice as tall as wide),
 vertically centered on the whole screen — non-modal, so it stays open
@@ -1825,11 +1829,17 @@ Along with the question itself, every request includes:
   range/filters plus a fixed list of every field and key that screen
   offers, Git Breach's own repository root, branch, ahead/behind
   count, staged/unstaged/untracked/conflict counts, and a handful of
-  recent commit subjects, or Firewall's own current backend and rule
-  count. Never a log line's own text, a diff's own content, a full
-  firewall ruleset, or a file's own content — only metadata already
-  visible in each screen's own headers (see "Machiavelli Mode" below
-  for the one deliberate exception to that).
+  recent commit subjects, Firewall's own current backend and rule
+  count, Mounts/Sessions/SSH Keys' own entry lists, Action Log's own
+  entry count and category breakdown, Undertow's own operation count
+  and type breakdown, Toolbox's own full catalog of commands and help
+  text, or Compare Faultline's own two roots, stats, and differing
+  entries' relative paths. Never a log line's own text, a diff's own
+  content, a full firewall ruleset, an Action Log entry's own message,
+  an Undertow operation's own source/target path, or a file's own
+  content — only metadata already visible in each screen's own
+  headers (see "Machiavelli Mode" below for the deliberate exceptions
+  to that).
 - Whatever sections of breakthrough's own documentation (the built-in
   help plus this guide) best match the question, found by a local,
   lexical search — no embeddings, no index built from a network call.
@@ -1867,16 +1877,22 @@ prompt" overwrites it back to that default, after confirming.
 
 ### Machiavelli Mode
 
-Off by default. Log Holepunch's, Git Breach's, and Firewall's own
-context (see above) normally never includes an actual log line's or
-diff's own text, or the ruleset itself — only filter/commit metadata
-and a rule count. Turning this on lets Log Holepunch forward the
-lines currently matching the Filter/Time/Level fields, verbatim,
-capped at 50 lines per question; Git Breach forward whatever diff is
-currently shown in Main, capped at 300 lines; and Firewall forward
-its full ruleset, capped at 50 rules. Real log lines, diffs, and
-firewall rules can carry credentials, IP addresses, internal network
-layout, or other data that would otherwise never leave this machine.
+Off by default. Log Holepunch's, Git Breach's, Firewall's, Action
+Log's, and Undertow's own context (see above) normally never includes
+an actual log line's or diff's own text, the ruleset itself, an
+entry's own message, or an operation's own source/target — only
+filter/commit metadata, a rule count, or a type/category breakdown.
+Turning this on lets Log Holepunch forward the lines currently
+matching the Filter/Time/Level fields, verbatim, capped at 50 lines
+per question; Git Breach forward whatever diff is currently shown in
+Main, capped at 300 lines; Firewall forward its full ruleset, capped
+at 50 rules; Action Log forward the entries currently matching its
+own Keyword/Time fields, capped at 50 entries; and Undertow forward
+every operation's own source/target path, capped at 50 operations.
+Real log lines, diffs, firewall rules, action log messages, and
+transfer paths can carry credentials, IP addresses, internal network
+layout, real filesystem paths, or other data that would otherwise
+never leave this machine.
 
 Turning it on requires scrolling a full warning to its own end before
 the confirming choice does anything — a question short enough to

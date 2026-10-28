@@ -326,6 +326,24 @@ func (r *Root) captureTransferCenterKey(event *tcell.EventKey) *tcell.EventKey {
 		r.closeTransferCenter()
 		return nil
 	}
+	// Tab/Backtab reach the AI Consigliere sidebar — see
+	// startConsigliereChord's own doc comment in consigliere.go and
+	// captureLogAuditSelectionTableKey's own identical shape.
+	// transferCenterTable is this screen's only real focus target.
+	if r.consigliereVisible {
+		if event.Key() == tcell.KeyTab {
+			r.app.SetFocus(r.consigliereInput)
+			return nil
+		}
+		if event.Key() == tcell.KeyBacktab {
+			if r.consigliereScrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliereHistory)
+			} else {
+				r.app.SetFocus(r.consigliereInput)
+			}
+			return nil
+		}
+	}
 	if event.Key() == tcell.KeyRune {
 		switch event.Rune() {
 		case 'r':
@@ -336,6 +354,12 @@ func (r *Root) captureTransferCenterKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case 'p':
 			r.pauseResumeSelectedTransferCenterOperation()
+			return nil
+		case 'g':
+			// "gC" reaches the AI Consigliere from here too — see
+			// startConsigliereChord's own doc comment in
+			// consigliere.go.
+			r.startConsigliereChord(nil)
 			return nil
 		}
 	}

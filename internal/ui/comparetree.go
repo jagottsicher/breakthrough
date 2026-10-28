@@ -119,6 +119,20 @@ func (r *Root) compareTreeButtonList() []*tview.Button {
 // which widget currently has focus — the same centralize-on-every-
 // widget shape captureBatchRenameKey already establishes.
 func (r *Root) captureCompareTreeKey(event *tcell.EventKey) *tcell.EventKey {
+	if r.consigliereVisible {
+		if event.Key() == tcell.KeyTab {
+			r.app.SetFocus(r.consigliereInput)
+			return nil
+		}
+		if event.Key() == tcell.KeyBacktab {
+			if r.consigliereScrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliereHistory)
+			} else {
+				r.app.SetFocus(r.consigliereInput)
+			}
+			return nil
+		}
+	}
 	switch event.Key() {
 	case tcell.KeyTab:
 		r.cycleCompareTreeFocus(1)
@@ -146,6 +160,9 @@ func (r *Root) captureCompareTreeKey(event *tcell.EventKey) *tcell.EventKey {
 		case 'c':
 			row, _ := r.compareTreeTable.GetSelection()
 			r.copyCompareTreeRow(row)
+			return nil
+		case 'g':
+			r.startConsigliereChord(nil)
 			return nil
 		}
 	}

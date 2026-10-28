@@ -364,6 +364,15 @@ func (r *Root) captureActivityLogTableKey(event *tcell.EventKey) *tcell.EventKey
 		r.closeActivityLog()
 		return nil
 	case tcell.KeyTab:
+		// The forward edge into the AI Consigliere sidebar — this
+		// table is this screen's own last stop (Keyword -> Time ->
+		// Table), so wrapping back to Keyword (the ordinary case) is
+		// what gives way to it instead, the same shape
+		// captureLogAuditViewerTableKey already establishes.
+		if r.consigliereVisible {
+			r.app.SetFocus(r.consigliereInput)
+			return nil
+		}
 		r.app.SetFocus(r.activityLogKeywordField)
 		return nil
 	case tcell.KeyBacktab:
@@ -372,6 +381,15 @@ func (r *Root) captureActivityLogTableKey(event *tcell.EventKey) *tcell.EventKey
 	}
 	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
 		r.reloadActivityLog()
+		return nil
+	}
+	// "gC" reaches the AI Consigliere from here too — see
+	// startConsigliereChord's own doc comment in consigliere.go.
+	// activityLogTable is a *tview.Table, which (unlike the Keyword/
+	// Time fields) has no built-in meaning for a bare 'g' to begin
+	// with, so nothing existing is lost by claiming it here.
+	if event.Key() == tcell.KeyRune && event.Rune() == 'g' {
+		r.startConsigliereChord(r.activityLogKeywordField)
 		return nil
 	}
 	return event

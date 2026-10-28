@@ -194,6 +194,34 @@ func TestOpenActivityLogFocusesTable(t *testing.T) {
 	}
 }
 
+// TestGCReachesAIConsigliereFromActivityLog pins "gC" reachability
+// from this screen's own table, the same shape
+// TestGCReachesAIConsigliereFromFirewall already establishes —
+// claimed only by the table (a *tview.Table), never by the Keyword/
+// Time fields, where a bare "g" must still just type the letter.
+func TestGCReachesAIConsigliereFromActivityLog(t *testing.T) {
+	systemDir := isolateActivityLogPaths(t)
+	writeActivityLogLines(t, systemDir, activityLogFixture()...)
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openActivityLog()
+
+	if got := r.captureActivityLogTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone)); got != nil {
+		t.Fatalf("capture('g') = %v, want nil (consumed, chord started)", got)
+	}
+	if r.pendingChord != 'g' {
+		t.Fatalf("pendingChord = %q, want 'g'", string(r.pendingChord))
+	}
+	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
+		t.Fatal("the resolving 'C' should have been consumed")
+	}
+	if !r.consigliereVisible {
+		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
+	}
+}
+
 // TestRenderActivityLogShowsPlaceholderWhenEmpty pins the "report it,
 // don't leave it looking like a successful empty read" contract for the
 // genuinely-nothing-logged-yet case.

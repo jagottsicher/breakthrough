@@ -185,9 +185,15 @@ func withConfirmEnable(opt optionSpec, warning string) optionSpec {
 // scrollacknowledge.go), per the user's own explicit request that a
 // warning this real not be reflexively accepted via a single short
 // question.
-const machiavelliModeWarning = `Machiavelli Mode lets Log Holepunch forward the actual matched log line content, Git Breach forward whatever diff is currently shown in Main, and Firewall forward its full ruleset — not just the filter/commit metadata or rule count each sends by default — to whichever AI provider is configured above.
+const machiavelliModeWarning = `Machiavelli Mode lets the AI Consigliere forward real content from these screens — not just the counts/metadata each sends by default — to whichever AI provider is configured above:
 
-Real log files, real diffs, and a real firewall ruleset very often contain things you would not otherwise want to leave this machine: passwords typed into forms, API keys and session tokens, private IP addresses and internal network/VPN layout, employee or customer names, email addresses, or other personal data that happened to get written into a line (or added/removed in a diff) by whatever produced it.
+- Log Holepunch: the actual matched log line content.
+- Git Breach: whatever diff is currently shown in Main.
+- Firewall: its full ruleset.
+- Action Log: the matching entries' own messages.
+- Undertow: every operation's own source/target path.
+
+Real log lines, diffs, firewall rules, action log messages, and transfer paths very often contain things you would not otherwise want to leave this machine: passwords typed into forms, API keys and session tokens, private IP addresses and internal network/VPN layout, real filesystem paths, employee or customer names, email addresses, or other personal data that happened to get written into a line (or added/removed in a diff) by whatever produced it.
 
 Once a question is sent with this mode on, that content has already left breakthrough and gone to a third-party provider over the network. There is no way to recall it afterwards, no matter what you do here next.
 
@@ -1508,13 +1514,16 @@ func optionCategories() []optionCategory {
 				withConfirmEnable(boolOption("consigliere_hardcore_mode", "Machiavelli Mode",
 					"Lets Log Holepunch's own context snapshot forward the actual "+
 						"matched log line content, Git Breach's own forward whatever diff "+
-						"is currently shown in Main, and Firewall's own forward its full "+
-						"ruleset, to the configured AI provider — not just the metadata/"+
-						"count each sends by default. A real log line, diff, or firewall "+
-						"rule can contain credentials, IP addresses, internal network "+
-						"layout, or other data — this is what makes that reachable by a "+
-						"third-party provider rather than withheld. Off by default; turning "+
-						"it off again is immediate, no confirmation needed.",
+						"is currently shown in Main, Firewall's own forward its full "+
+						"ruleset, Action Log's own forward the matching entries' own "+
+						"messages, and Undertow's own forward every operation's own "+
+						"source/target path, to the configured AI provider — not just the "+
+						"metadata/count each sends by default. A real log line, diff, "+
+						"firewall rule, action log message, or transfer path can contain "+
+						"credentials, IP addresses, internal network layout, real "+
+						"filesystem paths, or other data — this is what makes that "+
+						"reachable by a third-party provider rather than withheld. Off by "+
+						"default; turning it off again is immediate, no confirmation needed.",
 					false,
 					func(r *Root) bool { return r.settings.ConsigliereHardcoreMode },
 					func(r *Root, b bool) {

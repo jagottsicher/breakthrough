@@ -47,6 +47,30 @@ func TestCaptureMountsKeyEscapeClosesTheScreen(t *testing.T) {
 	}
 }
 
+// TestGCReachesAIConsigliereFromMounts pins "gC" reachability from
+// this screen, the same shape TestGCReachesAIConsigliereFromFirewall
+// already establishes.
+func TestGCReachesAIConsigliereFromMounts(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openMounts()
+
+	if got := r.captureMountsKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone)); got != nil {
+		t.Fatalf("capture('g') = %v, want nil (consumed, chord started)", got)
+	}
+	if r.pendingChord != 'g' {
+		t.Fatalf("pendingChord = %q, want 'g'", string(r.pendingChord))
+	}
+	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
+		t.Fatal("the resolving 'C' should have been consumed")
+	}
+	if !r.consigliereVisible {
+		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
+	}
+}
+
 // TestCaptureMountsKeyRRefreshesWithoutClosing pins that "r" is
 // consumed and re-reads the mount table (via reloadMounts) without
 // closing the screen — even when findmnt itself fails (a real

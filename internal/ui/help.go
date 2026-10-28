@@ -470,14 +470,18 @@ var helpText = strings.TrimLeft(`
 
   A chat sidebar talking to a real AI provider (Anthropic, OpenAI,
   DeepSeek, or Gemini — or a local Ollama server, no API key needed
-  at all) about whatever's currently on screen — reachable from
-  anywhere in the app, not just the file panel: inside Log Holepunch
-  or Git Breach, from a remote connection, anywhere "gC" is pressed.
-  Docked flush against the right edge, a third of the screen's own
-  width and half that many characters tall, vertically centered on
-  the whole screen — non-modal, so it stays open and reachable while
-  navigating the rest of the app underneath it, the same way the
-  Details sidebar above does.
+  at all) about whatever's currently on screen — reachable from the
+  file panel and every full-screen catalog screen: Log Holepunch, Git
+  Breach, Firewall, Mounts, Sessions, SSH Keys, Action Log, Undertow,
+  Toolbox, Compare Faultline, a remote connection, anywhere "gC" is
+  pressed. Not reachable from the Viewer/Look screen ("g"/"G" already
+  mean goto-top/goto-bottom there), terminal tabs (keystrokes go to
+  the shell underneath), or one-shot dialogs. Docked flush against
+  the right edge, a third of the screen's own width and half that many
+  characters tall, vertically centered on the whole screen —
+  non-modal, so it stays open and reachable while navigating the rest
+  of the app underneath it, the same way the Details sidebar above
+  does.
 
   "gC" again (once the sidebar's own input has focus), the title
   bar's own "✕", or Escape all close it — each asks for confirmation
@@ -490,11 +494,16 @@ var helpText = strings.TrimLeft(`
   directory and marked files, Log Holepunch's own directory/filters
   plus a fixed list of every field and key that screen offers, Git
   Breach's own branch/ahead-behind/staged/unstaged/untracked/conflict
-  counts and recent commit subjects, or Firewall's own current
-  backend and rule count — never a log line's, diff's, full ruleset's,
-  or file's own content), whatever documentation sections a local,
-  lexical search over this help text
-  and the online guide finds relevant, and the system prompt.
+  counts and recent commit subjects, Firewall's own current backend
+  and rule count, Mounts/Sessions/SSH Keys' own entry lists, Action
+  Log's own entry count and category breakdown, Undertow's own
+  operation count and type breakdown, Toolbox's own full catalog of
+  commands and help text, or Compare Faultline's own two roots, stats,
+  and differing entries' relative paths — never a log line's, diff's,
+  full ruleset's, action log message's, transfer path's, or file's own
+  content), whatever documentation sections a local, lexical search
+  over this help text and the online guide finds relevant, and the
+  system prompt.
 
   Configured entirely under Options → AI Consigliere: Provider,
   Model, Effort, the API key (environment variable, an opt-in
@@ -504,8 +513,10 @@ var helpText = strings.TrimLeft(`
   — off by default, gated behind a warning you have to scroll to the
   end of before it does anything — which lets Log Holepunch forward
   the lines currently matching its own filters, Git Breach forward
-  whatever diff is currently shown in Main, and Firewall forward its
-  full ruleset, all verbatim rather than just their usual metadata.
+  whatever diff is currently shown in Main, Firewall forward its full
+  ruleset, Action Log forward the matching entries' own messages, and
+  Undertow forward every operation's own source/target path, all
+  verbatim rather than just their usual metadata.
 
 [::b]Status bar (the bottom line, purely informational)[::-]
 
