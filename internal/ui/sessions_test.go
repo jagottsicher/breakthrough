@@ -44,6 +44,28 @@ func TestOpenSessionsShowsThePage(t *testing.T) {
 	}
 }
 
+// TestGCReachesAIConsigliereFromSessions pins "gC" reachability from
+// this screen, the same shape TestGCReachesAIConsigliereFromFirewall
+// already establishes.
+func TestGCReachesAIConsigliereFromSessions(t *testing.T) {
+	r := newTestRootForSessions(t)
+	isolateSessionsList(t, nil, nil)
+	r.openSessions()
+
+	if got := r.captureSessionsKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone)); got != nil {
+		t.Fatalf("capture('g') = %v, want nil (consumed, chord started)", got)
+	}
+	if r.pendingChord != 'g' {
+		t.Fatalf("pendingChord = %q, want 'g'", string(r.pendingChord))
+	}
+	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
+		t.Fatal("the resolving 'C' should have been consumed")
+	}
+	if !r.consigliereVisible {
+		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
+	}
+}
+
 func TestReloadSessionsShowsAnErrorWhenNeitherBackendIsInstalled(t *testing.T) {
 	r := newTestRootForSessions(t)
 	isolateSessionsList(t, nil, errors.New("multiplex: neither screen nor tmux is installed"))

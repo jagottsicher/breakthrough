@@ -33,6 +33,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
 	"github.com/jagottsicher/breakthrough/internal/docsearch"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
+	"github.com/jagottsicher/breakthrough/internal/multiplex"
 )
 
 const consiglierePage = "consigliere"
@@ -918,6 +919,8 @@ func (r *Root) consigliereContextSnapshot() string {
 		return r.firewallContextSnapshot()
 	case mountsPage:
 		return r.mountsContextSnapshot()
+	case sessionsPage:
+		return r.sessionsContextSnapshot()
 	default: // "" (the bare panel) and anything else "gC" might someday reach from
 		return r.panelContextSnapshot()
 	}
@@ -1254,6 +1257,45 @@ func (r *Root) mountsContextSnapshot() string {
 	}
 	if len(entries) > n {
 		fmt.Fprintf(&b, "(%d further mounts not shown)\n", len(entries)-n)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// consigliereMaxSessions caps how many sessions sessionsContextSnapshot
+// lists individually — the same anthropicMaxTokens-style reasoning
+// every other capped list here already follows.
+const consigliereMaxSessions = 50
+
+// sessionsContextSnapshot describes the Sessions screen: every real
+// GNU screen/tmux/Zellij session's own name, backend, and attach
+// status. Included by default — a session name is a similar risk to
+// a Git Breach commit subject (already sent by default), not a
+// credential or network topology.
+func (r *Root) sessionsContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Sessions.\n")
+	if r.sessionsErr != nil {
+		fmt.Fprintf(&b, "Could not read the current session list: %v\n", r.sessionsErr)
+		return strings.TrimSpace(b.String())
+	}
+	sessions := r.sessionsList
+	fmt.Fprintf(&b, "%d sessions:\n", len(sessions))
+	n := len(sessions)
+	if n > consigliereMaxSessions {
+		n = consigliereMaxSessions
+	}
+	for _, s := range sessions[:n] {
+		status := "unknown"
+		switch s.Status {
+		case multiplex.StatusAttached:
+			status = "attached"
+		case multiplex.StatusDetached:
+			status = "detached"
+		}
+		fmt.Fprintf(&b, "%s (%s, %s)\n", s.Name, s.Backend, status)
+	}
+	if len(sessions) > n {
+		fmt.Fprintf(&b, "(%d further sessions not shown)\n", len(sessions)-n)
 	}
 	return strings.TrimSpace(b.String())
 }

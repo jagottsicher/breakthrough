@@ -413,6 +413,24 @@ func (r *Root) captureSessionsKey(event *tcell.EventKey) *tcell.EventKey {
 		r.closeSessions()
 		return nil
 	}
+	// Tab/Backtab reach the AI Consigliere sidebar — see
+	// startConsigliereChord's own doc comment in consigliere.go and
+	// captureLogAuditSelectionTableKey's own identical shape.
+	// sessionsTable is this screen's only real focus target.
+	if r.consigliereVisible {
+		if event.Key() == tcell.KeyTab {
+			r.app.SetFocus(r.consigliereInput)
+			return nil
+		}
+		if event.Key() == tcell.KeyBacktab {
+			if r.consigliereScrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliereHistory)
+			} else {
+				r.app.SetFocus(r.consigliereInput)
+			}
+			return nil
+		}
+	}
 	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
 		r.reloadSessions()
 		return nil
@@ -424,6 +442,12 @@ func (r *Root) captureSessionsKey(event *tcell.EventKey) *tcell.EventKey {
 			r.confirmCloseSession(s)
 			return nil
 		}
+	}
+	// "gC" reaches the AI Consigliere from here too — see
+	// startConsigliereChord's own doc comment in consigliere.go.
+	if event.Key() == tcell.KeyRune && event.Rune() == 'g' {
+		r.startConsigliereChord(nil)
+		return nil
 	}
 	return event
 }

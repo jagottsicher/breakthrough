@@ -10,6 +10,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/mounts"
+	"github.com/jagottsicher/breakthrough/internal/multiplex"
 )
 
 func TestPanelContextSnapshotIncludesDirectoryAndMarkedFiles(t *testing.T) {
@@ -411,5 +412,68 @@ func TestConsigliereContextSnapshotDispatchesToMounts(t *testing.T) {
 
 	if !strings.Contains(got, "Current view: Mounts.") {
 		t.Errorf("snapshot = %q, want the Mounts snapshot, not the generic panel one", got)
+	}
+}
+
+// TestSessionsContextSnapshotIncludesSessions pins the real session
+// list being included by default — a session name is a similar risk
+// to a Git Breach commit subject, already sent by default.
+func TestSessionsContextSnapshotIncludesSessions(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.sessionsList = []multiplex.Session{
+		{Name: "work", Backend: multiplex.BackendTmux, Status: multiplex.StatusAttached},
+	}
+
+	got := root.sessionsContextSnapshot()
+
+	for _, want := range []string{"Sessions", "1 sessions", "work", "tmux", "attached"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+// TestSessionsContextSnapshotReportsReadError pins the real error
+// case: neither backend installed is surfaced, not a silently empty
+// snapshot.
+func TestSessionsContextSnapshotReportsReadError(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.sessionsErr = errors.New("neither screen nor tmux nor zellij is installed")
+
+	got := root.sessionsContextSnapshot()
+
+	if !strings.Contains(got, "neither screen nor tmux nor zellij is installed") {
+		t.Errorf("snapshot = %q, want it to surface the read error", got)
+	}
+}
+
+// TestSessionsContextSnapshotCapsSessionList pins the same cap-list
+// discipline every other snapshot builder here already follows.
+func TestSessionsContextSnapshotCapsSessionList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	var sessions []multiplex.Session
+	for i := 0; i < consigliereMaxSessions+5; i++ {
+		sessions = append(sessions, multiplex.Session{Name: "distinct-session", Backend: multiplex.BackendScreen})
+	}
+	root.sessionsList = sessions
+
+	got := root.sessionsContextSnapshot()
+
+	if got := strings.Count(got, "distinct-session"); got != consigliereMaxSessions {
+		t.Errorf("snapshot mentions %d sessions, want exactly the cap of %d", got, consigliereMaxSessions)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToSessions pins the
+// dispatch switch's own Sessions case.
+func TestConsigliereContextSnapshotDispatchesToSessions(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = sessionsPage
+	root.sessionsList = []multiplex.Session{{Name: "work"}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: Sessions.") {
+		t.Errorf("snapshot = %q, want the Sessions snapshot, not the generic panel one", got)
 	}
 }
