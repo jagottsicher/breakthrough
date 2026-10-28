@@ -11,6 +11,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/mounts"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
+	"github.com/jagottsicher/breakthrough/internal/sshkeys"
 )
 
 func TestPanelContextSnapshotIncludesDirectoryAndMarkedFiles(t *testing.T) {
@@ -475,5 +476,68 @@ func TestConsigliereContextSnapshotDispatchesToSessions(t *testing.T) {
 
 	if !strings.Contains(got, "Current view: Sessions.") {
 		t.Errorf("snapshot = %q, want the Sessions snapshot, not the generic panel one", got)
+	}
+}
+
+// TestSSHKeysContextSnapshotIncludesKeyPairs pins the real key
+// inventory being included by default — never the key material
+// itself, which this screen's own design never reads back out in the
+// first place.
+func TestSSHKeysContextSnapshotIncludesKeyPairs(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.sshKeysPairs = []sshkeys.KeyPair{
+		{Name: "id_ed25519", Type: "ed25519", Bits: 256, Encrypted: true, AgentLoaded: true},
+	}
+
+	got := root.sshKeysContextSnapshot()
+
+	for _, want := range []string{"SSH Keys", "1 key pairs", "id_ed25519", "ed25519", "256-bit", "passphrase-encrypted", "loaded in agent"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+// TestSSHKeysContextSnapshotReportsReadError pins the real error
+// case: a failed scan is surfaced, not a silently empty snapshot.
+func TestSSHKeysContextSnapshotReportsReadError(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.sshKeysErr = errors.New("reading ~/.ssh: permission denied")
+
+	got := root.sshKeysContextSnapshot()
+
+	if !strings.Contains(got, "permission denied") {
+		t.Errorf("snapshot = %q, want it to surface the read error", got)
+	}
+}
+
+// TestSSHKeysContextSnapshotCapsKeyList pins the same cap-list
+// discipline every other snapshot builder here already follows.
+func TestSSHKeysContextSnapshotCapsKeyList(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	var pairs []sshkeys.KeyPair
+	for i := 0; i < consigliereMaxSSHKeys+5; i++ {
+		pairs = append(pairs, sshkeys.KeyPair{Name: "distinct-key"})
+	}
+	root.sshKeysPairs = pairs
+
+	got := root.sshKeysContextSnapshot()
+
+	if got := strings.Count(got, "distinct-key"); got != consigliereMaxSSHKeys {
+		t.Errorf("snapshot mentions %d key pairs, want exactly the cap of %d", got, consigliereMaxSSHKeys)
+	}
+}
+
+// TestConsigliereContextSnapshotDispatchesToSSHKeys pins the dispatch
+// switch's own SSH Keys case.
+func TestConsigliereContextSnapshotDispatchesToSSHKeys(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.activePage = sshKeysPage
+	root.sshKeysPairs = []sshkeys.KeyPair{{Name: "id_ed25519"}}
+
+	got := root.consigliereContextSnapshot()
+
+	if !strings.Contains(got, "Current view: SSH Keys.") {
+		t.Errorf("snapshot = %q, want the SSH Keys snapshot, not the generic panel one", got)
 	}
 }

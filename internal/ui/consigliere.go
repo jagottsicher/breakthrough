@@ -921,6 +921,8 @@ func (r *Root) consigliereContextSnapshot() string {
 		return r.mountsContextSnapshot()
 	case sessionsPage:
 		return r.sessionsContextSnapshot()
+	case sshKeysPage:
+		return r.sshKeysContextSnapshot()
 	default: // "" (the bare panel) and anything else "gC" might someday reach from
 		return r.panelContextSnapshot()
 	}
@@ -1296,6 +1298,52 @@ func (r *Root) sessionsContextSnapshot() string {
 	}
 	if len(sessions) > n {
 		fmt.Fprintf(&b, "(%d further sessions not shown)\n", len(sessions)-n)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// consigliereMaxSSHKeys caps how many key pairs
+// sshKeysContextSnapshot lists individually — the same
+// anthropicMaxTokens-style reasoning every other capped list here
+// already follows.
+const consigliereMaxSSHKeys = 50
+
+// sshKeysContextSnapshot describes the SSH Keys screen: every real
+// local key pair's own name, type/size, encryption/permission state,
+// and whether it's currently loaded in the agent — never the key
+// material itself, which this screen's own design never reads back
+// out in the first place (see sshkeys.KeyPair's own doc comment), so
+// there is nothing to gate behind Machiavelli Mode here.
+func (r *Root) sshKeysContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: SSH Keys.\n")
+	if r.sshKeysErr != nil {
+		fmt.Fprintf(&b, "Could not read the current key inventory: %v\n", r.sshKeysErr)
+		return strings.TrimSpace(b.String())
+	}
+	pairs := r.sshKeysPairs
+	fmt.Fprintf(&b, "%d key pairs:\n", len(pairs))
+	n := len(pairs)
+	if n > consigliereMaxSSHKeys {
+		n = consigliereMaxSSHKeys
+	}
+	for _, k := range pairs[:n] {
+		encrypted := "not encrypted"
+		if k.Encrypted {
+			encrypted = "passphrase-encrypted"
+		}
+		agent := "not loaded in agent"
+		if k.AgentLoaded {
+			agent = "loaded in agent"
+		}
+		permWarning := ""
+		if k.PrivatePermissiveWarning {
+			permWarning = " [permissive private key mode]"
+		}
+		fmt.Fprintf(&b, "%s: %s %d-bit, %s, %s%s\n", k.Name, k.Type, k.Bits, encrypted, agent, permWarning)
+	}
+	if len(pairs) > n {
+		fmt.Fprintf(&b, "(%d further key pairs not shown)\n", len(pairs)-n)
 	}
 	return strings.TrimSpace(b.String())
 }
