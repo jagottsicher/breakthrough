@@ -555,6 +555,15 @@ func (r *Root) openConfirm(message, confirmLabel string, action func()) {
 	_, _, screenWidth, screenHeight := r.GetRect()
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
+	// A real, reported bug: a caller passing a message wider than the
+	// screen (confirmDialogTitleBar is a single fixed-height row, so it
+	// can't wrap to compensate) left x deeply negative and width past
+	// the screen's own edge — tview drew that as corrupted, flickering
+	// stripes rather than a readable dialog. message is always meant to
+	// be a short question (see this function's own doc comment above),
+	// but clamping here is a one-line guard against the next caller
+	// that forgets, rather than trusting every call site to remember.
+	x, y, width, height = r.clampToScreen(x, y, width, height)
 
 	r.confirmDialogLayout.SetRect(x, y, width, height)
 	// r.confirmDialog's own rect is also set, to the same full area —

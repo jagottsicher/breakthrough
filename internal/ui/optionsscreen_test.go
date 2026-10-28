@@ -1066,6 +1066,13 @@ func TestResetConfirmationNamesTheAction(t *testing.T) {
 // reset everything", the two list items actually left.
 func TestConfirmDialogWidthCoversLongQuestion(t *testing.T) {
 	r, _ := newOptionsRoot(t)
+	// A real terminal size, not the tiny 15x10 default an unsized test
+	// Root otherwise has — openConfirm now clamps its own dialog to the
+	// screen (see its own doc comment on the colored-stripes bug that
+	// fixed), so this test needs a screen roomy enough that the
+	// question genuinely fits without clamping, the same as any actual
+	// terminal this dialog would ever appear on.
+	r.SetRect(0, 0, 100, 40)
 
 	r.resetAllOptions()
 
@@ -1076,6 +1083,26 @@ func TestConfirmDialogWidthCoversLongQuestion(t *testing.T) {
 			layoutWidth, headerWidth, r.confirmDialogTitleBar.GetText(true))
 	}
 	r.cancelConfirm()
+}
+
+// TestConfirmDialogClampsAMessageWiderThanTheScreen pins a real,
+// reported bug: a question longer than the screen itself used to
+// leave the dialog's own x deeply negative and its width past the
+// screen's edge entirely — tview rendered that as corrupted, flashing
+// stripes rather than a readable (even if truncated) dialog.
+func TestConfirmDialogClampsAMessageWiderThanTheScreen(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 40, 20) // deliberately narrower than the message below
+
+	r.openConfirm(strings.Repeat("word ", 40), "Yes", func() {})
+
+	x, _, width, _ := r.confirmDialogLayout.GetRect()
+	if x < 0 {
+		t.Errorf("confirmDialogLayout x = %d, want it clamped to never go negative", x)
+	}
+	if width > 40 {
+		t.Errorf("confirmDialogLayout width = %d, want it clamped to the 40-wide screen", width)
+	}
 }
 
 // TestResetLeavesTheOptionsScreenOpen pins a real bug found by driving

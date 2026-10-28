@@ -1495,11 +1495,7 @@ func optionCategories() []optionCategory {
 						r.settings.ConsigliereHardcoreMode = b
 						r.persistSetting("consigliere_hardcore_mode", strconv.FormatBool(b))
 					}),
-					"Turn on Machiavelli Mode?\n\nLog Holepunch/Action Log will then send "+
-						"actual matched log line content — potentially including real "+
-						"credentials or personal data — to the configured AI provider, not "+
-						"just filter metadata. This cannot be undone once a request has "+
-						"already gone out."),
+					"Turn on Machiavelli Mode? Log lines may now reach the AI provider."),
 			},
 		},
 	}
