@@ -358,6 +358,24 @@ func chordFamilies() []chordFamily {
 			// header's own "@" button (see buildHeaderSpans) is this
 			// same action's mouse equivalent.
 			{'c', "Connect…", func(r *Root) { r.openConnectionMenu() }},
+			// "gC" — capital, right after lowercase "gc" (Connect),
+			// the same lower/uppercase-sibling pairing plainCommands'
+			// own c/C, d/D, e/E, v/V pairs already use. Opens the AI
+			// Consigliere chat sidebar (see consigliere.go) — docked
+			// against the right edge, the same non-modal shape "I"
+			// (Details) uses, not its own chord family, and not
+			// coupled to "I" itself, per feature_ideas.txt's own
+			// explicit requirement that it reach every view, not just
+			// the ones Details happens to be available on. "gC"/"ga"
+			// were both still free candidates per that same note; "gC"
+			// was the user's own explicit final choice. Only ever
+			// reaches toggleConsigliere's own "open" branch from here:
+			// once open, the sidebar's own input field takes real
+			// keyboard focus, so "gC" typed again is just two
+			// characters of the next question, not a second chord —
+			// see toggleConsigliere's own doc comment for the real
+			// close paths (Escape, the close glyph, a click outside).
+			{'C', "AI Consigliere", func(r *Root) { r.toggleConsigliere() }},
 			// "Direct SSH shell…" ("go ssh"), right after Connect: the
 			// same "go to a whole further place" role, just landing in
 			// a real interactive remote shell (Suspend + exec ssh, see
@@ -586,16 +604,19 @@ func chordFamilies() []chordFamily {
 			// browsing breakthrough's own recorded actions, nothing about
 			// it changed but the label.
 			{'l', "Action Log", func(r *Root) { r.openActivityLog() }},
-			{'s', "Sessions", func(r *Root) { r.openSessions() }},
-			{'k', "SSH Keys", func(r *Root) { r.openSSHKeys() }},
 			// "Log Holepunch" — capital L, this family's own second
 			// capitalized member alongside "jE" (see its own doc comment
 			// above for that convention): reads *other* log files on
 			// disk (internal/logview), scoped to wherever the active
 			// panel currently is rather than a fixed destination — see
 			// logaudit.go's own doc comment on openLogAudit for why that
-			// makes it unlike every other member of this family.
+			// makes it unlike every other member of this family. Kept
+			// right next to "jl" (Action Log) rather than further down
+			// the list — the user's own explicit request, since the two
+			// are each other's closest sibling in purpose.
 			{'L', "Log Holepunch", func(r *Root) { r.openLogAudit() }},
+			{'s', "Sessions", func(r *Root) { r.openSessions() }},
+			{'k', "SSH Keys", func(r *Root) { r.openSSHKeys() }},
 			// "t" for... not an obvious mnemonic for "Undertow" on its
 			// own, but it was already "t" for "Transfers" before this
 			// screen's own display name picked up the same disruptive-
@@ -813,11 +834,10 @@ func (r *Root) acceptsPropertiesAwareKey() bool {
 // (r.pendingChord already cleared, e.g. by a resolveChord that ran
 // between two ticks), since there would be no family to look up.
 func (r *Root) refreshChordHintBar() {
-	family, ok := chordFamilyFor(r.pendingChord)
-	if !ok {
+	if r.pendingChord == 0 {
 		return
 	}
-	text, spans := r.chordHintBar(family)
+	text, spans := r.chordHintBar(r.pendingChordFamily)
 	r.buttonBarSpans = spans
 	r.buttonBar.SetText(text)
 }
@@ -828,6 +848,7 @@ func (r *Root) refreshChordHintBar() {
 // rather than a separate status-bar segment.
 func (r *Root) startChord(family chordFamily) {
 	r.pendingChord = family.prefix
+	r.pendingChordFamily = family
 	r.chordDeadline = time.Now().Add(r.chordTimeout())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -860,7 +881,7 @@ func (r *Root) startChord(family chordFamily) {
 // have done something and didn't is exactly the situation that
 // deserves an explanation instead of nothing at all.
 func (r *Root) resolveChord(event *tcell.EventKey) bool {
-	family, _ := chordFamilyFor(r.pendingChord)
+	family := r.pendingChordFamily
 	r.cancelChord() // clear the pending state and its own UI first, so
 	// whatever the member action does next (most open an overlay of
 	// their own) isn't fighting leftover chord chrome.
@@ -878,7 +899,19 @@ func (r *Root) resolveChord(event *tcell.EventKey) bool {
 			return true
 		}
 	}
-	r.showTransientError(fmt.Errorf("%c%c is not a command — see \"?\" for help", family.prefix, event.Rune()))
+	// showTransientErrorOverOverlay, not showTransientError: this chord
+	// may well have been started from inside a full-screen catalog (Log
+	// Audit, Git Breach, ... — see startConsigliereChord in
+	// consigliere.go), and the ordinary showTransientError's own
+	// showOverlay closes every other overlay first, which would
+	// silently discard that screen's own place in overlayStack rather
+	// than just covering it — a real, reported bug: dismissing this
+	// very notice afterwards then landed back on the bare panel instead
+	// of restoring the screen the chord was actually pressed from. The
+	// main panel's own chords (started only while activePage == "" —
+	// see acceptsPlainKeyCommand) have nothing open to preserve either
+	// way, so this is no different for them.
+	r.showTransientErrorOverOverlay(fmt.Errorf("%c%c is not a command — see \"?\" for help", family.prefix, event.Rune()))
 	return true
 }
 
@@ -891,6 +924,7 @@ func (r *Root) cancelChord() {
 		r.chordCancel = nil
 	}
 	r.pendingChord = 0
+	r.pendingChordFamily = chordFamily{}
 	r.chordDeadline = time.Time{}
 	r.refreshButtonBar()
 	r.refreshStatusBar()

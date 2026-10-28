@@ -355,6 +355,7 @@ func (r *Root) ToggleDetailsSidebarShortcut() {
 // the Details sidebar, or any currently open tool window (see
 // toolwindow.go) currently has real keyboard focus — moving to the next
 // one in that fixed order (panel, then Details if it's showing, then
+// the AI Consigliere sidebar's own history if it's showing, then
 // every open tool window in the order they were opened), wrapping back
 // to the panel after the last one. See cmd/breakthrough, which only
 // consumes Tab when this returns true. Everywhere else (Properties' own
@@ -433,6 +434,55 @@ func (r *Root) focusCycleStops() []tview.Primitive {
 	}
 	if r.detailsSidebarVisible {
 		stops = append(stops, r.detailsSidebar)
+	}
+	// consigliereVisible alone isn't enough here — unlike
+	// detailsSidebar/toolWindows above, Consigliere is also reachable
+	// from inside a full-screen modal (Log Audit, Git Breach, ... — see
+	// startConsigliereChord in consigliere.go), and this list is read
+	// globally, for every Tab press, regardless of what's currently
+	// open (see cmd/breakthrough's own SetInputCapture). Including it
+	// here unconditionally was a real, reported bug: the moment
+	// consigliereInput/consigliereHistory actually had focus, this
+	// list matched them before the host screen's own local Tab
+	// handling (Git Breach's own toggleGitBreachFocus, Log Audit's own
+	// per-field chain) ever got a chance to run, so Tab always landed
+	// back on r.panel.table next — hidden behind whatever modal was
+	// actually on screen, a dead end. r.activePage == "" is exactly
+	// the same precondition every other entry in this list already
+	// has (split/details/tool windows only ever coexist with plain
+	// browsing too), so Consigliere now only joins the global cycle in
+	// that same, already-correct case; each host screen reachable from
+	// is responsible for its own local entry point instead (see
+	// gitBreachFocusables/captureLogAuditSelectionTableKey/
+	// captureLogAuditViewerTableKey/captureLogAuditDetailKey), with
+	// handleConsigliereInputDone's own consigliereReturnFocus as the
+	// one, host-agnostic way back out.
+	if r.consigliereVisible && r.activePage == "" {
+		// consigliereInput first — Tab from the panel reaches the
+		// question field directly (answering the user's own explicit
+		// question: once focus has left it, e.g. via a mouse click
+		// back into the panel, or by tabbing on into
+		// consigliereHistory, this is the real keyboard path back in,
+		// not just closing and reopening the sidebar).
+		stops = append(stops, r.consigliereInput)
+		// consigliereHistory only joins the cycle once there's
+		// actually something in it to scroll to (the same
+		// maxOffset() > 0 condition consigliereScrollbar's own Draw
+		// already uses to decide whether to even render a thumb — see
+		// scrollbar.go) — per the user's own explicit request: a stop
+		// Tab can land on with nothing to scroll once there is would
+		// just be a dead end to tab past, not a real destination. Tab
+		// from the field itself still reaches consigliereHistory the
+		// same way it already did (handleConsigliereInputDone's own
+		// direct SetFocus, not this list — InputField's own
+		// SetDoneFunc claims Tab before CycleFocusShortcut could ever
+		// see it while consigliereInput itself has focus, same as
+		// every other SetDoneFunc field in this app), using the exact
+		// same condition to decide whether to land there or wrap
+		// straight back to the panel instead.
+		if r.consigliereScrollbar.maxOffset() > 0 {
+			stops = append(stops, r.consigliereHistory)
+		}
 	}
 	for _, tw := range r.toolWindows {
 		stops = append(stops, tw)

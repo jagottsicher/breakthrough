@@ -2,11 +2,13 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/gdamore/tcell/v2"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/apikey"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/mail"
 )
@@ -97,6 +99,30 @@ type optionSpec struct {
 	// tell them apart. Nil for every other option, the overwhelming
 	// majority, which keep the table's ordinary background.
 	labelBackground func(*Root) tcell.Color
+
+	// secretAction, when non-nil, marks this row as a credential entry
+	// point rather than an ordinary value: activateOptionRow calls it
+	// instead of toggling/cycling/editing in place, and this row is
+	// never routed through apply(string)/persistSetting at all —
+	// exactly the point, since persistSetting writes straight into the
+	// user's own plain-text config file, which is precisely what the
+	// encrypted tier (internal/apikey) exists to avoid for a secret
+	// typed in here. key still identifies the row (for the "offered
+	// more than once" check), but deliberately has no
+	// config.SettingDocs entry of its own — see
+	// TestOptionCatalogMatchesSettingDocs' own secretAction exemption.
+	secretAction func(*Root)
+
+	// pathCompletion marks a KindString row whose editOptionValue
+	// dialog should offer Tab path completion (see
+	// completeOptionsInputPath) instead of Tab's own default meaning
+	// there, "cancel without applying" — every other row keeps that
+	// default; this is scoped to just the rows that opt in, the same
+	// way secretAction only changes activateOptionRow's dispatch for
+	// the rows that set it. Also gates editOptionValue's own commit-
+	// time validation (see validateOptionsInputPath): a non-empty
+	// value must resolve to a real, existing regular file.
+	pathCompletion bool
 }
 
 // doc returns the config-package metadata for this setting — its kind,
@@ -122,6 +148,14 @@ type optionCategory struct {
 // call sites that need it.
 func withSection(section string, opt optionSpec) optionSpec {
 	opt.section = section
+	return opt
+}
+
+// withPathCompletion stamps opt with pathCompletion (see optionSpec's
+// own doc comment) — the same small wrapper shape withSection already
+// establishes for a field only a handful of options ever set.
+func withPathCompletion(opt optionSpec) optionSpec {
+	opt.pathCompletion = true
 	return opt
 }
 
@@ -1329,7 +1363,205 @@ func optionCategories() []optionCategory {
 			name:    "Label",
 			options: labelNameOptions(),
 		},
+		{
+			// The "gC" sidebar's own provider setup (see
+			// internal/consigliere and internal/apikey's three-tier
+			// doc comment). Provider/key-file are ordinary, persisted
+			// settings; "API key (encrypted)" deliberately isn't one
+			// — see optionSpec.secretAction's own doc comment on why
+			// a credential never goes through persistSetting.
+			name: "AI Consigliere",
+			options: []optionSpec{
+				{
+					key:   "consigliere_provider",
+					label: "Provider",
+					help: "Which AI backend the sidebar's own real provider call uses.\n\n" +
+						"Only selects which provider's own API key is looked up (see \"API key\" " +
+						"below) — see internal/consigliere's own doc comment for the current " +
+						"state of the actual provider call itself.",
+					value: func(r *Root) string { return r.settings.ConsigliereProvider },
+					apply: func(r *Root, v string) {
+						r.settings.ConsigliereProvider = v
+						r.persistSetting("consigliere_provider", v)
+						// The Model/Effort rows' own choices are
+						// cached per provider (see consiglieremodels.go)
+						// — switching providers needs its own fetch,
+						// not whatever the previous one already
+						// cached.
+						r.refreshConsigliereModelCache()
+					},
+					choices: func(r *Root) []optionChoice {
+						return []optionChoice{
+							{value: "anthropic", label: "Anthropic (Claude)"},
+							{value: "openai", label: "OpenAI (ChatGPT)"},
+							{value: "deepseek", label: "DeepSeek"},
+						}
+					},
+				},
+				{
+					key:   "consigliere_model",
+					label: "Model",
+					help: "Overrides the selected provider's own built-in default model ID.\n\n" +
+						"The list is fetched live from the provider's own API — once a key is " +
+						"available (see the \"API key\" rows below) — the first time this " +
+						"category is opened or Provider changes, then cached for the rest of " +
+						"this run. \"(default: ...)\" is always offered too, even before that " +
+						"fetch finishes or if it fails.",
+					value: func(r *Root) string { return r.settings.ConsigliereModel },
+					apply: func(r *Root, v string) {
+						r.settings.ConsigliereModel = v
+						r.persistSetting("consigliere_model", v)
+					},
+					choices: func(r *Root) []optionChoice { return r.consigliereModelChoices() },
+				},
+				{
+					key:   "consigliere_effort",
+					label: "Effort",
+					help: "Overrides the selected model's own default reasoning effort — " +
+						"\"effort\" for Anthropic, \"reasoning_effort\" for OpenAI/DeepSeek.\n\n" +
+						"For Anthropic and DeepSeek, the available levels come from the same " +
+						"live model list as \"Model\" above, specific to whichever model is " +
+						"currently selected. OpenAI's own API never reports this per model, so " +
+						"its full documented set is always offered there regardless; an " +
+						"unsupported level for a specific OpenAI model is rejected by the " +
+						"request itself.",
+					value: func(r *Root) string { return r.settings.ConsigliereEffort },
+					apply: func(r *Root, v string) {
+						r.settings.ConsigliereEffort = v
+						r.persistSetting("consigliere_effort", v)
+					},
+					choices: func(r *Root) []optionChoice { return r.consigliereEffortChoices() },
+				},
+				withPathCompletion(stringOption("consigliere_api_key_file", "API key file (plain text)",
+					"An optional path to a plain-text file holding the selected provider's "+
+						"API key — the deliberately unencrypted, opt-in tier: protected only by "+
+						"this file's own permissions, nothing more. \"\" (the default) means this "+
+						"tier isn't configured; a well-known environment variable "+
+						"(ANTHROPIC_API_KEY/OPENAI_API_KEY/DEEPSEEK_API_KEY, matching the "+
+						"provider above) always takes priority over it, and \"API key "+
+						"(encrypted)\" below is the fallback beneath it.\n\n"+
+						"Tab completes a path while typing. A non-empty value must resolve to "+
+						"a real, existing file — stored as an absolute path regardless of what "+
+						"was typed, so it keeps meaning the same file on a later run even if "+
+						"the panel is somewhere else by then.",
+					func(r *Root) string { return r.settings.ConsigliereAPIKeyFile },
+					func(r *Root, v string) {
+						r.settings.ConsigliereAPIKeyFile = v
+						r.persistSetting("consigliere_api_key_file", v)
+					},
+				)),
+				{
+					key:   "consigliere_api_key_secret",
+					label: "API key (encrypted)",
+					help: "Type the selected provider's API key here to store it encrypted in " +
+						"breakthrough's own config directory, under a passphrase you choose — " +
+						"the lowest-priority tier, only used when neither the environment " +
+						"variable nor \"API key file\" above supplies one.\n\n" +
+						"The passphrase is asked for once per run, then kept in memory only " +
+						"(never written to disk) for the rest of this session — the same " +
+						"ssh-agent/gpg-agent convention. A wrong passphrase is rejected " +
+						"immediately rather than failing later. There is no way to read a " +
+						"stored key back out through this screen — only replace it.",
+					value:        func(r *Root) string { return r.consigliereAPIKeyStatus() },
+					secretAction: func(r *Root) { r.openAPIKeyDialog(r.settings.ConsigliereProvider) },
+				},
+			},
+		},
 	}
+}
+
+// consigliereEnvVarForProvider is the well-known environment variable
+// each provider's own official SDK/CLI already reads — the first,
+// highest-priority tier of internal/apikey's chain, never itself a
+// user-configurable setting (see optionCategories' own "AI
+// Consigliere" category, which only lets the provider and the
+// plain-text-file tier be chosen).
+func consigliereEnvVarForProvider(provider string) string {
+	switch provider {
+	case "anthropic":
+		return "ANTHROPIC_API_KEY"
+	case "openai":
+		return "OPENAI_API_KEY"
+	case "deepseek":
+		return "DEEPSEEK_API_KEY"
+	default:
+		return ""
+	}
+}
+
+// consigliereAPIKeyStatus is the "API key (encrypted)" row's own live
+// value: which tier (see apikey.Tier) currently supplies the selected
+// provider's key, or that none does — never the key itself.
+func (r *Root) consigliereAPIKeyStatus() string {
+	provider := r.settings.ConsigliereProvider
+	key, tier, err := apikey.Resolve(
+		consigliereEnvVarForProvider(provider),
+		r.settings.ConsigliereAPIKeyFile,
+		provider,
+		r.apiKeySession,
+	)
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	switch tier {
+	case apikey.TierEnv:
+		return "set via " + consigliereEnvVarForProvider(provider)
+	case apikey.TierFile:
+		return "set via file" + consigliereFilePermissionWarning(r.settings.ConsigliereAPIKeyFile)
+	case apikey.TierEncrypted:
+		return "stored (encrypted)" + consigliereKeySuffixHint(key)
+	default:
+		// TierNone doesn't by itself mean nothing is configured: the
+		// encrypted tier may hold an entry that's simply still locked
+		// this run (see errConsigliereLocked's own doc comment) —
+		// "not set" would wrongly suggest the user has to type the key
+		// in again, when really just the passphrase is missing.
+		if r.apiKeySession != nil && r.apiKeySession.HasProvider(provider) {
+			return "stored, locked — enter the passphrase to use it"
+		}
+		return "not set"
+	}
+}
+
+// consigliereFilePermissionWarning reports, for the status row only,
+// when the plain-text key file's own permissions are looser than
+// 0600 — deliberately a report, not an enforced rule: the encrypted
+// store *enforces* 0600 via Store.save (there's no legitimate reason
+// for it to ever be anything else), but this is the deliberately
+// unencrypted, opt-in tier — its whole point is "protected only by
+// this file's own permissions, nothing more" (see the row's own help
+// text), so refusing to use a looser file outright would be enforcing
+// a security property on a tier whose entire premise is that the
+// user is already managing that themselves. Surfaced here instead,
+// where the user is already looking at this tier's own live status.
+// "" (no warning) covers a missing/unreadable file too — Resolve's
+// own error, surfaced elsewhere, already covers that case; this
+// doesn't duplicate it.
+func consigliereFilePermissionWarning(path string) string {
+	if path == "" {
+		return ""
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		return fmt.Sprintf(" (⚠ permissions %04o, want 0600)", mode)
+	}
+	return ""
+}
+
+// consigliereKeySuffixHint renders a last-resort, non-reversible
+// glance-check against the stored key — never the key itself — the
+// same reasoning a credit card's own "ending in 1234" display
+// follows: enough to tell two configured keys apart, or confirm
+// pasting the right one, without the status row ever showing anything
+// that'd be a real problem to glance over someone's shoulder at.
+func consigliereKeySuffixHint(key string) string {
+	if len(key) < 4 {
+		return ""
+	}
+	return " (…" + key[len(key)-4:] + ")"
 }
 
 // labelNameOptions builds the Options screen's own nine "label_N_name"
@@ -1603,6 +1835,14 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.Label8Name, true
 	case "label_9_name":
 		return s.Label9Name, true
+	case "consigliere_provider":
+		return s.ConsigliereProvider, true
+	case "consigliere_api_key_file":
+		return s.ConsigliereAPIKeyFile, true
+	case "consigliere_model":
+		return s.ConsigliereModel, true
+	case "consigliere_effort":
+		return s.ConsigliereEffort, true
 	}
 	return "", false
 }

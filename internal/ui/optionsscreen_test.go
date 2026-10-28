@@ -83,6 +83,16 @@ func TestOptionCatalogMatchesSettingDocs(t *testing.T) {
 	offered := map[string]bool{}
 	for _, cat := range optionCategories() {
 		for _, opt := range cat.options {
+			if opt.secretAction != nil {
+				// Deliberately not config.SettingDocs-backed — see
+				// optionSpec.secretAction's own doc comment on why a
+				// credential never goes through persistSetting at all.
+				if offered[opt.key] {
+					t.Errorf("%q is offered in more than one category", opt.key)
+				}
+				offered[opt.key] = true
+				continue
+			}
 			if _, ok := opt.doc(); !ok {
 				t.Errorf("category %q offers %q, which config.SettingDocs doesn't recognize", cat.name, opt.key)
 			}
@@ -112,6 +122,11 @@ func TestSettingValueByKeyCoversEverySetting(t *testing.T) {
 	settings := config.DefaultSettings()
 	for _, cat := range optionCategories() {
 		for _, opt := range cat.options {
+			if opt.secretAction != nil {
+				// Never persisted via config.Settings at all — see
+				// optionSpec.secretAction's own doc comment.
+				continue
+			}
 			if _, ok := settingValueByKey(settings, opt.key); !ok {
 				t.Errorf("settingValueByKey has no case for %q", opt.key)
 			}

@@ -697,6 +697,34 @@ func SettingDocs() []SettingDoc {
 			Summary:     `Display name for color label 9 (the "zl" chord).`,
 			Implemented: true,
 		},
+		{
+			Key:         "consigliere_provider",
+			Default:     d.ConsigliereProvider,
+			Kind:        KindEnum,
+			Summary:     `Which AI backend the "gC" sidebar's own real provider call uses: "anthropic", "openai", or "deepseek".`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_api_key_file",
+			Default:     d.ConsigliereAPIKeyFile,
+			Kind:        KindString,
+			Summary:     "Optional path to a plain-text file holding the selected provider's API key (the unencrypted, opt-in tier — see internal/apikey).",
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_model",
+			Default:     d.ConsigliereModel,
+			Kind:        KindString,
+			Summary:     `Overrides the selected provider's own built-in default model ID. "" means use that default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_effort",
+			Default:     d.ConsigliereEffort,
+			Kind:        KindString,
+			Summary:     `Overrides the selected model's own default reasoning effort. "" omits it, the model's own documented default.`,
+			Implemented: true,
+		},
 	}
 }
 

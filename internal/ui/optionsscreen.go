@@ -148,6 +148,7 @@ func (r *Root) newOptionsScreen() {
 	r.optionsCategories.SetChangedFunc(func(index int, _, _ string, _ rune) {
 		r.optionsCategory = index
 		r.renderOptions()
+		r.refreshConsigliereModelCacheIfSelected()
 	})
 
 	r.optionsTable = tview.NewTable()
@@ -275,6 +276,15 @@ func (r *Root) newOptionsButtons() *tview.Flex {
 		// an action, not a value. The whole row of buttons is always
 		// visible regardless of category, the same as the three above.
 		{&r.optionsRemoveOrphanLabelsBtn, "Remove orphaned labels", r.startOrphanLabelScan},
+		// Same "always visible, acts on one specific category"
+		// reasoning as "New color scheme" above — the AI Consigliere's
+		// own system prompt is a whole file (see
+		// config.UserConsigliereSystemPromptFile), not a single-line
+		// setting editOptionValue's own input field could edit, so it
+		// gets its own editor-opening action here instead of a row in
+		// the settings table.
+		{&r.optionsEditSystemPromptBtn, "Edit system prompt", r.editConsigliereSystemPrompt},
+		{&r.optionsResetSystemPromptBtn, "Reset system prompt", r.resetConsigliereSystemPrompt},
 	}
 
 	row := tview.NewFlex().SetDirection(tview.FlexColumn)
@@ -301,6 +311,8 @@ func (r *Root) optionsButtonList() []*tview.Button {
 		r.optionsEditFileBtn,
 		r.optionsNewSchemeBtn,
 		r.optionsRemoveOrphanLabelsBtn,
+		r.optionsEditSystemPromptBtn,
+		r.optionsResetSystemPromptBtn,
 	}
 }
 
@@ -420,6 +432,23 @@ func (r *Root) openOptions() {
 	r.showOverlayWithRestore(optionsPage, r.optionsLayout, func() {
 		r.app.SetFocus(r.optionsCategories)
 	})
+	r.refreshConsigliereModelCacheIfSelected()
+}
+
+// refreshConsigliereModelCacheIfSelected triggers
+// refreshConsigliereModelCache only when the "AI Consigliere" category
+// is the one actually showing right now — called from openOptions
+// (covers opening Options already positioned there, e.g. from a
+// previous session in this same run) and from
+// renderOptionCategories' own SetChangedFunc (covers navigating to it
+// after Options is already open). Never unconditional: fetching a
+// provider's model list because someone opened Options to change the
+// color scheme would be a real, surprising network call for no reason
+// the user could see.
+func (r *Root) refreshConsigliereModelCacheIfSelected() {
+	if cat, ok := r.currentOptionCategory(); ok && cat.name == "AI Consigliere" {
+		r.refreshConsigliereModelCache()
+	}
 }
 
 // closeOptions hides the Options screen. Nothing to save or discard —
@@ -445,6 +474,7 @@ func (r *Root) renderOptionCategories() {
 	r.optionsCategories.SetChangedFunc(func(index int, _, _ string, _ rune) {
 		r.optionsCategory = index
 		r.renderOptions()
+		r.refreshConsigliereModelCacheIfSelected()
 	})
 }
 
@@ -749,6 +779,8 @@ func (r *Root) activateOptionRow(row int) {
 	doc, _ := opt.doc()
 
 	switch {
+	case opt.secretAction != nil:
+		opt.secretAction(r)
 	case doc.Kind == config.KindBool:
 		// Toggled in place — no dialog for a two-state value, since
 		// picking from a list of exactly "Yes" and "No" is pure
@@ -815,8 +847,27 @@ func (r *Root) editOptionValue(opt optionSpec) {
 	}
 
 	r.optionsInput.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyTab && opt.pathCompletion {
+			// Tab's own usual meaning in this dialog — cancel without
+			// applying, same as Escape — is suspended just for the
+			// rows that opt in (see optionSpec.pathCompletion's own
+			// doc comment); every other row keeps it.
+			r.completeOptionsInputPath()
+			return
+		}
 		if key == tcell.KeyEnter {
-			if value := strings.TrimSpace(r.optionsInput.GetText()); value != "" {
+			value := strings.TrimSpace(r.optionsInput.GetText())
+			if opt.pathCompletion {
+				resolved, ok := r.validateOptionsInputPath(value)
+				if !ok {
+					return // the rejection's own error is already shown; stay open to fix it
+				}
+				opt.apply(r, resolved)
+				r.hideOverlay()
+				r.renderOptions()
+				return
+			}
+			if value != "" {
 				opt.apply(r, value)
 			}
 		}
@@ -833,6 +884,98 @@ func (r *Root) editOptionValue(opt optionSpec) {
 	r.pushOverlay(optionsInputPage, r.optionsInput, nil)
 }
 
+// validateOptionsInputPath validates value for a pathCompletion row's
+// own commit: "" is always valid — it's how the file tier gets
+// unset — anything else must resolve (via r.panel.resolvePath, so "~"
+// and a path relative to the panel's own current directory both work
+// the same way typing them into the panel's own path bar would) to a
+// real, existing regular file. Returns the resolved, absolute path to
+// persist on success, deliberately never the raw typed text: a
+// relative value would otherwise keep meaning "whatever's at this
+// name relative to wherever the panel happens to be" rather than one
+// fixed file, and silently resolve to something different the next
+// time the panel's own directory differs.
+//
+// On failure, shows the rejection itself (layered on top via
+// showTransientErrorOverOverlay, not showError — see that function's
+// own doc comment on why: showError's plain showOverlay would close
+// this dialog, and Options underneath it, the exact overlay-stack bug
+// already fixed once for the encrypted-key dialog) and returns
+// ok=false, leaving this one open so the user can fix it rather than
+// having a wrong value silently closed over.
+func (r *Root) validateOptionsInputPath(value string) (resolved string, ok bool) {
+	if value == "" {
+		return "", true
+	}
+	resolved = r.panel.resolvePath(value)
+	info, err := os.Stat(resolved)
+	switch {
+	case err != nil:
+		r.showTransientErrorOverOverlay(fmt.Errorf("%s: %w", resolved, err))
+		return "", false
+	case info.IsDir():
+		r.showTransientErrorOverOverlay(fmt.Errorf("%s is a directory, not a file", resolved))
+		return "", false
+	case !info.Mode().IsRegular():
+		r.showTransientErrorOverOverlay(fmt.Errorf("%s is not a regular file", resolved))
+		return "", false
+	}
+	return resolved, true
+}
+
+// completeOptionsInputPath is Tab's own action for a pathCompletion
+// row's edit dialog — Panel.completions' own single-field shape (no
+// row/col cursor math, unlike completeBashLine's multi-line case)
+// needs nothing more than the field's current text.
+func (r *Root) completeOptionsInputPath() {
+	word := r.optionsInput.GetText()
+	matches := r.panel.completions(word)
+	if len(matches) == 0 {
+		return
+	}
+	completed := longestCommonPrefix(matches)
+	if completed != word {
+		r.optionsInput.SetText(completed)
+		return
+	}
+	if len(matches) == 1 {
+		return // the one match is already exactly what's typed
+	}
+	r.openOptionsInputCompletionPicker(matches)
+}
+
+// openOptionsInputCompletionPicker is completeOptionsInputPath's own
+// ambiguous-match case — openCompletionPicker's identical shape for
+// r.optionsInput instead of r.bashLine, anchored under the input
+// field rather than bashLine's own cursor position. A plain
+// pushOverlay, not pushOverlayReturningFocusTo: that one exists for
+// the empty-stack case (see its own doc comment), which doesn't apply
+// here — closing the picker reveals r.optionsInput's own still-open
+// pushOverlay frame underneath, whose default restore already
+// refocuses it without any extra help.
+func (r *Root) openOptionsInputCompletionPicker(matches []string) {
+	r.picker.Clear()
+	for _, m := range matches {
+		match := m
+		r.picker.AddItem(completionBasename(match), "", 0, func() {
+			r.hideOverlay()
+			r.optionsInput.SetText(match)
+		})
+	}
+	r.picker.SetDoneFunc(func() {
+		r.hideOverlay()
+	})
+
+	width, height := listSize(r.picker)
+	inputX, inputY, _, inputHeight := r.optionsInput.GetRect()
+	x, y, width, height := r.clampToScreen(inputX, inputY+inputHeight, width, height)
+	r.picker.SetRect(x, y, width, height)
+	r.picker.SetCurrentItem(0)
+	r.picker.SetOffset(0, 0)
+
+	r.pushOverlay(pickerPage, r.picker, nil)
+}
+
 // showOptionInfo opens the small centered window explaining one setting
 // — the info button's own action.
 //
@@ -846,9 +989,17 @@ func (r *Root) showOptionInfo(opt optionSpec) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[::b]%s[::-]\n\n", opt.label)
 	b.WriteString(opt.help)
-	fmt.Fprintf(&b, "\n\n[::d]Config key:[::-] %s", opt.key)
-	fmt.Fprintf(&b, "\n[::d]Default:[::-] %s", doc.Default)
-	fmt.Fprintf(&b, "\n[::d]Currently:[::-] %s (%s)", opt.value(r), r.settingOriginLabel(opt.key))
+	if opt.secretAction != nil {
+		// Never stored in the config file at all (see optionSpec's own
+		// doc comment on secretAction) — "Config key"/"Default" would
+		// both be misleading here, so this just shows where the live
+		// value currently comes from.
+		fmt.Fprintf(&b, "\n\n[::d]Currently:[::-] %s", opt.value(r))
+	} else {
+		fmt.Fprintf(&b, "\n\n[::d]Config key:[::-] %s", opt.key)
+		fmt.Fprintf(&b, "\n[::d]Default:[::-] %s", doc.Default)
+		fmt.Fprintf(&b, "\n[::d]Currently:[::-] %s (%s)", opt.value(r), r.settingOriginLabel(opt.key))
+	}
 	b.WriteString("\n\n[::d]Escape or a click outside closes this.[::-]")
 
 	r.optionsInfo.SetText(b.String())
@@ -985,6 +1136,11 @@ func (r *Root) resetAllOptions() {
 // change here.
 func (r *Root) resetOptions(options []optionSpec) {
 	for _, opt := range options {
+		if opt.secretAction != nil {
+			// Not config-backed at all (see optionSpec.secretAction's
+			// own doc comment) — nothing for "reset" to do.
+			continue
+		}
 		value := r.resetSetting(opt.key)
 		// Without persistence: the value being applied is precisely the
 		// one that resetting produced, and writing it back would

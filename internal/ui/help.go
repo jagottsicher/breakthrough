@@ -98,7 +98,10 @@ var helpText = strings.TrimLeft(`
                 gm Flareup · ge Email (launches neomutt/aerc/himalaya/
                 mail/mailx, whichever is installed — configurable
                 under Options) ·
-                g: Bash prompt (same as plain ":")
+                g: Bash prompt (same as plain ":") · gC AI Consigliere
+                (chat advisor overlay, text tips only, reachable from
+                any view — currently a placeholder reply, no real
+                provider wired up yet)
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
                 mw Open with… · mt tail -f · ma Select all · mA Deselect all ·
@@ -936,9 +939,11 @@ var helpText = strings.TrimLeft(`
                      with the original, unparsed line, but only when
                      it actually differs from the extracted message
     r               Re-read the same files
-    f               Toggle follow: re-reads the same files every two
-                     seconds and keeps rendering, the cursor following
-                     along if it was already on the last row
+    f               Toggle follow (the same idea as "tail -f", merged
+                     live across every selected file at once): re-reads
+                     the same files every two seconds and keeps
+                     rendering, the cursor following along if it was
+                     already on the last row
     s               Statistics: counts by level and by source (top 10),
                      over whatever currently matches the three filters
     Esc             Back to file selection

@@ -105,7 +105,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zi` Nerd Font icons (needs a terminal font that actually has them — off by default) · `zl` label (opens a quick picker to set/clear one of 9 colors on the focused row, or every checked row at once — the one member here that mutates state rather than just toggling a display) · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, del org · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Action Log](#action-log-screen-jl) screen · `jL` [Log Audit](#log-audit-screen-jl) screen (reads other log files in the current directory) |
+| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, del org · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Action Log](#action-log-screen-jl) screen · `jL` [Log Holepunch](#log-holepunch-screen-jl) screen (reads other log files in the current directory) |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -2528,18 +2528,20 @@ breakthrough never rotates or truncates it; that is `logrotate`'s job.
 
 ### Action Log screen ("jl")
 
-A read-only, live view of the real log file above — no second, parallel
-recording, just `activitylog.ParseLine` reading the same file back.
-Named "Action Log" (not "Activity Log") to avoid reading as a sibling
-of the Log Audit screen (`jL`) right next to it in the same chord
-family — it is breakthrough's own recorded actions, nothing about the
-screen itself changed.
+Shows only breakthrough's own recorded actions — never other log files
+on disk; for those, see [Log Holepunch](#log-holepunch-screen-jl)
+(`jL`) instead. A read-only, live view of the real log file above — no
+second, parallel recording, just `activitylog.ParseLine` reading the
+same file back. Named "Action Log" (not "Activity Log") so it doesn't
+read as a sibling of that other screen, right next to it in the same
+chord family — nothing about the screen itself changed, only the
+label.
 
 | Key | Action |
 |---|---|
 | `jl` | Open the Action Log screen |
 | Keyword field | Filter by a case-insensitive substring of the message |
-| Time field | Filter by when it happened — the exact same `before`/`after`/`between ... and ...`/relative ("last 7 days") expressions the panel's own Modified-time filter already accepts |
+| Time field | Filter by when it happened — a typed expression: `before <moment>`, `after <moment>`, or `between <moment> and <moment>`. A moment is an absolute date/time, or a relative one such as `7 days`, `2 hours ago`, or `30 minutes`; typing a relative moment on its own (`last 7 days`) is shorthand for "within that span". Exact same syntax as the panel's own Modified-time filter — see [Filtering](#filtering) for the full unit list. |
 | `Tab` / `Shift+Tab` | Move between Keyword, Time, and the list |
 | `r` | Re-read the real log file (while the list has focus) |
 | `Escape` | Close the screen, from any of the three |
@@ -2549,7 +2551,7 @@ own filter dropdown already has. Entries show newest first — the file
 itself is written oldest-first, but a log is usually read the other way
 around, the same "tail, not head" reasoning as a live log.
 
-### Log Audit screen ("jL")
+### Log Holepunch screen ("jL")
 
 Reads *other* log files on disk — unlike every other member of the `j`
 chord family, `jL` has no fixed destination: it acts on whichever
@@ -2563,15 +2565,15 @@ directory's own files (one level, not recursive) and groups them into
 logrotate families (`access.log`, `access.log.1`, `access.log.2.gz`
 collapse into one row). The "✕" glyph in the title bar's own top-right
 corner is a mouse-clickable equivalent to `Escape` — both this screen
-and the audit view below have one.
+and the Log Holepunch view below have one.
 
 | Key | Action |
 |---|---|
-| `Enter` | Open the Log Audit view for the family under the cursor |
+| `Enter` | Open the Log Holepunch view for the family under the cursor |
 | `r` | Re-scan the directory |
 | `Escape` | Close |
 
-Step 2 — the audit view: every selected file's own lines, merged into
+Step 2 — the Log Holepunch view: every selected file's own lines, merged into
 one chronological stream (`internal/logview.Merge`). Each file's
 format is detected automatically from a sample of its own lines
 (`internal/logview.Detect`) — JSON Lines (including Docker's
@@ -2601,14 +2603,14 @@ updating live regardless.
 | Key | Action |
 |---|---|
 | Filter field | Case-insensitive substring over Source and Message, narrowing the list live and highlighting every match |
-| Time field | Same `before`/`after`/`between ... and ...`/relative expressions the Action Log's own Time field already accepts |
+| Time field | Filter by when the entry happened — `before <moment>`, `after <moment>`, or `between <moment> and <moment>`, where a moment is an absolute date/time or a relative one such as `7 days`, `2 hours ago`, or `30 minutes`; a relative moment on its own (`last 7 days`) is shorthand for "within that span". Exact same syntax as the Action Log's own Time field (and the panel's own Modified-time filter — see [Filtering](#filtering)). |
 | Level field (`>=`) | A *minimum* severity ("warn" shows WARN and everything worse — ERROR, FATAL — not just exact matches); an entry with no recognized level never passes this filter, even "trace" |
 | `Tab` / `Shift+Tab` | Move between Filter, Time, Level, the timeline, and the list |
 | `e` | Jump to the next error (wraps around) |
 | `w` | Jump to the next warning (wraps around) |
 | `Enter` | Show this entry's full text, with the current filter still highlighted, plus a Raw section with the original, unparsed line — shown only when it actually differs from the extracted message |
 | `r` | Re-read the same files |
-| `f` | Toggle follow: re-reads the same files every two seconds and re-renders; the cursor follows along if it was already on the last row |
+| `f` | Toggle follow — the same idea as `tail -f`, but merged live across every selected file at once: re-reads the same files every two seconds and re-renders; the cursor follows along if it was already on the last row |
 | `s` | Statistics: counts by level and by source (top 10), over whatever currently matches the three filters |
 | `Escape` | Back to file selection |
 

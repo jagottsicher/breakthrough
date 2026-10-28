@@ -14,9 +14,12 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/apikey"
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/consigliere"
+	"github.com/jagottsicher/breakthrough/internal/docsearch"
 	"github.com/jagottsicher/breakthrough/internal/easteregg"
 	"github.com/jagottsicher/breakthrough/internal/filelabels"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
@@ -71,6 +74,9 @@ const (
 	// (newBgJobCancelDialog) — shared between Rsync and Compress/
 	// Extract, see its own package doc comment.
 	bgJobCancelPage = "bg-job-cancel"
+	// apiKeyDialogPage's own dialog is built in apikeydialog.go — the
+	// Options screen's own "AI Consigliere" category.
+	apiKeyDialogPage = "api-key-dialog"
 )
 
 // overlayFrame is one entry in Root.overlayStack (see showOverlay/
@@ -284,6 +290,51 @@ type Root struct {
 	// applyWithoutPersisting, the only thing that sets it.
 	suppressPersist bool
 
+	// apiKeySession is the AI Consigliere's own encrypted API-key tier
+	// (see internal/apikey and apikeydialog.go) — nil when no user
+	// config directory is available at all (config.UserDir() == ""),
+	// in which case that tier is simply unavailable rather than an
+	// error (see NewRoot).
+	apiKeySession *apikey.Session
+
+	// docSearchIndex is the AI Consigliere's own lexical search over
+	// breakthrough's embedded documentation (see internal/docsearch
+	// and consigliereDocSnapshot) — nil only if docsearch.NewDefaultIndex
+	// itself failed, which would mean the embed is broken (a build-time
+	// problem, not a runtime one); consigliereDocSnapshot treats that
+	// the same as "nothing matched," contributing nothing rather than
+	// failing the question.
+	docSearchIndex *docsearch.Index
+
+	// consigliereModelCache/consigliereModelFetchInFlight/
+	// consigliereModelFetchErr back the Options screen's own "Model"/
+	// "Effort" rows (see consiglieremodels.go) — keyed by provider
+	// name, populated only by refreshConsigliereModelCache, never by
+	// the rows' own choices functions (see that function's own doc
+	// comment on why a render-path network call would be wrong).
+	consigliereModelCache         map[string][]consigliere.ModelInfo
+	consigliereModelFetchInFlight map[string]bool
+	consigliereModelFetchErr      map[string]error
+
+	// apiKeyDialog* is the "API key (encrypted)" row's own dialog (see
+	// apikeydialog.go) — a fixed widget set, built once, whose actual
+	// fields are rebuilt per apiKeyDialogStep (passphrase vs. key),
+	// the same "fixed shell, variable fields" split
+	// cloudRemoteDialogForm already uses.
+	apiKeyDialogProvider        string
+	apiKeyDialogStep            apiKeyDialogStep
+	apiKeyDialogForm            *tview.Form
+	apiKeyDialogPassphraseField *tview.InputField
+	apiKeyDialogConfirmField    *tview.InputField
+	apiKeyDialogKeyField        *tview.InputField
+	apiKeyDialogStatus          *tview.TextView
+	apiKeyDialogCancelBtn       *tview.Button
+	apiKeyDialogOKBtn           *tview.Button
+	apiKeyDialogButtons         *tview.Flex
+	apiKeyDialogTitleBar        *tview.TextView
+	apiKeyDialogContent         *tview.Flex
+	apiKeyDialogLayout          *tview.Flex
+
 	// The Options screen (see optionsscreen.go) — a full-screen editor
 	// with the categories down the left (optionsCategories) and the
 	// selected one's settings on the right (optionsTable), the action
@@ -307,6 +358,8 @@ type Root struct {
 	optionsEditFileBtn           *tview.Button
 	optionsNewSchemeBtn          *tview.Button
 	optionsRemoveOrphanLabelsBtn *tview.Button
+	optionsEditSystemPromptBtn   *tview.Button
+	optionsResetSystemPromptBtn  *tview.Button
 	optionsCategory              int
 	optionsInfo                  *tview.TextView
 	optionsInput                 *tview.InputField
@@ -1772,6 +1825,82 @@ type Root struct {
 	helpTitleBar *tview.TextView
 	helpLayout   *tview.Flex
 
+	// consigliereHistory/consigliereScrollbar/consigliereTitleBar/
+	// consigliereInput/consigliereLayout are the AI Consigliere's own
+	// chat sidebar ("gC", see keymap.go and internal/consigliere) —
+	// docked against the right edge, the same non-modal shape Details
+	// (detailsSidebar/detailsSidebarLayout above) uses, plus
+	// consigliereInput as a second, fixed-height row beneath the
+	// history for the next question. consigliereMessages/
+	// consigliereCancel are this session's own chat state — see
+	// consigliere.go. The Provider itself is never cached on Root —
+	// buildConsigliereProvider constructs one fresh per question (see
+	// its own doc comment).
+	consigliereHistory   *tview.TextView
+	consigliereScrollbar *verticalScrollbar
+	consigliereTitleBar  *tview.TextView
+	consigliereInput     *tview.InputField
+	consigliereLayout    *tview.Flex
+	consigliereVisible   bool // mirrors detailsSidebarVisible — see showConsigliere/hideConsigliere
+	consigliereMessages  []consigliere.Message
+	consigliereCancel    context.CancelFunc
+	// consigliereAwaitingPassphrase is whether consigliereInput is
+	// currently in passphrase-entry mode (masked, Enter tries
+	// Session.Unlock instead of asking a question) — see
+	// showConsigliere's own doc comment on when that starts, and
+	// submitConsigliereUnlock on what ends it.
+	consigliereAwaitingPassphrase bool
+	// consigliereReturnFocus is captured once, in showConsigliere,
+	// before anything changes focus — see hideConsigliere's own doc
+	// comment.
+	consigliereReturnFocus tview.Primitive
+	// consigliereExitPage is r.activePage at that exact same moment —
+	// NOT for the auto-close behavior removed in the previous commit
+	// (that used a similarly-named consigliereHostPage field; this is
+	// a different purpose, not a revival), but so
+	// consigliereBackwardExit/consigliereForwardExitTarget can tell
+	// whether consigliereReturnFocus/consigliereForwardExit are still
+	// valid at all: both name a specific widget on whatever page was
+	// active when the sidebar opened, which the user can now navigate
+	// away from (pushing further pages) while leaving the sidebar
+	// open — per the user's own explicit request in the previous
+	// commit. A widget on a page that is no longer active is still a
+	// perfectly real tview.Primitive (nothing frees it), so without
+	// this check, Tab/Backtab out of the sidebar would keep landing on
+	// it anyway — covered, unreachable, and indistinguishable from a
+	// dead end (a real, reported bug).
+	consigliereExitPage string
+	// consigliereForwardExit is where Tab leaving consigliere's own
+	// input/history pair lands — the fixed stop that follows wherever
+	// the host screen that opened it (see startConsigliereChord's own
+	// doc comment in consigliere.go) splices it into its own ring.
+	// nil (the common case — a single-node "ring" like Log Audit's
+	// selection/detail screens, or consigliere opened from the bare
+	// panel, where the global focus cycle handles it instead — see
+	// focusCycleStops' own doc comment) falls back to
+	// consigliereReturnFocus in consigliereExitFocus, since Backtab
+	// and Tab then both lead to the same, single other node either
+	// way.
+	consigliereForwardExit tview.Primitive
+
+	// consigliereManuallyPositioned/consigliereDragging/
+	// consigliereDragOffsetX/Y make the sidebar's own title bar
+	// draggable, per the user's own explicit request that it become
+	// movable the way a Toolbox tool window already is — no resizing,
+	// just position. Mirrors dragPropertiesMouseCapture's own
+	// dragging/dragOffsetX/Y exactly (see its own doc comment in
+	// properties.go) for the drag mechanics themselves;
+	// consigliereManuallyPositioned is this sidebar's own addition —
+	// once a drag has actually happened, repositionConsigliereSidebar
+	// stops re-docking it flush right on every resize/reshow and just
+	// re-clamps the position the user chose. Reset to false every
+	// time showConsigliere opens a fresh session, so a drag never
+	// outlives the sidebar being closed and reopened.
+	consigliereManuallyPositioned bool
+	consigliereDragging           bool
+	consigliereDragOffsetX        int
+	consigliereDragOffsetY        int
+
 	// detailsSidebar is the right-hand Details layer toggled by "I"
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
 	// currently shown; unlike every overlay above it, it's deliberately
@@ -2219,6 +2348,24 @@ type Root struct {
 	chordDeadline time.Time
 	chordCancel   context.CancelFunc
 
+	// pendingChordFamily is exactly the chordFamily startChord was
+	// called with — read back directly by resolveChord/
+	// refreshChordHintBar instead of either one re-deriving it from
+	// pendingChord via chordFamilyFor's own global-by-prefix lookup
+	// (which only ever finds one of the families already registered in
+	// chordFamilies()). That distinction only matters for an ad-hoc
+	// family started from outside the main panel — see
+	// consigliereChordFamily in consigliere.go: calling startChord with
+	// it while pendingChord happens to be 'g' must resolve against that
+	// one-member family, not the real "goto" family chordFamilyFor('g')
+	// would otherwise still find, which would make gg/gh/gu/... etc. all
+	// reachable (and silently acting on the hidden file panel) from
+	// wherever this was actually started. Every existing caller already
+	// passes chordFamilyFor's own result straight through, so this
+	// changes nothing for them — only a family that doesn't share its
+	// own prefix's single registered identity needs it.
+	pendingChordFamily chordFamily
+
 	// bashLineCompletingPick is true only for the moment openCompletionPicker
 	// moves focus away from bashLine to the completion picker it opens —
 	// a deliberate, momentary transition, not the user leaving the
@@ -2629,19 +2776,60 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		return nil, err
 	}
 
+	// The AI Consigliere's own encrypted API-key tier (see
+	// internal/apikey's own doc comment for the three-tier chain this
+	// is the third of). A missing file is not an error — a brand-new,
+	// empty store (see apikey.LoadStore) — so apiKeyStoreWarning only
+	// ever fires for a store that exists but is actually corrupt, same
+	// "keine stillen Fehler" reasoning configWarnings already follows
+	// just below. An empty apiKeyStorePath() (no home directory at
+	// all, or a test's own override — see that var's own doc comment)
+	// leaves apiKeySession nil outright: Resolve already treats a nil
+	// Session as "this tier isn't available," the same way it treats
+	// an empty envVar/filePath argument.
+	var apiKeySession *apikey.Session
+	var apiKeyStoreWarning string
+	if path := apiKeyStorePath(); path != "" {
+		session, err := apikey.OpenSession(path)
+		if err != nil {
+			apiKeyStoreWarning = fmt.Sprintf("AI Consigliere API key store: %v", err)
+		} else {
+			apiKeySession = session
+		}
+	}
+
+	// The AI Consigliere's own documentation search (see
+	// internal/docsearch) — built once here rather than lazily on
+	// first use, since it's small and fast enough that there's no real
+	// cost to paying for it up front, and doing so here keeps every
+	// later caller free of a "build it if nil" check. A failure here
+	// means the embed itself is broken (see docsearch.NewDefaultIndex's
+	// own doc comment) — surfaced the same way apiKeyStoreWarning is,
+	// not fatal to starting breakthrough at all.
+	docSearchIndex, docSearchErr := docsearch.NewDefaultIndex(docsearch.ParseTviewBoldHeadingChunks(helpText, "help")...)
+	var docSearchWarning string
+	if docSearchErr != nil {
+		docSearchWarning = fmt.Sprintf("AI Consigliere documentation search: %v", docSearchErr)
+	}
+
 	r := &Root{
-		Pages:          tview.NewPages(),
-		app:            app,
-		startDir:       path,
-		mouseEnabled:   settings.MouseEnabled,
-		panel:          panel,
-		settings:       settings,
-		colorSchemes:   colorSchemes,
-		settingOrigins: settingOrigins,
-		theme:          theme,
-		notify:         notify.NewWithPersistence(notifyPersistPath()),
-		operations:     operations.NewTrackerWithPersistence(operationsPersistPath()),
-		labels:         filelabels.NewWithPersistence(labelsPersistPath()),
+		Pages:                         tview.NewPages(),
+		app:                           app,
+		startDir:                      path,
+		mouseEnabled:                  settings.MouseEnabled,
+		panel:                         panel,
+		settings:                      settings,
+		colorSchemes:                  colorSchemes,
+		settingOrigins:                settingOrigins,
+		theme:                         theme,
+		apiKeySession:                 apiKeySession,
+		docSearchIndex:                docSearchIndex,
+		consigliereModelCache:         map[string][]consigliere.ModelInfo{},
+		consigliereModelFetchInFlight: map[string]bool{},
+		consigliereModelFetchErr:      map[string]error{},
+		notify:                        notify.NewWithPersistence(notifyPersistPath()),
+		operations:                    operations.NewTrackerWithPersistence(operationsPersistPath()),
+		labels:                        filelabels.NewWithPersistence(labelsPersistPath()),
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
 		// doc comment and the struct field comment above.
@@ -2896,6 +3084,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.connectForm = r.newConnectForm()
 	r.connectButtons = r.newConnectButtons()
 	r.connectLayout = r.newConnectLayout()
+
+	// The "API key (encrypted)" dialog (see apikeydialog.go) — the
+	// Options screen's own "AI Consigliere" category.
+	r.apiKeyDialogForm = r.newAPIKeyDialogForm()
+	r.apiKeyDialogButtons = r.newAPIKeyDialogButtons()
+	r.apiKeyDialogLayout = r.newAPIKeyDialogLayout()
 	r.hostKeyConfirmDialog = r.newHostKeyConfirmDialog()
 	r.hostKeyConfirmLayout = r.newHostKeyConfirmLayout()
 
@@ -3053,6 +3247,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The directory picker (see openDirPicker) — built once and reset
 	// on every open, the same as everything else above.
 	r.dirPicker = r.newDirPicker()
+
+	// The AI Consigliere sidebar ("gC", see consigliere.go) — built once
+	// here, same as everything else above. The real Provider itself is
+	// built fresh per question, not here — see
+	// buildConsigliereProvider's own doc comment.
+	r.newConsigliereSidebar()
 
 	// The Help overlay (see help.go/openHelp) — a single, static,
 	// read-only TextView, the simplest of all of these (nothing to
@@ -3256,11 +3456,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpLayout, false, false)
+	r.AddPage(consiglierePage, r.consigliereLayout, false, false)
 	r.AddPage(viewerPage, r.viewerLayout, false, false)
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
 	r.AddPage(connectDialogPage, r.connectLayout, false, false)
+	r.AddPage(apiKeyDialogPage, r.apiKeyDialogLayout, false, false)
 	r.AddPage(cloudMountDialogPage, r.cloudMountDialogLayout, false, false)
 	r.AddPage(cloudRemoteDialogPage, r.cloudRemoteDialogLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
@@ -3292,6 +3494,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	var startupNotices []string
 	if len(configWarnings) > 0 {
 		startupNotices = append(startupNotices, fmt.Sprintf("config: %s", strings.Join(configWarnings, "; ")))
+	}
+	if apiKeyStoreWarning != "" {
+		startupNotices = append(startupNotices, apiKeyStoreWarning)
+	}
+	if docSearchWarning != "" {
+		startupNotices = append(startupNotices, docSearchWarning)
 	}
 	// Pushes its own notify.CategoryTrash toast directly (see its own
 	// doc comment) rather than adding to startupNotices/showError —
@@ -3648,6 +3856,22 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 	r.activeWidget = widget
 	r.ShowPage(page)
 	r.SendToFront(page)
+	// The AI Consigliere sidebar isn't part of overlayStack at all
+	// (see consigliere.go's own doc comment — it's non-modal), so
+	// pushing a new full-screen page here would otherwise bury it:
+	// tview's Pages draws in registration/SendToFront order, not
+	// Z-index, so without this, navigating from one full-screen page
+	// to another (e.g. Log Audit's own selection screen into a
+	// specific file's viewer) while the sidebar is open would redraw
+	// it on top of consigliereLayout, completely covering it — even
+	// though the sidebar itself is still fully open (per the user's
+	// own explicit request that it survive exactly this kind of
+	// ordinary within-task navigation). Keyboard focus is deliberately
+	// left on whatever this call already focused below, not pulled
+	// back onto the sidebar — only its own draw order needs fixing.
+	if r.consigliereVisible {
+		r.SendToFront(consiglierePage)
+	}
 	r.updateOverlayTitleBarColors()
 	if restore != nil {
 		restore()
@@ -3870,11 +4094,42 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 		return r.captureLogAuditTimelineMouse(action, event)
 	}
 
+	// An AI Consigliere title-bar drag in progress — same reasoning as
+	// every guard above: dragging the sidebar up or left would
+	// otherwise fall through to ordinary position-based dispatch
+	// mid-drag, leaving consigliereDragging stuck true forever.
+	if r.consigliereDragging {
+		out, outEvent, _ := r.dragConsigliereMouseCapture(action, event)
+		return out, outEvent
+	}
+
+	x, y := event.Position()
+
+	// The AI Consigliere sidebar is non-modal (see consigliere.go's own
+	// doc comment — it isn't part of overlayStack/activeWidget at all),
+	// so the check below would otherwise never know about it. Fixes a
+	// real bug: a click landing on the sidebar itself, while some other
+	// modal (Log Audit, Git Breach, ...) is the active overlay, used to
+	// read as "outside that overlay" and close *it* — never
+	// consigliereLayout's own rect, which this now checks first, same
+	// priority the drag guards above already get.
+	//
+	// Deliberately does *not* close the sidebar on a click outside it,
+	// unlike every modal overlay's own "click outside closes it"
+	// convention (captureOutsideClick) — per the user's own explicit
+	// request: this sidebar is meant to stay open while the user keeps
+	// interacting with the panel underneath (e.g. marking files for it
+	// to see in context), so only the title bar's own close glyph
+	// (dragConsigliereMouseCapture) or Escape (handleConsigliereInputDone)
+	// closes it.
+	if r.consigliereVisible && primitiveContains(r.consigliereLayout, x, y) {
+		return action, event // landed on the sidebar itself
+	}
+
 	if r.activePage == "" {
 		return action, event // nothing open, nothing to do
 	}
 
-	x, y := event.Position()
 	if primitiveContains(r.activeWidget, x, y) {
 		return action, event // event landed on the open overlay itself
 	}
@@ -4048,6 +4303,9 @@ func (r *Root) handleBeforeDraw(screen tcell.Screen) bool {
 
 	if r.detailsSidebarVisible {
 		r.repositionDetailsSidebar()
+	}
+	if r.consigliereVisible {
+		r.repositionConsigliereSidebar()
 	}
 	if r.activePage == propertiesPage {
 		r.rerenderProperties()

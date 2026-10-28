@@ -568,6 +568,37 @@ type Settings struct {
 	Label7Name string
 	Label8Name string
 	Label9Name string
+
+	// ConsigliereProvider is which AI backend the "gC" sidebar's own
+	// future real provider call uses (see internal/consigliere) —
+	// "anthropic" (the default), "openai", or "deepseek". Only selects
+	// which provider's API key is actually looked up; the key itself
+	// is never stored here (see internal/apikey's own doc comment for
+	// the three-tier env var/file/encrypted-store chain that is).
+	ConsigliereProvider string
+
+	// ConsigliereAPIKeyFile is an optional path to a plain-text file
+	// holding the selected provider's API key — the deliberately
+	// unencrypted, opt-in tier of internal/apikey's chain, below the
+	// environment variable and above the encrypted store. "" (the
+	// default) means this tier isn't configured at all, not an error.
+	ConsigliereAPIKeyFile string
+
+	// ConsigliereModel overrides the selected provider's own built-in
+	// default model ID (internal/consigliere's
+	// Anthropic/OpenAI/DeepSeekDefaultModel consts) — "" (the default)
+	// means "use that default". Exists because model IDs retire over
+	// time; without this, an outdated built-in literal would need a
+	// breakthrough update to fix instead of a one-line override here.
+	ConsigliereModel string
+
+	// ConsigliereEffort overrides the selected model's own default
+	// reasoning effort ("effort" for Anthropic, "reasoning_effort" for
+	// OpenAI/DeepSeek — see internal/consigliere's own doc comments on
+	// each provider's request shape). "" (the default) omits the
+	// field entirely, which is each provider's own documented default
+	// behavior, not a value this package picks on its own.
+	ConsigliereEffort string
 }
 
 // LabelName returns the display name for color-label id (1-9) — the
@@ -718,6 +749,11 @@ func DefaultSettings() Settings {
 		Label7Name: "Teal Deer",
 		Label8Name: "Pink Panther",
 		Label9Name: "Lime Disease",
+
+		ConsigliereProvider:   "anthropic",
+		ConsigliereAPIKeyFile: "",
+		ConsigliereModel:      "",
+		ConsigliereEffort:     "",
 	}
 }
 
@@ -928,6 +964,14 @@ func (s *Settings) apply(key, value string) error {
 		s.Label8Name = value
 	case "label_9_name":
 		s.Label9Name = value
+	case "consigliere_provider":
+		s.ConsigliereProvider = value
+	case "consigliere_api_key_file":
+		s.ConsigliereAPIKeyFile = value
+	case "consigliere_model":
+		s.ConsigliereModel = value
+	case "consigliere_effort":
+		s.ConsigliereEffort = value
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
