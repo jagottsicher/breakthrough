@@ -1271,6 +1271,75 @@ func TestTabBacktabReachConsigliereFromLogAuditDetail(t *testing.T) {
 	}
 }
 
+// TestLogAuditDetailDragCanMoveUpAndLeft pins the user's own explicit
+// request that the Log entry detail dialog become movable — mirrors
+// TestSearchDragCanMoveUpAndLeft (search_test.go): dragging up/left
+// must work exactly like dragging down/right, not just one direction
+// (see dragLogAuditDetailMouseCapture's own doc comment on why
+// captureOutsideClick needs its own logAuditDetailDragging check for
+// this).
+func TestLogAuditDetailDragCanMoveUpAndLeft(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	drawRoot(t, r, 300, 40)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	r.openLogAuditDetail(1)
+
+	r.moveLogAuditDetail(150, 20)
+	startX, startY, width, height := r.logAuditDetailLayout.GetRect()
+
+	r.dragLogAuditDetailMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
+	if !r.logAuditDetailDragging {
+		t.Fatal("setup: pressing the title bar should have started a drag")
+	}
+
+	newX, newY := startX-5, startY-3
+	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(newX+2, newY, tcell.ButtonPrimary, 0))
+	r.captureOutsideClick(tview.MouseLeftUp, tcell.NewEventMouse(newX+2, newY, tcell.ButtonNone, 0))
+
+	gotX, gotY, gotWidth, gotHeight := r.logAuditDetailLayout.GetRect()
+	if gotX != newX || gotY != newY {
+		t.Errorf("rect = (%d,%d), want (%d,%d) — dragging up/left should move the dialog exactly like dragging down/right does", gotX, gotY, newX, newY)
+	}
+	if gotWidth != width || gotHeight != height {
+		t.Errorf("size changed during a pure move: (%d,%d) -> (%d,%d), want unchanged", width, height, gotWidth, gotHeight)
+	}
+	if r.logAuditDetailDragging {
+		t.Error("logAuditDetailDragging should be false after MouseLeftUp")
+	}
+}
+
+// TestLogAuditDetailAltArrowMovesTheDialog pins the keyboard half of
+// the same request: Alt+Arrow moves the dialog one cell at a time,
+// the same convention toolWindow's own InputHandler already
+// establishes (toolwindow.go).
+func TestLogAuditDetailAltArrowMovesTheDialog(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	drawRoot(t, r, 300, 40)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	r.openLogAuditDetail(1)
+
+	r.moveLogAuditDetail(150, 20)
+	startX, startY, _, _ := r.logAuditDetailLayout.GetRect()
+
+	if got := r.captureLogAuditDetailKey(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModAlt)); got != nil {
+		t.Fatalf("capture(Alt+Up) = %v, want nil (consumed)", got)
+	}
+	if got := r.captureLogAuditDetailKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModAlt)); got != nil {
+		t.Fatalf("capture(Alt+Left) = %v, want nil (consumed)", got)
+	}
+
+	gotX, gotY, _, _ := r.logAuditDetailLayout.GetRect()
+	if gotX != startX-1 || gotY != startY-1 {
+		t.Errorf("rect = (%d,%d), want (%d,%d) after Alt+Up then Alt+Left", gotX, gotY, startX-1, startY-1)
+	}
+}
+
 // TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere is the
 // exact scenario the user reported: opening the AI Consigliere from
 // the viewer's own table used to collapse the whole ring down to just

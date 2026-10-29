@@ -152,6 +152,34 @@ func TestLogAuditTimelineTextIncludesStartAndEndLabels(t *testing.T) {
 	}
 }
 
+// TestLogAuditTimelineLayoutScalesPastTwoHundredColumns pins a real,
+// user-reported bug: width used to be silently clamped to 200,
+// leaving the bar (and therefore the end label right after it)
+// stopped at column 200 regardless of how much wider the terminal
+// actually was — looking exactly like the end label had drifted off
+// its own right-aligned position on anything wider.
+func TestLogAuditTimelineLayoutScalesPastTwoHundredColumns(t *testing.T) {
+	base := time.Date(2026, 10, 7, 16, 0, 0, 0, time.UTC)
+	entries := []logview.Entry{
+		{Time: base, Level: logview.LevelInfo},
+		{Time: base.Add(time.Hour), Level: logview.LevelInfo},
+	}
+
+	counts, _, _, _, _, bucketCount, _, _, ok := logAuditTimelineLayout(entries, 300)
+	if !ok {
+		t.Fatal("logAuditTimelineLayout: want ok")
+	}
+	if len(counts) != bucketCount {
+		t.Fatalf("len(counts) = %d, bucketCount = %d, want equal", len(counts), bucketCount)
+	}
+	// barWidth = width - len(labels) - 2, so a far wider terminal must
+	// produce a meaningfully wider bar, not the same one a 200-column
+	// terminal would have gotten.
+	if bucketCount < 250 {
+		t.Errorf("bucketCount = %d, want it scaled against the real 300-column width, not clamped to 200", bucketCount)
+	}
+}
+
 // TestLogAuditTimelineLabelIncludesDateOnlyAcrossDayBoundary pins
 // logAuditTimelineLabel's own sameDay contract: bare time when both
 // endpoints share a calendar day (the common case), the full date too

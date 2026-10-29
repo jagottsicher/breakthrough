@@ -332,6 +332,7 @@ func (r *Root) newLogAuditDetailScreen() {
 	r.logAuditDetailLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.logAuditDetailTitleBar, 1, 0, false).
 		AddItem(r.logAuditDetailView, 0, 1, true)
+	r.logAuditDetailLayout.SetMouseCapture(r.dragLogAuditDetailMouseCapture)
 }
 
 // logAuditGroupInfo describes one FileGroup for the selection table's
@@ -996,6 +997,63 @@ func (r *Root) closeLogAuditDetail() {
 	r.hideOverlay()
 }
 
+// moveLogAuditDetail repositions the Log entry detail dialog to
+// (x, y) without touching its own current width/height — mirrors
+// moveSearch (search.go), simpler for the same reason: the dialog is
+// a single tview.Flex (title bar + text view, see
+// newLogAuditDetailScreen), so one SetRect is all that's needed —
+// Flex recalculates both children's own sub-rects on the next Draw,
+// unlike Search/Properties' own separately-positioned title bars.
+func (r *Root) moveLogAuditDetail(x, y int) {
+	_, _, width, height := r.logAuditDetailLayout.GetRect()
+	x, y, width, height = r.clampToScreen(x, y, width, height)
+	r.logAuditDetailLayout.SetRect(x, y, width, height)
+	// Flex only cascades a real rect down to its own children on the
+	// next Draw() — a title-bar click right after a drag-move (the
+	// very next mouse event, well before any Draw happens) would
+	// otherwise still test against the pre-move rect, the same "SetRect
+	// alone never cascades" caveat moveSearch's own doc comment already
+	// covers for an identical shape.
+	r.logAuditDetailTitleBar.SetRect(x, y, width, 1)
+}
+
+// dragLogAuditDetailMouseCapture makes the Log entry detail dialog's
+// own title bar draggable — mirrors dragSearchMouseCapture (see its
+// own, considerably longer doc comment for the full reasoning,
+// including why captureOutsideClick needs its own
+// logAuditDetailDragging check the same way it already has one for
+// searchDragging/propertiesDragging). Deliberately no close glyph,
+// unlike Search/Properties — see logAuditDetailDragging's own doc
+// comment in root.go.
+func (r *Root) dragLogAuditDetailMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	x, y := event.Position()
+
+	if r.logAuditDetailDragging {
+		switch action {
+		case tview.MouseMove:
+			if event.Buttons()&tcell.ButtonPrimary == 0 {
+				r.logAuditDetailDragging = false
+				return tview.MouseConsumed, nil
+			}
+			r.moveLogAuditDetail(x-r.logAuditDetailDragOffsetX, y-r.logAuditDetailDragOffsetY)
+			return tview.MouseConsumed, nil
+		case tview.MouseLeftUp:
+			r.logAuditDetailDragging = false
+			return tview.MouseConsumed, nil
+		}
+		return tview.MouseConsumed, nil // swallow everything else for the duration of the drag
+	}
+
+	if action == tview.MouseLeftDown && r.logAuditDetailTitleBar.InRect(x, y) {
+		wx, wy, _, _ := r.logAuditDetailLayout.GetRect()
+		r.logAuditDetailDragging = true
+		r.logAuditDetailDragOffsetX, r.logAuditDetailDragOffsetY = x-wx, y-wy
+		return tview.MouseConsumed, nil
+	}
+
+	return action, event
+}
+
 // captureLogAuditSelectionTableKey: "r" re-scans the directory, Escape
 // closes — the same shape captureActivityLogTableKey already
 // establishes. Enter is handled by SetSelectedFunc, not here (see
@@ -1340,6 +1398,28 @@ func (r *Root) captureLogAuditDetailKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeLogAuditDetail()
 		return nil
+	}
+	// Alt+Arrow moves the dialog one cell at a time — the same
+	// convention toolWindow's own InputHandler already establishes
+	// (toolwindow.go), reused here rather than invented fresh, per the
+	// user's own explicit request that this dialog become movable by
+	// keyboard, not just by dragging its title bar.
+	if event.Modifiers()&tcell.ModAlt != 0 {
+		x, y, _, _ := r.logAuditDetailLayout.GetRect()
+		switch event.Key() {
+		case tcell.KeyLeft:
+			r.moveLogAuditDetail(x-1, y)
+			return nil
+		case tcell.KeyRight:
+			r.moveLogAuditDetail(x+1, y)
+			return nil
+		case tcell.KeyUp:
+			r.moveLogAuditDetail(x, y-1)
+			return nil
+		case tcell.KeyDown:
+			r.moveLogAuditDetail(x, y+1)
+			return nil
+		}
 	}
 	if event.Key() == tcell.KeyRune && event.Rune() == 'g' {
 		// "gC" reaches the AI Consigliere — see startConsigliereChord's

@@ -50,8 +50,8 @@ func TestListAnthropicModelsParsesEffortLevelsAndFiltersLifecycle(t *testing.T) 
 	if gotVersion != anthropicAPIVersion {
 		t.Errorf("anthropic-version = %q, want %q", gotVersion, anthropicAPIVersion)
 	}
-	if gotQuery.Get("lifecycle") != "active" {
-		t.Errorf("lifecycle query param = %q, want %q", gotQuery.Get("lifecycle"), "active")
+	if gotQuery.Get("lifecycle[]") != "active" {
+		t.Errorf("lifecycle[] query param = %q, want %q", gotQuery.Get("lifecycle[]"), "active")
 	}
 	if gotQuery.Get("limit") != "1000" {
 		t.Errorf("limit query param = %q, want %q", gotQuery.Get("limit"), "1000")

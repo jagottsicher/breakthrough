@@ -91,19 +91,22 @@ func (e anthropicModelEntry) effortLevels() []string {
 }
 
 // ListAnthropicModels calls Anthropic's own GET /v1/models and
-// returns every currently "active" model (lifecycle=active is passed
-// as a query parameter, and double-checked client-side — a
-// deprecated or retired model would otherwise still work today but
-// warn or fail the next time this list is refreshed, exactly the
-// "currently available" promise the caller asked for), each with its
-// own supported effort levels.
+// returns every currently "active" model (lifecycle[]=active is
+// passed as a query parameter — the live endpoint rejects the
+// singular "lifecycle" name outright with a 4xx explicitly naming
+// "lifecycle[]" instead, a real, reported failure this exact value
+// fixes — and double-checked client-side too: a deprecated or retired
+// model would otherwise still work today but warn or fail the next
+// time this list is refreshed, exactly the "currently available"
+// promise the caller asked for), each with its own supported effort
+// levels.
 //
 // limit=1000 is passed explicitly: the endpoint's own default is 20
 // with cursor pagination (has_more/last_id) — silently truncating the
 // list at 20 models would be a real, easy-to-miss bug as Anthropic's
 // own lineup grows.
 func ListAnthropicModels(ctx context.Context, apiKey, baseURL string, client *http.Client) ([]ModelInfo, error) {
-	url := firstNonEmpty(baseURL, AnthropicDefaultBaseURL) + "/v1/models?limit=1000&lifecycle=active"
+	url := firstNonEmpty(baseURL, AnthropicDefaultBaseURL) + "/v1/models?limit=1000&lifecycle[]=active"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("consigliere: building Anthropic models request: %w", err)
