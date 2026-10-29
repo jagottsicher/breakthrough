@@ -1402,14 +1402,16 @@ func TestLogAuditTimeFieldLabelTurnsRedOnAnUnparseableExpression(t *testing.T) {
 	r.logAuditTimeField.SetText("between 2026-10-26 00:00:01 and 2026-10-26 29:59:59")
 
 	got, _, _ := r.logAuditTimeField.GetLabelStyle().Decompose()
-	if want := r.theme.CriticalText; got != want {
-		t.Errorf("label color = %v, want CriticalText (%v) for an unparseable expression", got, want)
+	if want := tcell.ColorRed; got != want {
+		t.Errorf("label color = %v, want %v for an unparseable expression", got, want)
 	}
 }
 
 // TestLogAuditTimeFieldLabelTurnsGreenOnAParseableExpression is the
 // other half: a real, recognized expression (or an empty field) gets
-// the ordinary "this means something" green instead.
+// a bright, attention-grabbing green instead — deliberately not this
+// app's own themed EntryExecutable, which is muted by design (see its
+// own doc comment) — per the user's own explicit request.
 func TestLogAuditTimeFieldLabelTurnsGreenOnAParseableExpression(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
@@ -1418,14 +1420,14 @@ func TestLogAuditTimeFieldLabelTurnsGreenOnAParseableExpression(t *testing.T) {
 
 	r.logAuditTimeField.SetText("last 7 days")
 	got, _, _ := r.logAuditTimeField.GetLabelStyle().Decompose()
-	if want := r.theme.EntryExecutable; got != want {
-		t.Errorf("label color = %v, want EntryExecutable (%v) for a parseable expression", got, want)
+	if want := tcell.ColorLime; got != want {
+		t.Errorf("label color = %v, want %v for a parseable expression", got, want)
 	}
 
 	r.logAuditTimeField.SetText("")
 	got, _, _ = r.logAuditTimeField.GetLabelStyle().Decompose()
-	if want := r.theme.EntryExecutable; got != want {
-		t.Errorf("label color = %v, want EntryExecutable (%v) for an empty field", got, want)
+	if want := tcell.ColorLime; got != want {
+		t.Errorf("label color = %v, want %v for an empty field", got, want)
 	}
 }
 
