@@ -281,7 +281,18 @@ func (r *Root) renderConsigliereTitleBar(width int) {
 		label = " AI Consigliere · MACHIAVELLI "
 	}
 	closeCol := toolWindowCloseButtonCol(0, width)
-	padding := closeCol - len(label)
+	// tview.TaggedStringWidth, not len(label): "·" (U+00B7, the
+	// Machiavelli Mode separator) is 2 bytes in UTF-8 but 1 display
+	// column — len() overcounted it by one, under-computing padding by
+	// one, and so drawing the close glyph one column too far left
+	// whenever this label's own "· MACHIAVELLI" suffix is in it. A
+	// real, reported bug: the glyph looked shifted only while
+	// Machiavelli Mode was on, even though the click math below (which
+	// never depended on this label at all) stayed correct the whole
+	// time — matching openScrollAcknowledgeNotice's own identical,
+	// already-correct use of TaggedStringWidth for the exact same
+	// close-glyph padding.
+	padding := closeCol - tview.TaggedStringWidth(label)
 	if padding < 0 {
 		padding = 0
 	}
