@@ -128,7 +128,7 @@ func (r *Root) newLogAuditSelectionScreen() {
 	logAuditTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.logAuditTable, 0, 1, true).
 		AddItem(r.logAuditScrollbar, 1, 0, false)
-	logAuditTableRow.SetMouseCapture(r.logAuditScrollbar.captureMouse)
+	logAuditTableRow.SetMouseCapture(chainTableDoubleClick(r.logAuditTable, r.logAuditScrollbar.captureMouse))
 
 	r.logAuditSelectionLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.logAuditTitleBar, 1, 0, false).
@@ -321,7 +321,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	logAuditViewerTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.logAuditViewerTable, 0, 1, true).
 		AddItem(r.logAuditViewerScrollbar, 1, 0, false)
-	logAuditViewerTableRow.SetMouseCapture(r.logAuditViewerScrollbar.captureMouse)
+	logAuditViewerTableRow.SetMouseCapture(chainTableDoubleClick(r.logAuditViewerTable, r.logAuditViewerScrollbar.captureMouse))
 
 	r.logAuditViewerLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.logAuditViewerTitle, 1, 0, false).
@@ -443,6 +443,35 @@ func (r *Root) renderLogAuditSelection() {
 
 	if cur, _ := r.logAuditTable.GetSelection(); cur < 1 || cur > len(r.logAuditGroups) {
 		r.logAuditTable.Select(1, 0)
+	}
+}
+
+// chainTableDoubleClick wraps fallback (the row's own scrollbar
+// capture, in both current callers) with a check for
+// tview.MouseLeftDoubleClick landing on one of table's own data
+// cells — a real, reported bug: a fast second click (within tview's
+// own 500ms DoubleClickInterval — see Application.fireMouseActions,
+// verified directly against tview's own source, not guessed) fires
+// MouseLeftDoubleClick instead of a second MouseLeftClick, and
+// Table.MouseHandler has no case for that action at all, so it's
+// never consumed there — it fell through to whatever was drawn
+// underneath instead (the file panel), exactly the shape
+// Root.captureMouse's own MouseLeftDoubleClick case already handles
+// for the main panel's own table. Reruns whichever cell's own Clicked
+// func a plain click already wired (clickLogAuditSelectionCell/
+// clickLogAuditViewerCell) — idempotent, since both just reopen the
+// same row — rather than duplicating that logic here.
+func chainTableDoubleClick(table *tview.Table, fallback func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse)) func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseLeftDoubleClick {
+			x, y := event.Position()
+			row, column := table.CellAt(x, y)
+			if cell := table.GetCell(row, column); cell != nil && cell.Clicked != nil {
+				cell.Clicked()
+				return tview.MouseConsumed, nil
+			}
+		}
+		return fallback(action, event)
 	}
 }
 
