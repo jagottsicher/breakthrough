@@ -22,25 +22,25 @@ startup files and expands its aliases, whichever shell that actually is
 
 <p align="left">
   <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-20-07.png">
-    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-20-07.png" width="49%"></a>&nbsp;
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-20-07.png" width="48%"></a>&nbsp;
   <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-22-24.png">
-    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-22-24.png" width="49%">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-22-24.png" width="48%">
   </a>
 </p>
 
 <p align="left">
   <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-24-51.png">
-    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-24-51.png" width="49%"></a>&nbsp;
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-24-51.png" width="48%"></a>&nbsp;
   <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-29-46.png">
-    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-29-46.png" width="49%">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-29-46.png" width="48%">
   </a>
 </p>
 
 <p align="left">
   <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-42-19.png">
-    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-42-19.png" width="49%"></a>&nbsp;
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-42-19.png" width="48%"></a>&nbsp;
   <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-46-57.png">
-    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-46-57.png" width="49%">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-25%2014-46-57.png" width="48%">
   </a>
 </p>
 
