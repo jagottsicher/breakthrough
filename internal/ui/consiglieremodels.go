@@ -21,7 +21,7 @@ const consigliereModelFetchTimeout = 15 * time.Second
 // whichever provider is asked for, the same switch
 // buildConsigliereProvider's own doc comment establishes for Reply
 // itself.
-var listConsigliereModelsFunc = func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+var listConsigliereModelsFunc = func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
 	switch providerName {
 	case "openai":
 		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.OpenAIDefaultBaseURL, nil)
@@ -30,7 +30,11 @@ var listConsigliereModelsFunc = func(ctx context.Context, providerName, key stri
 	case "gemini":
 		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.GeminiDefaultBaseURL, nil)
 	case "ollama":
-		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.OllamaDefaultBaseURL, nil)
+		// ollamaBaseURLOverride, not the bare constant: see
+		// ConsigliereOllamaBaseURL's own doc comment
+		// (internal/config/settings.go) — the model list has to come
+		// from the same server Reply itself will actually talk to.
+		return consigliere.ListOpenAICompatModels(ctx, key, firstNonEmptyConsigliereModel(ollamaBaseURLOverride, consigliere.OllamaDefaultBaseURL), nil)
 	default:
 		return consigliere.ListAnthropicModels(ctx, key, consigliere.AnthropicDefaultBaseURL, nil)
 	}
@@ -89,7 +93,7 @@ func (r *Root) refreshConsigliereModelCache() {
 		cancel()
 		r.consigliereModelFetchInFlight[provider] = false
 	}, func() {
-		models, err := listConsigliereModelsFunc(ctx, provider, key)
+		models, err := listConsigliereModelsFunc(ctx, provider, key, r.settings.ConsigliereOllamaBaseURL)
 		cancel()
 		r.app.QueueUpdateDraw(func() {
 			r.finishConsigliereModelFetch(provider, models, err)

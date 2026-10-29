@@ -117,7 +117,7 @@ func TestMain(m *testing.M) {
 	// call against a real provider — the same dialFunc-style seam
 	// connectdialog.go already establishes for its own real network
 	// call.
-	listConsigliereModelsFunc = func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+	listConsigliereModelsFunc = func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
 		return nil, errors.New("listConsigliereModelsFunc: no fake installed for this test")
 	}
 	// Same reasoning as apiKeyStorePath above, for the AI Consigliere's

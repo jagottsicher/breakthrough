@@ -1856,6 +1856,7 @@ Along with the question itself, every request includes:
 | Model | Overrides the provider's own default — the dropdown is filled from that provider's own live model list, fetched once a real API key is configured |
 | Effort | Overrides the model's own default reasoning effort; Anthropic/DeepSeek offer whichever levels that specific model actually supports, OpenAI's own fixed set otherwise (its API never reports this per model) |
 | API key file (plain text) | An optional path to a plain-text file holding the key — Tab completes a path while typing, a non-empty value must resolve to a real file, and this row warns (without blocking) if the file's own permissions are looser than 0600 |
+| Ollama base URL | Overrides Ollama's own built-in default server address (`http://localhost:11434/v1`) — only read while Provider above is `ollama`. For an Ollama server running on a different machine, not the one breakthrough itself is on (e.g. `http://192.168.1.50:11434/v1` — keep the trailing `/v1`). `""` (the default) means use the built-in default. |
 | API key (encrypted) | Stores the key encrypted under a passphrase you choose, asked for once per run and kept in memory only — never written to disk |
 | Machiavelli Mode | See below |
 
@@ -1868,7 +1869,10 @@ opening the sidebar forces a passphrase prompt right there before any
 question can be typed, rather than only discovering the lock after a
 question already failed. Ollama needs none of this at all — it talks
 to a local server (`http://localhost:11434` by default) instead of a
-real API, so none of the three tiers above ever apply to it.
+real API, so none of the three tiers above ever apply to it. That
+default assumes Ollama runs on the same machine breakthrough does;
+"Ollama base URL" above points it at a server running elsewhere on
+the network instead.
 
 Two buttons, also under this category: "Edit system prompt" opens
 `~/.config/breakthrough/consigliere-system-prompt.txt` (created with a

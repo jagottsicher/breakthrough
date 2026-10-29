@@ -584,6 +584,19 @@ type Settings struct {
 	// default) means this tier isn't configured at all, not an error.
 	ConsigliereAPIKeyFile string
 
+	// ConsigliereOllamaBaseURL overrides
+	// consigliere.OllamaDefaultBaseURL ("http://localhost:11434/v1")
+	// — the one escape hatch for a real, reported gap: a local-only
+	// constant assumed Ollama always runs on the same machine as
+	// breakthrough itself, with no way to point it at a server
+	// running Ollama elsewhere on the network. "" (the default) means
+	// "use that built-in default", exactly the same "empty means
+	// fall back" contract ConsigliereModel/ConsigliereEffort already
+	// have. Only ever read while ConsigliereProvider is "ollama" —
+	// every other provider's own base URL is a fixed, documented API
+	// endpoint, never something a user would point elsewhere.
+	ConsigliereOllamaBaseURL string
+
 	// ConsigliereModel overrides the selected provider's own built-in
 	// default model ID (internal/consigliere's
 	// Anthropic/OpenAI/DeepSeekDefaultModel consts) — "" (the default)
@@ -982,6 +995,8 @@ func (s *Settings) apply(key, value string) error {
 		s.ConsigliereProvider = value
 	case "consigliere_api_key_file":
 		s.ConsigliereAPIKeyFile = value
+	case "consigliere_ollama_base_url":
+		s.ConsigliereOllamaBaseURL = value
 	case "consigliere_model":
 		s.ConsigliereModel = value
 	case "consigliere_effort":

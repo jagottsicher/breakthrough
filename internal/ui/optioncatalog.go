@@ -1506,6 +1506,29 @@ func optionCategories() []optionCategory {
 						r.refreshConsigliereModelCacheIfSelected()
 					},
 				)),
+				stringOption("consigliere_ollama_base_url", "Ollama base URL",
+					"Overrides Ollama's own built-in default server address "+
+						"(\"http://localhost:11434/v1\") — only read while Provider "+
+						"above is \"ollama\". A real, reported gap: the built-in "+
+						"default assumed Ollama always runs on the same machine as "+
+						"breakthrough itself, with no way to point it at a server "+
+						"running Ollama elsewhere on the network (e.g. "+
+						"\"http://192.168.1.50:11434/v1\" — keep the trailing "+
+						"\"/v1\", the same OpenAI-compatible path segment the "+
+						"built-in default already has). \"\" (the default) means "+
+						"use that built-in default.",
+					func(r *Root) string { return r.settings.ConsigliereOllamaBaseURL },
+					func(r *Root, v string) {
+						r.settings.ConsigliereOllamaBaseURL = v
+						r.persistSetting("consigliere_ollama_base_url", v)
+						// Changing where the model list itself has to come
+						// from is exactly the same "a fetch that needs
+						// retrying" case consigliere_api_key_file's own
+						// apply just above already covers — see
+						// refreshConsigliereModelCacheIfSelected's own doc
+						// comment.
+						r.refreshConsigliereModelCacheIfSelected()
+					}),
 				{
 					key:   "consigliere_api_key_secret",
 					label: "API key (encrypted)",
@@ -1935,6 +1958,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.ConsigliereProvider, true
 	case "consigliere_api_key_file":
 		return s.ConsigliereAPIKeyFile, true
+	case "consigliere_ollama_base_url":
+		return s.ConsigliereOllamaBaseURL, true
 	case "consigliere_model":
 		return s.ConsigliereModel, true
 	case "consigliere_effort":

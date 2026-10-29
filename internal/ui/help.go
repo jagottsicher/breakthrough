@@ -509,7 +509,10 @@ var helpText = strings.TrimLeft(`
   Model, Effort, the API key (environment variable, an opt-in
   plain-text file, or encrypted under a passphrase asked for once per
   run — none of this applies to Ollama, which needs no key at all),
-  an editable/resettable system prompt, and "Machiavelli Mode"
+  "Ollama base URL" (overrides the built-in "same machine as
+  breakthrough" default, for a server running elsewhere on the
+  network — only read while Provider is "ollama"), an
+  editable/resettable system prompt, and "Machiavelli Mode"
   — off by default, gated behind a warning you have to scroll to the
   end of before it does anything — which lets Log Holepunch forward
   the lines currently matching its own filters, Git Breach forward

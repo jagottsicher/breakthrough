@@ -255,6 +255,35 @@ func TestBuildConsigliereProviderForOllamaNeedsNoRealKey(t *testing.T) {
 	}
 }
 
+// TestBuildConsigliereProviderForOllamaUsesTheConfiguredBaseURL pins
+// a real, reported gap: the built-in default assumed Ollama always
+// runs on the same machine as breakthrough itself, with no way to
+// point it at a server running Ollama elsewhere on the network.
+func TestBuildConsigliereProviderForOllamaUsesTheConfiguredBaseURL(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "ollama"
+	root.settings.ConsigliereOllamaBaseURL = "http://192.168.1.50:11434/v1"
+
+	got, ok := root.buildConsigliereProvider().(consigliere.OpenAICompat)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.OpenAICompat", root.buildConsigliereProvider())
+	}
+	if want := "http://192.168.1.50:11434/v1"; got.BaseURL != want {
+		t.Errorf("BaseURL = %q, want %q", got.BaseURL, want)
+	}
+}
+
+// TestConsigliereOllamaBaseURLFallsBackToTheDefault is the other
+// half: an empty override means "use the built-in default", not an
+// empty base URL.
+func TestConsigliereOllamaBaseURLFallsBackToTheDefault(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	if got, want := root.consigliereOllamaBaseURL(), consigliere.OllamaDefaultBaseURL; got != want {
+		t.Errorf("consigliereOllamaBaseURL() = %q, want the built-in default %q", got, want)
+	}
+}
+
 // TestTabInConsigliereInputMovesFocusToHistory pins the sidebar's own
 // real keyboard path to the scrollable history: InputField's own
 // SetDoneFunc claims Tab before it could ever reach CycleFocusShortcut

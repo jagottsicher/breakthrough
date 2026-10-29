@@ -158,7 +158,7 @@ func TestOptionsKeyFileCommitRetriesTheModelFetch(t *testing.T) {
 		t.Fatal("setup: should not be cached yet")
 	}
 	called := make(chan struct{}, 1)
-	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
 		called <- struct{}{}
 		return []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}, nil
 	})
