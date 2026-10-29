@@ -1494,6 +1494,15 @@ func optionCategories() []optionCategory {
 					func(r *Root, v string) {
 						r.settings.ConsigliereAPIKeyFile = v
 						r.persistSetting("consigliere_api_key_file", v)
+						// A key may have just become available (or
+						// changed) for the first time — Model/Effort's
+						// own choices would otherwise stay stuck on
+						// just "(default: ...)" until this category is
+						// left and re-entered (see
+						// refreshConsigliereModelCacheIfSelected's own
+						// doc comment on why the fetch itself never
+						// runs from here directly).
+						r.refreshConsigliereModelCacheIfSelected()
 					},
 				)),
 				{

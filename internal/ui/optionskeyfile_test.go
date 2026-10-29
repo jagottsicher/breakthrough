@@ -1,13 +1,17 @@
 package ui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/consigliere"
 )
 
 func openConsigliereAPIKeyFileRow(t *testing.T, r *Root) {
@@ -136,6 +140,40 @@ func TestOptionsKeyFileAcceptsARealFileAndResolvesToAbsolute(t *testing.T) {
 	want := filepath.Join(r.panel.path, "apple.txt")
 	if r.settings.ConsigliereAPIKeyFile != want {
 		t.Errorf("ConsigliereAPIKeyFile = %q, want the resolved absolute path %q", r.settings.ConsigliereAPIKeyFile, want)
+	}
+}
+
+// TestOptionsKeyFileCommitRetriesTheModelFetch pins the real,
+// reported bug: Model/Effort's own choices stayed stuck on just
+// "(default: ...)" after setting a key file while already in this
+// category, because nothing retried refreshConsigliereModelCache
+// until the category was left and re-entered.
+func TestOptionsKeyFileCommitRetriesTheModelFetch(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	openConsigliereAPIKeyFileRow(t, r)
+	// No key configured yet — the initial fetch (triggered by
+	// selectOptionCategory) already failed and recorded
+	// errConsigliereNoAPIKey.
+	if _, ok := r.consigliereModelCache["anthropic"]; ok {
+		t.Fatal("setup: should not be cached yet")
+	}
+	called := make(chan struct{}, 1)
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+		called <- struct{}{}
+		return []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}, nil
+	})
+
+	keyFile := filepath.Join(t.TempDir(), "key.txt")
+	if err := os.WriteFile(keyFile, []byte("sk-ant-real-key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.optionsInput.SetText(keyFile)
+	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	select {
+	case <-called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("committing the key file should have retried the model fetch")
 	}
 }
 
