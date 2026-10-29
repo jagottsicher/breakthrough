@@ -1493,6 +1493,88 @@ func TestLogAuditTimeFieldLabelTurnsGreenOnAParseableExpression(t *testing.T) {
 	}
 }
 
+// TestLogAuditKeywordFieldLabelTurnsRedOnAnUnparseableExpression pins
+// the same silent-degradation gap logAuditKeywordQuery's own doc
+// comment documents, extended to this field per the user's own
+// explicit follow-up request: an unbalanced-parens typo used to be
+// accepted with no visible sign anything was wrong.
+func TestLogAuditKeywordFieldLabelTurnsRedOnAnUnparseableExpression(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.openLogAuditViewer()
+
+	r.logAuditKeywordField.SetText("foo AND (bar")
+
+	got, _, _ := r.logAuditKeywordField.GetLabelStyle().Decompose()
+	if want := tcell.ColorRed; got != want {
+		t.Errorf("label color = %v, want %v for an unparseable expression", got, want)
+	}
+}
+
+// TestLogAuditKeywordFieldLabelTurnsGreenOnAParseableExpression is the
+// other half: a real, recognized expression (or an empty field) gets
+// the bright attention-grabbing green instead.
+func TestLogAuditKeywordFieldLabelTurnsGreenOnAParseableExpression(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.openLogAuditViewer()
+
+	r.logAuditKeywordField.SetText("foo AND (bar OR baz)")
+	got, _, _ := r.logAuditKeywordField.GetLabelStyle().Decompose()
+	if want := tcell.ColorLime; got != want {
+		t.Errorf("label color = %v, want %v for a parseable expression", got, want)
+	}
+
+	r.logAuditKeywordField.SetText("")
+	got, _, _ = r.logAuditKeywordField.GetLabelStyle().Decompose()
+	if want := tcell.ColorLime; got != want {
+		t.Errorf("label color = %v, want %v for an empty field", got, want)
+	}
+}
+
+// TestLogAuditLevelFieldLabelTurnsRedOnAnUnrecognizedLevel pins the
+// same silent-degradation gap logAuditMinLevel's own doc comment
+// documents, extended to this field per the user's own explicit
+// follow-up request: a typo'd level name used to be accepted with no
+// visible sign anything was wrong.
+func TestLogAuditLevelFieldLabelTurnsRedOnAnUnrecognizedLevel(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.openLogAuditViewer()
+
+	r.logAuditLevelField.SetText("wrn")
+
+	got, _, _ := r.logAuditLevelField.GetLabelStyle().Decompose()
+	if want := tcell.ColorRed; got != want {
+		t.Errorf("label color = %v, want %v for an unrecognized level", got, want)
+	}
+}
+
+// TestLogAuditLevelFieldLabelTurnsGreenOnARecognizedLevel is the other
+// half: a real, recognized level name (or an empty field) gets the
+// bright attention-grabbing green instead.
+func TestLogAuditLevelFieldLabelTurnsGreenOnARecognizedLevel(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.openLogAuditViewer()
+
+	r.logAuditLevelField.SetText("warn")
+	got, _, _ := r.logAuditLevelField.GetLabelStyle().Decompose()
+	if want := tcell.ColorLime; got != want {
+		t.Errorf("label color = %v, want %v for a recognized level", got, want)
+	}
+
+	r.logAuditLevelField.SetText("")
+	got, _, _ = r.logAuditLevelField.GetLabelStyle().Decompose()
+	if want := tcell.ColorLime; got != want {
+		t.Errorf("label color = %v, want %v for an empty field", got, want)
+	}
+}
+
 // TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere is the
 // exact scenario the user reported: opening the AI Consigliere from
 // the viewer's own table used to collapse the whole ring down to just
