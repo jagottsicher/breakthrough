@@ -1763,7 +1763,7 @@ func (r *Root) buildConsigliereProvider() consigliere.Provider {
 		// errConsigliereNoAPIKey for a credential this provider never
 		// needed in the first place.
 		return consigliere.OpenAICompat{
-			BaseURL: consigliere.OllamaDefaultBaseURL,
+			BaseURL: r.consigliereOllamaBaseURL(),
 			Model:   firstNonEmptyConsigliereModel(model, consigliere.OllamaDefaultModel),
 			Effort:  effort,
 			APIKey:  func() (string, error) { return "ollama", nil },
@@ -1786,6 +1786,18 @@ func firstNonEmptyConsigliereModel(override, fallback string) string {
 		return override
 	}
 	return fallback
+}
+
+// consigliereOllamaBaseURL is ConsigliereOllamaBaseURL if the user
+// set one, otherwise consigliere.OllamaDefaultBaseURL — see that
+// setting's own doc comment (internal/config/settings.go) for the
+// real, reported gap this closes: a local-only constant assumed
+// Ollama always runs on the same machine as breakthrough itself.
+func (r *Root) consigliereOllamaBaseURL() string {
+	if url := r.settings.ConsigliereOllamaBaseURL; url != "" {
+		return url
+	}
+	return consigliere.OllamaDefaultBaseURL
 }
 
 // submitConsigliereUnlock is Enter's own action while

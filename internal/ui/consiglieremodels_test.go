@@ -16,7 +16,7 @@ import (
 // installed" default afterwards — the same t.Cleanup-scoped-override
 // shape every other swappable var in this package's tests already
 // uses.
-func withFakeConsigliereModelList(t *testing.T, fn func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error)) {
+func withFakeConsigliereModelList(t *testing.T, fn func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error)) {
 	t.Helper()
 	previous := listConsigliereModelsFunc
 	listConsigliereModelsFunc = fn
@@ -61,7 +61,7 @@ func TestRefreshConsigliereModelCacheFetchesForOllamaWithoutAnyKeyConfigured(t *
 	r.settings.ConsigliereProvider = "ollama"
 	type call struct{ providerName, key string }
 	calls := make(chan call, 1)
-	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
 		calls <- call{providerName, key}
 		return nil, nil
 	})
@@ -84,6 +84,32 @@ func TestRefreshConsigliereModelCacheFetchesForOllamaWithoutAnyKeyConfigured(t *
 	}
 }
 
+// TestRefreshConsigliereModelCachePassesTheConfiguredOllamaBaseURL
+// pins a real, reported gap: the model list has to come from the
+// same server Reply itself will actually talk to, not always the
+// built-in localhost default.
+func TestRefreshConsigliereModelCachePassesTheConfiguredOllamaBaseURL(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.settings.ConsigliereProvider = "ollama"
+	r.settings.ConsigliereOllamaBaseURL = "http://192.168.1.50:11434/v1"
+	calls := make(chan string, 1)
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
+		calls <- ollamaBaseURLOverride
+		return nil, nil
+	})
+
+	r.refreshConsigliereModelCache()
+
+	select {
+	case got := <-calls:
+		if want := "http://192.168.1.50:11434/v1"; got != want {
+			t.Errorf("fetch called with ollamaBaseURLOverride = %q, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("fetch was never called")
+	}
+}
+
 // TestRefreshConsigliereModelCacheCallsFetchWithResolvedKey pins the
 // synchronous half: a key is actually available, so the fetch is
 // attempted (not skipped) with the right provider/key pair, and
@@ -95,7 +121,7 @@ func TestRefreshConsigliereModelCacheCallsFetchWithResolvedKey(t *testing.T) {
 	r := rootWithConsigliereKey(t)
 	type call struct{ providerName, key string }
 	calls := make(chan call, 1)
-	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
 		calls <- call{providerName, key}
 		return nil, nil
 	})
@@ -145,7 +171,7 @@ func TestFinishConsigliereModelFetchRecordsErrorWithoutTouchingCache(t *testing.
 func TestRefreshConsigliereModelCacheSkipsWithoutAKey(t *testing.T) {
 	r := newPlainKeyRoot(t) // no ANTHROPIC_API_KEY set — TestMain blanks it
 	called := false
-	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
 		called = true
 		return nil, nil
 	})
@@ -164,7 +190,7 @@ func TestRefreshConsigliereModelCacheSkipsWhenAlreadyCached(t *testing.T) {
 	r := rootWithConsigliereKey(t)
 	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{{ID: "already-cached"}}
 	called := false
-	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
 		called = true
 		return nil, nil
 	})
@@ -190,7 +216,7 @@ func TestRefreshConsigliereModelCacheSkipsWhenAlreadyInFlight(t *testing.T) {
 	unblock := make(chan struct{})
 	var mu sync.Mutex
 	calls := 0
-	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key string) ([]consigliere.ModelInfo, error) {
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
 		mu.Lock()
 		calls++
 		mu.Unlock()

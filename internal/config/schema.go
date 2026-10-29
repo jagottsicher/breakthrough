@@ -712,6 +712,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "consigliere_ollama_base_url",
+			Default:     d.ConsigliereOllamaBaseURL,
+			Kind:        KindString,
+			Summary:     `Overrides Ollama's own built-in default server address ("http://localhost:11434/v1"), for an Ollama server running on a different machine. Only read while Provider is "ollama". "" means use that default.`,
+			Implemented: true,
+		},
+		{
 			Key:         "consigliere_model",
 			Default:     d.ConsigliereModel,
 			Kind:        KindString,
