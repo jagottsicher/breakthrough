@@ -670,6 +670,52 @@ func TestOpenLogAuditDetailShowsRawOnlyWhenDifferentFromMessage(t *testing.T) {
 	}
 }
 
+// TestClickLogAuditSelectionCellOpensTheViewer pins a real, reported
+// bug: clicking a log family selected the row but a second click did
+// nothing to it at all — the event fell through to whatever was
+// drawn underneath instead (the file panel), since tview's own Table
+// never runs a row's SetSelectedFunc on a plain click, only moves the
+// selection there (the same reason clickSessionsCell exists). A click
+// must open the viewer directly, the same single action Enter already
+// is.
+func TestClickLogAuditSelectionCellOpensTheViewer(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+
+	cell := r.logAuditTable.GetCell(1, logAuditSelName)
+	if cell.Clicked == nil {
+		t.Fatal("row 1's own Name cell has no Clicked handler")
+	}
+	cell.Clicked()
+
+	if r.activePage != logAuditViewerPage {
+		t.Errorf("activePage = %q after clicking a log family, want the viewer open", r.activePage)
+	}
+}
+
+// TestClickLogAuditViewerCellOpensTheDetail mirrors
+// TestClickLogAuditSelectionCellOpensTheViewer for the viewer
+// table's own rows: a click used to select a log line but never open
+// it the way Enter does.
+func TestClickLogAuditViewerCellOpensTheDetail(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	cell := r.logAuditViewerTable.GetCell(1, logAuditColMessage)
+	if cell.Clicked == nil {
+		t.Fatal("row 1's own Message cell has no Clicked handler")
+	}
+	cell.Clicked()
+
+	if r.activePage != logAuditDetailPage {
+		t.Errorf("activePage = %q after clicking a log line, want the detail dialog open", r.activePage)
+	}
+}
+
 // TestLogAuditTimeFieldDoesNotFilterLiveButDoesOnEnterOrLeave pins the
 // user's own explicit report: re-rendering the table and re-bucketing
 // the timeline on every single keystroke made typing into the Time
