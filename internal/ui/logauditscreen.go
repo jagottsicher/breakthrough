@@ -722,10 +722,17 @@ func (r *Root) restyleLogAuditFocusTargets(focused tview.Primitive) {
 // why the field's live re-filtering specifically isn't).
 func (r *Root) restyleLogAuditTimeFieldLabel() {
 	text := strings.TrimSpace(r.logAuditTimeField.GetText())
-	color := r.theme.EntryExecutable
+	// tcell.ColorLime/ColorRed directly, not theme.EntryExecutable/
+	// CriticalText: this is a live, momentary ping meant to catch the
+	// eye while typing, not part of this app's own themed palette —
+	// EntryExecutable in particular is deliberately muted (see its own
+	// doc comment on why), the opposite of what this needs. Per the
+	// user's own explicit request for something "deutlich heller,
+	// greller" than the themed colors gave here.
+	color := tcell.ColorLime
 	if text != "" {
 		if _, err := filterexpr.ParseMtime(text, time.Now()); err != nil {
-			color = r.theme.CriticalText
+			color = tcell.ColorRed
 		}
 	}
 	r.logAuditTimeField.SetLabelColor(color)
