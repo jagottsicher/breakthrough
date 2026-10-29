@@ -716,6 +716,68 @@ func TestClickLogAuditViewerCellOpensTheDetail(t *testing.T) {
 	}
 }
 
+// TestDoubleClickLogAuditSelectionRowStillOpensTheViewer pins a real,
+// reported bug: a fast second click (within tview's own 500ms
+// DoubleClickInterval) fires MouseLeftDoubleClick instead of a second
+// MouseLeftClick, and Table.MouseHandler has no case for that action
+// at all — it used to fall through to whatever was drawn underneath
+// instead (the file panel) rather than simply reopening the row a
+// plain click already opens. chainTableDoubleClick's own job is to
+// catch that action and rerun the same cell's Clicked func.
+func TestDoubleClickLogAuditSelectionRowStillOpensTheViewer(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	drawRoot(t, r, 100, 30)
+
+	rectX, rectY, _, _ := r.logAuditTable.GetInnerRect()
+	fallbackCalled := false
+	fallback := func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		fallbackCalled = true
+		return action, event
+	}
+	capture := chainTableDoubleClick(r.logAuditTable, fallback)
+
+	capture(tview.MouseLeftDoubleClick, tcell.NewEventMouse(rectX, rectY+1, tcell.ButtonPrimary, 0))
+
+	if r.activePage != logAuditViewerPage {
+		t.Errorf("activePage = %q after a double-click on row 1, want the viewer open", r.activePage)
+	}
+	if fallbackCalled {
+		t.Error("a double-click landing on a row with a Clicked handler should not have reached the fallback")
+	}
+}
+
+// TestDoubleClickLogAuditViewerRowStillOpensTheDetail mirrors
+// TestDoubleClickLogAuditSelectionRowStillOpensTheViewer for the
+// viewer table's own rows.
+func TestDoubleClickLogAuditViewerRowStillOpensTheDetail(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	drawRoot(t, r, 100, 30)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	drawRoot(t, r, 100, 30)
+
+	rectX, rectY, _, _ := r.logAuditViewerTable.GetInnerRect()
+	fallbackCalled := false
+	fallback := func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		fallbackCalled = true
+		return action, event
+	}
+	capture := chainTableDoubleClick(r.logAuditViewerTable, fallback)
+
+	capture(tview.MouseLeftDoubleClick, tcell.NewEventMouse(rectX, rectY+1, tcell.ButtonPrimary, 0))
+
+	if r.activePage != logAuditDetailPage {
+		t.Errorf("activePage = %q after a double-click on row 1, want the detail dialog open", r.activePage)
+	}
+	if fallbackCalled {
+		t.Error("a double-click landing on a row with a Clicked handler should not have reached the fallback")
+	}
+}
+
 // TestLogAuditTimeFieldDoesNotFilterLiveButDoesOnEnterOrLeave pins the
 // user's own explicit report: re-rendering the table and re-bucketing
 // the timeline on every single keystroke made typing into the Time
