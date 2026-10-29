@@ -363,6 +363,61 @@ func TestOptionDefaultHintSurfacesAModelFetchFailure(t *testing.T) {
 	}
 }
 
+// TestOptionDefaultHintTruncatesALongModelFetchFailure pins a real,
+// reported regression: an uncapped provider error (a real one can run
+// well past a normal "default: ..." hint's own length) overflowed the
+// Default column, pushing the Info column — and everything visually
+// to its right — well past where it belongs. showOptionInfo's own "?"
+// popup gets the full text instead (see TestShowOptionInfoIncludesTheFullModelFetchFailure).
+func TestOptionDefaultHintTruncatesALongModelFetchFailure(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	for i, cat := range optionCategories() {
+		if cat.name == "AI Consigliere" {
+			r.optionsCategory = i
+		}
+	}
+	long := "consigliere: Anthropic: the parameter name is `lifecycle[]`, not `lifecycle` — a much longer message than any ordinary default hint"
+	r.consigliereModelFetchInFlight["anthropic"] = true
+	r.finishConsigliereModelFetch("anthropic", nil, errors.New(long))
+
+	modelRow, ok := optionRowByKey(r, "consigliere_model")
+	if !ok {
+		t.Fatal("no consigliere_model row")
+	}
+	opt, _ := r.optionAtRow(modelRow)
+	got := r.optionDefaultHint(opt)
+	if len(got) >= len(long) {
+		t.Errorf("optionDefaultHint(consigliere_model) = %q (%d chars), want it capped well below the raw error's own %d chars", got, len(got), len(long))
+	}
+}
+
+// TestShowOptionInfoIncludesTheFullModelFetchFailure pins the other
+// half: the "?" info popup — the one place in this screen that
+// already has room for a long explanation — gets the untruncated
+// error, not just the capped hint optionDefaultHint shows inline.
+func TestShowOptionInfoIncludesTheFullModelFetchFailure(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	for i, cat := range optionCategories() {
+		if cat.name == "AI Consigliere" {
+			r.optionsCategory = i
+		}
+	}
+	long := "consigliere: Anthropic: the parameter name is `lifecycle[]`, not `lifecycle` — a much longer message than any ordinary default hint"
+	r.consigliereModelFetchInFlight["anthropic"] = true
+	r.finishConsigliereModelFetch("anthropic", nil, errors.New(long))
+
+	modelRow, ok := optionRowByKey(r, "consigliere_model")
+	if !ok {
+		t.Fatal("no consigliere_model row")
+	}
+	opt, _ := r.optionAtRow(modelRow)
+	r.showOptionInfo(opt)
+
+	if got := r.optionsInfo.GetText(true); !strings.Contains(got, long) {
+		t.Errorf("optionsInfo text = %q, want it to include the full, untruncated error %q", got, long)
+	}
+}
+
 // TestOptionDefaultHintSurfacesAnEmptyModelList is the other silent
 // path the advisor flagged: a fetch that returns no error but also no
 // models (a malformed success body, or a provider that genuinely

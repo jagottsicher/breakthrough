@@ -738,7 +738,14 @@ func (r *Root) optionDefaultHint(opt optionSpec) string {
 	if opt.key == "consigliere_model" || opt.key == "consigliere_effort" {
 		provider := r.settings.ConsigliereProvider
 		if err, ok := r.consigliereModelFetchErr[provider]; ok {
-			return "model list fetch failed: " + err.Error()
+			// Capped — a real provider error can run well past a
+			// normal "default: ..." hint's own length (a real,
+			// reported case: the Default column's own overflow pushed
+			// the Info column, and everything after it, well past
+			// where it's meant to sit). showOptionInfo's own "?"
+			// popup has room for the rest; this is just the heads-up
+			// that something needs it.
+			return "model list fetch failed: " + truncateRunes(err.Error(), 40)
 		}
 		// A fetch that returned no error but also no models is just as
 		// silent otherwise: the provider's own response parsed fine
@@ -1036,6 +1043,15 @@ func (r *Root) showOptionInfo(opt optionSpec) {
 		fmt.Fprintf(&b, "\n\n[::d]Config key:[::-] %s", opt.key)
 		fmt.Fprintf(&b, "\n[::d]Default:[::-] %s", doc.Default)
 		fmt.Fprintf(&b, "\n[::d]Currently:[::-] %s (%s)", opt.value(r), r.settingOriginLabel(opt.key))
+	}
+	// The Default column's own hint truncates a model-list fetch
+	// failure (see optionDefaultHint) — the full error belongs here
+	// instead, the one place in this screen that already has room for
+	// a long explanation.
+	if opt.key == "consigliere_model" || opt.key == "consigliere_effort" {
+		if err, ok := r.consigliereModelFetchErr[r.settings.ConsigliereProvider]; ok {
+			fmt.Fprintf(&b, "\n\n[::d]Model list fetch failed:[::-] %s", err.Error())
+		}
 	}
 	b.WriteString("\n\n[::d]Escape or a click outside closes this.[::-]")
 
