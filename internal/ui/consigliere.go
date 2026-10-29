@@ -924,6 +924,17 @@ func joinConsigliereSnapshotParts(parts ...string) string {
 }
 
 func (r *Root) consigliereContextSnapshot() string {
+	// Checked before the switch below, not as one of its own cases:
+	// viewingShells is a separate flag from activePage entirely (see
+	// its own doc comment in root.go — Shells/Terminal is deliberately
+	// not part of the overlay system activePage tracks), so activePage
+	// still reads whatever the file panel underneath last left it as.
+	// Without this, a question asked while looking at a Terminal got
+	// answered as if the file panel were still on screen — a real,
+	// reported gap.
+	if r.viewingShells {
+		return r.terminalContextSnapshot()
+	}
 	switch r.activePage {
 	case logAuditSelectionPage, logAuditViewerPage, logAuditDetailPage, logAuditStatsPage:
 		return r.logAuditContextSnapshot()
@@ -972,7 +983,18 @@ func (r *Root) panelContextSnapshot() string {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Current view: file panel.\nDirectory: %s\n", p.path)
+	b.WriteString("Current view: file panel.\n")
+	if p.isRemote() {
+		// A real, reported gap: without this, a question about "this
+		// directory" got answered as if it were a path on the local
+		// machine — never mentioning that it's actually a remote
+		// listing over SFTP, on a completely different host, which
+		// changes what advice (permissions, available tools, what
+		// "df"/"du" would even mean here) actually applies.
+		fmt.Fprintf(&b, "Directory: %s (remote, via SFTP on %s)\n", p.path, p.remoteConn.Label())
+	} else {
+		fmt.Fprintf(&b, "Directory: %s\n", p.path)
+	}
 	if len(p.selected) > 0 {
 		names := make([]string, 0, len(p.selected))
 		for path := range p.selected {
@@ -985,6 +1007,31 @@ func (r *Root) panelContextSnapshot() string {
 		}
 		fmt.Fprintf(&b, "Marked files (%d total): %s\n", len(names), strings.Join(shown, ", "))
 	}
+	return strings.TrimSpace(b.String())
+}
+
+// terminalContextSnapshot describes the Terminal/Shells screen —
+// which connection the currently-visible one is open to, and whether
+// its own process has already exited — explicitly never anything of
+// what's actually running inside it: a termtab.Session's own
+// input/output stream is a real, interactive shell session, not a
+// tview widget this package renders text into, and there is no
+// mechanism connecting it to this snapshot at all (by design — a
+// shell's own screen can carry anything, from a stray password typed
+// into a prompt to the output of a command that's still running).
+func (r *Root) terminalContextSnapshot() string {
+	var b strings.Builder
+	b.WriteString("Current view: Terminal.\n")
+	if r.activeShell < 0 || r.activeShell >= len(r.shells) {
+		b.WriteString("No terminal is actually open right now.\n")
+		return strings.TrimSpace(b.String())
+	}
+	tab := r.shells[r.activeShell]
+	fmt.Fprintf(&b, "Connected to: %s\n", tab.conn.Label())
+	if tab.exited {
+		b.WriteString("This terminal's own process has already exited.\n")
+	}
+	b.WriteString("Its own input and output are not visible here at all — only which connection it's open to.\n")
 	return strings.TrimSpace(b.String())
 }
 

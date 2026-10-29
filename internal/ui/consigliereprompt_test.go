@@ -3,17 +3,20 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/mounts"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/operations"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/sshkeys"
 )
 
@@ -46,6 +49,80 @@ func TestPanelContextSnapshotCapsMarkedFiles(t *testing.T) {
 
 	if !strings.Contains(got, fmt.Sprintf("%d total", total)) {
 		t.Errorf("snapshot = %q, want it to state the real total count even though the list itself is capped", got)
+	}
+}
+
+// TestPanelContextSnapshotMentionsARemoteConnection pins a real,
+// reported gap: a question about "this directory" while browsing a
+// remote listing over SFTP got answered as if it were a path on the
+// local machine — nothing ever said it was actually remote, on a
+// completely different host, which changes what advice (permissions,
+// available tools, what "df"/"du" would even mean here) applies.
+func TestPanelContextSnapshotMentionsARemoteConnection(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{"/remote": nil}}
+	if err := root.panel.connectRemote(client, remotefs.Connection{Host: "example.com", User: "tester"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+
+	got := root.panelContextSnapshot()
+
+	for _, want := range []string{"remote", "SFTP", "tester@example.com"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to mention %q", got, want)
+		}
+	}
+}
+
+// TestConsigliereContextSnapshotDescribesAnOpenTerminal pins the
+// other half of the same real, reported gap: viewingShells is a
+// separate flag from activePage entirely (root.go's own doc comment),
+// so a question asked while looking at a Terminal used to be answered
+// as if the file panel underneath were still on screen.
+func TestConsigliereContextSnapshotDescribesAnOpenTerminal(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+	r.openNewShellEmbedded(testShellConn("example.com"))
+	defer func() {
+		for _, tab := range r.shells {
+			_ = tab.session.Close()
+		}
+	}()
+
+	got := r.consigliereContextSnapshot()
+
+	for _, want := range []string{"Current view: Terminal.", "example.com"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("snapshot = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "Current view: file panel") {
+		t.Errorf("snapshot = %q, must not describe the file panel underneath while a Terminal is on screen", got)
+	}
+}
+
+// TestTerminalContextSnapshotNeverMentionsInputOrOutput pins the
+// explicit boundary: there is no mechanism connecting a termtab.
+// Session's own live screen content to this snapshot at all — a
+// shell's own prompt can carry anything, including a password someone
+// just typed.
+func TestTerminalContextSnapshotNeverMentionsInputOrOutput(t *testing.T) {
+	r := newTestRootForShells(t)
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "echo super-secret-password; sleep 5") })
+	r.openNewShellEmbedded(testShellConn("example.com"))
+	defer func() {
+		for _, tab := range r.shells {
+			_ = tab.session.Close()
+		}
+	}()
+
+	got := r.terminalContextSnapshot()
+
+	if strings.Contains(got, "secret") {
+		t.Errorf("snapshot = %q, must never include anything from the shell's own live screen", got)
+	}
+	if !strings.Contains(got, "not visible") {
+		t.Errorf("snapshot = %q, want it to explicitly say input/output aren't visible here", got)
 	}
 }
 
