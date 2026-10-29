@@ -149,6 +149,22 @@ func (s *Session) Cell(x, y int) vt10x.Glyph {
 	return s.term.Cell(x, y)
 }
 
+// Screen dumps the virtual terminal's own current visible contents as
+// plain text, row by row. Unlike Cell/Cursor/Size/Mode, this does
+// NOT lock around the call itself — vt10x's own String() (confirmed
+// directly against its source, not guessed) already takes its own
+// Lock()/Unlock() internally, so wrapping it here would deadlock the
+// very first call, every time. The one deliberate exception to
+// internal/ui's own "the AI Consigliere never sees a Terminal's own
+// input/output" rule (see its own terminalContextSnapshot doc
+// comment): Machiavelli Mode's opt-in forwarding needs a real string
+// to send, and vt10x.Terminal already has exactly this via the View
+// interface's own fmt.Stringer — not reimplemented here, just
+// exposed through Session.
+func (s *Session) Screen() string {
+	return s.term.String()
+}
+
 // Cursor returns the virtual terminal's own current cursor position and
 // attributes — same locking contract as Cell.
 func (s *Session) Cursor() vt10x.Cursor {

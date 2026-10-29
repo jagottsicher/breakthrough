@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/compare"
@@ -101,12 +102,31 @@ func TestConsigliereContextSnapshotDescribesAnOpenTerminal(t *testing.T) {
 	}
 }
 
-// TestTerminalContextSnapshotNeverMentionsInputOrOutput pins the
-// explicit boundary: there is no mechanism connecting a termtab.
-// Session's own live screen content to this snapshot at all — a
-// shell's own prompt can carry anything, including a password someone
-// just typed.
-func TestTerminalContextSnapshotNeverMentionsInputOrOutput(t *testing.T) {
+// waitForTerminalScreen polls (Session's own parseLoop runs on a
+// separate goroutine — see termtab's own waitForCellRow for the
+// identical reasoning) until tab's own current screen contains want,
+// or fails the test after timeout.
+func waitForTerminalScreen(t *testing.T, tab *shellTab, want string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var got string
+	for time.Now().Before(deadline) {
+		got = tab.session.Screen()
+		if strings.Contains(got, want) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("terminal screen = %q after %s, want it to contain %q", got, timeout, want)
+}
+
+// TestTerminalContextSnapshotNeverMentionsInputOrOutputByDefault pins
+// the default boundary: nothing from a termtab.Session's own live
+// screen reaches this snapshot unless Machiavelli Mode is on (see
+// TestTerminalContextSnapshotIncludesScreenUnderMachiavelliMode for
+// the opt-in exception) — a shell's own prompt can carry anything,
+// including a password someone just typed.
+func TestTerminalContextSnapshotNeverMentionsInputOrOutputByDefault(t *testing.T) {
 	r := newTestRootForShells(t)
 	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "echo super-secret-password; sleep 5") })
 	r.openNewShellEmbedded(testShellConn("example.com"))
@@ -123,6 +143,29 @@ func TestTerminalContextSnapshotNeverMentionsInputOrOutput(t *testing.T) {
 	}
 	if !strings.Contains(got, "not visible") {
 		t.Errorf("snapshot = %q, want it to explicitly say input/output aren't visible here", got)
+	}
+}
+
+// TestTerminalContextSnapshotIncludesScreenUnderMachiavelliMode pins
+// the one deliberate, opt-in exception: once the user has turned the
+// mode on, the Terminal's own current screen is forwarded verbatim —
+// Session.Screen's own doc comment has the full reasoning.
+func TestTerminalContextSnapshotIncludesScreenUnderMachiavelliMode(t *testing.T) {
+	r := newTestRootForShells(t)
+	r.settings.ConsigliereHardcoreMode = true
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "echo super-secret-password; sleep 5") })
+	r.openNewShellEmbedded(testShellConn("example.com"))
+	defer func() {
+		for _, tab := range r.shells {
+			_ = tab.session.Close()
+		}
+	}()
+	waitForTerminalScreen(t, r.shells[r.activeShell], "super-secret-password", 2*time.Second)
+
+	got := r.terminalContextSnapshot()
+
+	if !strings.Contains(got, "super-secret-password") {
+		t.Errorf("snapshot = %q, want the terminal's own current screen forwarded under Machiavelli Mode", got)
 	}
 }
 
