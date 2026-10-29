@@ -205,6 +205,18 @@ func (r *Root) newLogAuditViewerScreen() {
 		r.logAuditViewerFieldDone(key, r.logAuditLevelField, r.logAuditKeywordField)
 	})
 	r.logAuditTimeField.SetFocusFunc(func() { r.restyleLogAuditFocusTargets(r.logAuditTimeField) })
+	// Unlike the rest of this field's own live behavior (see the
+	// "Deliberately NOT a live SetChangedFunc" comment just above),
+	// this one check is cheap regardless of how many entries are
+	// loaded — a parse attempt against the typed text alone, never a
+	// re-filter or re-bucket — so it runs on every keystroke without
+	// reintroducing the sluggishness that comment describes. Per the
+	// user's own explicit request: an expression that doesn't parse
+	// (e.g. "between ... and 2026-10-26 29:59:59" — not a valid hour)
+	// used to be accepted with no visible sign anything was wrong at
+	// all, silently matching every entry instead of narrowing them;
+	// the label's own color is now that sign.
+	r.logAuditTimeField.SetChangedFunc(func(string) { r.restyleLogAuditTimeFieldLabel() })
 
 	// Level is a *minimum* severity ("warn" shows WARN and everything
 	// above it — ERROR, FATAL — not only exact WARN matches), the same
@@ -675,6 +687,29 @@ func (r *Root) restyleLogAuditFocusTargets(focused tview.Primitive) {
 	r.logAuditTimelineView.SetBackgroundColor(background)
 	r.repaintLogAuditTimeline()
 	r.renderLogAuditFocusIndicator(focused == r.logAuditViewerTable)
+	// styleInput's own call just above (inside the loop) resets every
+	// filter field's label to the ordinary, uniform TextColor on every
+	// focus change — reapplied here, after it, so a focus change never
+	// silently erases the Time field's own validity color.
+	r.restyleLogAuditTimeFieldLabel()
+}
+
+// restyleLogAuditTimeFieldLabel colors the "Time: " label itself —
+// EntryExecutable's own green when the current text is empty or
+// parses cleanly, CriticalText's own red when it doesn't — per the
+// user's own explicit request for a visible sign the expression
+// typed so far either means something or doesn't, cheap enough to run
+// on every keystroke (see SetChangedFunc's own doc comment above on
+// why the field's live re-filtering specifically isn't).
+func (r *Root) restyleLogAuditTimeFieldLabel() {
+	text := strings.TrimSpace(r.logAuditTimeField.GetText())
+	color := r.theme.EntryExecutable
+	if text != "" {
+		if _, err := filterexpr.ParseMtime(text, time.Now()); err != nil {
+			color = r.theme.CriticalText
+		}
+	}
+	r.logAuditTimeField.SetLabelColor(color)
 }
 
 // logAuditCurrentlyFocused reports whichever of the five
