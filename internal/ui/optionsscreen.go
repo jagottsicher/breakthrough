@@ -726,6 +726,28 @@ func (r *Root) renderOptionValue(opt optionSpec, value string) string {
 // shown, in the one place with room to explain it properly: the info
 // window (see showOptionInfo).
 func (r *Root) optionDefaultHint(opt optionSpec) string {
+	// The Model/Effort rows' own live choices come from a background
+	// fetch that can fail for reasons entirely outside this screen
+	// (a key good enough for Reply but not for listing models, a rate
+	// limit, a provider outage) — surfaced here rather than left
+	// silent, since a failed fetch otherwise looks identical to a
+	// provider that genuinely has nothing beyond its own default: both
+	// show just "(default: ...)"/"(model default)", and nothing else
+	// in this screen ever reads consigliereModelFetchErr (a real,
+	// reported case of exactly that silent failure).
+	if opt.key == "consigliere_model" || opt.key == "consigliere_effort" {
+		provider := r.settings.ConsigliereProvider
+		if err, ok := r.consigliereModelFetchErr[provider]; ok {
+			return "model list fetch failed: " + err.Error()
+		}
+		// A fetch that returned no error but also no models is just as
+		// silent otherwise: the provider's own response parsed fine
+		// and simply listed nothing, which still leaves Model/Effort
+		// stuck on just their own default with no visible reason why.
+		if cached, ok := r.consigliereModelCache[provider]; ok && len(cached) == 0 {
+			return "model list came back empty"
+		}
+	}
 	doc, ok := opt.doc()
 	if !ok || doc.Default == opt.value(r) {
 		return ""

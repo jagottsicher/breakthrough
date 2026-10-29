@@ -351,6 +351,12 @@ func (r *Root) cancelAPIKeyDialog() {
 	}
 	r.hideOverlay()
 	r.renderOptions()
+	// Cancelling right after a successful Unlock (see this func's own
+	// doc comment above) can also have just made an existing stored
+	// key usable for the first time this run — Model/Effort's own
+	// choices would otherwise stay stuck on just "(default: ...)"
+	// until this category is left and re-entered.
+	r.refreshConsigliereModelCacheIfSelected()
 }
 
 // runAPIKeyDialogOK is the OK button's own action (and Enter in the
@@ -416,4 +422,10 @@ func (r *Root) runAPIKeyDialogSetKey() {
 	r.apiKeyDialogKeyField.SetText("")
 	r.hideOverlay()
 	r.renderOptions()
+	// A key may have just become available for the first time —
+	// Model/Effort's own choices would otherwise stay stuck on just
+	// "(default: ...)" until this category is left and re-entered
+	// (see refreshConsigliereModelCacheIfSelected's own doc comment on
+	// why the fetch itself never runs from here directly).
+	r.refreshConsigliereModelCacheIfSelected()
 }
