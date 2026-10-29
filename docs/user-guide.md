@@ -2753,6 +2753,21 @@ keyboard focus or a drag is in progress, so an in-progress selection
 never has the buckets shift out from under it — the list keeps
 updating live regardless.
 
+The start/end labels either side of the bar show the bare time
+(`15:04:05`) when the matching entries themselves all fall on the
+same calendar day, or the full date too once they don't — based on
+what was actually found, not on the Time field's own text: a
+`between ... and ...` expression that crosses midnight can still end
+up with every matching entry clustered within one calendar day (data
+simply isn't spread across the whole span asked for), correctly
+showing bare time there even though the Time field above still names
+two different dates. The bar's own bucket counts and colors are
+unaffected either way — only the label text depends on this.
+
+The Time field's own label turns red while its current text doesn't
+parse as a valid expression (an out-of-range value like `29:59:59`,
+for instance) and green once it does, or while the field is empty.
+
 | Key | Action |
 |---|---|
 | Filter field | Case-insensitive substring over Source and Message, narrowing the list live and highlighting every match |

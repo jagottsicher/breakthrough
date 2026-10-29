@@ -952,6 +952,16 @@ var helpText = strings.TrimLeft(`
   so an in-progress selection never has its buckets shift out from
   under it.
 
+  The start/end labels show the bare time once the matching entries
+  themselves all fall on the same calendar day — based on what was
+  actually found, not on the Time field's own text, so a "between ...
+  and ..." expression that crosses midnight can still show bare time
+  if the data it matched happens to cluster within one day. The bar's
+  own bucket counts and colors never depend on this, only the label
+  text does. The Time field's own label turns red while its current
+  text doesn't parse (an out-of-range value like "29:59:59", for
+  instance) and green once it does, or while the field is empty.
+
     Filter          A boolean query over Source and Message, narrowing
                      the list live and highlighting every positively-
                      matching term (never one whose own absence is what

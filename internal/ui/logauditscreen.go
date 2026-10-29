@@ -420,28 +420,47 @@ func (r *Root) renderLogAuditSelection() {
 	enableTableSelection(r.logAuditTable)
 	for i, g := range r.logAuditGroups {
 		row := i + 1
+		click := r.clickLogAuditSelectionCell(row)
 		r.logAuditTable.SetCell(row, logAuditSelName,
-			tview.NewTableCell(g.Base).SetTextColor(r.theme.Text).SetSelectable(true))
+			tview.NewTableCell(g.Base).SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
 		// Text, not MutedTextColor — per the user's own explicit report:
 		// Name already uses Text (white), and Info/Size/Modified looked
 		// inconsistently dimmer next to it for no real reason (none of
 		// these three carry any "this is secondary" meaning Name
 		// itself doesn't also have).
 		r.logAuditTable.SetCell(row, logAuditSelInfo,
-			tview.NewTableCell(logAuditGroupInfo(g)).SetTextColor(r.theme.Text).SetSelectable(true))
+			tview.NewTableCell(logAuditGroupInfo(g)).SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
 		sizeText, modText := "", ""
 		if newest, ok := g.Newest(); ok {
 			sizeText = humanSize(newest.Size)
 			modText = logAuditTimeText(newest.ModTime)
 		}
 		r.logAuditTable.SetCell(row, logAuditSelSize,
-			tview.NewTableCell(sizeText).SetTextColor(r.theme.Text).SetSelectable(true))
+			tview.NewTableCell(sizeText).SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
 		r.logAuditTable.SetCell(row, logAuditSelModified,
-			tview.NewTableCell(modText).SetTextColor(r.theme.Text).SetSelectable(true))
+			tview.NewTableCell(modText).SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
 	}
 
 	if cur, _ := r.logAuditTable.GetSelection(); cur < 1 || cur > len(r.logAuditGroups) {
 		r.logAuditTable.Select(1, 0)
+	}
+}
+
+// clickLogAuditSelectionCell is one row's own mouse action — see
+// clickSessionsCell's own doc comment (sessions.go) for why this has
+// to be per-cell rather than a table-wide mouse capture: tview's own
+// Table never runs a row's SetSelectedFunc on a plain click, only
+// moves the selection there. A real, reported bug: clicking a log
+// family selected the row but a second click did nothing to it at
+// all — the event fell through to whatever was drawn underneath
+// instead (the file panel), since nothing here ever actually opened
+// it on a click, only on Enter. Returns true so tview does not also
+// move the selection afterwards (this already does, via Select).
+func (r *Root) clickLogAuditSelectionCell(row int) func() bool {
+	return func() bool {
+		r.logAuditTable.Select(row, 0)
+		r.openLogAuditViewer()
+		return true
 	}
 }
 
@@ -925,7 +944,8 @@ func (r *Root) renderLogAuditViewer() {
 		levelColor := logAuditLevelColor(r.theme, e.Level)
 		cell := func(col int, text string, color tcell.Color) {
 			r.logAuditViewerTable.SetCell(row, col,
-				tview.NewTableCell(text).SetTextColor(color).SetSelectable(true))
+				tview.NewTableCell(text).SetTextColor(color).SetSelectable(true).
+					SetClickedFunc(r.clickLogAuditViewerCell(row)))
 		}
 		cell(logAuditColTime, padRight(logAuditTimeText(e.Time), 19), r.theme.Text)
 		cell(logAuditColLevel, padRight(e.Level.String(), 5), levelColor)
@@ -979,6 +999,19 @@ func (r *Root) navigateLogAuditLevel(level logview.Level) {
 			r.logAuditViewerTable.Select(row, 0)
 			return
 		}
+	}
+}
+
+// clickLogAuditViewerCell mirrors clickLogAuditSelectionCell's own
+// doc comment above, for the viewer table's own rows: a click used to
+// select a log line but never open it the way Enter does, falling
+// through to whatever was underneath instead (the file panel) on a
+// second click.
+func (r *Root) clickLogAuditViewerCell(row int) func() bool {
+	return func() bool {
+		r.logAuditViewerTable.Select(row, 0)
+		r.openLogAuditDetail(row)
+		return true
 	}
 }
 
