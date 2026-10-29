@@ -1031,8 +1031,28 @@ func (r *Root) terminalContextSnapshot() string {
 	if tab.exited {
 		b.WriteString("This terminal's own process has already exited.\n")
 	}
-	b.WriteString("Its own input and output are not visible here at all — only which connection it's open to.\n")
+	if r.settings.ConsigliereHardcoreMode {
+		b.WriteString(r.consigliereMachiavelliTerminalScreen(tab))
+	} else {
+		b.WriteString("Its own input and output are not visible here at all — only which connection it's open to.\n")
+	}
 	return strings.TrimSpace(b.String())
+}
+
+// consigliereMachiavelliTerminalScreen forwards the Terminal's own
+// current visible screen content verbatim, under Machiavelli Mode
+// only — see Session.Screen's own doc comment on why this is the
+// one deliberate exception to this screen's usual "never visible
+// here" rule. A shell's own screen can carry anything, from a stray
+// password typed into a prompt to a command's own still-running
+// output, which is exactly why this is opt-in rather than the
+// default.
+func (r *Root) consigliereMachiavelliTerminalScreen(tab *shellTab) string {
+	screen := tab.session.Screen()
+	if strings.TrimSpace(screen) == "" {
+		return ""
+	}
+	return "Machiavelli Mode is on — the terminal's own current screen, forwarded verbatim:\n" + screen + "\n"
 }
 
 // logAuditContextSnapshot describes whichever Log Holepunch page is

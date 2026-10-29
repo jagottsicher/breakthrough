@@ -65,6 +65,27 @@ func TestStartParsesRealOutputIntoCells(t *testing.T) {
 	waitForCellRow(t, s, 0, "hello", 2*time.Second)
 }
 
+// TestScreenReturnsTheRealParsedContent pins Screen's own contract:
+// a plain-text dump of whatever the virtual terminal has actually
+// parsed so far, the exact same content Cell(x, y) already exposes
+// cell by cell — not a stand-in or a placeholder.
+func TestScreenReturnsTheRealParsedContent(t *testing.T) {
+	s, err := Start(connNoop(), StartOptions{
+		Cols: 20, Rows: 5,
+		Command: shCommand(`printf 'hello'`),
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	waitForCellRow(t, s, 0, "hello", 2*time.Second)
+
+	if got := s.Screen(); !strings.Contains(got, "hello") {
+		t.Errorf("Screen() = %q, want it to contain the real parsed output %q", got, "hello")
+	}
+}
+
 func TestSizeReturnsTheConfiguredStartingSize(t *testing.T) {
 	s, err := Start(connNoop(), StartOptions{
 		Cols: 42, Rows: 13,
