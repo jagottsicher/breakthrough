@@ -220,7 +220,14 @@ func (r *Root) newSessionsScreen() {
 	sessionsTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.sessionsTable, 0, 1, true).
 		AddItem(r.sessionsScrollbar, 1, 0, false)
-	sessionsTableRow.SetMouseCapture(r.sessionsScrollbar.captureMouse)
+	// chainTableDoubleClick (logauditscreen.go) — activateSessionsCell's
+	// own default column (attachSession) suspends the whole app
+	// first, so a stray second click mostly lands on the external
+	// attach command's own terminal instead (a much narrower window
+	// than the other screens this same fix now covers), but adding it
+	// here too removes the ambiguity entirely rather than leaving one
+	// table's own fast-double-click behavior unverified.
+	sessionsTableRow.SetMouseCapture(chainTableDoubleClick(r.sessionsTable, r.sessionsScrollbar.captureMouse))
 
 	r.sessionsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.sessionsTitleBar, 1, 0, false).

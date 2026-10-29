@@ -466,21 +466,38 @@ func (r *Root) renderLogAuditSelection() {
 	}
 }
 
-// chainTableDoubleClick wraps fallback (the row's own scrollbar
-// capture, in both current callers) with a check for
+// chainTableDoubleClick wraps fallback (each caller's own row-wide
+// mouse capture — a scrollbar's own captureMouse, or a plain pass-
+// through where there isn't one) with a check for
 // tview.MouseLeftDoubleClick landing on one of table's own data
-// cells — a real, reported bug: a fast second click (within tview's
-// own 500ms DoubleClickInterval — see Application.fireMouseActions,
-// verified directly against tview's own source, not guessed) fires
+// cells — a real, reported bug, first found on Log Holepunch's own
+// two tables: a fast second click (within tview's own 500ms
+// DoubleClickInterval — see Application.fireMouseActions, verified
+// directly against tview's own source, not guessed) fires
 // MouseLeftDoubleClick instead of a second MouseLeftClick, and
 // Table.MouseHandler has no case for that action at all, so it's
 // never consumed there — it fell through to whatever was drawn
-// underneath instead (the file panel), exactly the shape
-// Root.captureMouse's own MouseLeftDoubleClick case already handles
-// for the main panel's own table. Reruns whichever cell's own Clicked
-// func a plain click already wired (clickLogAuditSelectionCell/
-// clickLogAuditViewerCell) — idempotent, since both just reopen the
-// same row — rather than duplicating that logic here.
+// underneath instead, exactly the shape Root.captureMouse's own
+// MouseLeftDoubleClick case already handles for the main panel's own
+// table. Reruns whichever cell's own Clicked func a plain click
+// already wired — idempotent, since every caller's own Clicked func
+// just reopens/reactivates the same row — rather than duplicating
+// that logic here.
+//
+// Only actually reaches table at all if table is still part of
+// tview.Pages' own visible stack by the time the second click
+// arrives (confirmed directly against a real session, not assumed):
+// Log Holepunch's own viewer opens *on top* of the selection table
+// (pushOverlay never hides what's underneath), so Pages' own
+// cascading dispatch still finds this capture when the viewer's own
+// fresher widget doesn't claim the click first. A screen whose own
+// Clicked action instead calls hideOverlay() outright (closing
+// itself, not opening something new on top) has already removed
+// itself from that same stack by the time the second click's own
+// MouseLeftDoubleClick fires — wiring this exact helper onto such a
+// table's own mouse capture would build and pass tests but never
+// actually run in that scenario, a real trap this doc comment exists
+// to name explicitly rather than leave the next reader to rediscover.
 func chainTableDoubleClick(table *tview.Table, fallback func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse)) func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		if action == tview.MouseLeftDoubleClick {
