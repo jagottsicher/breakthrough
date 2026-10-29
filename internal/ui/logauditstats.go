@@ -169,9 +169,6 @@ func logAuditTimelineLayout(entries []logview.Entry, width int) (counts []int, s
 	if width < 10 {
 		width = 10
 	}
-	if width > 200 {
-		width = 200
-	}
 
 	// A first pass just to find the real span, before committing to a
 	// label format or a final bucket count — logAuditTimelineBuckets

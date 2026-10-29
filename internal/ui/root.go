@@ -2454,6 +2454,19 @@ type Root struct {
 	searchDragging                       bool
 	searchDragOffsetX, searchDragOffsetY int
 
+	// logAuditDetailDragging/logAuditDetailDragOffsetX/Y are
+	// dragLogAuditDetailMouseCapture's own equivalent of
+	// searchDragging/searchDragOffsetX/Y just above, for the Log entry
+	// detail dialog's own title bar (logauditscreen.go) — same shape,
+	// same reasoning, per the user's own explicit request that it
+	// become movable both by mouse and by keyboard (see
+	// captureLogAuditDetailKey's own Alt+Arrow handling) — deliberately
+	// no close glyph, unlike Properties/Search: Escape already closes
+	// this dialog, and the user explicitly asked for dragging only, not
+	// another way to close it.
+	logAuditDetailDragging                               bool
+	logAuditDetailDragOffsetX, logAuditDetailDragOffsetY int
+
 	// propertiesFocusIndex is Properties' own keyboard-navigation cursor
 	// (see setPropertiesFocus/movePropertiesFocus/capturePropertiesKey):
 	// -1 (nothing focused, Properties' state right after opening) or an
@@ -4100,6 +4113,14 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// own check exists to prevent.
 	if r.searchDragging {
 		return r.dragSearchMouseCapture(action, event)
+	}
+
+	// A Log entry detail dialog drag in progress — same reasoning as
+	// searchDragging/propertiesDragging above: dragging up/left past
+	// the not-yet-updated rect would otherwise stop reaching
+	// dragLogAuditDetailMouseCapture at all.
+	if r.logAuditDetailDragging {
+		return r.dragLogAuditDetailMouseCapture(action, event)
 	}
 
 	// A Log Audit timeline drag in progress — same reasoning as
