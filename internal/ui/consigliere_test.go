@@ -359,6 +359,39 @@ func TestConsigliereTitleBarShowsMachiavelliModeRegardlessOfFocus(t *testing.T) 
 	}
 }
 
+// TestConsigliereTitleBarCloseGlyphColumnIsUnaffectedByMachiavelliLabel
+// pins a real, reported bug: "·" (U+00B7, the Machiavelli Mode
+// label's own separator) is 2 bytes in UTF-8 but 1 display column —
+// renderConsigliereTitleBar used to compute padding from len(label)
+// directly, overcounting the Machiavelli label by one byte and so
+// drawing the close glyph one column too far left only while
+// Machiavelli Mode was on. The click itself was never affected (its
+// own math never depended on this label at all) — only where the
+// glyph visually landed.
+func TestConsigliereTitleBarCloseGlyphColumnIsUnaffectedByMachiavelliLabel(t *testing.T) {
+	// tview.TaggedStringWidth of everything before the glyph, not
+	// strings.Index (a byte offset): "·" is a multi-byte rune, so a
+	// byte offset would reintroduce the exact same miscount this test
+	// exists to catch, just in the test itself instead of the code
+	// under test.
+	closeGlyphColumn := func(text string) int {
+		idx := strings.Index(text, "✕")
+		return tview.TaggedStringWidth(text[:idx])
+	}
+
+	root := newPlainKeyRoot(t)
+	root.renderConsigliereTitleBar(80)
+	plainCol := closeGlyphColumn(root.consigliereTitleBar.GetText(false))
+
+	root.settings.ConsigliereHardcoreMode = true
+	root.renderConsigliereTitleBar(80)
+	machiavelliCol := closeGlyphColumn(root.consigliereTitleBar.GetText(false))
+
+	if plainCol != machiavelliCol {
+		t.Errorf("close glyph column = %d with Machiavelli Mode on, want the same %d the plain label uses", machiavelliCol, plainCol)
+	}
+}
+
 // TestShowConsigliereLeavesAnOpenDetailsSidebarOpen and
 // TestShowDetailsSidebarLeavesAnOpenConsigliereOpen pin the user's own
 // explicit request: the two no longer need to be mutually exclusive —

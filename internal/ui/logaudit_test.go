@@ -1340,6 +1340,49 @@ func TestLogAuditDetailAltArrowMovesTheDialog(t *testing.T) {
 	}
 }
 
+// TestLogAuditTimeFieldLabelTurnsRedOnAnUnparseableExpression pins a
+// real, reported bug: "between 2026-10-26 00:00:01 and 2026-10-26
+// 29:59:59" (29 is not a valid hour) used to be accepted with no
+// visible sign anything was wrong — logAuditEntryVisible silently
+// skips the time filter entirely on a parse error, matching every
+// entry instead of narrowing them. The label's own color is now that
+// sign.
+func TestLogAuditTimeFieldLabelTurnsRedOnAnUnparseableExpression(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.openLogAuditViewer()
+
+	r.logAuditTimeField.SetText("between 2026-10-26 00:00:01 and 2026-10-26 29:59:59")
+
+	got, _, _ := r.logAuditTimeField.GetLabelStyle().Decompose()
+	if want := r.theme.CriticalText; got != want {
+		t.Errorf("label color = %v, want CriticalText (%v) for an unparseable expression", got, want)
+	}
+}
+
+// TestLogAuditTimeFieldLabelTurnsGreenOnAParseableExpression is the
+// other half: a real, recognized expression (or an empty field) gets
+// the ordinary "this means something" green instead.
+func TestLogAuditTimeFieldLabelTurnsGreenOnAParseableExpression(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.openLogAuditViewer()
+
+	r.logAuditTimeField.SetText("last 7 days")
+	got, _, _ := r.logAuditTimeField.GetLabelStyle().Decompose()
+	if want := r.theme.EntryExecutable; got != want {
+		t.Errorf("label color = %v, want EntryExecutable (%v) for a parseable expression", got, want)
+	}
+
+	r.logAuditTimeField.SetText("")
+	got, _, _ = r.logAuditTimeField.GetLabelStyle().Decompose()
+	if want := r.theme.EntryExecutable; got != want {
+		t.Errorf("label color = %v, want EntryExecutable (%v) for an empty field", got, want)
+	}
+}
+
 // TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere is the
 // exact scenario the user reported: opening the AI Consigliere from
 // the viewer's own table used to collapse the whole ring down to just
