@@ -125,6 +125,20 @@ func logAuditBucketTimeRange(minT, maxT time.Time, bucketCount, i int) (from, to
 // same layout logAuditTimeText uses for the table itself) once the
 // span crosses a day boundary, where the bare time alone would be
 // ambiguous about which day it belongs to.
+// logAuditTimelineLabel renders one end of the timeline's own
+// displayed span: bare time once the real matching entries (not the
+// filter text that produced them) all fall on the same calendar day
+// — which always means a span well under 24 hours, so dropping the
+// date loses nothing a reader needs — the full date otherwise. Per
+// the user's own explicit confirmation: a "between ... and ..."
+// expression that itself crosses midnight can still end up with
+// every matching entry clustered within one calendar day (sparse
+// data near the filter's own edges), correctly showing bare time here
+// even though the filter text above it still names two different
+// dates — the two serve different questions (what was asked for vs.
+// what was actually found) and are allowed to disagree. Bucketing
+// itself (logAuditTimelineBuckets) never reads this at all, so the
+// bar's own content is unaffected either way.
 func logAuditTimelineLabel(t time.Time, sameDay bool) string {
 	if sameDay {
 		return t.Format("15:04:05")
