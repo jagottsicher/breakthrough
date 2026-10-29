@@ -87,6 +87,25 @@ func TestListAnthropicModelsSurfacesServerError(t *testing.T) {
 	}
 }
 
+// TestListAnthropicModelsSurfacesAMalformedSuccessBody pins the real,
+// reported bug: a 200 whose body doesn't match anthropicModelsResponse
+// (an API change, a proxy returning something unrelated) used to be
+// silently treated as "zero models, no error" — indistinguishable
+// from a provider that genuinely has nothing to list, and the
+// caller's own cache treats a nil error as success, caching the empty
+// result forever.
+func TestListAnthropicModelsSurfacesAMalformedSuccessBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`not json at all`))
+	}))
+	defer server.Close()
+
+	_, err := ListAnthropicModels(context.Background(), "sk-ant-test-key", server.URL, nil)
+	if err == nil {
+		t.Fatal("want an error for a 200 response whose body doesn't parse")
+	}
+}
+
 func TestListOpenAICompatModelsParsesIDsAndOptionalEffort(t *testing.T) {
 	var gotAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -138,5 +157,20 @@ func TestListOpenAICompatModelsSurfacesServerError(t *testing.T) {
 	_, err := ListOpenAICompatModels(context.Background(), "wrong-key", server.URL, nil)
 	if err == nil {
 		t.Fatal("want an error for a 401 response")
+	}
+}
+
+// TestListOpenAICompatModelsSurfacesAMalformedSuccessBody mirrors
+// TestListAnthropicModelsSurfacesAMalformedSuccessBody's own doc
+// comment for the shared OpenAI/DeepSeek code path.
+func TestListOpenAICompatModelsSurfacesAMalformedSuccessBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`not json at all`))
+	}))
+	defer server.Close()
+
+	_, err := ListOpenAICompatModels(context.Background(), "test-key", server.URL, nil)
+	if err == nil {
+		t.Fatal("want an error for a 200 response whose body doesn't parse")
 	}
 }

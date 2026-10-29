@@ -362,3 +362,29 @@ func TestOptionDefaultHintSurfacesAModelFetchFailure(t *testing.T) {
 		t.Errorf("optionDefaultHint(consigliere_effort) = %q, want it to surface the fetch error", got)
 	}
 }
+
+// TestOptionDefaultHintSurfacesAnEmptyModelList is the other silent
+// path the advisor flagged: a fetch that returns no error but also no
+// models (a malformed success body, or a provider that genuinely
+// listed nothing) is just as invisible as a real error unless called
+// out specifically — finishConsigliereModelFetch treats a nil error
+// as success regardless of how many models came back.
+func TestOptionDefaultHintSurfacesAnEmptyModelList(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	for i, cat := range optionCategories() {
+		if cat.name == "AI Consigliere" {
+			r.optionsCategory = i
+		}
+	}
+	r.consigliereModelFetchInFlight["anthropic"] = true
+	r.finishConsigliereModelFetch("anthropic", []consigliere.ModelInfo{}, nil)
+
+	modelRow, ok := optionRowByKey(r, "consigliere_model")
+	if !ok {
+		t.Fatal("no consigliere_model row")
+	}
+	opt, _ := r.optionAtRow(modelRow)
+	if got := r.optionDefaultHint(opt); !strings.Contains(got, "empty") {
+		t.Errorf("optionDefaultHint(consigliere_model) = %q, want it to mention the empty list", got)
+	}
+}

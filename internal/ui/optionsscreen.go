@@ -736,8 +736,16 @@ func (r *Root) optionDefaultHint(opt optionSpec) string {
 	// in this screen ever reads consigliereModelFetchErr (a real,
 	// reported case of exactly that silent failure).
 	if opt.key == "consigliere_model" || opt.key == "consigliere_effort" {
-		if err, ok := r.consigliereModelFetchErr[r.settings.ConsigliereProvider]; ok {
+		provider := r.settings.ConsigliereProvider
+		if err, ok := r.consigliereModelFetchErr[provider]; ok {
 			return "model list fetch failed: " + err.Error()
+		}
+		// A fetch that returned no error but also no models is just as
+		// silent otherwise: the provider's own response parsed fine
+		// and simply listed nothing, which still leaves Model/Effort
+		// stuck on just their own default with no visible reason why.
+		if cached, ok := r.consigliereModelCache[provider]; ok && len(cached) == 0 {
+			return "model list came back empty"
 		}
 	}
 	doc, ok := opt.doc()

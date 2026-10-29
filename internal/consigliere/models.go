@@ -122,9 +122,6 @@ func ListAnthropicModels(ctx context.Context, apiKey, baseURL string, client *ht
 		return nil, fmt.Errorf("consigliere: reading Anthropic models response: %w", err)
 	}
 
-	var parsed anthropicModelsResponse
-	_ = json.Unmarshal(data, &parsed)
-
 	if resp.StatusCode != http.StatusOK {
 		var errBody anthropicResponse
 		_ = json.Unmarshal(data, &errBody)
@@ -132,6 +129,18 @@ func ListAnthropicModels(ctx context.Context, apiKey, baseURL string, client *ht
 			return nil, fmt.Errorf("consigliere: Anthropic: %s", errBody.Error.Message)
 		}
 		return nil, fmt.Errorf("consigliere: Anthropic models endpoint returned status %d", resp.StatusCode)
+	}
+
+	// A 200 whose body doesn't actually match anthropicModelsResponse
+	// (an API change, a proxy returning something else entirely) must
+	// not look identical to a provider that genuinely has nothing to
+	// list: the caller's own cache treats a nil error here as success,
+	// silently caching an empty list forever (the same "keine stillen
+	// Fehler" reasoning the caller's own doc comment already applies
+	// to the HTTP layer).
+	var parsed anthropicModelsResponse
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("consigliere: parsing Anthropic models response: %w", err)
 	}
 
 	out := make([]ModelInfo, 0, len(parsed.Data))
@@ -182,9 +191,6 @@ func ListOpenAICompatModels(ctx context.Context, apiKey, baseURL string, client 
 		return nil, fmt.Errorf("consigliere: reading models response: %w", err)
 	}
 
-	var parsed openAICompatModelsResponse
-	_ = json.Unmarshal(data, &parsed)
-
 	if resp.StatusCode != http.StatusOK {
 		var errBody openAICompatResponse
 		_ = json.Unmarshal(data, &errBody)
@@ -192,6 +198,14 @@ func ListOpenAICompatModels(ctx context.Context, apiKey, baseURL string, client 
 			return nil, fmt.Errorf("consigliere: %s", errBody.Error.Message)
 		}
 		return nil, fmt.Errorf("consigliere: models endpoint returned status %d", resp.StatusCode)
+	}
+
+	// See ListAnthropicModels' own identical doc comment on why a
+	// malformed 200 must not look identical to a provider that
+	// genuinely has nothing to list.
+	var parsed openAICompatModelsResponse
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("consigliere: parsing models response: %w", err)
 	}
 
 	out := make([]ModelInfo, 0, len(parsed.Data))

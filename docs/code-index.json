@@ -518,13 +518,13 @@
     },
     {
       "path": "internal/consigliere/models.go",
-      "size": 7623,
-      "sha256": "895adf1d1bac1e83a638d4a70b18a6618a3e3bff89e77df38a4359a5958e7b78"
+      "size": 8418,
+      "sha256": "fcfcdc9632f843fa2dc3de7a27997eab5458d9f1fbdeb94ee09a598dbc1fcc66"
     },
     {
       "path": "internal/consigliere/models_test.go",
-      "size": 4416,
-      "sha256": "facdfee6aa22fe80bb9b35d431209f44ffab983777880a3cfe49ce2083a4f224"
+      "size": 5881,
+      "sha256": "8f207965d4aed47d6d5a6cc898eeb76b84693f9e4cf50866ea50ef0aaa0c25bf"
     },
     {
       "path": "internal/consigliere/openaicompat.go",
@@ -1993,8 +1993,8 @@
     },
     {
       "path": "internal/ui/consiglieremodels_test.go",
-      "size": 13223,
-      "sha256": "8b012d3c0d180eee7642b30a67077134cf298a29781fca6d73ee6dc5ad5c8252"
+      "size": 14272,
+      "sha256": "f521250aeb66fce5687c7a61a586a2b121c7a78dbbd3373999481b0dbae14f91"
     },
     {
       "path": "internal/ui/consigliereprompt.go",
@@ -2438,8 +2438,8 @@
     },
     {
       "path": "internal/ui/optionsscreen.go",
-      "size": 54301,
-      "sha256": "e2323f107bc90fc9c592a6200efb19acb6359d01caf04dcc1d17fd86d4cb43b3"
+      "size": 54704,
+      "sha256": "bd2905bba6446240d0f8aba07004893f4282dbf1bf4316100eae093a9aded57e"
     },
     {
       "path": "internal/ui/optionsscreen_test.go",
@@ -8819,21 +8819,21 @@
       "file": "internal/consigliere/models.go",
       "name": "openAICompatModelsResponse",
       "kind": "type",
-      "line": 151
+      "line": 160
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models.go",
       "name": "openAICompatModelEntry",
       "kind": "type",
-      "line": 155
+      "line": 164
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models.go",
       "name": "ListOpenAICompatModels",
       "kind": "function",
-      "line": 165
+      "line": 174
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -8852,16 +8852,30 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models_test.go",
+      "name": "TestListAnthropicModelsSurfacesAMalformedSuccessBody",
+      "kind": "function",
+      "line": 97
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/models_test.go",
       "name": "TestListOpenAICompatModelsParsesIDsAndOptionalEffort",
       "kind": "function",
-      "line": 90
+      "line": 109
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models_test.go",
       "name": "TestListOpenAICompatModelsSurfacesServerError",
       "kind": "function",
-      "line": 131
+      "line": 150
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/models_test.go",
+      "name": "TestListOpenAICompatModelsSurfacesAMalformedSuccessBody",
+      "kind": "function",
+      "line": 166
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -32353,6 +32367,13 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/consiglieremodels_test.go",
+      "name": "TestOptionDefaultHintSurfacesAnEmptyModelList",
+      "kind": "function",
+      "line": 372
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consigliereprompt.go",
       "name": "consigliereSystemPromptPath",
       "kind": "var",
@@ -43530,7 +43551,7 @@
       "name": "settingOriginLabel",
       "kind": "method",
       "receiver": "*Root",
-      "line": 752
+      "line": 760
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43538,7 +43559,7 @@
       "name": "currentOptionCategory",
       "kind": "method",
       "receiver": "*Root",
-      "line": 762
+      "line": 770
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43546,7 +43567,7 @@
       "name": "optionAtRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 774
+      "line": 782
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43554,7 +43575,7 @@
       "name": "activateOptionRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 788
+      "line": 796
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43562,7 +43583,7 @@
       "name": "cycleOptionChoice",
       "kind": "method",
       "receiver": "*Root",
-      "line": 840
+      "line": 848
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43570,7 +43591,7 @@
       "name": "editOptionValue",
       "kind": "method",
       "receiver": "*Root",
-      "line": 865
+      "line": 873
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43578,7 +43599,7 @@
       "name": "validateOptionsInputPath",
       "kind": "method",
       "receiver": "*Root",
-      "line": 935
+      "line": 943
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43586,7 +43607,7 @@
       "name": "completeOptionsInputPath",
       "kind": "method",
       "receiver": "*Root",
-      "line": 959
+      "line": 967
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43594,7 +43615,7 @@
       "name": "openOptionsInputCompletionPicker",
       "kind": "method",
       "receiver": "*Root",
-      "line": 985
+      "line": 993
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43602,7 +43623,7 @@
       "name": "showOptionInfo",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1015
+      "line": 1023
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43610,7 +43631,7 @@
       "name": "optionsInfoSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1052
+      "line": 1060
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43618,7 +43639,7 @@
       "name": "captureOptionsTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1070
+      "line": 1078
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43626,7 +43647,7 @@
       "name": "captureOptionsTableMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1095
+      "line": 1103
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43634,7 +43655,7 @@
       "name": "resetCurrentOptionCategory",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1130
+      "line": 1138
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43642,7 +43663,7 @@
       "name": "resetAllOptions",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1145
+      "line": 1153
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43650,7 +43671,7 @@
       "name": "resetOptions",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1166
+      "line": 1174
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43658,7 +43679,7 @@
       "name": "refreshSettingOrigins",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1187
+      "line": 1195
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43666,7 +43687,7 @@
       "name": "editConfigFile",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1200
+      "line": 1208
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43674,7 +43695,7 @@
       "name": "reloadSettingsFromDisk",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1222
+      "line": 1230
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43682,7 +43703,7 @@
       "name": "duplicateColorScheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1256
+      "line": 1264
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43690,7 +43711,7 @@
       "name": "freeColorSchemeSlug",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1290
+      "line": 1298
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43698,7 +43719,7 @@
       "name": "reloadColorSchemes",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1310
+      "line": 1318
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43706,7 +43727,7 @@
       "name": "applyThemeOnly",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1329
+      "line": 1337
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43714,7 +43735,7 @@
       "name": "applyOptionsTheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1338
+      "line": 1346
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -62361,5 +62382,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "84ce13f4ab61ebb037b0a5eefe3fb4de3730ab3c9c4c0231d02eb23c53af4c82"
+  "merkle_root": "7efcaeb542999847a5cea2882d9b3ca505ec609502cfe3eadf77f71473388c05"
 }
