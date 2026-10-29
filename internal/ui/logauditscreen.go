@@ -152,7 +152,17 @@ func (r *Root) newLogAuditViewerScreen() {
 	// field itself (shown only while it's actually empty), the same
 	// row Time/Level's own "(e.g. ...)" labels used to carry instead.
 	r.logAuditKeywordField.SetPlaceholder(`keyword, keyword1 AND (keyword2 OR keyword3)`)
-	r.logAuditKeywordField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
+	// logAuditKeywordQuery's own "ok is false for a blank field or an
+	// unparseable expression" contract means an unbalanced-parens
+	// typo, say, used to be accepted with no visible sign anything was
+	// wrong — silently matching every entry instead of narrowing them,
+	// the same class of silent failure the Time field's own label
+	// color already addresses — per the user's own explicit follow-up
+	// request to extend it here too.
+	r.logAuditKeywordField.SetChangedFunc(func(string) {
+		r.renderLogAuditViewer()
+		r.restyleLogAuditKeywordFieldLabel()
+	})
 	r.logAuditKeywordField.SetDoneFunc(func(key tcell.Key) {
 		// Keyword is the first stop in this screen's own field chain —
 		// Backtab from here is the backward edge into the AI
@@ -226,7 +236,17 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditLevelField = tview.NewInputField()
 	r.logAuditLevelField.SetLabel("Level >= ")
 	r.logAuditLevelField.SetPlaceholder("warn")
-	r.logAuditLevelField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
+	// logAuditMinLevel's own "ok is false for a blank field or an
+	// unrecognized level name" contract means a typo ("wrn") used to
+	// be accepted with no visible sign anything was wrong — silently
+	// matching every entry instead of narrowing them, the same class
+	// of silent failure the Time field's own label color already
+	// addresses — per the user's own explicit follow-up request to
+	// extend it here too.
+	r.logAuditLevelField.SetChangedFunc(func(string) {
+		r.renderLogAuditViewer()
+		r.restyleLogAuditLevelFieldLabel()
+	})
 	r.logAuditLevelField.SetDoneFunc(func(key tcell.Key) {
 		// next is the timeline, not the table directly — see
 		// captureLogAuditTimelineKey's own doc comment on the Tab
@@ -738,33 +758,71 @@ func (r *Root) restyleLogAuditFocusTargets(focused tview.Primitive) {
 	// styleInput's own call just above (inside the loop) resets every
 	// filter field's label to the ordinary, uniform TextColor on every
 	// focus change — reapplied here, after it, so a focus change never
-	// silently erases the Time field's own validity color.
+	// silently erases any of the three fields' own validity color.
+	r.restyleLogAuditKeywordFieldLabel()
 	r.restyleLogAuditTimeFieldLabel()
+	r.restyleLogAuditLevelFieldLabel()
 }
 
-// restyleLogAuditTimeFieldLabel colors the "Time: " label itself —
-// EntryExecutable's own green when the current text is empty or
-// parses cleanly, CriticalText's own red when it doesn't — per the
-// user's own explicit request for a visible sign the expression
-// typed so far either means something or doesn't, cheap enough to run
-// on every keystroke (see SetChangedFunc's own doc comment above on
-// why the field's live re-filtering specifically isn't).
+// logAuditValidityLabelColor is tcell.ColorLime/ColorRed directly,
+// not theme.EntryExecutable/CriticalText: this is a live, momentary
+// ping meant to catch the eye while typing, not part of this app's
+// own themed palette — EntryExecutable in particular is deliberately
+// muted (see its own doc comment on why), the opposite of what this
+// needs. Per the user's own explicit request for something "deutlich
+// heller, greller" than the themed colors gave here. Shared by all
+// three filter fields' own restyle functions below.
+func logAuditValidityLabelColor(valid bool) tcell.Color {
+	if valid {
+		return tcell.ColorLime
+	}
+	return tcell.ColorRed
+}
+
+// restyleLogAuditKeywordFieldLabel colors the "Filter: " label by
+// whether logAuditKeywordQuery can currently parse it — see its own
+// doc comment on the silent-degradation contract this makes visible.
+// Cheap enough to run on every keystroke: a parse attempt against the
+// typed text alone, the same already-live cost renderLogAuditViewer
+// itself pays right alongside it in this field's own SetChangedFunc.
+func (r *Root) restyleLogAuditKeywordFieldLabel() {
+	text := strings.TrimSpace(r.logAuditKeywordField.GetText())
+	valid := true
+	if text != "" {
+		_, ok := logAuditKeywordQuery(text)
+		valid = ok
+	}
+	r.logAuditKeywordField.SetLabelColor(logAuditValidityLabelColor(valid))
+}
+
+// restyleLogAuditTimeFieldLabel colors the "Time: " label by whether
+// filterexpr.ParseMtime can currently parse it — per the user's own
+// explicit request for a visible sign the expression typed so far
+// either means something or doesn't, cheap enough to run on every
+// keystroke (see SetChangedFunc's own doc comment above on why the
+// field's live re-filtering specifically isn't).
 func (r *Root) restyleLogAuditTimeFieldLabel() {
 	text := strings.TrimSpace(r.logAuditTimeField.GetText())
-	// tcell.ColorLime/ColorRed directly, not theme.EntryExecutable/
-	// CriticalText: this is a live, momentary ping meant to catch the
-	// eye while typing, not part of this app's own themed palette —
-	// EntryExecutable in particular is deliberately muted (see its own
-	// doc comment on why), the opposite of what this needs. Per the
-	// user's own explicit request for something "deutlich heller,
-	// greller" than the themed colors gave here.
-	color := tcell.ColorLime
+	valid := true
 	if text != "" {
-		if _, err := filterexpr.ParseMtime(text, time.Now()); err != nil {
-			color = tcell.ColorRed
-		}
+		_, err := filterexpr.ParseMtime(text, time.Now())
+		valid = err == nil
 	}
-	r.logAuditTimeField.SetLabelColor(color)
+	r.logAuditTimeField.SetLabelColor(logAuditValidityLabelColor(valid))
+}
+
+// restyleLogAuditLevelFieldLabel mirrors
+// restyleLogAuditKeywordFieldLabel for the "Level >= " field — see
+// logAuditMinLevel's own doc comment on the identical silent-
+// degradation contract this makes visible.
+func (r *Root) restyleLogAuditLevelFieldLabel() {
+	text := strings.TrimSpace(r.logAuditLevelField.GetText())
+	valid := true
+	if text != "" {
+		_, ok := logAuditMinLevel(text)
+		valid = ok
+	}
+	r.logAuditLevelField.SetLabelColor(logAuditValidityLabelColor(valid))
 }
 
 // logAuditCurrentlyFocused reports whichever of the five

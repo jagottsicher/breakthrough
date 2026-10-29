@@ -2764,9 +2764,13 @@ showing bare time there even though the Time field above still names
 two different dates. The bar's own bucket counts and colors are
 unaffected either way — only the label text depends on this.
 
-The Time field's own label turns red while its current text doesn't
-parse as a valid expression (an out-of-range value like `29:59:59`,
-for instance) and green once it does, or while the field is empty.
+All three filter fields' own labels turn red while their current
+text doesn't parse — an unbalanced `(` for Filter, an out-of-range
+value like `29:59:59` for Time, a typo'd level name for Level — and
+green once it does, or while the field is empty. An unparseable
+filter is simply not applied (matching everything, as if that field
+were blank) rather than blocking the others, so the label color is
+the only sign anything was actually wrong.
 
 | Key | Action |
 |---|---|

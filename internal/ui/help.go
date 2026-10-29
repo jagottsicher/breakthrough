@@ -958,9 +958,13 @@ var helpText = strings.TrimLeft(`
   and ..." expression that crosses midnight can still show bare time
   if the data it matched happens to cluster within one day. The bar's
   own bucket counts and colors never depend on this, only the label
-  text does. The Time field's own label turns red while its current
-  text doesn't parse (an out-of-range value like "29:59:59", for
-  instance) and green once it does, or while the field is empty.
+  text does. All three filter fields' own labels turn red while their
+  current text doesn't parse — an unbalanced "(" for Filter, an
+  out-of-range value like "29:59:59" for Time, a typo'd level name
+  for Level — and green once it does, or while the field is empty. An
+  unparseable filter is simply not applied (matching everything, as
+  if that field were blank) rather than blocking the others, so the
+  label color is the only sign anything was actually wrong.
 
     Filter          A boolean query over Source and Message, narrowing
                      the list live and highlighting every positively-
