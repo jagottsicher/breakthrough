@@ -1714,8 +1714,8 @@ var errConsigliereLocked = errors.New("API key is stored but locked — unlock i
 // of the run (see consigliere.KeyFunc's own doc comment).
 func (r *Root) buildConsigliereProvider() consigliere.Provider {
 	providerName := r.settings.ConsigliereProvider
-	model := r.settings.ConsigliereModel
-	effort := r.settings.ConsigliereEffort
+	model := r.settings.ConsigliereModelFor(providerName)
+	effort := r.settings.ConsigliereEffortFor(providerName)
 	keyFile := r.settings.ConsigliereAPIKeyFile
 	session := r.apiKeySession
 

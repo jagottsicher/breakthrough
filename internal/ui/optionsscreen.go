@@ -739,6 +739,21 @@ func (r *Root) renderOptionValue(opt optionSpec, value string) string {
 // The provenance itself is still worth knowing occasionally, and still
 // shown, in the one place with room to explain it properly: the info
 // window (see showOptionInfo).
+// isConsigliereModelOrEffortKey reports whether key is one of the
+// twelve per-provider "Model"/"Effort" rows (see
+// consigliereModelOptionFor/consigliereEffortOptionFor in
+// optioncatalog.go) — optionDefaultHint/showOptionInfo both need to
+// single these out, regardless of which provider's own copy a given
+// row is, to surface consigliereModelFetchErr.
+func isConsigliereModelOrEffortKey(key string) bool {
+	for _, provider := range []string{"anthropic", "openai", "deepseek", "gemini", "ollama", "custom"} {
+		if key == consigliereModelEffortKeyFor(provider, "model") || key == consigliereModelEffortKeyFor(provider, "effort") {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Root) optionDefaultHint(opt optionSpec) string {
 	// The Model/Effort rows' own live choices come from a background
 	// fetch that can fail for reasons entirely outside this screen
@@ -749,7 +764,7 @@ func (r *Root) optionDefaultHint(opt optionSpec) string {
 	// show just "(default: ...)"/"(model default)", and nothing else
 	// in this screen ever reads consigliereModelFetchErr (a real,
 	// reported case of exactly that silent failure).
-	if opt.key == "consigliere_model" || opt.key == "consigliere_effort" {
+	if isConsigliereModelOrEffortKey(opt.key) {
 		provider := r.settings.ConsigliereProvider
 		if err, ok := r.consigliereModelFetchErr[provider]; ok {
 			// Capped — a real provider error can run well past a
@@ -879,6 +894,21 @@ func (r *Root) cycleOptionChoice(opt optionSpec) {
 			next = (i + 1) % len(choices)
 			break
 		}
+	}
+
+	// consigliereTypedEntrySentinel (consiglieremodels.go) is the one
+	// deliberate exception to "activating the row *is* the change"
+	// above: Model/Effort need a way to type an arbitrary ID that was
+	// never fetched or stored before — a real, reported gap, since
+	// every other choice on those two rows only ever comes from a
+	// live fetch or an already-stored override, with no way to type a
+	// brand new one through this screen at all. Cycling onto it opens
+	// the same free-text input every KindString row without choices
+	// already gets (editOptionValue), rather than applying the
+	// sentinel value itself.
+	if choices[next].value == consigliereTypedEntrySentinel {
+		r.editOptionValue(opt)
+		return
 	}
 
 	opt.apply(r, choices[next].value)
@@ -1062,7 +1092,7 @@ func (r *Root) showOptionInfo(opt optionSpec) {
 	// failure (see optionDefaultHint) — the full error belongs here
 	// instead, the one place in this screen that already has room for
 	// a long explanation.
-	if opt.key == "consigliere_model" || opt.key == "consigliere_effort" {
+	if isConsigliereModelOrEffortKey(opt.key) {
 		if err, ok := r.consigliereModelFetchErr[r.settings.ConsigliereProvider]; ok {
 			fmt.Fprintf(&b, "\n\n[::d]Model list fetch failed:[::-] %s", err.Error())
 		}

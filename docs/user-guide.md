@@ -1856,8 +1856,8 @@ Along with the question itself, every request includes:
 | Setting | What it does |
 |---|---|
 | Provider | `anthropic`, `openai`, `deepseek`, `gemini`, `ollama` (no API key needed — the server doesn't have to be this same machine, see "Ollama base URL" below), or `custom` (any other OpenAI-compatible endpoint, see "Custom base URL" below) |
-| Model | Overrides the provider's own default — the dropdown is filled from that provider's own live model list, fetched once a real API key is configured |
-| Effort | Overrides the model's own default reasoning effort; Anthropic/DeepSeek offer whichever levels that specific model actually supports, OpenAI's own fixed set otherwise (its API never reports this per model) |
+| Model | Overrides the selected provider's own default — stored per provider, so switching Provider never shows another provider's own override. The dropdown is filled from that provider's own live model list, fetched once a real API key is configured; "(enter manually...)", always the last choice, opens a free-text field for an ID that was never fetched or stored before |
+| Effort | Overrides the model's own default reasoning effort — also stored per provider. Anthropic/DeepSeek offer whichever levels that specific model actually supports, OpenAI's own fixed set otherwise (its API never reports this per model); the same "(enter manually...)" free-text entry is always the last choice here too |
 | API key file (plain text) | An optional path to a plain-text file holding the key — Tab completes a path while typing, a non-empty value must resolve to a real file, and this row warns (without blocking) if the file's own permissions are looser than 0600. Hidden while Provider is `ollama`, which needs no key at all |
 | Ollama base URL | Overrides Ollama's own built-in default server address (`http://localhost:11434/v1`) — only shown while Provider above is `ollama`. For an Ollama server running on a different machine, not the one breakthrough itself is on (e.g. `http://192.168.1.50:11434/v1` — keep the trailing `/v1`). `""` (the default) means use the built-in default |
 | Custom base URL | The address of an OpenAI-compatible endpoint this app has no built-in default for at all (a self-hosted gateway, a hosted aggregator such as `https://api.publicai.co/v1`, ...) — only shown while Provider above is `custom`. `""` (the default) means no server is configured yet |
@@ -1878,7 +1878,21 @@ rather than a real API, so none of the three tiers above ever apply to
 it, and the API key rows above are hidden entirely while it's
 selected. "Custom" does need a real key, the same three-tier way every
 other provider but Ollama does — there's no way to know in advance
-whether a given OpenAI-compatible endpoint requires one.
+whether a given OpenAI-compatible endpoint requires one. This also
+means listing available models is a real, authenticated call to the
+provider — a stored-but-locked encrypted key blocks the live model
+list the exact same way it would block Reply itself; Machiavelli Mode
+has nothing to do with this at all, since it only controls what
+*context* is forwarded alongside a key that's already resolved.
+
+Model/Effort's own "" (default) choice shows one of three things
+instead of a model name, depending on why: "(enter passphrase to
+see)" when a key is stored but the encrypted tier is still locked;
+"(no API key configured)" when nothing at all is configured yet for
+this provider; "(not available)" for any other reason the live list
+isn't available (still fetching, the fetch failed outright, or the
+provider — currently only "custom" — has no built-in default model of
+its own to report in the first place).
 
 Two buttons, also under this category: "Edit system prompt" opens
 `~/.config/breakthrough/consigliere-system-prompt.txt` (created with a

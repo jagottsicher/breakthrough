@@ -609,21 +609,49 @@ type Settings struct {
 	// fall back to.
 	ConsigliereCustomBaseURL string
 
-	// ConsigliereModel overrides the selected provider's own built-in
-	// default model ID (internal/consigliere's
-	// Anthropic/OpenAI/DeepSeekDefaultModel consts) — "" (the default)
-	// means "use that default". Exists because model IDs retire over
-	// time; without this, an outdated built-in literal would need a
-	// breakthrough update to fix instead of a one-line override here.
-	ConsigliereModel string
-
-	// ConsigliereEffort overrides the selected model's own default
-	// reasoning effort ("effort" for Anthropic, "reasoning_effort" for
-	// OpenAI/DeepSeek — see internal/consigliere's own doc comments on
-	// each provider's request shape). "" (the default) omits the
-	// field entirely, which is each provider's own documented default
-	// behavior, not a value this package picks on its own.
+	// ConsigliereModel and ConsigliereEffort are deprecated — kept only
+	// as the one-time migration source for ConsigliereAnthropicModel/
+	// ConsigliereAnthropicEffort and their five per-provider siblings
+	// below (see MigrateLegacyConsigliereModelEffort). A single shared
+	// field for every provider was a real, reported bug: switching
+	// Provider never cleared or swapped it, so e.g. a model ID typed in
+	// for "custom" kept showing up, as if deliberately selected, after
+	// switching to "anthropic" too. Never read directly by
+	// buildConsigliereProvider/consiglieremodels.go any more — only by
+	// the migration itself, right after Load.
+	ConsigliereModel  string
 	ConsigliereEffort string
+
+	// ConsigliereAnthropicModel through ConsigliereCustomModel each
+	// override that one provider's own built-in default model ID
+	// (internal/consigliere's Default*Model consts; "custom" has none
+	// of its own — see ConsigliereCustomBaseURL's own doc comment) —
+	// "" (the default) means "use that default". One field per
+	// provider, not a single shared one (see ConsigliereModel's own
+	// doc comment on the bug that was), so switching Provider in
+	// Options shows exactly the override that provider actually has,
+	// never another provider's.
+	ConsigliereAnthropicModel string
+	ConsigliereOpenAIModel    string
+	ConsigliereDeepSeekModel  string
+	ConsigliereGeminiModel    string
+	ConsigliereOllamaModel    string
+	ConsigliereCustomModel    string
+
+	// ConsigliereAnthropicEffort through ConsigliereCustomEffort are
+	// ConsigliereAnthropicModel through ConsigliereCustomModel's own
+	// counterpart for reasoning effort ("effort" for Anthropic,
+	// "reasoning_effort" for OpenAI/DeepSeek — see internal/consigliere's
+	// own doc comments on each provider's request shape). "" (the
+	// default) omits the field entirely, which is each provider's own
+	// documented default behavior, not a value this package picks on
+	// its own.
+	ConsigliereAnthropicEffort string
+	ConsigliereOpenAIEffort    string
+	ConsigliereDeepSeekEffort  string
+	ConsigliereGeminiEffort    string
+	ConsigliereOllamaEffort    string
+	ConsigliereCustomEffort    string
 
 	// ConsigliereHardcoreMode ("Machiavelli Mode" in the Options
 	// screen's own label — see optioncatalog.go) lets a per-view
@@ -1015,12 +1043,171 @@ func (s *Settings) apply(key, value string) error {
 		s.ConsigliereModel = value
 	case "consigliere_effort":
 		s.ConsigliereEffort = value
+	case "consigliere_anthropic_model":
+		s.ConsigliereAnthropicModel = value
+	case "consigliere_openai_model":
+		s.ConsigliereOpenAIModel = value
+	case "consigliere_deepseek_model":
+		s.ConsigliereDeepSeekModel = value
+	case "consigliere_gemini_model":
+		s.ConsigliereGeminiModel = value
+	case "consigliere_ollama_model":
+		s.ConsigliereOllamaModel = value
+	case "consigliere_custom_model":
+		s.ConsigliereCustomModel = value
+	case "consigliere_anthropic_effort":
+		s.ConsigliereAnthropicEffort = value
+	case "consigliere_openai_effort":
+		s.ConsigliereOpenAIEffort = value
+	case "consigliere_deepseek_effort":
+		s.ConsigliereDeepSeekEffort = value
+	case "consigliere_gemini_effort":
+		s.ConsigliereGeminiEffort = value
+	case "consigliere_ollama_effort":
+		s.ConsigliereOllamaEffort = value
+	case "consigliere_custom_effort":
+		s.ConsigliereCustomEffort = value
 	case "consigliere_hardcore_mode":
 		return parseBool(&s.ConsigliereHardcoreMode)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
 	return nil
+}
+
+// ConsigliereModelFor and ConsigliereEffortFor return the override
+// actually in force for provider — the one ConsigliereAnthropicModel/
+// ConsigliereAnthropicEffort-style field matching it, never the
+// deprecated shared ConsigliereModel/ConsigliereEffort (see their own
+// doc comment). "" (the provider's own built-in default) for a
+// provider name none of these recognize.
+func (s Settings) ConsigliereModelFor(provider string) string {
+	switch provider {
+	case "anthropic":
+		return s.ConsigliereAnthropicModel
+	case "openai":
+		return s.ConsigliereOpenAIModel
+	case "deepseek":
+		return s.ConsigliereDeepSeekModel
+	case "gemini":
+		return s.ConsigliereGeminiModel
+	case "ollama":
+		return s.ConsigliereOllamaModel
+	case "custom":
+		return s.ConsigliereCustomModel
+	default:
+		return ""
+	}
+}
+
+func (s Settings) ConsigliereEffortFor(provider string) string {
+	switch provider {
+	case "anthropic":
+		return s.ConsigliereAnthropicEffort
+	case "openai":
+		return s.ConsigliereOpenAIEffort
+	case "deepseek":
+		return s.ConsigliereDeepSeekEffort
+	case "gemini":
+		return s.ConsigliereGeminiEffort
+	case "ollama":
+		return s.ConsigliereOllamaEffort
+	case "custom":
+		return s.ConsigliereCustomEffort
+	default:
+		return ""
+	}
+}
+
+// SetConsigliereModelFor and SetConsigliereEffortFor are
+// ConsigliereModelFor/ConsigliereEffortFor's own write side — a no-op
+// for a provider name neither recognizes.
+func (s *Settings) SetConsigliereModelFor(provider, value string) {
+	switch provider {
+	case "anthropic":
+		s.ConsigliereAnthropicModel = value
+	case "openai":
+		s.ConsigliereOpenAIModel = value
+	case "deepseek":
+		s.ConsigliereDeepSeekModel = value
+	case "gemini":
+		s.ConsigliereGeminiModel = value
+	case "ollama":
+		s.ConsigliereOllamaModel = value
+	case "custom":
+		s.ConsigliereCustomModel = value
+	}
+}
+
+func (s *Settings) SetConsigliereEffortFor(provider, value string) {
+	switch provider {
+	case "anthropic":
+		s.ConsigliereAnthropicEffort = value
+	case "openai":
+		s.ConsigliereOpenAIEffort = value
+	case "deepseek":
+		s.ConsigliereDeepSeekEffort = value
+	case "gemini":
+		s.ConsigliereGeminiEffort = value
+	case "ollama":
+		s.ConsigliereOllamaEffort = value
+	case "custom":
+		s.ConsigliereCustomEffort = value
+	}
+}
+
+// consigliereModelEffortKeyFor builds the "consigliere_<provider>_model"/
+// "..._effort" config key for provider — field, not model, covers both
+// ("model" or "effort") — shared by the Options screen's own
+// optionSpec.key values and MigrateLegacyConsigliereModelEffort below,
+// so the two can't drift into naming the same setting two different
+// ways.
+func consigliereModelEffortKeyFor(provider, field string) string {
+	return "consigliere_" + provider + "_" + field
+}
+
+// MigrateLegacyConsigliereModelEffort moves a still-present
+// consigliere_model/consigliere_effort value (see ConsigliereModel's
+// own doc comment on why those two are deprecated) into whichever
+// provider was selected when the file holding them was last saved —
+// the one meaningful interpretation of a value that used to apply to
+// "whatever provider is selected" before each provider got its own
+// field — then removes both legacy lines from userPath so this is a
+// true one-time migration, not a value that keeps reasserting itself
+// over a since-chosen per-provider override on every later run. A
+// legacy value is only ever copied into the new field when that field
+// is still unset — never overwrites a per-provider override the user
+// already made since.
+//
+// No-op (and no disk write) when neither legacy field actually holds a
+// value — overwhelmingly the common case once migrated once, or for
+// anyone who started on a version that never had the old shared
+// fields at all.
+func MigrateLegacyConsigliereModelEffort(s *Settings, userPath string) {
+	if s.ConsigliereModel == "" && s.ConsigliereEffort == "" {
+		return
+	}
+
+	provider := s.ConsigliereProvider
+	if s.ConsigliereModel != "" && s.ConsigliereModelFor(provider) == "" {
+		s.SetConsigliereModelFor(provider, s.ConsigliereModel)
+		if userPath != "" {
+			_ = SetKey(userPath, consigliereModelEffortKeyFor(provider, "model"), s.ConsigliereModel)
+		}
+	}
+	if s.ConsigliereEffort != "" && s.ConsigliereEffortFor(provider) == "" {
+		s.SetConsigliereEffortFor(provider, s.ConsigliereEffort)
+		if userPath != "" {
+			_ = SetKey(userPath, consigliereModelEffortKeyFor(provider, "effort"), s.ConsigliereEffort)
+		}
+	}
+
+	s.ConsigliereModel = ""
+	s.ConsigliereEffort = ""
+	if userPath != "" {
+		_ = UnsetKey(userPath, "consigliere_model")
+		_ = UnsetKey(userPath, "consigliere_effort")
+	}
 }
 
 // Load reads systemPath then userPath (see ParseFile — either may not

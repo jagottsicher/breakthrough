@@ -214,6 +214,85 @@ func consigliereProviderIs(provider string) func(*Root) bool {
 	return func(r *Root) bool { return r.settings.ConsigliereProvider == provider }
 }
 
+// consigliereModelOptionFor and consigliereEffortOptionFor build one
+// provider's own "Model"/"Effort" row — six of each, one per provider,
+// every one visible only while Provider is actually set to it (see
+// withVisible/consigliereProviderIs), the same shape the Ollama/Custom
+// base-URL rows already establish for "only this one provider cares
+// about this row" — so exactly one Model row and one Effort row are
+// ever shown at a time, even though there are twelve underneath. Twelve
+// real, separate config keys (see
+// config.ConsigliereAnthropicModel's own doc comment) rather than one
+// shared field was a real, reported bug: switching Provider used to
+// leave the previous provider's own override showing — confusingly
+// live, as if still deliberately chosen — under the new provider too.
+//
+// noBuiltinDefault is "custom"'s own case: every other provider
+// substitutes its own Default*Model constant when this is "" (see
+// firstNonEmptyConsigliereModel), but "custom" has none of its own at
+// all, so its help text says so instead of naming one.
+func consigliereModelOptionFor(provider, providerLabel string, noBuiltinDefault bool) optionSpec {
+	help := fmt.Sprintf("Overrides the %s provider's own built-in default model ID.\n\n"+
+		"The list is fetched live from the provider's own API — once a key is "+
+		"available (see the \"API key\" rows below) — the first time this "+
+		"category is opened or Provider changes, then cached for the rest of "+
+		"this run. \"(default: ...)\" is always offered too, even before that "+
+		"fetch finishes or if it fails.", providerLabel)
+	if noBuiltinDefault {
+		help = fmt.Sprintf("The model ID the %s provider actually receives — unlike every "+
+			"other provider here, %s has no built-in default of its own at all, so "+
+			"\"\" is passed through as-is rather than silently substituting some "+
+			"other provider's own default.\n\n"+
+			"The list is fetched live from the endpoint's own API — once a key is "+
+			"available (see the \"API key\" rows below) — the first time this "+
+			"category is opened or Provider changes, then cached for the rest of "+
+			"this run.", providerLabel, providerLabel)
+	}
+	return withVisible(optionSpec{
+		key:   consigliereModelEffortKeyFor(provider, "model"),
+		label: "Model",
+		help:  help,
+		value: func(r *Root) string { return r.settings.ConsigliereModelFor(provider) },
+		apply: func(r *Root, v string) {
+			r.settings.SetConsigliereModelFor(provider, v)
+			r.persistSetting(consigliereModelEffortKeyFor(provider, "model"), v)
+		},
+		choices: func(r *Root) []optionChoice { return r.consigliereModelChoices() },
+	}, consigliereProviderIs(provider))
+}
+
+func consigliereEffortOptionFor(provider, providerLabel string) optionSpec {
+	return withVisible(optionSpec{
+		key:   consigliereModelEffortKeyFor(provider, "effort"),
+		label: "Effort",
+		help: fmt.Sprintf("Overrides the selected model's own default reasoning effort for "+
+			"the %s provider — \"effort\" for Anthropic, \"reasoning_effort\" for "+
+			"every OpenAI-compatible one (OpenAI, DeepSeek, Gemini, Ollama, Custom).\n\n"+
+			"For Anthropic and DeepSeek, the available levels come from the same "+
+			"live model list as \"Model\" above, specific to whichever model is "+
+			"currently selected. OpenAI's own API never reports this per model, so "+
+			"its full documented set is always offered there regardless; an "+
+			"unsupported level for a specific OpenAI model is rejected by the "+
+			"request itself.", providerLabel),
+		value: func(r *Root) string { return r.settings.ConsigliereEffortFor(provider) },
+		apply: func(r *Root, v string) {
+			r.settings.SetConsigliereEffortFor(provider, v)
+			r.persistSetting(consigliereModelEffortKeyFor(provider, "effort"), v)
+		},
+		choices: func(r *Root) []optionChoice { return r.consigliereEffortChoices() },
+	}, consigliereProviderIs(provider))
+}
+
+// consigliereModelEffortKeyFor mirrors config's own identically named
+// helper exactly — see its doc comment — kept in sync by
+// TestConsigliereModelEffortKeyForMatchesConfigPackage rather than
+// importing config just for a two-line string builder this package's
+// own schema-coverage tests already pin against config.SettingDocs
+// independently.
+func consigliereModelEffortKeyFor(provider, field string) string {
+	return "consigliere_" + provider + "_" + field
+}
+
 // machiavelliModeWarning is consigliere_hardcore_mode's own
 // confirmEnable text — long enough to need actually scrolling through
 // in openScrollAcknowledgeNotice's own fixed-size box (see
@@ -1486,40 +1565,18 @@ func optionCategories() []optionCategory {
 						}
 					},
 				},
-				{
-					key:   "consigliere_model",
-					label: "Model",
-					help: "Overrides the selected provider's own built-in default model ID.\n\n" +
-						"The list is fetched live from the provider's own API — once a key is " +
-						"available (see the \"API key\" rows below) — the first time this " +
-						"category is opened or Provider changes, then cached for the rest of " +
-						"this run. \"(default: ...)\" is always offered too, even before that " +
-						"fetch finishes or if it fails.",
-					value: func(r *Root) string { return r.settings.ConsigliereModel },
-					apply: func(r *Root, v string) {
-						r.settings.ConsigliereModel = v
-						r.persistSetting("consigliere_model", v)
-					},
-					choices: func(r *Root) []optionChoice { return r.consigliereModelChoices() },
-				},
-				{
-					key:   "consigliere_effort",
-					label: "Effort",
-					help: "Overrides the selected model's own default reasoning effort — " +
-						"\"effort\" for Anthropic, \"reasoning_effort\" for OpenAI/DeepSeek.\n\n" +
-						"For Anthropic and DeepSeek, the available levels come from the same " +
-						"live model list as \"Model\" above, specific to whichever model is " +
-						"currently selected. OpenAI's own API never reports this per model, so " +
-						"its full documented set is always offered there regardless; an " +
-						"unsupported level for a specific OpenAI model is rejected by the " +
-						"request itself.",
-					value: func(r *Root) string { return r.settings.ConsigliereEffort },
-					apply: func(r *Root, v string) {
-						r.settings.ConsigliereEffort = v
-						r.persistSetting("consigliere_effort", v)
-					},
-					choices: func(r *Root) []optionChoice { return r.consigliereEffortChoices() },
-				},
+				consigliereModelOptionFor("anthropic", "Anthropic", false),
+				consigliereEffortOptionFor("anthropic", "Anthropic"),
+				consigliereModelOptionFor("openai", "OpenAI", false),
+				consigliereEffortOptionFor("openai", "OpenAI"),
+				consigliereModelOptionFor("deepseek", "DeepSeek", false),
+				consigliereEffortOptionFor("deepseek", "DeepSeek"),
+				consigliereModelOptionFor("gemini", "Gemini", false),
+				consigliereEffortOptionFor("gemini", "Gemini"),
+				consigliereModelOptionFor("ollama", "Ollama", false),
+				consigliereEffortOptionFor("ollama", "Ollama"),
+				consigliereModelOptionFor("custom", "Custom", true),
+				consigliereEffortOptionFor("custom", "Custom"),
 				withVisible(withPathCompletion(stringOption("consigliere_api_key_file", "API key file (plain text)",
 					"An optional path to a plain-text file holding the selected provider's "+
 						"API key — the deliberately unencrypted, opt-in tier: protected only by "+
@@ -2022,10 +2079,30 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.ConsigliereOllamaBaseURL, true
 	case "consigliere_custom_base_url":
 		return s.ConsigliereCustomBaseURL, true
-	case "consigliere_model":
-		return s.ConsigliereModel, true
-	case "consigliere_effort":
-		return s.ConsigliereEffort, true
+	case "consigliere_anthropic_model":
+		return s.ConsigliereAnthropicModel, true
+	case "consigliere_anthropic_effort":
+		return s.ConsigliereAnthropicEffort, true
+	case "consigliere_openai_model":
+		return s.ConsigliereOpenAIModel, true
+	case "consigliere_openai_effort":
+		return s.ConsigliereOpenAIEffort, true
+	case "consigliere_deepseek_model":
+		return s.ConsigliereDeepSeekModel, true
+	case "consigliere_deepseek_effort":
+		return s.ConsigliereDeepSeekEffort, true
+	case "consigliere_gemini_model":
+		return s.ConsigliereGeminiModel, true
+	case "consigliere_gemini_effort":
+		return s.ConsigliereGeminiEffort, true
+	case "consigliere_ollama_model":
+		return s.ConsigliereOllamaModel, true
+	case "consigliere_ollama_effort":
+		return s.ConsigliereOllamaEffort, true
+	case "consigliere_custom_model":
+		return s.ConsigliereCustomModel, true
+	case "consigliere_custom_effort":
+		return s.ConsigliereCustomEffort, true
 	case "consigliere_hardcore_mode":
 		return strconv.FormatBool(s.ConsigliereHardcoreMode), true
 	}

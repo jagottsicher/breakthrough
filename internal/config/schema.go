@@ -725,18 +725,102 @@ func SettingDocs() []SettingDoc {
 			Summary:     `The server address Provider "custom" talks to — an OpenAI-compatible API this app has no built-in default for (a self-hosted gateway, an aggregator, ...). Only read while Provider is "custom".`,
 			Implemented: true,
 		},
+		// consigliere_model/consigliere_effort are deliberately absent
+		// here, even though Settings.apply still recognizes them (see
+		// config.ConsigliereModel's own doc comment): a single shared
+		// override for every provider was a real, reported bug, now
+		// replaced by the twelve per-provider keys below. Keeping them
+		// out of SettingDocs — rather than listing them with
+		// Implemented: false, which TestSettingDocsMarkTheUnimplementedKey
+		// reserves for "language" alone, and which would also claim the
+		// misleading "not implemented yet" in the generated template —
+		// is what actually drops them from the generated config
+		// template and the Options screen, while apply's own switch
+		// still accepts an old config file's lines long enough for
+		// MigrateLegacyConsigliereModelEffort to read and then remove
+		// them.
 		{
-			Key:         "consigliere_model",
-			Default:     d.ConsigliereModel,
+			Key:         "consigliere_anthropic_model",
+			Default:     d.ConsigliereAnthropicModel,
 			Kind:        KindString,
-			Summary:     `Overrides the selected provider's own built-in default model ID. "" means use that default.`,
+			Summary:     `Overrides the Anthropic provider's own built-in default model ID. "" means use that default.`,
 			Implemented: true,
 		},
 		{
-			Key:         "consigliere_effort",
-			Default:     d.ConsigliereEffort,
+			Key:         "consigliere_anthropic_effort",
+			Default:     d.ConsigliereAnthropicEffort,
 			Kind:        KindString,
-			Summary:     `Overrides the selected model's own default reasoning effort. "" omits it, the model's own documented default.`,
+			Summary:     `Overrides the Anthropic provider's own default reasoning effort for the selected model. "" omits it, the model's own documented default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_openai_model",
+			Default:     d.ConsigliereOpenAIModel,
+			Kind:        KindString,
+			Summary:     `Overrides the OpenAI provider's own built-in default model ID. "" means use that default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_openai_effort",
+			Default:     d.ConsigliereOpenAIEffort,
+			Kind:        KindString,
+			Summary:     `Overrides the OpenAI provider's own default reasoning effort for the selected model. "" omits it, the model's own documented default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_deepseek_model",
+			Default:     d.ConsigliereDeepSeekModel,
+			Kind:        KindString,
+			Summary:     `Overrides the DeepSeek provider's own built-in default model ID. "" means use that default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_deepseek_effort",
+			Default:     d.ConsigliereDeepSeekEffort,
+			Kind:        KindString,
+			Summary:     `Overrides the DeepSeek provider's own default reasoning effort for the selected model. "" omits it, the model's own documented default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_gemini_model",
+			Default:     d.ConsigliereGeminiModel,
+			Kind:        KindString,
+			Summary:     `Overrides the Gemini provider's own built-in default model ID. "" means use that default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_gemini_effort",
+			Default:     d.ConsigliereGeminiEffort,
+			Kind:        KindString,
+			Summary:     `Overrides the Gemini provider's own default reasoning effort for the selected model. "" omits it, the model's own documented default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_ollama_model",
+			Default:     d.ConsigliereOllamaModel,
+			Kind:        KindString,
+			Summary:     `Overrides the Ollama provider's own built-in default model ID. "" means use that default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_ollama_effort",
+			Default:     d.ConsigliereOllamaEffort,
+			Kind:        KindString,
+			Summary:     `Overrides the Ollama provider's own default reasoning effort for the selected model. "" omits it, the model's own documented default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_custom_model",
+			Default:     d.ConsigliereCustomModel,
+			Kind:        KindString,
+			Summary:     `Overrides the Custom provider's own model ID — unlike every other provider, Custom has no built-in default of its own, so "" means no model is configured yet rather than "use a default".`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_custom_effort",
+			Default:     d.ConsigliereCustomEffort,
+			Kind:        KindString,
+			Summary:     `Overrides the Custom provider's own default reasoning effort for the selected model. "" omits it.`,
 			Implemented: true,
 		},
 		{

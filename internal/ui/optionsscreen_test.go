@@ -164,6 +164,43 @@ func TestToggleOptionAppliesLiveAndPersists(t *testing.T) {
 // own gate: activating the row while it's off must not apply anything
 // yet, only open the scroll-to-acknowledge notice — accepting it (once
 // scrolled to the end) is what actually flips the setting.
+// TestCycleOptionChoiceOntoTypedEntrySentinelOpensFreeTextInput pins a
+// real, reported gap: the Model/Effort rows only ever offered what a
+// live fetch returned or what's already stored — with the encrypted
+// key locked (or a failed fetch), there was no way to type a brand
+// new model ID through this screen at all. Cycling onto the
+// typed-entry sentinel (always the last choice — see
+// appendConsigliereTypedEntryChoice) must open the ordinary free-text
+// input instead of ever applying the sentinel value itself.
+func TestCycleOptionChoiceOntoTypedEntrySentinelOpensFreeTextInput(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_anthropic_model")
+	if !ok {
+		t.Fatal("no consigliere_anthropic_model row")
+	}
+	opt, _ := r.optionAtRow(row)
+	choices := opt.choices(r)
+	last := choices[len(choices)-1]
+	if last.value != consigliereTypedEntrySentinel {
+		t.Fatalf("last choice = %+v, want the typed-entry sentinel", last)
+	}
+
+	// Cycle all the way around to land on the sentinel (the one before
+	// wrapping back to "").
+	for i := 0; i < len(choices)-1; i++ {
+		r.activateOptionRow(row)
+	}
+
+	if r.activePage != optionsInputPage {
+		t.Errorf("activePage = %q, want the free-text input open", r.activePage)
+	}
+	if got := r.settings.ConsigliereAnthropicModel; got == string(consigliereTypedEntrySentinel) {
+		t.Error("the sentinel itself must never be applied as a real model ID")
+	}
+}
+
 func TestConfirmEnableOptionAsksBeforeTurningOn(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	r.SetRect(0, 0, 100, 40)

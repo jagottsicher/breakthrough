@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jagottsicher/breakthrough/internal/apikey"
@@ -13,6 +14,18 @@ import (
 // internal/consigliere's own Reply calls already follow, just a
 // separate constant since this is a different call entirely.
 const consigliereModelFetchTimeout = 15 * time.Second
+
+// consigliereTypedEntrySentinel is a reserved optionChoice.value real
+// model/effort IDs can never collide with (a NUL byte never appears in
+// one) — appended to the Model/Effort rows' own choices (see
+// consigliereModelChoices/consigliereEffortChoices) so cycling onto it
+// opens a free-text entry instead of applying it literally (see
+// cycleOptionChoice's own doc comment on this one exception). A real,
+// reported gap without it: those two rows otherwise only ever offer
+// what a live fetch returned or what's already stored, with no way to
+// type a brand new ID — e.g. while the fetch itself is locked behind
+// an unentered passphrase, or failed outright.
+const consigliereTypedEntrySentinel = "\x00consigliere-typed-entry\x00"
 
 // listConsigliereModelsFunc is the real "list this provider's
 // available models" call — a package-level var, like dialFunc in
@@ -82,7 +95,18 @@ func (r *Root) refreshConsigliereModelCache() {
 		var err error
 		key, tier, err = apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFile, provider, r.apiKeySession)
 		if err == nil && tier == apikey.TierNone {
-			err = errConsigliereNoAPIKey
+			// Resolve itself treats a locked encrypted tier exactly
+			// like "not configured at all" (see its own doc comment)
+			// — distinguished here instead, same as
+			// buildConsigliereProvider's own keyFunc, so the Options
+			// screen can tell "nothing is configured anywhere" (a real
+			// gap) apart from "a key exists, just needs the
+			// passphrase" (nothing to fix, just unlock).
+			if r.apiKeySession != nil && r.apiKeySession.HasProvider(provider) && !r.apiKeySession.IsUnlocked() {
+				err = errConsigliereLocked
+			} else {
+				err = errConsigliereNoAPIKey
+			}
 		}
 		if err != nil {
 			r.consigliereModelFetchErr[provider] = err
@@ -150,20 +174,40 @@ func consigliereDefaultModelFor(provider string) string {
 }
 
 // consigliereDefaultChoiceLabel is the "" choice's own label for both
-// consigliereModelChoices and consigliereEffortChoices — "(not
-// available)" whenever there's nothing real to report yet: either the
-// model list hasn't been fetched successfully for this provider at
-// all (so defaultText, whatever it would otherwise say, isn't
-// confirmed against anything live), or the provider has no built-in
-// default of its own in the first place (defaultText == "", currently
-// only "custom"). Once a real, non-empty defaultText is actually
-// backed by a successful fetch, it's shown as "(<defaultText>)"
-// instead.
-func consigliereDefaultChoiceLabel(fetched bool, defaultText string) string {
-	if !fetched || defaultText == "" {
+// consigliereModelChoices and consigliereEffortChoices — once a real,
+// non-empty defaultText is actually backed by a successful fetch for
+// this provider, shown as "(<defaultText>)"; otherwise one of three
+// distinct reasons why not, rather than a single catch-all "(not
+// available)" that used to make "there's a key stored, just enter the
+// passphrase to use it" indistinguishable from "nothing is configured
+// here at all" — a real, reported gap:
+//
+//   - fetchErr is errConsigliereLocked: a key is stored encrypted but
+//     the passphrase hasn't been entered yet this run — nothing to
+//     fix, just unlock it (e.g. by asking the sidebar a question, or
+//     "API key (encrypted)" below).
+//   - fetchErr is errConsigliereNoAPIKey: no tier has anything at all
+//     for this provider — something to actually configure.
+//   - any other fetchErr, or none yet (still fetching, or this
+//     provider needs no key — e.g. Ollama — but the fetch itself
+//     hasn't completed/succeeded for some other reason): the generic
+//     "(not available)".
+//
+// defaultText == "" (currently only "custom", which has no built-in
+// default model of its own at all — see ConsigliereCustomBaseURL's
+// own doc comment) always takes the generic case too, regardless of
+// fetchErr: there's nothing to confirm via a fetch in the first place.
+func consigliereDefaultChoiceLabel(fetchErr error, fetched bool, defaultText string) string {
+	switch {
+	case errors.Is(fetchErr, errConsigliereLocked):
+		return "(enter passphrase to see)"
+	case errors.Is(fetchErr, errConsigliereNoAPIKey):
+		return "(no API key configured)"
+	case !fetched || defaultText == "":
 		return "(not available)"
+	default:
+		return "(" + defaultText + ")"
 	}
-	return "(" + defaultText + ")"
 }
 
 // consigliereModelChoices is the "Model" row's own choices — reads
@@ -183,18 +227,28 @@ func (r *Root) consigliereModelChoices() []optionChoice {
 	if d := consigliereDefaultModelFor(provider); d != "" {
 		defaultText = "default: " + d
 	}
-	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(ok, defaultText)}}
+	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(r.consigliereModelFetchErr[provider], ok, defaultText)}}
 
 	if !ok {
-		if v := r.settings.ConsigliereModel; v != "" {
+		if v := r.settings.ConsigliereModelFor(provider); v != "" {
 			choices = append(choices, optionChoice{value: v, label: v})
 		}
-		return choices
+		return appendConsigliereTypedEntryChoice(choices)
 	}
 	for _, m := range cached {
 		choices = append(choices, optionChoice{value: m.ID, label: m.ID})
 	}
-	return ensureConsigliereChoiceIncludes(choices, r.settings.ConsigliereModel)
+	choices = ensureConsigliereChoiceIncludes(choices, r.settings.ConsigliereModelFor(provider))
+	return appendConsigliereTypedEntryChoice(choices)
+}
+
+// appendConsigliereTypedEntryChoice adds consigliereTypedEntrySentinel
+// as the last choice — shared by consigliereModelChoices/
+// consigliereEffortChoices, both of whose every other choice comes
+// from a live fetch or an already-stored override (see the sentinel's
+// own doc comment on why that's not enough on its own).
+func appendConsigliereTypedEntryChoice(choices []optionChoice) []optionChoice {
+	return append(choices, optionChoice{value: consigliereTypedEntrySentinel, label: "(enter manually...)"})
 }
 
 // consigliereEffortLevelsFor returns model's own supported effort
@@ -221,7 +275,7 @@ func (r *Root) consigliereEffortLevelsFor(provider, model string) []string {
 // override reasoning, applied here to effort levels instead of models.
 func (r *Root) consigliereEffortChoices() []optionChoice {
 	provider := r.settings.ConsigliereProvider
-	model := r.settings.ConsigliereModel
+	model := r.settings.ConsigliereModelFor(provider)
 	if model == "" {
 		model = consigliereDefaultModelFor(provider)
 	}
@@ -231,11 +285,12 @@ func (r *Root) consigliereEffortChoices() []optionChoice {
 	if fetched {
 		defaultText = "model default"
 	}
-	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(fetched, defaultText)}}
+	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(r.consigliereModelFetchErr[provider], fetched, defaultText)}}
 	for _, lvl := range r.consigliereEffortLevelsFor(provider, model) {
 		choices = append(choices, optionChoice{value: lvl, label: lvl})
 	}
-	return ensureConsigliereChoiceIncludes(choices, r.settings.ConsigliereEffort)
+	choices = ensureConsigliereChoiceIncludes(choices, r.settings.ConsigliereEffortFor(provider))
+	return appendConsigliereTypedEntryChoice(choices)
 }
 
 // ensureConsigliereChoiceIncludes appends a {value, label: value}

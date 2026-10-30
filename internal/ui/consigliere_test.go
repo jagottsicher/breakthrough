@@ -289,11 +289,38 @@ func TestConsigliereOllamaBaseURLFallsBackToTheDefault(t *testing.T) {
 // it has no built-in BaseURL/Model default of its own at all, so both
 // are passed through exactly as configured, and it resolves a real key
 // the same three-tier way openai/deepseek/gemini do (unlike Ollama).
+// TestConsigliereModelIsStoredPerProviderNotShared pins the user's own
+// explicit report: setting a Model override under one provider must
+// never show up as that same provider's own override under a
+// different one — a single shared field used to do exactly that.
+func TestConsigliereModelIsStoredPerProviderNotShared(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "custom"
+	root.settings.ConsigliereCustomModel = "swiss-ai/apertus-8b-instruct"
+
+	root.settings.ConsigliereProvider = "anthropic"
+
+	if got := root.settings.ConsigliereModelFor("anthropic"); got != "" {
+		t.Errorf("ConsigliereModelFor(anthropic) = %q, want \"\" — custom's own override must not leak into anthropic's", got)
+	}
+	if got := root.settings.ConsigliereModelFor("custom"); got != "swiss-ai/apertus-8b-instruct" {
+		t.Errorf("ConsigliereModelFor(custom) = %q, want it preserved", got)
+	}
+
+	got, ok := root.buildConsigliereProvider().(consigliere.Anthropic)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.Anthropic", root.buildConsigliereProvider())
+	}
+	if got.Model != "" {
+		t.Errorf("Anthropic Model = %q, want \"\" (its own default), not custom's own override", got.Model)
+	}
+}
+
 func TestBuildConsigliereProviderForCustomUsesTheConfiguredBaseURL(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereProvider = "custom"
 	root.settings.ConsigliereCustomBaseURL = "https://api.publicai.co/v1"
-	root.settings.ConsigliereModel = "some-model"
+	root.settings.ConsigliereCustomModel = "some-model"
 
 	got, ok := root.buildConsigliereProvider().(consigliere.OpenAICompat)
 	if !ok {
