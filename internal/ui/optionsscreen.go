@@ -906,19 +906,19 @@ func (r *Root) cycleOptionChoice(opt optionSpec) {
 		}
 	}
 
-	// consigliereTypedEntrySentinel (consiglieremodels.go) is the one
-	// deliberate exception to "activating the row *is* the change"
-	// above: Model/Effort need a way to type an arbitrary ID that was
-	// never fetched or stored before — a real, reported gap, since
-	// every other choice on those two rows only ever comes from a
-	// live fetch or an already-stored override, with no way to type a
-	// brand new one through this screen at all. Cycling onto it opens
-	// the same free-text input every KindString row without choices
-	// already gets (editOptionValue), rather than applying the
-	// sentinel value itself.
-	if choices[next].value == consigliereTypedEntrySentinel {
-		r.editOptionValue(opt)
-		return
+	// consigliereTypedEntrySentinel (consiglieremodels.go) never gets
+	// applied by cycling through it — skipped straight past, wrapping
+	// the same way the real carousel the user asked for would, rather
+	// than popping the free-text input dialog mid-cycle. A real,
+	// reported regression that was: cycling fast through several
+	// values in a row landed on it unpredictably, and the dialog
+	// opening right under a still-incoming burst of clicks/keypresses
+	// was a real, reported freeze. Reaching it is now a deliberate,
+	// separate action — see enterConsigliereModelOrEffortManually,
+	// bound to its own key on this table — not a side effect of
+	// cycling past it.
+	for choices[next].value == consigliereTypedEntrySentinel {
+		next = (next + 1) % len(choices)
 	}
 
 	opt.apply(r, choices[next].value)
@@ -1156,6 +1156,25 @@ func (r *Root) captureOptionsTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
 		r.activateOptionRow(row)
 		return nil
+	}
+
+	// "m" opens the free-text entry directly on a row that offers one
+	// (currently only Model/Effort — see
+	// consigliereTypedEntrySentinel's own doc comment) — the
+	// deliberate, separate action cycleOptionChoice's own doc comment
+	// points to, now that reaching the sentinel by cycling just skips
+	// past it instead. A no-op on any other row, same as "?" already
+	// is on one with no help text.
+	if event.Key() == tcell.KeyRune && event.Rune() == 'm' {
+		if opt, ok := r.optionAtRow(row); ok && opt.choices != nil {
+			for _, c := range opt.choices(r) {
+				if c.value == consigliereTypedEntrySentinel {
+					r.editOptionValue(opt)
+					return nil
+				}
+			}
+		}
+		return event
 	}
 
 	if event.Rune() != '?' {

@@ -164,15 +164,16 @@ func TestToggleOptionAppliesLiveAndPersists(t *testing.T) {
 // own gate: activating the row while it's off must not apply anything
 // yet, only open the scroll-to-acknowledge notice — accepting it (once
 // scrolled to the end) is what actually flips the setting.
-// TestCycleOptionChoiceOntoTypedEntrySentinelOpensFreeTextInput pins a
-// real, reported gap: the Model/Effort rows only ever offered what a
-// live fetch returned or what's already stored — with the encrypted
-// key locked (or a failed fetch), there was no way to type a brand
-// new model ID through this screen at all. Cycling onto the
-// typed-entry sentinel (always the last choice — see
-// appendConsigliereTypedEntryChoice) must open the ordinary free-text
-// input instead of ever applying the sentinel value itself.
-func TestCycleOptionChoiceOntoTypedEntrySentinelOpensFreeTextInput(t *testing.T) {
+// TestCycleOptionChoiceSkipsThePastTypedEntrySentinel pins a real,
+// reported regression: cycling used to open the free-text input the
+// instant it reached the typed-entry sentinel (always the last
+// choice — see appendConsigliereTypedEntryChoice), which meant
+// clicking through Model/Effort fast could pop that dialog mid-click,
+// right under a still-incoming burst of further clicks/keypresses — a
+// real, reported freeze. Cycling now skips straight past it, wrapping
+// the same way a real carousel does; reaching it is a separate,
+// deliberate action (see TestOptionsTableKeyMOpensTypedEntryOnARowThatHasIt).
+func TestCycleOptionChoiceSkipsThePastTypedEntrySentinel(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	selectOptionCategory(t, r, "AI Consigliere")
 
@@ -187,17 +188,59 @@ func TestCycleOptionChoiceOntoTypedEntrySentinelOpensFreeTextInput(t *testing.T)
 		t.Fatalf("last choice = %+v, want the typed-entry sentinel", last)
 	}
 
-	// Cycle all the way around to land on the sentinel (the one before
-	// wrapping back to "").
+	// A full lap (one activation per real choice, sentinel excluded)
+	// must land back on "" without ever opening the free-text input
+	// along the way.
 	for i := 0; i < len(choices)-1; i++ {
 		r.activateOptionRow(row)
+		if r.activePage == optionsInputPage {
+			t.Fatalf("cycling opened the free-text input after %d activation(s) — the sentinel should only ever be skipped past", i+1)
+		}
 	}
+	if got := r.settings.ConsigliereAnthropicModel; got != "" {
+		t.Errorf("ConsigliereAnthropicModel = %q after a full lap, want back at \"\" (the sentinel must never be applied as a real model ID either)", got)
+	}
+}
+
+// TestOptionsTableKeyMOpensTypedEntryOnARowThatHasIt pins the
+// deliberate, separate action for reaching the typed-entry sentinel —
+// see TestCycleOptionChoiceSkipsThePastTypedEntrySentinel's own doc
+// comment on why cycling itself no longer does.
+func TestOptionsTableKeyMOpensTypedEntryOnARowThatHasIt(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_anthropic_model")
+	if !ok {
+		t.Fatal("no consigliere_anthropic_model row")
+	}
+	r.optionsTable.Select(row, 0)
+
+	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != optionsInputPage {
 		t.Errorf("activePage = %q, want the free-text input open", r.activePage)
 	}
-	if got := r.settings.ConsigliereAnthropicModel; got == string(consigliereTypedEntrySentinel) {
-		t.Error("the sentinel itself must never be applied as a real model ID")
+}
+
+// TestOptionsTableKeyMIsANoOpOnARowWithoutTypedEntry pins the other
+// half: "m" does nothing (doesn't even consume the keypress) on a row
+// that offers no free-text entry at all, e.g. an ordinary enum like
+// color_scheme.
+func TestOptionsTableKeyMIsANoOpOnARowWithoutTypedEntry(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	row, ok := optionRowByKey(r, "color_scheme")
+	if !ok {
+		t.Fatal("no color_scheme row")
+	}
+	r.optionsTable.Select(row, 0)
+	before := r.activePage
+
+	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModNone), func(tview.Primitive) {})
+
+	if r.activePage != before {
+		t.Errorf("activePage changed to %q after \"m\" on a row with no typed entry", r.activePage)
 	}
 }
 
