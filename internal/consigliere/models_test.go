@@ -63,7 +63,7 @@ func TestListAnthropicModelsParsesEffortLevelsAndFiltersLifecycle(t *testing.T) 
 	if models[0].ID != "claude-opus-5-5" {
 		t.Errorf("models[0].ID = %q", models[0].ID)
 	}
-	want := []string{"low", "medium", "high", "xhigh", "max"}
+	want := []string{"max", "xhigh", "high", "medium", "low"}
 	if len(models[0].EffortLevels) != len(want) {
 		t.Fatalf("EffortLevels = %v, want %v", models[0].EffortLevels, want)
 	}

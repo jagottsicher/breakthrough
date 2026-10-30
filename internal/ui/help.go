@@ -509,7 +509,10 @@ var helpText = strings.TrimLeft(`
   system prompt.
 
   Configured entirely under Options → AI Consigliere: Provider,
-  Model, Effort, the API key (environment variable, an opt-in
+  Model, Effort (both stored per provider, fetched live once a key is
+  configured; Enter/Space cycles through the list like a carousel,
+  wrapping around — press "m" instead to type a model/effort ID
+  manually, one that was never fetched or stored), the API key (environment variable, an opt-in
   plain-text file, or encrypted under a passphrase asked for once per
   run — none of this applies to Ollama, which needs no key at all;
   hidden entirely while Provider is "Ollama" for exactly that

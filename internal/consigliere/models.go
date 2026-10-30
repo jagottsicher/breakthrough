@@ -67,26 +67,30 @@ type anthropicModelEntry struct {
 	} `json:"capabilities"`
 }
 
-// effortLevels collects whichever of low/medium/high/xhigh/max this
+// effortLevels collects whichever of max/xhigh/high/medium/low this
 // entry's own capabilities.effort reports as supported, in that fixed
-// order — the same order the Effort documentation itself lists them
-// in (platform.claude.com/docs/en/build-with-claude/effort).
+// order — the same descending-capability order the Effort
+// documentation itself lists them in
+// (platform.claude.com/docs/en/build-with-claude/effort, checked
+// 2026-10-31) — a real, reported bug fixed here: this used to build
+// the ascending order instead, backwards from what the doc comment
+// already claimed.
 func (e anthropicModelEntry) effortLevels() []string {
 	var out []string
-	if e.Capabilities.Effort.Low.Supported {
-		out = append(out, "low")
-	}
-	if e.Capabilities.Effort.Medium.Supported {
-		out = append(out, "medium")
-	}
-	if e.Capabilities.Effort.High.Supported {
-		out = append(out, "high")
+	if e.Capabilities.Effort.Max.Supported {
+		out = append(out, "max")
 	}
 	if e.Capabilities.Effort.XHigh.Supported {
 		out = append(out, "xhigh")
 	}
-	if e.Capabilities.Effort.Max.Supported {
-		out = append(out, "max")
+	if e.Capabilities.Effort.High.Supported {
+		out = append(out, "high")
+	}
+	if e.Capabilities.Effort.Medium.Supported {
+		out = append(out, "medium")
+	}
+	if e.Capabilities.Effort.Low.Supported {
+		out = append(out, "low")
 	}
 	return out
 }

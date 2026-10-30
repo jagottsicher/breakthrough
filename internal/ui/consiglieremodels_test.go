@@ -545,6 +545,87 @@ func TestConsigliereEffortChoicesDefaultLabelShowsModelDefaultOnceFetched(t *tes
 	}
 }
 
+// TestConsigliereEffortChoicesParsesTheRealAnthropicCapabilitiesShape
+// pins the exact GET /v1/models response shape Anthropic's own API
+// documents (platform.claude.com/docs/en/api/models/list, checked
+// 2026-10-31) end to end — a real ID fetched through
+// ListAnthropicModels, cached, then looked up by
+// consigliereEffortChoices for that exact same ID. Written to rule
+// parsing out as the cause of a real, reported "Effort never offers
+// anything for Anthropic" complaint before looking anywhere else: if
+// this test passes, the parsing/caching/lookup chain itself is sound,
+// and the real explanation is almost certainly the encrypted tier
+// being locked (no cache populated at all yet, reported today via
+// consigliereDefaultChoiceLabel's own three-state label — see
+// TestConsigliereModelChoicesDefaultLabelDistinguishesLockedFromNoKey),
+// not a defect in how effort levels are read.
+func TestConsigliereEffortChoicesParsesTheRealAnthropicCapabilitiesShape(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"data": [{
+				"id": "claude-opus-5-5",
+				"type": "model",
+				"lifecycle": "active",
+				"capabilities": {
+					"effort": {
+						"supported": true,
+						"low": {"supported": true},
+						"medium": {"supported": true},
+						"high": {"supported": true},
+						"max": {"supported": true},
+						"xhigh": {"supported": true}
+					}
+				}
+			}],
+			"first_id": "claude-opus-5-5",
+			"has_more": false,
+			"last_id": "claude-opus-5-5"
+		}`))
+	}))
+	defer server.Close()
+
+	models, err := consigliere.ListAnthropicModels(context.Background(), "test-key", server.URL, nil)
+	if err != nil {
+		t.Fatalf("ListAnthropicModels: %v", err)
+	}
+
+	r := newPlainKeyRoot(t)
+	r.consigliereModelCache["anthropic"] = models
+	r.settings.ConsigliereAnthropicModel = "claude-opus-5-5"
+
+	choices := r.consigliereEffortChoices()
+
+	want := []string{"", "max", "xhigh", "high", "medium", "low", consigliereTypedEntrySentinel}
+	if len(choices) != len(want) {
+		t.Fatalf("choices = %+v, want %v", choices, want)
+	}
+	for i, v := range want {
+		if choices[i].value != v {
+			t.Errorf("choices[%d] = %q, want %q", i, choices[i].value, v)
+		}
+	}
+}
+
+// TestConsigliereEffortChoicesFindsNothingForAnUncachedModelID pins
+// the other half: a configured model ID that doesn't match anything
+// in the cache (a typo, a renamed/retired model, or simply no cache at
+// all yet) degrades to just "(model default)" plus the typed-entry
+// sentinel — never an error, and never a stale/wrong set of levels.
+func TestConsigliereEffortChoicesFindsNothingForAnUncachedModelID(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{
+		{ID: "claude-opus-5-5", EffortLevels: []string{"low", "high"}},
+	}
+	r.settings.ConsigliereAnthropicModel = "claude-sonnet-5-5" // not in the cache above
+
+	choices := r.consigliereEffortChoices()
+
+	want := []string{"", consigliereTypedEntrySentinel}
+	if len(choices) != len(want) {
+		t.Fatalf("choices = %+v, want %v (no per-model levels found)", choices, want)
+	}
+}
+
 func TestConsigliereEffortChoicesUsesPerModelLevelsForAnthropic(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	r.settings.ConsigliereAnthropicModel = "claude-opus-5-5"
