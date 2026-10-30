@@ -153,8 +153,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 172436,
-      "sha256": "4598d04de8585e8d2519c1179750e8914792ea10232f55b7eebaaab4f870ae58"
+      "size": 172618,
+      "sha256": "545cc51cc9ef1805de6e1c9cd8052fbb41be1f63f35ec846d2dd0d9d00ff5a20"
     },
     {
       "path": "docs/whitepaper.md",
@@ -518,13 +518,13 @@
     },
     {
       "path": "internal/consigliere/models.go",
-      "size": 8604,
-      "sha256": "b4c612130174455c207b34f5c1f5217d918516a4e4d1acdf72d0f658bb793dba"
+      "size": 10990,
+      "sha256": "08921b0250313f20290c7f27cfa963c2192860e28c8ef767867b3c3a246e224c"
     },
     {
       "path": "internal/consigliere/models_test.go",
-      "size": 5887,
-      "sha256": "b4faad9b189ea9c9ec992c27a1dc2d90d5b72977fbff2986ea4bf9e48c03d8f0"
+      "size": 7576,
+      "sha256": "1dbc119cbc0c77c491edbf55cc220c5a1a0f7dd3002ffd397658053be13174e0"
     },
     {
       "path": "internal/consigliere/openaicompat.go",
@@ -1988,13 +1988,13 @@
     },
     {
       "path": "internal/ui/consiglieremodels.go",
-      "size": 13575,
-      "sha256": "679cf3fd7346894004b9713b2aaa4d216ec866465e9a9312acc11afccbc8775a"
+      "size": 14764,
+      "sha256": "493eebdef6ad77344f3b86f223d8ba7f27b100dd3d63c4214b994fba25ae2435"
     },
     {
       "path": "internal/ui/consiglieremodels_test.go",
-      "size": 26259,
-      "sha256": "2f996bf373056f0ac43ddf75c9334b3ad4992d819d81b5a8eab40c45b72b6f2f"
+      "size": 28702,
+      "sha256": "ea2df0e888d4cad154449d3d12fcc53e8b344fcf68d781a513485b925a3b7cb8"
     },
     {
       "path": "internal/ui/consigliereprompt.go",
@@ -4360,6 +4360,8 @@
         "io",
         "io/fs",
         "math",
+        "net/http",
+        "net/http/httptest",
         "os",
         "os/exec",
         "os/user",
@@ -8852,35 +8854,35 @@
       "file": "internal/consigliere/models.go",
       "name": "ModelInfo",
       "kind": "type",
-      "line": 20
+      "line": 21
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models.go",
       "name": "OpenAIEffortLevels",
       "kind": "var",
-      "line": 40
+      "line": 41
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models.go",
       "name": "anthropicModelsResponse",
       "kind": "type",
-      "line": 47
+      "line": 48
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models.go",
       "name": "anthropicCapabilitySupport",
       "kind": "type",
-      "line": 51
+      "line": 52
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models.go",
       "name": "anthropicModelEntry",
       "kind": "type",
-      "line": 55
+      "line": 56
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -8888,35 +8890,49 @@
       "name": "effortLevels",
       "kind": "method",
       "receiver": "anthropicModelEntry",
-      "line": 73
+      "line": 74
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models.go",
       "name": "ListAnthropicModels",
       "kind": "function",
-      "line": 108
+      "line": 109
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models.go",
       "name": "openAICompatModelsResponse",
       "kind": "type",
-      "line": 163
+      "line": 164
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models.go",
       "name": "openAICompatModelEntry",
       "kind": "type",
-      "line": 167
+      "line": 168
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/models.go",
       "name": "ListOpenAICompatModels",
       "kind": "function",
-      "line": 177
+      "line": 178
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/models.go",
+      "name": "ollamaTagsResponse",
+      "kind": "type",
+      "line": 231
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/models.go",
+      "name": "ListOllamaNativeModels",
+      "kind": "function",
+      "line": 250
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -8959,6 +8975,20 @@
       "name": "TestListOpenAICompatModelsSurfacesAMalformedSuccessBody",
       "kind": "function",
       "line": 166
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/models_test.go",
+      "name": "TestListOllamaNativeModelsParsesNamesAndStripsV1",
+      "kind": "function",
+      "line": 184
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/models_test.go",
+      "name": "TestListOllamaNativeModelsSurfacesServerError",
+      "kind": "function",
+      "line": 216
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -32374,10 +32404,17 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels.go",
+      "name": "listOllamaModelsWithNativeFallback",
+      "kind": "function",
+      "line": 76
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/consiglieremodels.go",
       "name": "refreshConsigliereModelCache",
       "kind": "method",
       "receiver": "*Root",
-      "line": 77
+      "line": 102
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32385,21 +32422,21 @@
       "name": "finishConsigliereModelFetch",
       "kind": "method",
       "receiver": "*Root",
-      "line": 139
+      "line": 164
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels.go",
       "name": "consigliereDefaultModelFor",
       "kind": "function",
-      "line": 159
+      "line": 184
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels.go",
       "name": "consigliereDefaultChoiceLabel",
       "kind": "function",
-      "line": 200
+      "line": 225
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32407,14 +32444,14 @@
       "name": "consigliereModelChoices",
       "kind": "method",
       "receiver": "*Root",
-      "line": 222
+      "line": 247
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels.go",
       "name": "appendConsigliereTypedEntryChoice",
       "kind": "function",
-      "line": 250
+      "line": 275
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32422,7 +32459,7 @@
       "name": "consigliereEffortLevelsFor",
       "kind": "method",
       "receiver": "*Root",
-      "line": 260
+      "line": 285
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32430,238 +32467,252 @@
       "name": "consigliereEffortChoices",
       "kind": "method",
       "receiver": "*Root",
-      "line": 276
+      "line": 301
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels.go",
       "name": "ensureConsigliereChoiceIncludes",
       "kind": "function",
-      "line": 299
+      "line": 324
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "withFakeConsigliereModelList",
       "kind": "function",
-      "line": 24
+      "line": 26
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "rootWithConsigliereKey",
       "kind": "function",
-      "line": 35
+      "line": 37
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereProviderNeedsNoKeyOnlyTrueForOllama",
       "kind": "function",
-      "line": 47
+      "line": 49
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestRefreshConsigliereModelCacheFetchesForOllamaWithoutAnyKeyConfigured",
       "kind": "function",
-      "line": 64
+      "line": 66
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "call",
       "kind": "type",
-      "line": 67
+      "line": 69
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestRefreshConsigliereModelCachePassesTheConfiguredOllamaBaseURL",
       "kind": "function",
-      "line": 96
+      "line": 98
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/consiglieremodels_test.go",
+      "name": "TestListOllamaModelsWithNativeFallbackUsesNativeTagsWhenV1ModelsFails",
+      "kind": "function",
+      "line": 132
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/consiglieremodels_test.go",
+      "name": "TestListOllamaModelsWithNativeFallbackPrefersV1ModelsWhenItWorks",
+      "kind": "function",
+      "line": 159
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestRefreshConsigliereModelCachePassesTheConfiguredCustomBaseURL",
       "kind": "function",
-      "line": 123
+      "line": 184
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestRefreshConsigliereModelCacheCallsFetchWithResolvedKey",
       "kind": "function",
-      "line": 153
+      "line": 214
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "call",
       "kind": "type",
-      "line": 155
+      "line": 216
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestFinishConsigliereModelFetchPopulatesCacheAndRerenders",
       "kind": "function",
-      "line": 174
+      "line": 235
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestFinishConsigliereModelFetchRecordsErrorWithoutTouchingCache",
       "kind": "function",
-      "line": 189
+      "line": 250
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestRefreshConsigliereModelCacheSkipsWithoutAKey",
       "kind": "function",
-      "line": 204
+      "line": 265
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestRefreshConsigliereModelCacheSkipsWhenAlreadyCached",
       "kind": "function",
-      "line": 222
+      "line": 283
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestRefreshConsigliereModelCacheSkipsWhenAlreadyInFlight",
       "kind": "function",
-      "line": 246
+      "line": 307
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereModelChoicesAlwaysIncludesStoredOverrideEvenWithoutACache",
       "kind": "function",
-      "line": 279
+      "line": 340
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereModelChoicesFromCacheIncludeEveryFetchedModel",
       "kind": "function",
-      "line": 299
+      "line": 360
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereModelChoicesDefaultLabelIsNotAvailableBeforeFetch",
       "kind": "function",
-      "line": 321
+      "line": 382
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereModelChoicesDefaultLabelShowsRealDefaultOnceFetched",
       "kind": "function",
-      "line": 334
+      "line": 395
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereModelChoicesDefaultLabelDistinguishesLockedFromNoKey",
       "kind": "function",
-      "line": 357
+      "line": 418
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereModelRowBlankCommitResetsToDefault",
       "kind": "function",
-      "line": 395
+      "line": 456
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereModelRowApplyRetriggersTheFetch",
       "kind": "function",
-      "line": 421
+      "line": 482
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereModelChoicesDefaultLabelStaysNotAvailableForCustom",
       "kind": "function",
-      "line": 448
+      "line": 509
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereEffortChoicesDefaultLabelIsNotAvailableBeforeFetch",
       "kind": "function",
-      "line": 463
+      "line": 524
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereEffortChoicesDefaultLabelShowsModelDefaultOnceFetched",
       "kind": "function",
-      "line": 476
+      "line": 537
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereEffortChoicesUsesPerModelLevelsForAnthropic",
       "kind": "function",
-      "line": 487
+      "line": 548
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereEffortChoicesUsesFixedSetForOpenAI",
       "kind": "function",
-      "line": 508
+      "line": 569
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereEffortChoicesIncludesStoredOverrideEvenIfNotInLevels",
       "kind": "function",
-      "line": 519
+      "line": 580
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestConsigliereModelChoicesCycleNeverSilentlyDiscardsAnUnmatchedOverride",
       "kind": "function",
-      "line": 545
+      "line": 606
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestOptionDefaultHintSurfacesAModelFetchFailure",
       "kind": "function",
-      "line": 567
+      "line": 628
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestOptionDefaultHintTruncatesALongModelFetchFailure",
       "kind": "function",
-      "line": 602
+      "line": 663
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestShowOptionInfoIncludesTheFullModelFetchFailure",
       "kind": "function",
-      "line": 628
+      "line": 689
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/consiglieremodels_test.go",
       "name": "TestOptionDefaultHintSurfacesAnEmptyModelList",
       "kind": "function",
-      "line": 657
+      "line": 718
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -39255,14 +39306,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -53527,14 +53578,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 27
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 27
     },
@@ -62960,5 +63011,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "6753a09119c807c86fbf0ac3b8d546d1572d0da06a9f6698b530049ec518f1e7"
+  "merkle_root": "e14b10ed0b423a9ddbc9d1cba0d88232a97f404a7c0d039e63baedc8c5c73c15"
 }

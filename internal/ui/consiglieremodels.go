@@ -47,7 +47,7 @@ var listConsigliereModelsFunc = func(ctx context.Context, providerName, key, bas
 		// ConsigliereOllamaBaseURL's own doc comment
 		// (internal/config/settings.go) — the model list has to come
 		// from the same server Reply itself will actually talk to.
-		return consigliere.ListOpenAICompatModels(ctx, key, firstNonEmptyConsigliereModel(baseURLOverride, consigliere.OllamaDefaultBaseURL), nil)
+		return listOllamaModelsWithNativeFallback(ctx, key, firstNonEmptyConsigliereModel(baseURLOverride, consigliere.OllamaDefaultBaseURL))
 	case "custom":
 		// No built-in fallback at all — see ConsigliereCustomBaseURL's
 		// own doc comment: this provider exists specifically for an
@@ -56,6 +56,31 @@ var listConsigliereModelsFunc = func(ctx context.Context, providerName, key, bas
 	default:
 		return consigliere.ListAnthropicModels(ctx, key, consigliere.AnthropicDefaultBaseURL, nil)
 	}
+}
+
+// listOllamaModelsWithNativeFallback is listConsigliereModelsFunc's
+// own "ollama" case, pulled out as a named function — unlike that
+// package-level var, never overridden by TestMain's own
+// no-real-network-calls default, so a test can exercise its real
+// fallback logic directly against a local httptest server instead of
+// only ever seeing the fake.
+//
+// A real, reported case this fallback exists for: some
+// Ollama-compatible servers (not Ollama's own reference
+// implementation) answer real chat questions and list models through
+// their own native API, but never implement the OpenAI-compatible GET
+// /v1/models at all, 404ing on it permanently. Tried only as a
+// fallback, not the first attempt, since Ollama's own real server
+// already supports /v1/models directly and shouldn't need the extra
+// round trip.
+func listOllamaModelsWithNativeFallback(ctx context.Context, key, baseURL string) ([]consigliere.ModelInfo, error) {
+	models, err := consigliere.ListOpenAICompatModels(ctx, key, baseURL, nil)
+	if err != nil {
+		if native, nativeErr := consigliere.ListOllamaNativeModels(ctx, baseURL, nil); nativeErr == nil {
+			return native, nil
+		}
+	}
+	return models, err
 }
 
 // refreshConsigliereModelCache fetches the currently selected

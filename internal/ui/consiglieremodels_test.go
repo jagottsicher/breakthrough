@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -120,6 +122,65 @@ func TestRefreshConsigliereModelCachePassesTheConfiguredOllamaBaseURL(t *testing
 // own counterpart for "custom" — the same real, reported gap, just for
 // the provider that has no built-in default of its own at all, rather
 // than one that falls back to localhost.
+// TestListOllamaModelsWithNativeFallbackUsesNativeTagsWhenV1ModelsFails
+// pins the user's own explicit report: a real Ollama-compatible
+// server that answers chat questions and lists models through its own
+// native /api/tags, but 404s on the OpenAI-compatible GET /v1/models
+// permanently — the real listConsigliereModelsFunc dispatch (not the
+// TestMain-overridden package var, which never reaches this), against
+// a local httptest server that behaves exactly that way.
+func TestListOllamaModelsWithNativeFallbackUsesNativeTagsWhenV1ModelsFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			w.WriteHeader(http.StatusNotFound)
+		case "/api/tags":
+			_, _ = w.Write([]byte(`{"models":[{"name":"qwen2.5:1.5b"},{"name":"llama3.2:1b"}]}`))
+		default:
+			t.Errorf("unexpected request path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	models, err := listOllamaModelsWithNativeFallback(context.Background(), "", server.URL+"/v1")
+	if err != nil {
+		t.Fatalf("listOllamaModelsWithNativeFallback: %v", err)
+	}
+	if len(models) != 2 || models[0].ID != "qwen2.5:1.5b" || models[1].ID != "llama3.2:1b" {
+		t.Errorf("models = %+v, want the native /api/tags result", models)
+	}
+}
+
+// TestListOllamaModelsWithNativeFallbackPrefersV1ModelsWhenItWorks
+// pins the other half: a real Ollama server's own /v1/models is tried
+// first and used as-is — the fallback never fires, so an extra round
+// trip only ever happens for a server that actually needs it.
+func TestListOllamaModelsWithNativeFallbackPrefersV1ModelsWhenItWorks(t *testing.T) {
+	tagsCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[{"id":"llama3.1"}]}`))
+		case "/api/tags":
+			tagsCalled = true
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	models, err := listOllamaModelsWithNativeFallback(context.Background(), "", server.URL+"/v1")
+	if err != nil {
+		t.Fatalf("listOllamaModelsWithNativeFallback: %v", err)
+	}
+	if len(models) != 1 || models[0].ID != "llama3.1" {
+		t.Errorf("models = %+v, want the /v1/models result", models)
+	}
+	if tagsCalled {
+		t.Error("/api/tags should never be called when /v1/models already succeeded")
+	}
+}
+
 func TestRefreshConsigliereModelCachePassesTheConfiguredCustomBaseURL(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	t.Setenv("BREAKTHROUGH_CUSTOM_API_KEY", "custom-test-key")
