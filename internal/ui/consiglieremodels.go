@@ -125,9 +125,17 @@ func (r *Root) finishConsigliereModelFetch(provider string, models []consigliere
 // consigliereDefaultModelFor is the literal each provider's own
 // Default*Model constant maps to — the same switch
 // buildConsigliereProvider/listConsigliereModelsFunc already use,
-// pulled out once since consigliereModelChoices needs it too.
+// pulled out once since consigliereModelChoices needs it too. ""
+// means this provider has no built-in default model name of its own
+// at all — currently only "custom" (see ConsigliereCustomBaseURL's
+// own doc comment on why), and any provider name this switch doesn't
+// otherwise recognize, which must never silently claim Anthropic's
+// own default the way falling through a bare "default:" case here
+// once did.
 func consigliereDefaultModelFor(provider string) string {
 	switch provider {
+	case "anthropic":
+		return consigliere.AnthropicDefaultModel
 	case "openai":
 		return consigliere.OpenAIDefaultModel
 	case "deepseek":
@@ -137,8 +145,25 @@ func consigliereDefaultModelFor(provider string) string {
 	case "ollama":
 		return consigliere.OllamaDefaultModel
 	default:
-		return consigliere.AnthropicDefaultModel
+		return ""
 	}
+}
+
+// consigliereDefaultChoiceLabel is the "" choice's own label for both
+// consigliereModelChoices and consigliereEffortChoices — "(not
+// available)" whenever there's nothing real to report yet: either the
+// model list hasn't been fetched successfully for this provider at
+// all (so defaultText, whatever it would otherwise say, isn't
+// confirmed against anything live), or the provider has no built-in
+// default of its own in the first place (defaultText == "", currently
+// only "custom"). Once a real, non-empty defaultText is actually
+// backed by a successful fetch, it's shown as "(<defaultText>)"
+// instead.
+func consigliereDefaultChoiceLabel(fetched bool, defaultText string) string {
+	if !fetched || defaultText == "" {
+		return "(not available)"
+	}
+	return "(" + defaultText + ")"
 }
 
 // consigliereModelChoices is the "Model" row's own choices — reads
@@ -152,9 +177,14 @@ func consigliereDefaultModelFor(provider string) string {
 // deliberate override with "default" the moment Enter is pressed.
 func (r *Root) consigliereModelChoices() []optionChoice {
 	provider := r.settings.ConsigliereProvider
-	choices := []optionChoice{{value: "", label: "(default: " + consigliereDefaultModelFor(provider) + ")"}}
-
 	cached, ok := r.consigliereModelCache[provider]
+
+	defaultText := ""
+	if d := consigliereDefaultModelFor(provider); d != "" {
+		defaultText = "default: " + d
+	}
+	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(ok, defaultText)}}
+
 	if !ok {
 		if v := r.settings.ConsigliereModel; v != "" {
 			choices = append(choices, optionChoice{value: v, label: v})
@@ -195,8 +225,13 @@ func (r *Root) consigliereEffortChoices() []optionChoice {
 	if model == "" {
 		model = consigliereDefaultModelFor(provider)
 	}
+	_, fetched := r.consigliereModelCache[provider]
 
-	choices := []optionChoice{{value: "", label: "(model default)"}}
+	defaultText := ""
+	if fetched {
+		defaultText = "model default"
+	}
+	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(fetched, defaultText)}}
 	for _, lvl := range r.consigliereEffortLevelsFor(provider, model) {
 		choices = append(choices, optionChoice{value: lvl, label: lvl})
 	}

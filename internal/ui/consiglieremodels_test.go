@@ -308,6 +308,80 @@ func TestConsigliereModelChoicesFromCacheIncludeEveryFetchedModel(t *testing.T) 
 	}
 }
 
+// TestConsigliereModelChoicesDefaultLabelIsNotAvailableBeforeFetch
+// pins the user's own explicit report: claiming a specific default
+// model name before the live list has actually been fetched overstates
+// what breakthrough really knows — "(not available)", not a model
+// name, until a fetch for this provider has actually succeeded.
+func TestConsigliereModelChoicesDefaultLabelIsNotAvailableBeforeFetch(t *testing.T) {
+	r := newPlainKeyRoot(t)
+
+	choices := r.consigliereModelChoices()
+
+	if choices[0].value != "" || choices[0].label != "(not available)" {
+		t.Errorf("choices[0] = %+v, want {value: \"\", label: \"(not available)\"}", choices[0])
+	}
+}
+
+// TestConsigliereModelChoicesDefaultLabelShowsRealDefaultOnceFetched
+// is the other half: once a fetch for this provider has actually
+// succeeded, the real built-in default model name is shown.
+func TestConsigliereModelChoicesDefaultLabelShowsRealDefaultOnceFetched(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}
+
+	choices := r.consigliereModelChoices()
+
+	if want := "(default: " + consigliere.AnthropicDefaultModel + ")"; choices[0].label != want {
+		t.Errorf("choices[0].label = %q, want %q", choices[0].label, want)
+	}
+}
+
+// TestConsigliereModelChoicesDefaultLabelStaysNotAvailableForCustom
+// pins the bug this was reported for directly: "custom" has no
+// built-in default model name of its own at all (unlike every other
+// provider), so its own default choice must never claim some other
+// provider's own default — "(not available)" even once a fetch has
+// succeeded, since there genuinely is nothing to report.
+func TestConsigliereModelChoicesDefaultLabelStaysNotAvailableForCustom(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.settings.ConsigliereProvider = "custom"
+	r.consigliereModelCache["custom"] = []consigliere.ModelInfo{{ID: "some-model"}}
+
+	choices := r.consigliereModelChoices()
+
+	if choices[0].value != "" || choices[0].label != "(not available)" {
+		t.Errorf("choices[0] = %+v, want {value: \"\", label: \"(not available)\"}", choices[0])
+	}
+}
+
+// TestConsigliereEffortChoicesDefaultLabelIsNotAvailableBeforeFetch is
+// TestConsigliereModelChoicesDefaultLabelIsNotAvailableBeforeFetch's
+// own counterpart for the Effort row.
+func TestConsigliereEffortChoicesDefaultLabelIsNotAvailableBeforeFetch(t *testing.T) {
+	r := newPlainKeyRoot(t)
+
+	choices := r.consigliereEffortChoices()
+
+	if choices[0].value != "" || choices[0].label != "(not available)" {
+		t.Errorf("choices[0] = %+v, want {value: \"\", label: \"(not available)\"}", choices[0])
+	}
+}
+
+// TestConsigliereEffortChoicesDefaultLabelShowsModelDefaultOnceFetched
+// is the other half: once a fetch for this provider has actually
+// succeeded, the usual "(model default)" sentinel is shown again.
+func TestConsigliereEffortChoicesDefaultLabelShowsModelDefaultOnceFetched(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{{ID: consigliere.AnthropicDefaultModel}}
+
+	choices := r.consigliereEffortChoices()
+
+	if want := "(model default)"; choices[0].label != want {
+		t.Errorf("choices[0].label = %q, want %q", choices[0].label, want)
+	}
+}
+
 func TestConsigliereEffortChoicesUsesPerModelLevelsForAnthropic(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	r.settings.ConsigliereModel = "claude-opus-5-5"
