@@ -556,7 +556,7 @@ func (r *Root) consigliereNeedsUnlock() bool {
 	if !r.apiKeySession.HasProvider(provider) {
 		return false
 	}
-	_, tier, err := apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFile, provider, r.apiKeySession)
+	_, tier, err := apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFileFor(provider), provider, r.apiKeySession)
 	return err == nil && tier == apikey.TierNone
 }
 
@@ -1716,7 +1716,7 @@ func (r *Root) buildConsigliereProvider() consigliere.Provider {
 	providerName := r.settings.ConsigliereProvider
 	model := r.settings.ConsigliereModelFor(providerName)
 	effort := r.settings.ConsigliereEffortFor(providerName)
-	keyFile := r.settings.ConsigliereAPIKeyFile
+	keyFile := r.settings.ConsigliereAPIKeyFileFor(providerName)
 	session := r.apiKeySession
 
 	keyFunc := func() (string, error) {

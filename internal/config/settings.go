@@ -577,12 +577,33 @@ type Settings struct {
 	// the three-tier env var/file/encrypted-store chain that is).
 	ConsigliereProvider string
 
-	// ConsigliereAPIKeyFile is an optional path to a plain-text file
-	// holding the selected provider's API key — the deliberately
-	// unencrypted, opt-in tier of internal/apikey's chain, below the
-	// environment variable and above the encrypted store. "" (the
-	// default) means this tier isn't configured at all, not an error.
+	// ConsigliereAPIKeyFile is deprecated — kept only as the one-time
+	// migration source for ConsigliereAnthropicAPIKeyFile and its four
+	// per-provider siblings below (folded into
+	// MigrateLegacyConsigliereModelEffort, same as ConsigliereModel/
+	// ConsigliereEffort's own identical deprecation). A single shared
+	// field for every provider was a real, reported bug: OpenAI and
+	// Custom (or any two providers) read the exact same plain-text
+	// file, so configuring it for one silently handed the same key to
+	// every other provider too. Never read directly by
+	// buildConsigliereProvider/consiglieremodels.go any more — only by
+	// the migration itself, right after Load.
 	ConsigliereAPIKeyFile string
+
+	// ConsigliereAnthropicAPIKeyFile through ConsigliereCustomAPIKeyFile
+	// are ConsigliereAPIKeyFile's own per-provider replacement — an
+	// optional path to a plain-text file holding that one provider's
+	// own API key, the deliberately unencrypted, opt-in tier of
+	// internal/apikey's chain, below the environment variable and
+	// above the encrypted store. "" (the default) means this tier
+	// isn't configured at all, not an error. No Ollama field: it needs
+	// no key at all (see consigliereProviderNeedsNoKey's own doc
+	// comment).
+	ConsigliereAnthropicAPIKeyFile string
+	ConsigliereOpenAIAPIKeyFile    string
+	ConsigliereDeepSeekAPIKeyFile  string
+	ConsigliereGeminiAPIKeyFile    string
+	ConsigliereCustomAPIKeyFile    string
 
 	// ConsigliereOllamaBaseURL overrides
 	// consigliere.OllamaDefaultBaseURL ("http://localhost:11434/v1")
@@ -1035,6 +1056,16 @@ func (s *Settings) apply(key, value string) error {
 		s.ConsigliereProvider = value
 	case "consigliere_api_key_file":
 		s.ConsigliereAPIKeyFile = value
+	case "consigliere_anthropic_api_key_file":
+		s.ConsigliereAnthropicAPIKeyFile = value
+	case "consigliere_openai_api_key_file":
+		s.ConsigliereOpenAIAPIKeyFile = value
+	case "consigliere_deepseek_api_key_file":
+		s.ConsigliereDeepSeekAPIKeyFile = value
+	case "consigliere_gemini_api_key_file":
+		s.ConsigliereGeminiAPIKeyFile = value
+	case "consigliere_custom_api_key_file":
+		s.ConsigliereCustomAPIKeyFile = value
 	case "consigliere_ollama_base_url":
 		s.ConsigliereOllamaBaseURL = value
 	case "consigliere_custom_base_url":
@@ -1156,6 +1187,44 @@ func (s *Settings) SetConsigliereEffortFor(provider, value string) {
 	}
 }
 
+// ConsigliereAPIKeyFileFor and SetConsigliereAPIKeyFileFor are
+// ConsigliereModelFor/SetConsigliereModelFor's own counterpart for the
+// plain-text API key file tier — no "ollama" case at all (it needs no
+// key, see consigliereProviderNeedsNoKey's own doc comment), so both
+// simply return/ignore "" for it, the same as any other provider name
+// neither recognizes.
+func (s Settings) ConsigliereAPIKeyFileFor(provider string) string {
+	switch provider {
+	case "anthropic":
+		return s.ConsigliereAnthropicAPIKeyFile
+	case "openai":
+		return s.ConsigliereOpenAIAPIKeyFile
+	case "deepseek":
+		return s.ConsigliereDeepSeekAPIKeyFile
+	case "gemini":
+		return s.ConsigliereGeminiAPIKeyFile
+	case "custom":
+		return s.ConsigliereCustomAPIKeyFile
+	default:
+		return ""
+	}
+}
+
+func (s *Settings) SetConsigliereAPIKeyFileFor(provider, value string) {
+	switch provider {
+	case "anthropic":
+		s.ConsigliereAnthropicAPIKeyFile = value
+	case "openai":
+		s.ConsigliereOpenAIAPIKeyFile = value
+	case "deepseek":
+		s.ConsigliereDeepSeekAPIKeyFile = value
+	case "gemini":
+		s.ConsigliereGeminiAPIKeyFile = value
+	case "custom":
+		s.ConsigliereCustomAPIKeyFile = value
+	}
+}
+
 // consigliereModelEffortKeyFor builds the "consigliere_<provider>_model"/
 // "..._effort" config key for provider — field, not model, covers both
 // ("model" or "effort") — shared by the Options screen's own
@@ -1184,7 +1253,7 @@ func consigliereModelEffortKeyFor(provider, field string) string {
 // anyone who started on a version that never had the old shared
 // fields at all.
 func MigrateLegacyConsigliereModelEffort(s *Settings, userPath string) {
-	if s.ConsigliereModel == "" && s.ConsigliereEffort == "" {
+	if s.ConsigliereModel == "" && s.ConsigliereEffort == "" && s.ConsigliereAPIKeyFile == "" {
 		return
 	}
 
@@ -1201,12 +1270,27 @@ func MigrateLegacyConsigliereModelEffort(s *Settings, userPath string) {
 			_ = SetKey(userPath, consigliereModelEffortKeyFor(provider, "effort"), s.ConsigliereEffort)
 		}
 	}
+	// ConsigliereAPIKeyFile is the exact same deprecated-shared-field
+	// shape as ConsigliereModel/ConsigliereEffort above, just for the
+	// plain-text key tier instead — folded into this same migration
+	// rather than a second exported function and call site, see this
+	// func's own name (left as-is: renaming it now would just be
+	// churn for every call site, and "Model/Effort" is still the main
+	// case this exists for).
+	if s.ConsigliereAPIKeyFile != "" && s.ConsigliereAPIKeyFileFor(provider) == "" {
+		s.SetConsigliereAPIKeyFileFor(provider, s.ConsigliereAPIKeyFile)
+		if userPath != "" {
+			_ = SetKey(userPath, consigliereModelEffortKeyFor(provider, "api_key_file"), s.ConsigliereAPIKeyFile)
+		}
+	}
 
 	s.ConsigliereModel = ""
 	s.ConsigliereEffort = ""
+	s.ConsigliereAPIKeyFile = ""
 	if userPath != "" {
 		_ = UnsetKey(userPath, "consigliere_model")
 		_ = UnsetKey(userPath, "consigliere_effort")
+		_ = UnsetKey(userPath, "consigliere_api_key_file")
 	}
 }
 

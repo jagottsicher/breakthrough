@@ -93,7 +93,7 @@ func (r *Root) refreshConsigliereModelCache() {
 	if !consigliereProviderNeedsNoKey(provider) {
 		var tier apikey.Tier
 		var err error
-		key, tier, err = apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFile, provider, r.apiKeySession)
+		key, tier, err = apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFileFor(provider), provider, r.apiKeySession)
 		if err == nil && tier == apikey.TierNone {
 			// Resolve itself treats a locked encrypted tier exactly
 			// like "not configured at all" (see its own doc comment)

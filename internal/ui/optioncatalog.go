@@ -335,6 +335,45 @@ func consigliereModelEffortKeyFor(provider, field string) string {
 	return "consigliere_" + provider + "_" + field
 }
 
+// consigliereAPIKeyFileOptionFor builds one provider's own "API key
+// file (plain text)" row — five of them, one per provider that
+// actually needs a key at all (no Ollama — see
+// consigliereProviderNeedsNoKey's own doc comment), each visible only
+// while Provider is set to it. A real, reported bug without this: a
+// single shared ConsigliereAPIKeyFile field meant OpenAI and Custom
+// (or any two providers) read the exact same plain-text file, so
+// configuring it for one silently handed the same key to every other
+// provider too — the same shared-field mistake Model/Effort's own doc
+// comment already covers, just for the plain-text tier instead.
+func consigliereAPIKeyFileOptionFor(provider, providerLabel string) optionSpec {
+	return withVisible(withPathCompletion(optionSpec{
+		key:   consigliereModelEffortKeyFor(provider, "api_key_file"),
+		label: "API key file (plain text)",
+		help: fmt.Sprintf("An optional path to a plain-text file holding the %s "+
+			"provider's own API key — the deliberately unencrypted, opt-in tier: "+
+			"protected only by this file's own permissions, nothing more. \"\" "+
+			"(the default) means this tier isn't configured; a well-known "+
+			"environment variable (matching the provider above) always takes "+
+			"priority over it, and \"API key (encrypted)\" below is the fallback "+
+			"beneath it.\n\n"+
+			"Tab completes a path while typing. A non-empty value must resolve to "+
+			"a real, existing file — stored as an absolute path regardless of what "+
+			"was typed, so it keeps meaning the same file on a later run even if "+
+			"the panel is somewhere else by then.", providerLabel),
+		value: func(r *Root) string { return r.settings.ConsigliereAPIKeyFileFor(provider) },
+		apply: func(r *Root, v string) {
+			key := consigliereModelEffortKeyFor(provider, "api_key_file")
+			if v == "" {
+				v = r.resetSetting(key)
+			} else {
+				r.persistSetting(key, v)
+			}
+			r.settings.SetConsigliereAPIKeyFileFor(provider, v)
+			r.refreshConsigliereModelCacheIfSelected()
+		},
+	}), consigliereProviderIs(provider))
+}
+
 // machiavelliModeWarning is consigliere_hardcore_mode's own
 // confirmEnable text — long enough to need actually scrolling through
 // in openScrollAcknowledgeNotice's own fixed-size box (see
@@ -1619,33 +1658,11 @@ func optionCategories() []optionCategory {
 				consigliereEffortOptionFor("ollama", "Ollama"),
 				consigliereModelOptionFor("custom", "Custom", true),
 				consigliereEffortOptionFor("custom", "Custom"),
-				withVisible(withPathCompletion(stringOption("consigliere_api_key_file", "API key file (plain text)",
-					"An optional path to a plain-text file holding the selected provider's "+
-						"API key — the deliberately unencrypted, opt-in tier: protected only by "+
-						"this file's own permissions, nothing more. \"\" (the default) means this "+
-						"tier isn't configured; a well-known environment variable "+
-						"(ANTHROPIC_API_KEY/OPENAI_API_KEY/DEEPSEEK_API_KEY, matching the "+
-						"provider above) always takes priority over it, and \"API key "+
-						"(encrypted)\" below is the fallback beneath it.\n\n"+
-						"Tab completes a path while typing. A non-empty value must resolve to "+
-						"a real, existing file — stored as an absolute path regardless of what "+
-						"was typed, so it keeps meaning the same file on a later run even if "+
-						"the panel is somewhere else by then.",
-					func(r *Root) string { return r.settings.ConsigliereAPIKeyFile },
-					func(r *Root, v string) {
-						r.settings.ConsigliereAPIKeyFile = v
-						r.persistSetting("consigliere_api_key_file", v)
-						// A key may have just become available (or
-						// changed) for the first time — Model/Effort's
-						// own choices would otherwise stay stuck on
-						// just "(default: ...)" until this category is
-						// left and re-entered (see
-						// refreshConsigliereModelCacheIfSelected's own
-						// doc comment on why the fetch itself never
-						// runs from here directly).
-						r.refreshConsigliereModelCacheIfSelected()
-					},
-				)), func(r *Root) bool { return !consigliereProviderNeedsNoKey(r.settings.ConsigliereProvider) }),
+				consigliereAPIKeyFileOptionFor("anthropic", "Anthropic"),
+				consigliereAPIKeyFileOptionFor("openai", "OpenAI"),
+				consigliereAPIKeyFileOptionFor("deepseek", "DeepSeek"),
+				consigliereAPIKeyFileOptionFor("gemini", "Gemini"),
+				consigliereAPIKeyFileOptionFor("custom", "Custom"),
 				withVisible(stringOption("consigliere_ollama_base_url", "Ollama base URL",
 					"Overrides Ollama's own built-in default server address "+
 						"(\"http://localhost:11434/v1\") — only read while Provider "+
@@ -1774,7 +1791,7 @@ func (r *Root) consigliereAPIKeyStatus() string {
 	}
 	key, tier, err := apikey.Resolve(
 		consigliereEnvVarForProvider(provider),
-		r.settings.ConsigliereAPIKeyFile,
+		r.settings.ConsigliereAPIKeyFileFor(provider),
 		provider,
 		r.apiKeySession,
 	)
@@ -1785,7 +1802,7 @@ func (r *Root) consigliereAPIKeyStatus() string {
 	case apikey.TierEnv:
 		return "set via " + consigliereEnvVarForProvider(provider)
 	case apikey.TierFile:
-		return "set via file" + consigliereFilePermissionWarning(r.settings.ConsigliereAPIKeyFile)
+		return "set via file" + consigliereFilePermissionWarning(r.settings.ConsigliereAPIKeyFileFor(provider))
 	case apikey.TierEncrypted:
 		return "stored (encrypted)" + consigliereKeySuffixHint(key)
 	default:
@@ -2115,8 +2132,16 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.Label9Name, true
 	case "consigliere_provider":
 		return s.ConsigliereProvider, true
-	case "consigliere_api_key_file":
-		return s.ConsigliereAPIKeyFile, true
+	case "consigliere_anthropic_api_key_file":
+		return s.ConsigliereAnthropicAPIKeyFile, true
+	case "consigliere_openai_api_key_file":
+		return s.ConsigliereOpenAIAPIKeyFile, true
+	case "consigliere_deepseek_api_key_file":
+		return s.ConsigliereDeepSeekAPIKeyFile, true
+	case "consigliere_gemini_api_key_file":
+		return s.ConsigliereGeminiAPIKeyFile, true
+	case "consigliere_custom_api_key_file":
+		return s.ConsigliereCustomAPIKeyFile, true
 	case "consigliere_ollama_base_url":
 		return s.ConsigliereOllamaBaseURL, true
 	case "consigliere_custom_base_url":

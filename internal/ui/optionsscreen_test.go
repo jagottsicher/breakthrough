@@ -868,7 +868,7 @@ func TestConsigliereProviderSpecificRowsAreHiddenForOtherProviders(t *testing.T)
 	if _, ok := optionRowByKey(r, "consigliere_custom_base_url"); ok {
 		t.Error("\"Custom base URL\" should be hidden while Provider is \"anthropic\"")
 	}
-	if _, ok := optionRowByKey(r, "consigliere_api_key_file"); !ok {
+	if _, ok := optionRowByKey(r, "consigliere_anthropic_api_key_file"); !ok {
 		t.Error("the plain-text API key row should be shown while Provider is \"anthropic\"")
 	}
 	if _, ok := optionRowByKey(r, "consigliere_api_key_secret"); !ok {
@@ -882,8 +882,8 @@ func TestConsigliereProviderSpecificRowsAreHiddenForOtherProviders(t *testing.T)
 	if _, ok := optionRowByKey(r, "consigliere_custom_base_url"); ok {
 		t.Error("\"Custom base URL\" should stay hidden while Provider is \"ollama\"")
 	}
-	if _, ok := optionRowByKey(r, "consigliere_api_key_file"); ok {
-		t.Error("the plain-text API key row should be hidden while Provider is \"ollama\"")
+	if _, ok := optionRowByKey(r, "consigliere_anthropic_api_key_file"); ok {
+		t.Error("anthropic's own API key row should stay hidden while Provider is \"ollama\"")
 	}
 	if _, ok := optionRowByKey(r, "consigliere_api_key_secret"); ok {
 		t.Error("the encrypted API key row should be hidden while Provider is \"ollama\"")
@@ -896,7 +896,7 @@ func TestConsigliereProviderSpecificRowsAreHiddenForOtherProviders(t *testing.T)
 	if _, ok := optionRowByKey(r, "consigliere_custom_base_url"); !ok {
 		t.Error("\"Custom base URL\" should be shown while Provider is \"custom\"")
 	}
-	if _, ok := optionRowByKey(r, "consigliere_api_key_file"); !ok {
+	if _, ok := optionRowByKey(r, "consigliere_custom_api_key_file"); !ok {
 		t.Error("the plain-text API key row should be shown while Provider is \"custom\"")
 	}
 	if _, ok := optionRowByKey(r, "consigliere_api_key_secret"); !ok {

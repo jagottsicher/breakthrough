@@ -17,9 +17,9 @@ import (
 func openConsigliereAPIKeyFileRow(t *testing.T, r *Root) {
 	t.Helper()
 	selectOptionCategory(t, r, "AI Consigliere")
-	row, ok := optionRowByKey(r, "consigliere_api_key_file")
+	row, ok := optionRowByKey(r, "consigliere_anthropic_api_key_file")
 	if !ok {
-		t.Fatal("no consigliere_api_key_file row")
+		t.Fatal("no consigliere_anthropic_api_key_file row")
 	}
 	r.activateOptionRow(row)
 	if r.activePage != optionsInputPage {
@@ -88,8 +88,8 @@ func TestOptionsKeyFileRejectsADirectory(t *testing.T) {
 		t.Errorf("activePage = %q, want the rejection's own error layered on top", r.activePage)
 	}
 	assertPageVisible(t, r, optionsInputPage)
-	if r.settings.ConsigliereAPIKeyFile != "" {
-		t.Errorf("ConsigliereAPIKeyFile = %q, want the rejected value never applied", r.settings.ConsigliereAPIKeyFile)
+	if r.settings.ConsigliereAnthropicAPIKeyFile != "" {
+		t.Errorf("ConsigliereAPIKeyFile = %q, want the rejected value never applied", r.settings.ConsigliereAnthropicAPIKeyFile)
 	}
 }
 
@@ -138,8 +138,8 @@ func TestOptionsKeyFileAcceptsARealFileAndResolvesToAbsolute(t *testing.T) {
 		t.Fatalf("activePage = %q, want back on the Options screen after a valid commit", r.activePage)
 	}
 	want := filepath.Join(r.panel.path, "apple.txt")
-	if r.settings.ConsigliereAPIKeyFile != want {
-		t.Errorf("ConsigliereAPIKeyFile = %q, want the resolved absolute path %q", r.settings.ConsigliereAPIKeyFile, want)
+	if r.settings.ConsigliereAnthropicAPIKeyFile != want {
+		t.Errorf("ConsigliereAPIKeyFile = %q, want the resolved absolute path %q", r.settings.ConsigliereAnthropicAPIKeyFile, want)
 	}
 }
 
@@ -183,14 +183,14 @@ func TestOptionsKeyFileCommitRetriesTheModelFetch(t *testing.T) {
 // a no-op" default (see editOptionValue's own doc comment).
 func TestOptionsKeyFileBlankCommitUnsetsIt(t *testing.T) {
 	r, _ := newOptionsRoot(t)
-	r.settings.ConsigliereAPIKeyFile = filepath.Join(r.panel.path, "apple.txt")
+	r.settings.ConsigliereAnthropicAPIKeyFile = filepath.Join(r.panel.path, "apple.txt")
 	openConsigliereAPIKeyFileRow(t, r)
 
 	r.optionsInput.SetText("")
 	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
-	if r.settings.ConsigliereAPIKeyFile != "" {
-		t.Errorf("ConsigliereAPIKeyFile = %q, want a blank commit to unset it", r.settings.ConsigliereAPIKeyFile)
+	if r.settings.ConsigliereAnthropicAPIKeyFile != "" {
+		t.Errorf("ConsigliereAPIKeyFile = %q, want a blank commit to unset it", r.settings.ConsigliereAnthropicAPIKeyFile)
 	}
 }
 
@@ -224,7 +224,7 @@ func TestConsigliereAPIKeyStatusIncludesPermissionWarningForFileTier(t *testing.
 		t.Fatalf("writing file: %v", err)
 	}
 	r := newPlainKeyRoot(t)
-	r.settings.ConsigliereAPIKeyFile = path
+	r.settings.ConsigliereAnthropicAPIKeyFile = path
 
 	got := r.consigliereAPIKeyStatus()
 

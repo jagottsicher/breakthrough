@@ -704,11 +704,49 @@ func SettingDocs() []SettingDoc {
 			Summary:     `Which AI backend the "gC" sidebar's own real provider call uses: "anthropic", "openai", or "deepseek".`,
 			Implemented: true,
 		},
+		// consigliere_api_key_file is deliberately absent here, even
+		// though Settings.apply still recognizes it (see
+		// config.ConsigliereAPIKeyFile's own doc comment): a single
+		// shared plain-text key file for every provider was a real,
+		// reported bug — OpenAI and Custom (or any two providers) read
+		// the exact same file, so configuring it for one silently
+		// handed the same key to every other provider too. Replaced by
+		// the five per-provider keys below, the same move
+		// consigliere_model/consigliere_effort's own removal already
+		// made for an identical shared-field mistake.
 		{
-			Key:         "consigliere_api_key_file",
-			Default:     d.ConsigliereAPIKeyFile,
+			Key:         "consigliere_anthropic_api_key_file",
+			Default:     d.ConsigliereAnthropicAPIKeyFile,
 			Kind:        KindString,
-			Summary:     "Optional path to a plain-text file holding the selected provider's API key (the unencrypted, opt-in tier — see internal/apikey).",
+			Summary:     "Optional path to a plain-text file holding the Anthropic provider's own API key (the unencrypted, opt-in tier — see internal/apikey).",
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_openai_api_key_file",
+			Default:     d.ConsigliereOpenAIAPIKeyFile,
+			Kind:        KindString,
+			Summary:     "Optional path to a plain-text file holding the OpenAI provider's own API key (the unencrypted, opt-in tier — see internal/apikey).",
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_deepseek_api_key_file",
+			Default:     d.ConsigliereDeepSeekAPIKeyFile,
+			Kind:        KindString,
+			Summary:     "Optional path to a plain-text file holding the DeepSeek provider's own API key (the unencrypted, opt-in tier — see internal/apikey).",
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_gemini_api_key_file",
+			Default:     d.ConsigliereGeminiAPIKeyFile,
+			Kind:        KindString,
+			Summary:     "Optional path to a plain-text file holding the Gemini provider's own API key (the unencrypted, opt-in tier — see internal/apikey).",
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_custom_api_key_file",
+			Default:     d.ConsigliereCustomAPIKeyFile,
+			Kind:        KindString,
+			Summary:     "Optional path to a plain-text file holding the Custom provider's own API key (the unencrypted, opt-in tier — see internal/apikey).",
 			Implemented: true,
 		},
 		{

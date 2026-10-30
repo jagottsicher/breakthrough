@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -293,6 +295,54 @@ func TestConsigliereOllamaBaseURLFallsBackToTheDefault(t *testing.T) {
 // explicit report: setting a Model override under one provider must
 // never show up as that same provider's own override under a
 // different one — a single shared field used to do exactly that.
+// TestConsigliereAPIKeyFileIsStoredPerProviderNotShared pins the
+// user's own explicit report: OpenAI and Custom (or any two providers)
+// used to read the exact same plain-text key file, since
+// ConsigliereAPIKeyFile was one shared field for every provider —
+// configuring it for one silently handed the same key to every other
+// provider too.
+func TestConsigliereAPIKeyFileIsStoredPerProviderNotShared(t *testing.T) {
+	openaiKeyFile := filepath.Join(t.TempDir(), "openai-key.txt")
+	if err := os.WriteFile(openaiKeyFile, []byte("sk-openai-test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	customKeyFile := filepath.Join(t.TempDir(), "custom-key.txt")
+	if err := os.WriteFile(customKeyFile, []byte("sk-custom-test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereOpenAIAPIKeyFile = openaiKeyFile
+	root.settings.ConsigliereCustomAPIKeyFile = customKeyFile
+	root.settings.ConsigliereCustomBaseURL = "https://api.publicai.co/v1"
+
+	root.settings.ConsigliereProvider = "openai"
+	openaiProvider, ok := root.buildConsigliereProvider().(consigliere.OpenAICompat)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.OpenAICompat", root.buildConsigliereProvider())
+	}
+	openaiKey, err := openaiProvider.APIKey()
+	if err != nil {
+		t.Fatalf("openai APIKey(): %v", err)
+	}
+	if openaiKey != "sk-openai-test" {
+		t.Errorf("openai key = %q, want %q", openaiKey, "sk-openai-test")
+	}
+
+	root.settings.ConsigliereProvider = "custom"
+	customProvider, ok := root.buildConsigliereProvider().(consigliere.OpenAICompat)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.OpenAICompat", root.buildConsigliereProvider())
+	}
+	customKey, err := customProvider.APIKey()
+	if err != nil {
+		t.Fatalf("custom APIKey(): %v", err)
+	}
+	if customKey != "sk-custom-test" {
+		t.Errorf("custom key = %q, want %q — not openai's own key", customKey, "sk-custom-test")
+	}
+}
+
 func TestConsigliereModelIsStoredPerProviderNotShared(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereProvider = "custom"
