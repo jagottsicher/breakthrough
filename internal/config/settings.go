@@ -577,12 +577,33 @@ type Settings struct {
 	// the three-tier env var/file/encrypted-store chain that is).
 	ConsigliereProvider string
 
-	// ConsigliereAPIKeyFile is an optional path to a plain-text file
-	// holding the selected provider's API key — the deliberately
-	// unencrypted, opt-in tier of internal/apikey's chain, below the
-	// environment variable and above the encrypted store. "" (the
-	// default) means this tier isn't configured at all, not an error.
+	// ConsigliereAPIKeyFile is deprecated — kept only as the one-time
+	// migration source for ConsigliereAnthropicAPIKeyFile and its four
+	// per-provider siblings below (folded into
+	// MigrateLegacyConsigliereModelEffort, same as ConsigliereModel/
+	// ConsigliereEffort's own identical deprecation). A single shared
+	// field for every provider was a real, reported bug: OpenAI and
+	// Custom (or any two providers) read the exact same plain-text
+	// file, so configuring it for one silently handed the same key to
+	// every other provider too. Never read directly by
+	// buildConsigliereProvider/consiglieremodels.go any more — only by
+	// the migration itself, right after Load.
 	ConsigliereAPIKeyFile string
+
+	// ConsigliereAnthropicAPIKeyFile through ConsigliereCustomAPIKeyFile
+	// are ConsigliereAPIKeyFile's own per-provider replacement — an
+	// optional path to a plain-text file holding that one provider's
+	// own API key, the deliberately unencrypted, opt-in tier of
+	// internal/apikey's chain, below the environment variable and
+	// above the encrypted store. "" (the default) means this tier
+	// isn't configured at all, not an error. No Ollama field: it needs
+	// no key at all (see consigliereProviderNeedsNoKey's own doc
+	// comment).
+	ConsigliereAnthropicAPIKeyFile string
+	ConsigliereOpenAIAPIKeyFile    string
+	ConsigliereDeepSeekAPIKeyFile  string
+	ConsigliereGeminiAPIKeyFile    string
+	ConsigliereCustomAPIKeyFile    string
 
 	// ConsigliereOllamaBaseURL overrides
 	// consigliere.OllamaDefaultBaseURL ("http://localhost:11434/v1")
@@ -597,21 +618,61 @@ type Settings struct {
 	// endpoint, never something a user would point elsewhere.
 	ConsigliereOllamaBaseURL string
 
-	// ConsigliereModel overrides the selected provider's own built-in
-	// default model ID (internal/consigliere's
-	// Anthropic/OpenAI/DeepSeekDefaultModel consts) — "" (the default)
-	// means "use that default". Exists because model IDs retire over
-	// time; without this, an outdated built-in literal would need a
-	// breakthrough update to fix instead of a one-line override here.
-	ConsigliereModel string
+	// ConsigliereCustomBaseURL is the server address Provider "custom"
+	// talks to — unlike every other provider, which has its own fixed,
+	// documented endpoint (or Ollama's own locally-assumed default),
+	// "custom" has no default of its own at all: it exists specifically
+	// for an OpenAI-compatible API this app doesn't know about ahead of
+	// time (a self-hosted gateway, an aggregator like
+	// platform.publicai.co, ...) — a real, reported gap Provider's own
+	// fixed set otherwise had no way to cover. Read the exact same way
+	// ConsigliereOllamaBaseURL is, just with no built-in fallback to
+	// fall back to.
+	ConsigliereCustomBaseURL string
 
-	// ConsigliereEffort overrides the selected model's own default
-	// reasoning effort ("effort" for Anthropic, "reasoning_effort" for
-	// OpenAI/DeepSeek — see internal/consigliere's own doc comments on
-	// each provider's request shape). "" (the default) omits the
-	// field entirely, which is each provider's own documented default
-	// behavior, not a value this package picks on its own.
+	// ConsigliereModel and ConsigliereEffort are deprecated — kept only
+	// as the one-time migration source for ConsigliereAnthropicModel/
+	// ConsigliereAnthropicEffort and their five per-provider siblings
+	// below (see MigrateLegacyConsigliereModelEffort). A single shared
+	// field for every provider was a real, reported bug: switching
+	// Provider never cleared or swapped it, so e.g. a model ID typed in
+	// for "custom" kept showing up, as if deliberately selected, after
+	// switching to "anthropic" too. Never read directly by
+	// buildConsigliereProvider/consiglieremodels.go any more — only by
+	// the migration itself, right after Load.
+	ConsigliereModel  string
 	ConsigliereEffort string
+
+	// ConsigliereAnthropicModel through ConsigliereCustomModel each
+	// override that one provider's own built-in default model ID
+	// (internal/consigliere's Default*Model consts; "custom" has none
+	// of its own — see ConsigliereCustomBaseURL's own doc comment) —
+	// "" (the default) means "use that default". One field per
+	// provider, not a single shared one (see ConsigliereModel's own
+	// doc comment on the bug that was), so switching Provider in
+	// Options shows exactly the override that provider actually has,
+	// never another provider's.
+	ConsigliereAnthropicModel string
+	ConsigliereOpenAIModel    string
+	ConsigliereDeepSeekModel  string
+	ConsigliereGeminiModel    string
+	ConsigliereOllamaModel    string
+	ConsigliereCustomModel    string
+
+	// ConsigliereAnthropicEffort through ConsigliereCustomEffort are
+	// ConsigliereAnthropicModel through ConsigliereCustomModel's own
+	// counterpart for reasoning effort ("effort" for Anthropic,
+	// "reasoning_effort" for OpenAI/DeepSeek — see internal/consigliere's
+	// own doc comments on each provider's request shape). "" (the
+	// default) omits the field entirely, which is each provider's own
+	// documented default behavior, not a value this package picks on
+	// its own.
+	ConsigliereAnthropicEffort string
+	ConsigliereOpenAIEffort    string
+	ConsigliereDeepSeekEffort  string
+	ConsigliereGeminiEffort    string
+	ConsigliereOllamaEffort    string
+	ConsigliereCustomEffort    string
 
 	// ConsigliereHardcoreMode ("Machiavelli Mode" in the Options
 	// screen's own label — see optioncatalog.go) lets a per-view
@@ -995,18 +1056,242 @@ func (s *Settings) apply(key, value string) error {
 		s.ConsigliereProvider = value
 	case "consigliere_api_key_file":
 		s.ConsigliereAPIKeyFile = value
+	case "consigliere_anthropic_api_key_file":
+		s.ConsigliereAnthropicAPIKeyFile = value
+	case "consigliere_openai_api_key_file":
+		s.ConsigliereOpenAIAPIKeyFile = value
+	case "consigliere_deepseek_api_key_file":
+		s.ConsigliereDeepSeekAPIKeyFile = value
+	case "consigliere_gemini_api_key_file":
+		s.ConsigliereGeminiAPIKeyFile = value
+	case "consigliere_custom_api_key_file":
+		s.ConsigliereCustomAPIKeyFile = value
 	case "consigliere_ollama_base_url":
 		s.ConsigliereOllamaBaseURL = value
+	case "consigliere_custom_base_url":
+		s.ConsigliereCustomBaseURL = value
 	case "consigliere_model":
 		s.ConsigliereModel = value
 	case "consigliere_effort":
 		s.ConsigliereEffort = value
+	case "consigliere_anthropic_model":
+		s.ConsigliereAnthropicModel = value
+	case "consigliere_openai_model":
+		s.ConsigliereOpenAIModel = value
+	case "consigliere_deepseek_model":
+		s.ConsigliereDeepSeekModel = value
+	case "consigliere_gemini_model":
+		s.ConsigliereGeminiModel = value
+	case "consigliere_ollama_model":
+		s.ConsigliereOllamaModel = value
+	case "consigliere_custom_model":
+		s.ConsigliereCustomModel = value
+	case "consigliere_anthropic_effort":
+		s.ConsigliereAnthropicEffort = value
+	case "consigliere_openai_effort":
+		s.ConsigliereOpenAIEffort = value
+	case "consigliere_deepseek_effort":
+		s.ConsigliereDeepSeekEffort = value
+	case "consigliere_gemini_effort":
+		s.ConsigliereGeminiEffort = value
+	case "consigliere_ollama_effort":
+		s.ConsigliereOllamaEffort = value
+	case "consigliere_custom_effort":
+		s.ConsigliereCustomEffort = value
 	case "consigliere_hardcore_mode":
 		return parseBool(&s.ConsigliereHardcoreMode)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
 	return nil
+}
+
+// ConsigliereModelFor and ConsigliereEffortFor return the override
+// actually in force for provider — the one ConsigliereAnthropicModel/
+// ConsigliereAnthropicEffort-style field matching it, never the
+// deprecated shared ConsigliereModel/ConsigliereEffort (see their own
+// doc comment). "" (the provider's own built-in default) for a
+// provider name none of these recognize.
+func (s Settings) ConsigliereModelFor(provider string) string {
+	switch provider {
+	case "anthropic":
+		return s.ConsigliereAnthropicModel
+	case "openai":
+		return s.ConsigliereOpenAIModel
+	case "deepseek":
+		return s.ConsigliereDeepSeekModel
+	case "gemini":
+		return s.ConsigliereGeminiModel
+	case "ollama":
+		return s.ConsigliereOllamaModel
+	case "custom":
+		return s.ConsigliereCustomModel
+	default:
+		return ""
+	}
+}
+
+func (s Settings) ConsigliereEffortFor(provider string) string {
+	switch provider {
+	case "anthropic":
+		return s.ConsigliereAnthropicEffort
+	case "openai":
+		return s.ConsigliereOpenAIEffort
+	case "deepseek":
+		return s.ConsigliereDeepSeekEffort
+	case "gemini":
+		return s.ConsigliereGeminiEffort
+	case "ollama":
+		return s.ConsigliereOllamaEffort
+	case "custom":
+		return s.ConsigliereCustomEffort
+	default:
+		return ""
+	}
+}
+
+// SetConsigliereModelFor and SetConsigliereEffortFor are
+// ConsigliereModelFor/ConsigliereEffortFor's own write side — a no-op
+// for a provider name neither recognizes.
+func (s *Settings) SetConsigliereModelFor(provider, value string) {
+	switch provider {
+	case "anthropic":
+		s.ConsigliereAnthropicModel = value
+	case "openai":
+		s.ConsigliereOpenAIModel = value
+	case "deepseek":
+		s.ConsigliereDeepSeekModel = value
+	case "gemini":
+		s.ConsigliereGeminiModel = value
+	case "ollama":
+		s.ConsigliereOllamaModel = value
+	case "custom":
+		s.ConsigliereCustomModel = value
+	}
+}
+
+func (s *Settings) SetConsigliereEffortFor(provider, value string) {
+	switch provider {
+	case "anthropic":
+		s.ConsigliereAnthropicEffort = value
+	case "openai":
+		s.ConsigliereOpenAIEffort = value
+	case "deepseek":
+		s.ConsigliereDeepSeekEffort = value
+	case "gemini":
+		s.ConsigliereGeminiEffort = value
+	case "ollama":
+		s.ConsigliereOllamaEffort = value
+	case "custom":
+		s.ConsigliereCustomEffort = value
+	}
+}
+
+// ConsigliereAPIKeyFileFor and SetConsigliereAPIKeyFileFor are
+// ConsigliereModelFor/SetConsigliereModelFor's own counterpart for the
+// plain-text API key file tier — no "ollama" case at all (it needs no
+// key, see consigliereProviderNeedsNoKey's own doc comment), so both
+// simply return/ignore "" for it, the same as any other provider name
+// neither recognizes.
+func (s Settings) ConsigliereAPIKeyFileFor(provider string) string {
+	switch provider {
+	case "anthropic":
+		return s.ConsigliereAnthropicAPIKeyFile
+	case "openai":
+		return s.ConsigliereOpenAIAPIKeyFile
+	case "deepseek":
+		return s.ConsigliereDeepSeekAPIKeyFile
+	case "gemini":
+		return s.ConsigliereGeminiAPIKeyFile
+	case "custom":
+		return s.ConsigliereCustomAPIKeyFile
+	default:
+		return ""
+	}
+}
+
+func (s *Settings) SetConsigliereAPIKeyFileFor(provider, value string) {
+	switch provider {
+	case "anthropic":
+		s.ConsigliereAnthropicAPIKeyFile = value
+	case "openai":
+		s.ConsigliereOpenAIAPIKeyFile = value
+	case "deepseek":
+		s.ConsigliereDeepSeekAPIKeyFile = value
+	case "gemini":
+		s.ConsigliereGeminiAPIKeyFile = value
+	case "custom":
+		s.ConsigliereCustomAPIKeyFile = value
+	}
+}
+
+// consigliereModelEffortKeyFor builds the "consigliere_<provider>_model"/
+// "..._effort" config key for provider — field, not model, covers both
+// ("model" or "effort") — shared by the Options screen's own
+// optionSpec.key values and MigrateLegacyConsigliereModelEffort below,
+// so the two can't drift into naming the same setting two different
+// ways.
+func consigliereModelEffortKeyFor(provider, field string) string {
+	return "consigliere_" + provider + "_" + field
+}
+
+// MigrateLegacyConsigliereModelEffort moves a still-present
+// consigliere_model/consigliere_effort value (see ConsigliereModel's
+// own doc comment on why those two are deprecated) into whichever
+// provider was selected when the file holding them was last saved —
+// the one meaningful interpretation of a value that used to apply to
+// "whatever provider is selected" before each provider got its own
+// field — then removes both legacy lines from userPath so this is a
+// true one-time migration, not a value that keeps reasserting itself
+// over a since-chosen per-provider override on every later run. A
+// legacy value is only ever copied into the new field when that field
+// is still unset — never overwrites a per-provider override the user
+// already made since.
+//
+// No-op (and no disk write) when neither legacy field actually holds a
+// value — overwhelmingly the common case once migrated once, or for
+// anyone who started on a version that never had the old shared
+// fields at all.
+func MigrateLegacyConsigliereModelEffort(s *Settings, userPath string) {
+	if s.ConsigliereModel == "" && s.ConsigliereEffort == "" && s.ConsigliereAPIKeyFile == "" {
+		return
+	}
+
+	provider := s.ConsigliereProvider
+	if s.ConsigliereModel != "" && s.ConsigliereModelFor(provider) == "" {
+		s.SetConsigliereModelFor(provider, s.ConsigliereModel)
+		if userPath != "" {
+			_ = SetKey(userPath, consigliereModelEffortKeyFor(provider, "model"), s.ConsigliereModel)
+		}
+	}
+	if s.ConsigliereEffort != "" && s.ConsigliereEffortFor(provider) == "" {
+		s.SetConsigliereEffortFor(provider, s.ConsigliereEffort)
+		if userPath != "" {
+			_ = SetKey(userPath, consigliereModelEffortKeyFor(provider, "effort"), s.ConsigliereEffort)
+		}
+	}
+	// ConsigliereAPIKeyFile is the exact same deprecated-shared-field
+	// shape as ConsigliereModel/ConsigliereEffort above, just for the
+	// plain-text key tier instead — folded into this same migration
+	// rather than a second exported function and call site, see this
+	// func's own name (left as-is: renaming it now would just be
+	// churn for every call site, and "Model/Effort" is still the main
+	// case this exists for).
+	if s.ConsigliereAPIKeyFile != "" && s.ConsigliereAPIKeyFileFor(provider) == "" {
+		s.SetConsigliereAPIKeyFileFor(provider, s.ConsigliereAPIKeyFile)
+		if userPath != "" {
+			_ = SetKey(userPath, consigliereModelEffortKeyFor(provider, "api_key_file"), s.ConsigliereAPIKeyFile)
+		}
+	}
+
+	s.ConsigliereModel = ""
+	s.ConsigliereEffort = ""
+	s.ConsigliereAPIKeyFile = ""
+	if userPath != "" {
+		_ = UnsetKey(userPath, "consigliere_model")
+		_ = UnsetKey(userPath, "consigliere_effort")
+		_ = UnsetKey(userPath, "consigliere_api_key_file")
+	}
 }
 
 // Load reads systemPath then userPath (see ParseFile — either may not

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -281,6 +283,134 @@ func TestConsigliereOllamaBaseURLFallsBackToTheDefault(t *testing.T) {
 
 	if got, want := root.consigliereOllamaBaseURL(), consigliere.OllamaDefaultBaseURL; got != want {
 		t.Errorf("consigliereOllamaBaseURL() = %q, want the built-in default %q", got, want)
+	}
+}
+
+// TestBuildConsigliereProviderForCustomUsesTheConfiguredBaseURL pins
+// "custom"'s own defining difference from every other provider here:
+// it has no built-in BaseURL/Model default of its own at all, so both
+// are passed through exactly as configured, and it resolves a real key
+// the same three-tier way openai/deepseek/gemini do (unlike Ollama).
+// TestConsigliereModelIsStoredPerProviderNotShared pins the user's own
+// explicit report: setting a Model override under one provider must
+// never show up as that same provider's own override under a
+// different one — a single shared field used to do exactly that.
+// TestConsigliereAPIKeyFileIsStoredPerProviderNotShared pins the
+// user's own explicit report: OpenAI and Custom (or any two providers)
+// used to read the exact same plain-text key file, since
+// ConsigliereAPIKeyFile was one shared field for every provider —
+// configuring it for one silently handed the same key to every other
+// provider too.
+func TestConsigliereAPIKeyFileIsStoredPerProviderNotShared(t *testing.T) {
+	openaiKeyFile := filepath.Join(t.TempDir(), "openai-key.txt")
+	if err := os.WriteFile(openaiKeyFile, []byte("sk-openai-test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	customKeyFile := filepath.Join(t.TempDir(), "custom-key.txt")
+	if err := os.WriteFile(customKeyFile, []byte("sk-custom-test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereOpenAIAPIKeyFile = openaiKeyFile
+	root.settings.ConsigliereCustomAPIKeyFile = customKeyFile
+	root.settings.ConsigliereCustomBaseURL = "https://api.publicai.co/v1"
+
+	root.settings.ConsigliereProvider = "openai"
+	openaiProvider, ok := root.buildConsigliereProvider().(consigliere.OpenAICompat)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.OpenAICompat", root.buildConsigliereProvider())
+	}
+	openaiKey, err := openaiProvider.APIKey()
+	if err != nil {
+		t.Fatalf("openai APIKey(): %v", err)
+	}
+	if openaiKey != "sk-openai-test" {
+		t.Errorf("openai key = %q, want %q", openaiKey, "sk-openai-test")
+	}
+
+	root.settings.ConsigliereProvider = "custom"
+	customProvider, ok := root.buildConsigliereProvider().(consigliere.OpenAICompat)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.OpenAICompat", root.buildConsigliereProvider())
+	}
+	customKey, err := customProvider.APIKey()
+	if err != nil {
+		t.Fatalf("custom APIKey(): %v", err)
+	}
+	if customKey != "sk-custom-test" {
+		t.Errorf("custom key = %q, want %q — not openai's own key", customKey, "sk-custom-test")
+	}
+}
+
+func TestConsigliereModelIsStoredPerProviderNotShared(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "custom"
+	root.settings.ConsigliereCustomModel = "swiss-ai/apertus-8b-instruct"
+
+	root.settings.ConsigliereProvider = "anthropic"
+
+	if got := root.settings.ConsigliereModelFor("anthropic"); got != "" {
+		t.Errorf("ConsigliereModelFor(anthropic) = %q, want \"\" — custom's own override must not leak into anthropic's", got)
+	}
+	if got := root.settings.ConsigliereModelFor("custom"); got != "swiss-ai/apertus-8b-instruct" {
+		t.Errorf("ConsigliereModelFor(custom) = %q, want it preserved", got)
+	}
+
+	got, ok := root.buildConsigliereProvider().(consigliere.Anthropic)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.Anthropic", root.buildConsigliereProvider())
+	}
+	if got.Model != "" {
+		t.Errorf("Anthropic Model = %q, want \"\" (its own default), not custom's own override", got.Model)
+	}
+}
+
+func TestBuildConsigliereProviderForCustomUsesTheConfiguredBaseURL(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "custom"
+	root.settings.ConsigliereCustomBaseURL = "https://api.publicai.co/v1"
+	root.settings.ConsigliereCustomModel = "some-model"
+
+	got, ok := root.buildConsigliereProvider().(consigliere.OpenAICompat)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.OpenAICompat", root.buildConsigliereProvider())
+	}
+	if want := "https://api.publicai.co/v1"; got.BaseURL != want {
+		t.Errorf("BaseURL = %q, want %q", got.BaseURL, want)
+	}
+	if want := "some-model"; got.Model != want {
+		t.Errorf("Model = %q, want %q", got.Model, want)
+	}
+}
+
+// TestConsigliereBaseURLOverride pins consigliereBaseURLOverride's own
+// three branches directly: Ollama and "custom" each read their own
+// setting, every other provider gets "" since
+// listConsigliereModelsFunc's own per-provider constant already covers
+// it.
+func TestConsigliereBaseURLOverride(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereOllamaBaseURL = "http://192.168.1.50:11434/v1"
+	root.settings.ConsigliereCustomBaseURL = "https://api.publicai.co/v1"
+
+	if got, want := root.consigliereBaseURLOverride("ollama"), "http://192.168.1.50:11434/v1"; got != want {
+		t.Errorf("consigliereBaseURLOverride(%q) = %q, want %q", "ollama", got, want)
+	}
+	if got, want := root.consigliereBaseURLOverride("custom"), "https://api.publicai.co/v1"; got != want {
+		t.Errorf("consigliereBaseURLOverride(%q) = %q, want %q", "custom", got, want)
+	}
+	if got, want := root.consigliereBaseURLOverride("anthropic"), ""; got != want {
+		t.Errorf("consigliereBaseURLOverride(%q) = %q, want %q", "anthropic", got, want)
+	}
+}
+
+// TestConsigliereEnvVarForProviderCustom pins the one env var name
+// "custom" has that no other provider shares — chosen under this
+// app's own name since the endpoint itself has none it could assume.
+func TestConsigliereEnvVarForProviderCustom(t *testing.T) {
+	if got, want := consigliereEnvVarForProvider("custom"), "BREAKTHROUGH_CUSTOM_API_KEY"; got != want {
+		t.Errorf("consigliereEnvVarForProvider(%q) = %q, want %q", "custom", got, want)
 	}
 }
 

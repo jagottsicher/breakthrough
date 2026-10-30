@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jagottsicher/breakthrough/internal/apikey"
@@ -14,6 +15,18 @@ import (
 // separate constant since this is a different call entirely.
 const consigliereModelFetchTimeout = 15 * time.Second
 
+// consigliereTypedEntrySentinel is a reserved optionChoice.value real
+// model/effort IDs can never collide with (a NUL byte never appears in
+// one) — appended to the Model/Effort rows' own choices (see
+// consigliereModelChoices/consigliereEffortChoices) so cycling onto it
+// opens a free-text entry instead of applying it literally (see
+// cycleOptionChoice's own doc comment on this one exception). A real,
+// reported gap without it: those two rows otherwise only ever offer
+// what a live fetch returned or what's already stored, with no way to
+// type a brand new ID — e.g. while the fetch itself is locked behind
+// an unentered passphrase, or failed outright.
+const consigliereTypedEntrySentinel = "\x00consigliere-typed-entry\x00"
+
 // listConsigliereModelsFunc is the real "list this provider's
 // available models" call — a package-level var, like dialFunc in
 // connectdialog.go, so a test can fake it without a real network
@@ -21,7 +34,7 @@ const consigliereModelFetchTimeout = 15 * time.Second
 // whichever provider is asked for, the same switch
 // buildConsigliereProvider's own doc comment establishes for Reply
 // itself.
-var listConsigliereModelsFunc = func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
+var listConsigliereModelsFunc = func(ctx context.Context, providerName, key, baseURLOverride string) ([]consigliere.ModelInfo, error) {
 	switch providerName {
 	case "openai":
 		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.OpenAIDefaultBaseURL, nil)
@@ -30,14 +43,44 @@ var listConsigliereModelsFunc = func(ctx context.Context, providerName, key, oll
 	case "gemini":
 		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.GeminiDefaultBaseURL, nil)
 	case "ollama":
-		// ollamaBaseURLOverride, not the bare constant: see
+		// baseURLOverride, not the bare constant: see
 		// ConsigliereOllamaBaseURL's own doc comment
 		// (internal/config/settings.go) — the model list has to come
 		// from the same server Reply itself will actually talk to.
-		return consigliere.ListOpenAICompatModels(ctx, key, firstNonEmptyConsigliereModel(ollamaBaseURLOverride, consigliere.OllamaDefaultBaseURL), nil)
+		return listOllamaModelsWithNativeFallback(ctx, key, firstNonEmptyConsigliereModel(baseURLOverride, consigliere.OllamaDefaultBaseURL))
+	case "custom":
+		// No built-in fallback at all — see ConsigliereCustomBaseURL's
+		// own doc comment: this provider exists specifically for an
+		// endpoint this app has no default for in the first place.
+		return consigliere.ListOpenAICompatModels(ctx, key, baseURLOverride, nil)
 	default:
 		return consigliere.ListAnthropicModels(ctx, key, consigliere.AnthropicDefaultBaseURL, nil)
 	}
+}
+
+// listOllamaModelsWithNativeFallback is listConsigliereModelsFunc's
+// own "ollama" case, pulled out as a named function — unlike that
+// package-level var, never overridden by TestMain's own
+// no-real-network-calls default, so a test can exercise its real
+// fallback logic directly against a local httptest server instead of
+// only ever seeing the fake.
+//
+// A real, reported case this fallback exists for: some
+// Ollama-compatible servers (not Ollama's own reference
+// implementation) answer real chat questions and list models through
+// their own native API, but never implement the OpenAI-compatible GET
+// /v1/models at all, 404ing on it permanently. Tried only as a
+// fallback, not the first attempt, since Ollama's own real server
+// already supports /v1/models directly and shouldn't need the extra
+// round trip.
+func listOllamaModelsWithNativeFallback(ctx context.Context, key, baseURL string) ([]consigliere.ModelInfo, error) {
+	models, err := consigliere.ListOpenAICompatModels(ctx, key, baseURL, nil)
+	if err != nil {
+		if native, nativeErr := consigliere.ListOllamaNativeModels(ctx, baseURL, nil); nativeErr == nil {
+			return native, nil
+		}
+	}
+	return models, err
 }
 
 // refreshConsigliereModelCache fetches the currently selected
@@ -75,9 +118,20 @@ func (r *Root) refreshConsigliereModelCache() {
 	if !consigliereProviderNeedsNoKey(provider) {
 		var tier apikey.Tier
 		var err error
-		key, tier, err = apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFile, provider, r.apiKeySession)
+		key, tier, err = apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFileFor(provider), provider, r.apiKeySession)
 		if err == nil && tier == apikey.TierNone {
-			err = errConsigliereNoAPIKey
+			// Resolve itself treats a locked encrypted tier exactly
+			// like "not configured at all" (see its own doc comment)
+			// — distinguished here instead, same as
+			// buildConsigliereProvider's own keyFunc, so the Options
+			// screen can tell "nothing is configured anywhere" (a real
+			// gap) apart from "a key exists, just needs the
+			// passphrase" (nothing to fix, just unlock).
+			if r.apiKeySession != nil && r.apiKeySession.HasProvider(provider) && !r.apiKeySession.IsUnlocked() {
+				err = errConsigliereLocked
+			} else {
+				err = errConsigliereNoAPIKey
+			}
 		}
 		if err != nil {
 			r.consigliereModelFetchErr[provider] = err
@@ -93,7 +147,7 @@ func (r *Root) refreshConsigliereModelCache() {
 		cancel()
 		r.consigliereModelFetchInFlight[provider] = false
 	}, func() {
-		models, err := listConsigliereModelsFunc(ctx, provider, key, r.settings.ConsigliereOllamaBaseURL)
+		models, err := listConsigliereModelsFunc(ctx, provider, key, r.consigliereBaseURLOverride(provider))
 		cancel()
 		r.app.QueueUpdateDraw(func() {
 			r.finishConsigliereModelFetch(provider, models, err)
@@ -120,9 +174,17 @@ func (r *Root) finishConsigliereModelFetch(provider string, models []consigliere
 // consigliereDefaultModelFor is the literal each provider's own
 // Default*Model constant maps to — the same switch
 // buildConsigliereProvider/listConsigliereModelsFunc already use,
-// pulled out once since consigliereModelChoices needs it too.
+// pulled out once since consigliereModelChoices needs it too. ""
+// means this provider has no built-in default model name of its own
+// at all — currently only "custom" (see ConsigliereCustomBaseURL's
+// own doc comment on why), and any provider name this switch doesn't
+// otherwise recognize, which must never silently claim Anthropic's
+// own default the way falling through a bare "default:" case here
+// once did.
 func consigliereDefaultModelFor(provider string) string {
 	switch provider {
+	case "anthropic":
+		return consigliere.AnthropicDefaultModel
 	case "openai":
 		return consigliere.OpenAIDefaultModel
 	case "deepseek":
@@ -132,7 +194,44 @@ func consigliereDefaultModelFor(provider string) string {
 	case "ollama":
 		return consigliere.OllamaDefaultModel
 	default:
-		return consigliere.AnthropicDefaultModel
+		return ""
+	}
+}
+
+// consigliereDefaultChoiceLabel is the "" choice's own label for both
+// consigliereModelChoices and consigliereEffortChoices — once a real,
+// non-empty defaultText is actually backed by a successful fetch for
+// this provider, shown as "(<defaultText>)"; otherwise one of three
+// distinct reasons why not, rather than a single catch-all "(not
+// available)" that used to make "there's a key stored, just enter the
+// passphrase to use it" indistinguishable from "nothing is configured
+// here at all" — a real, reported gap:
+//
+//   - fetchErr is errConsigliereLocked: a key is stored encrypted but
+//     the passphrase hasn't been entered yet this run — nothing to
+//     fix, just unlock it (e.g. by asking the sidebar a question, or
+//     "API key (encrypted)" below).
+//   - fetchErr is errConsigliereNoAPIKey: no tier has anything at all
+//     for this provider — something to actually configure.
+//   - any other fetchErr, or none yet (still fetching, or this
+//     provider needs no key — e.g. Ollama — but the fetch itself
+//     hasn't completed/succeeded for some other reason): the generic
+//     "(not available)".
+//
+// defaultText == "" (currently only "custom", which has no built-in
+// default model of its own at all — see ConsigliereCustomBaseURL's
+// own doc comment) always takes the generic case too, regardless of
+// fetchErr: there's nothing to confirm via a fetch in the first place.
+func consigliereDefaultChoiceLabel(fetchErr error, fetched bool, defaultText string) string {
+	switch {
+	case errors.Is(fetchErr, errConsigliereLocked):
+		return "(enter passphrase to see)"
+	case errors.Is(fetchErr, errConsigliereNoAPIKey):
+		return "(no API key configured)"
+	case !fetched || defaultText == "":
+		return "(not available)"
+	default:
+		return "(" + defaultText + ")"
 	}
 }
 
@@ -147,19 +246,34 @@ func consigliereDefaultModelFor(provider string) string {
 // deliberate override with "default" the moment Enter is pressed.
 func (r *Root) consigliereModelChoices() []optionChoice {
 	provider := r.settings.ConsigliereProvider
-	choices := []optionChoice{{value: "", label: "(default: " + consigliereDefaultModelFor(provider) + ")"}}
-
 	cached, ok := r.consigliereModelCache[provider]
+
+	defaultText := ""
+	if d := consigliereDefaultModelFor(provider); d != "" {
+		defaultText = "default: " + d
+	}
+	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(r.consigliereModelFetchErr[provider], ok, defaultText)}}
+
 	if !ok {
-		if v := r.settings.ConsigliereModel; v != "" {
+		if v := r.settings.ConsigliereModelFor(provider); v != "" {
 			choices = append(choices, optionChoice{value: v, label: v})
 		}
-		return choices
+		return appendConsigliereTypedEntryChoice(choices)
 	}
 	for _, m := range cached {
 		choices = append(choices, optionChoice{value: m.ID, label: m.ID})
 	}
-	return ensureConsigliereChoiceIncludes(choices, r.settings.ConsigliereModel)
+	choices = ensureConsigliereChoiceIncludes(choices, r.settings.ConsigliereModelFor(provider))
+	return appendConsigliereTypedEntryChoice(choices)
+}
+
+// appendConsigliereTypedEntryChoice adds consigliereTypedEntrySentinel
+// as the last choice — shared by consigliereModelChoices/
+// consigliereEffortChoices, both of whose every other choice comes
+// from a live fetch or an already-stored override (see the sentinel's
+// own doc comment on why that's not enough on its own).
+func appendConsigliereTypedEntryChoice(choices []optionChoice) []optionChoice {
+	return append(choices, optionChoice{value: consigliereTypedEntrySentinel, label: "(enter manually...)"})
 }
 
 // consigliereEffortLevelsFor returns model's own supported effort
@@ -186,16 +300,22 @@ func (r *Root) consigliereEffortLevelsFor(provider, model string) []string {
 // override reasoning, applied here to effort levels instead of models.
 func (r *Root) consigliereEffortChoices() []optionChoice {
 	provider := r.settings.ConsigliereProvider
-	model := r.settings.ConsigliereModel
+	model := r.settings.ConsigliereModelFor(provider)
 	if model == "" {
 		model = consigliereDefaultModelFor(provider)
 	}
+	_, fetched := r.consigliereModelCache[provider]
 
-	choices := []optionChoice{{value: "", label: "(model default)"}}
+	defaultText := ""
+	if fetched {
+		defaultText = "model default"
+	}
+	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(r.consigliereModelFetchErr[provider], fetched, defaultText)}}
 	for _, lvl := range r.consigliereEffortLevelsFor(provider, model) {
 		choices = append(choices, optionChoice{value: lvl, label: lvl})
 	}
-	return ensureConsigliereChoiceIncludes(choices, r.settings.ConsigliereEffort)
+	choices = ensureConsigliereChoiceIncludes(choices, r.settings.ConsigliereEffortFor(provider))
+	return appendConsigliereTypedEntryChoice(choices)
 }
 
 // ensureConsigliereChoiceIncludes appends a {value, label: value}

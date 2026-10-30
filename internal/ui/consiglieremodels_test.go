@@ -3,11 +3,18 @@ package ui
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/apikey"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
 )
 
@@ -104,6 +111,93 @@ func TestRefreshConsigliereModelCachePassesTheConfiguredOllamaBaseURL(t *testing
 	case got := <-calls:
 		if want := "http://192.168.1.50:11434/v1"; got != want {
 			t.Errorf("fetch called with ollamaBaseURLOverride = %q, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("fetch was never called")
+	}
+}
+
+// TestRefreshConsigliereModelCachePassesTheConfiguredCustomBaseURL is
+// TestRefreshConsigliereModelCachePassesTheConfiguredOllamaBaseURL's
+// own counterpart for "custom" — the same real, reported gap, just for
+// the provider that has no built-in default of its own at all, rather
+// than one that falls back to localhost.
+// TestListOllamaModelsWithNativeFallbackUsesNativeTagsWhenV1ModelsFails
+// pins the user's own explicit report: a real Ollama-compatible
+// server that answers chat questions and lists models through its own
+// native /api/tags, but 404s on the OpenAI-compatible GET /v1/models
+// permanently — the real listConsigliereModelsFunc dispatch (not the
+// TestMain-overridden package var, which never reaches this), against
+// a local httptest server that behaves exactly that way.
+func TestListOllamaModelsWithNativeFallbackUsesNativeTagsWhenV1ModelsFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			w.WriteHeader(http.StatusNotFound)
+		case "/api/tags":
+			_, _ = w.Write([]byte(`{"models":[{"name":"qwen2.5:1.5b"},{"name":"llama3.2:1b"}]}`))
+		default:
+			t.Errorf("unexpected request path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	models, err := listOllamaModelsWithNativeFallback(context.Background(), "", server.URL+"/v1")
+	if err != nil {
+		t.Fatalf("listOllamaModelsWithNativeFallback: %v", err)
+	}
+	if len(models) != 2 || models[0].ID != "qwen2.5:1.5b" || models[1].ID != "llama3.2:1b" {
+		t.Errorf("models = %+v, want the native /api/tags result", models)
+	}
+}
+
+// TestListOllamaModelsWithNativeFallbackPrefersV1ModelsWhenItWorks
+// pins the other half: a real Ollama server's own /v1/models is tried
+// first and used as-is — the fallback never fires, so an extra round
+// trip only ever happens for a server that actually needs it.
+func TestListOllamaModelsWithNativeFallbackPrefersV1ModelsWhenItWorks(t *testing.T) {
+	tagsCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[{"id":"llama3.1"}]}`))
+		case "/api/tags":
+			tagsCalled = true
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	models, err := listOllamaModelsWithNativeFallback(context.Background(), "", server.URL+"/v1")
+	if err != nil {
+		t.Fatalf("listOllamaModelsWithNativeFallback: %v", err)
+	}
+	if len(models) != 1 || models[0].ID != "llama3.1" {
+		t.Errorf("models = %+v, want the /v1/models result", models)
+	}
+	if tagsCalled {
+		t.Error("/api/tags should never be called when /v1/models already succeeded")
+	}
+}
+
+func TestRefreshConsigliereModelCachePassesTheConfiguredCustomBaseURL(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	t.Setenv("BREAKTHROUGH_CUSTOM_API_KEY", "custom-test-key")
+	r.settings.ConsigliereProvider = "custom"
+	r.settings.ConsigliereCustomBaseURL = "https://api.publicai.co/v1"
+	calls := make(chan string, 1)
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
+		calls <- ollamaBaseURLOverride
+		return nil, nil
+	})
+
+	r.refreshConsigliereModelCache()
+
+	select {
+	case got := <-calls:
+		if want := "https://api.publicai.co/v1"; got != want {
+			t.Errorf("fetch called with baseURLOverride = %q, want %q", got, want)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("fetch was never called")
@@ -245,7 +339,7 @@ func TestRefreshConsigliereModelCacheSkipsWhenAlreadyInFlight(t *testing.T) {
 
 func TestConsigliereModelChoicesAlwaysIncludesStoredOverrideEvenWithoutACache(t *testing.T) {
 	r := newPlainKeyRoot(t)
-	r.settings.ConsigliereModel = "claude-haiku-5-5"
+	r.settings.ConsigliereAnthropicModel = "claude-haiku-5-5"
 
 	choices := r.consigliereModelChoices()
 
@@ -272,17 +366,269 @@ func TestConsigliereModelChoicesFromCacheIncludeEveryFetchedModel(t *testing.T) 
 
 	choices := r.consigliereModelChoices()
 
-	if len(choices) != 3 { // default sentinel + two fetched models
-		t.Fatalf("choices = %+v, want 3 entries", choices)
+	if len(choices) != 4 { // default sentinel + two fetched models + typed-entry sentinel
+		t.Fatalf("choices = %+v, want 4 entries", choices)
 	}
 	if choices[1].value != "claude-opus-5-5" || choices[2].value != "claude-haiku-5-5" {
 		t.Errorf("choices = %+v", choices)
 	}
 }
 
+// TestConsigliereModelChoicesDefaultLabelIsNotAvailableBeforeFetch
+// pins the user's own explicit report: claiming a specific default
+// model name before the live list has actually been fetched overstates
+// what breakthrough really knows — "(not available)", not a model
+// name, until a fetch for this provider has actually succeeded.
+func TestConsigliereModelChoicesDefaultLabelIsNotAvailableBeforeFetch(t *testing.T) {
+	r := newPlainKeyRoot(t)
+
+	choices := r.consigliereModelChoices()
+
+	if choices[0].value != "" || choices[0].label != "(not available)" {
+		t.Errorf("choices[0] = %+v, want {value: \"\", label: \"(not available)\"}", choices[0])
+	}
+}
+
+// TestConsigliereModelChoicesDefaultLabelShowsRealDefaultOnceFetched
+// is the other half: once a fetch for this provider has actually
+// succeeded, the real built-in default model name is shown.
+func TestConsigliereModelChoicesDefaultLabelShowsRealDefaultOnceFetched(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}
+
+	choices := r.consigliereModelChoices()
+
+	if want := "(default: " + consigliere.AnthropicDefaultModel + ")"; choices[0].label != want {
+		t.Errorf("choices[0].label = %q, want %q", choices[0].label, want)
+	}
+}
+
+// TestConsigliereModelChoicesDefaultLabelStaysNotAvailableForCustom
+// pins the bug this was reported for directly: "custom" has no
+// built-in default model name of its own at all (unlike every other
+// provider), so its own default choice must never claim some other
+// provider's own default — "(not available)" even once a fetch has
+// succeeded, since there genuinely is nothing to report.
+// TestConsigliereModelChoicesDefaultLabelDistinguishesLockedFromNoKey
+// pins the user's own explicit report: a key stored but still locked
+// behind an unentered passphrase used to look identical to "nothing is
+// configured here at all" — both just "(not available)". Now
+// distinct: "(enter passphrase to see)" for the first, "(no API key
+// configured)" for the second.
+func TestConsigliereModelChoicesDefaultLabelDistinguishesLockedFromNoKey(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	session, err := apikey.OpenSession(filepath.Join(t.TempDir(), "apikeys.json"))
+	if err != nil {
+		t.Fatalf("OpenSession: %v", err)
+	}
+	r.apiKeySession = session
+
+	r.refreshConsigliereModelCache()
+	choices := r.consigliereModelChoices()
+	if want := "(no API key configured)"; choices[0].label != want {
+		t.Errorf("choices[0].label = %q, want %q (no key stored anywhere)", choices[0].label, want)
+	}
+
+	if err := session.Unlock("a passphrase"); err != nil {
+		t.Fatalf("Unlock: %v", err)
+	}
+	if err := session.Set("anthropic", "sk-ant-stored"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	session.Lock()
+	delete(r.consigliereModelFetchErr, "anthropic")
+
+	r.refreshConsigliereModelCache()
+	choices = r.consigliereModelChoices()
+	if want := "(enter passphrase to see)"; choices[0].label != want {
+		t.Errorf("choices[0].label = %q, want %q (a key is stored, just locked)", choices[0].label, want)
+	}
+}
+
+// TestConsigliereModelRowBlankCommitResetsToDefault pins the user's
+// own explicit report: typing something into Model and then clearing
+// the field again used to do nothing at all (editOptionValue's own
+// ordinary "blank commit is a no-op" rule — see
+// optionSpec.emptyMeansDefault's own doc comment) — the only way back
+// to "use the built-in default" was "Reset category", which also
+// discards every other AI Consigliere setting (Provider, API key
+// file, ...) along with it.
+func TestConsigliereModelRowBlankCommitResetsToDefault(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "AI Consigliere")
+	r.settings.ConsigliereAnthropicModel = "some-garbage-the-user-typed"
+
+	row, ok := optionRowByKey(r, "consigliere_anthropic_model")
+	if !ok {
+		t.Fatal("no consigliere_anthropic_model row")
+	}
+	opt, _ := r.optionAtRow(row)
+
+	r.editOptionValue(opt)
+	r.optionsInput.SetText("")
+	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.settings.ConsigliereAnthropicModel != "" {
+		t.Errorf("ConsigliereAnthropicModel = %q, want a blank commit to reset it to the built-in default", r.settings.ConsigliereAnthropicModel)
+	}
+}
+
+// TestConsigliereModelRowApplyRetriggersTheFetch pins the other half
+// of the same report: once Model/Effort has just been typed into (or
+// reset), a fetch that was never attempted — or previously failed —
+// deserves another try, the same "a value changed, retry" reasoning
+// the base-URL rows' own apply already follows (see
+// refreshConsigliereModelCacheIfSelected).
+func TestConsigliereModelRowApplyRetriggersTheFetch(t *testing.T) {
+	r := rootWithConsigliereKey(t)
+	for i, cat := range optionCategories() {
+		if cat.name == "AI Consigliere" {
+			r.optionsCategory = i
+		}
+	}
+	calls := make(chan struct{}, 2)
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, baseURLOverride string) ([]consigliere.ModelInfo, error) {
+		calls <- struct{}{}
+		return []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}, nil
+	})
+
+	row, ok := optionRowByKey(r, "consigliere_anthropic_model")
+	if !ok {
+		t.Fatal("no consigliere_anthropic_model row")
+	}
+	opt, _ := r.optionAtRow(row)
+	opt.apply(r, "a-typed-in-model")
+
+	select {
+	case <-calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("typing a new model should have retried the model fetch")
+	}
+}
+
+func TestConsigliereModelChoicesDefaultLabelStaysNotAvailableForCustom(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.settings.ConsigliereProvider = "custom"
+	r.consigliereModelCache["custom"] = []consigliere.ModelInfo{{ID: "some-model"}}
+
+	choices := r.consigliereModelChoices()
+
+	if choices[0].value != "" || choices[0].label != "(not available)" {
+		t.Errorf("choices[0] = %+v, want {value: \"\", label: \"(not available)\"}", choices[0])
+	}
+}
+
+// TestConsigliereEffortChoicesDefaultLabelIsNotAvailableBeforeFetch is
+// TestConsigliereModelChoicesDefaultLabelIsNotAvailableBeforeFetch's
+// own counterpart for the Effort row.
+func TestConsigliereEffortChoicesDefaultLabelIsNotAvailableBeforeFetch(t *testing.T) {
+	r := newPlainKeyRoot(t)
+
+	choices := r.consigliereEffortChoices()
+
+	if choices[0].value != "" || choices[0].label != "(not available)" {
+		t.Errorf("choices[0] = %+v, want {value: \"\", label: \"(not available)\"}", choices[0])
+	}
+}
+
+// TestConsigliereEffortChoicesDefaultLabelShowsModelDefaultOnceFetched
+// is the other half: once a fetch for this provider has actually
+// succeeded, the usual "(model default)" sentinel is shown again.
+func TestConsigliereEffortChoicesDefaultLabelShowsModelDefaultOnceFetched(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{{ID: consigliere.AnthropicDefaultModel}}
+
+	choices := r.consigliereEffortChoices()
+
+	if want := "(model default)"; choices[0].label != want {
+		t.Errorf("choices[0].label = %q, want %q", choices[0].label, want)
+	}
+}
+
+// TestConsigliereEffortChoicesParsesTheRealAnthropicCapabilitiesShape
+// pins the exact GET /v1/models response shape Anthropic's own API
+// documents (platform.claude.com/docs/en/api/models/list, checked
+// 2026-10-31) end to end — a real ID fetched through
+// ListAnthropicModels, cached, then looked up by
+// consigliereEffortChoices for that exact same ID. Written to rule
+// parsing out as the cause of a real, reported "Effort never offers
+// anything for Anthropic" complaint before looking anywhere else: if
+// this test passes, the parsing/caching/lookup chain itself is sound,
+// and the real explanation is almost certainly the encrypted tier
+// being locked (no cache populated at all yet, reported today via
+// consigliereDefaultChoiceLabel's own three-state label — see
+// TestConsigliereModelChoicesDefaultLabelDistinguishesLockedFromNoKey),
+// not a defect in how effort levels are read.
+func TestConsigliereEffortChoicesParsesTheRealAnthropicCapabilitiesShape(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"data": [{
+				"id": "claude-opus-5-5",
+				"type": "model",
+				"lifecycle": "active",
+				"capabilities": {
+					"effort": {
+						"supported": true,
+						"low": {"supported": true},
+						"medium": {"supported": true},
+						"high": {"supported": true},
+						"max": {"supported": true},
+						"xhigh": {"supported": true}
+					}
+				}
+			}],
+			"first_id": "claude-opus-5-5",
+			"has_more": false,
+			"last_id": "claude-opus-5-5"
+		}`))
+	}))
+	defer server.Close()
+
+	models, err := consigliere.ListAnthropicModels(context.Background(), "test-key", server.URL, nil)
+	if err != nil {
+		t.Fatalf("ListAnthropicModels: %v", err)
+	}
+
+	r := newPlainKeyRoot(t)
+	r.consigliereModelCache["anthropic"] = models
+	r.settings.ConsigliereAnthropicModel = "claude-opus-5-5"
+
+	choices := r.consigliereEffortChoices()
+
+	want := []string{"", "max", "xhigh", "high", "medium", "low", consigliereTypedEntrySentinel}
+	if len(choices) != len(want) {
+		t.Fatalf("choices = %+v, want %v", choices, want)
+	}
+	for i, v := range want {
+		if choices[i].value != v {
+			t.Errorf("choices[%d] = %q, want %q", i, choices[i].value, v)
+		}
+	}
+}
+
+// TestConsigliereEffortChoicesFindsNothingForAnUncachedModelID pins
+// the other half: a configured model ID that doesn't match anything
+// in the cache (a typo, a renamed/retired model, or simply no cache at
+// all yet) degrades to just "(model default)" plus the typed-entry
+// sentinel — never an error, and never a stale/wrong set of levels.
+func TestConsigliereEffortChoicesFindsNothingForAnUncachedModelID(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{
+		{ID: "claude-opus-5-5", EffortLevels: []string{"low", "high"}},
+	}
+	r.settings.ConsigliereAnthropicModel = "claude-sonnet-5-5" // not in the cache above
+
+	choices := r.consigliereEffortChoices()
+
+	want := []string{"", consigliereTypedEntrySentinel}
+	if len(choices) != len(want) {
+		t.Fatalf("choices = %+v, want %v (no per-model levels found)", choices, want)
+	}
+}
+
 func TestConsigliereEffortChoicesUsesPerModelLevelsForAnthropic(t *testing.T) {
 	r := newPlainKeyRoot(t)
-	r.settings.ConsigliereModel = "claude-opus-5-5"
+	r.settings.ConsigliereAnthropicModel = "claude-opus-5-5"
 	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{
 		{ID: "claude-opus-5-5", EffortLevels: []string{"low", "medium", "high"}},
 		{ID: "claude-haiku-5-5", EffortLevels: []string{"medium"}},
@@ -290,7 +636,7 @@ func TestConsigliereEffortChoicesUsesPerModelLevelsForAnthropic(t *testing.T) {
 
 	choices := r.consigliereEffortChoices()
 
-	want := []string{"", "low", "medium", "high"}
+	want := []string{"", "low", "medium", "high", consigliereTypedEntrySentinel}
 	if len(choices) != len(want) {
 		t.Fatalf("choices = %+v, want %v", choices, want)
 	}
@@ -307,14 +653,14 @@ func TestConsigliereEffortChoicesUsesFixedSetForOpenAI(t *testing.T) {
 
 	choices := r.consigliereEffortChoices()
 
-	if len(choices) != len(consigliere.OpenAIEffortLevels)+1 { // +1 for the "(model default)" sentinel
+	if len(choices) != len(consigliere.OpenAIEffortLevels)+2 { // +1 "(model default)" sentinel, +1 typed-entry sentinel
 		t.Fatalf("choices = %+v, want the fixed OpenAIEffortLevels set regardless of any cache", choices)
 	}
 }
 
 func TestConsigliereEffortChoicesIncludesStoredOverrideEvenIfNotInLevels(t *testing.T) {
 	r := newPlainKeyRoot(t)
-	r.settings.ConsigliereEffort = "some-future-level"
+	r.settings.ConsigliereAnthropicEffort = "some-future-level"
 	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{
 		{ID: consigliere.AnthropicDefaultModel, EffortLevels: []string{"low", "high"}},
 	}
@@ -340,13 +686,13 @@ func TestConsigliereEffortChoicesIncludesStoredOverrideEvenIfNotInLevels(t *test
 // provider's own default instead of what the user actually configured.
 func TestConsigliereModelChoicesCycleNeverSilentlyDiscardsAnUnmatchedOverride(t *testing.T) {
 	r := newPlainKeyRoot(t)
-	r.settings.ConsigliereModel = "a-manually-typed-model-not-in-any-fetch"
+	r.settings.ConsigliereAnthropicModel = "a-manually-typed-model-not-in-any-fetch"
 	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}
 
 	choices := r.consigliereModelChoices()
 
 	for _, c := range choices {
-		if c.value == r.settings.ConsigliereModel {
+		if c.value == r.settings.ConsigliereAnthropicModel {
 			return // found — cycling from here will not silently reset to the default
 		}
 	}
@@ -370,22 +716,22 @@ func TestOptionDefaultHintSurfacesAModelFetchFailure(t *testing.T) {
 	r.consigliereModelFetchInFlight["anthropic"] = true
 	r.finishConsigliereModelFetch("anthropic", nil, errors.New("Anthropic: invalid x-api-key"))
 
-	modelRow, ok := optionRowByKey(r, "consigliere_model")
+	modelRow, ok := optionRowByKey(r, "consigliere_anthropic_model")
 	if !ok {
-		t.Fatal("no consigliere_model row")
+		t.Fatal("no consigliere_anthropic_model row")
 	}
 	opt, _ := r.optionAtRow(modelRow)
 	if got := r.optionDefaultHint(opt); !strings.Contains(got, "invalid x-api-key") {
-		t.Errorf("optionDefaultHint(consigliere_model) = %q, want it to surface the fetch error", got)
+		t.Errorf("optionDefaultHint(consigliere_anthropic_model) = %q, want it to surface the fetch error", got)
 	}
 
-	effortRow, ok := optionRowByKey(r, "consigliere_effort")
+	effortRow, ok := optionRowByKey(r, "consigliere_anthropic_effort")
 	if !ok {
-		t.Fatal("no consigliere_effort row")
+		t.Fatal("no consigliere_anthropic_effort row")
 	}
 	opt, _ = r.optionAtRow(effortRow)
 	if got := r.optionDefaultHint(opt); !strings.Contains(got, "invalid x-api-key") {
-		t.Errorf("optionDefaultHint(consigliere_effort) = %q, want it to surface the fetch error", got)
+		t.Errorf("optionDefaultHint(consigliere_anthropic_effort) = %q, want it to surface the fetch error", got)
 	}
 }
 
@@ -406,14 +752,14 @@ func TestOptionDefaultHintTruncatesALongModelFetchFailure(t *testing.T) {
 	r.consigliereModelFetchInFlight["anthropic"] = true
 	r.finishConsigliereModelFetch("anthropic", nil, errors.New(long))
 
-	modelRow, ok := optionRowByKey(r, "consigliere_model")
+	modelRow, ok := optionRowByKey(r, "consigliere_anthropic_model")
 	if !ok {
-		t.Fatal("no consigliere_model row")
+		t.Fatal("no consigliere_anthropic_model row")
 	}
 	opt, _ := r.optionAtRow(modelRow)
 	got := r.optionDefaultHint(opt)
 	if len(got) >= len(long) {
-		t.Errorf("optionDefaultHint(consigliere_model) = %q (%d chars), want it capped well below the raw error's own %d chars", got, len(got), len(long))
+		t.Errorf("optionDefaultHint(consigliere_anthropic_model) = %q (%d chars), want it capped well below the raw error's own %d chars", got, len(got), len(long))
 	}
 }
 
@@ -432,9 +778,9 @@ func TestShowOptionInfoIncludesTheFullModelFetchFailure(t *testing.T) {
 	r.consigliereModelFetchInFlight["anthropic"] = true
 	r.finishConsigliereModelFetch("anthropic", nil, errors.New(long))
 
-	modelRow, ok := optionRowByKey(r, "consigliere_model")
+	modelRow, ok := optionRowByKey(r, "consigliere_anthropic_model")
 	if !ok {
-		t.Fatal("no consigliere_model row")
+		t.Fatal("no consigliere_anthropic_model row")
 	}
 	opt, _ := r.optionAtRow(modelRow)
 	r.showOptionInfo(opt)
@@ -460,12 +806,12 @@ func TestOptionDefaultHintSurfacesAnEmptyModelList(t *testing.T) {
 	r.consigliereModelFetchInFlight["anthropic"] = true
 	r.finishConsigliereModelFetch("anthropic", []consigliere.ModelInfo{}, nil)
 
-	modelRow, ok := optionRowByKey(r, "consigliere_model")
+	modelRow, ok := optionRowByKey(r, "consigliere_anthropic_model")
 	if !ok {
-		t.Fatal("no consigliere_model row")
+		t.Fatal("no consigliere_anthropic_model row")
 	}
 	opt, _ := r.optionAtRow(modelRow)
 	if got := r.optionDefaultHint(opt); !strings.Contains(got, "empty") {
-		t.Errorf("optionDefaultHint(consigliere_model) = %q, want it to mention the empty list", got)
+		t.Errorf("optionDefaultHint(consigliere_anthropic_model) = %q, want it to mention the empty list", got)
 	}
 }

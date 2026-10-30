@@ -1799,8 +1799,11 @@ closes it.
 ## AI Consigliere
 
 A chat sidebar talking to a real AI provider (Anthropic, OpenAI,
-DeepSeek, or Gemini — or a local Ollama server, no API key needed at
-all) about whatever's currently on screen — reachable with `gC` from
+DeepSeek, Gemini, an Ollama server anywhere reachable on the network —
+not only this same machine — with no API key needed at all, or a
+Custom OpenAI-compatible endpoint for anything else, e.g. a
+self-hosted gateway or a hosted aggregator) about whatever's currently
+on screen — reachable with `gC` from
 the file panel and every full-screen catalog screen: Log Holepunch,
 Git Breach, Firewall, Mounts, Sessions, SSH Keys, Action Log,
 Undertow, Toolbox, Compare Faultline, a remote connection, anywhere
@@ -1852,27 +1855,44 @@ Along with the question itself, every request includes:
 
 | Setting | What it does |
 |---|---|
-| Provider | `anthropic`, `openai`, `deepseek`, `gemini`, or `ollama` (a local server, no API key needed) |
-| Model | Overrides the provider's own default — the dropdown is filled from that provider's own live model list, fetched once a real API key is configured |
-| Effort | Overrides the model's own default reasoning effort; Anthropic/DeepSeek offer whichever levels that specific model actually supports, OpenAI's own fixed set otherwise (its API never reports this per model) |
-| API key file (plain text) | An optional path to a plain-text file holding the key — Tab completes a path while typing, a non-empty value must resolve to a real file, and this row warns (without blocking) if the file's own permissions are looser than 0600 |
-| Ollama base URL | Overrides Ollama's own built-in default server address (`http://localhost:11434/v1`) — only read while Provider above is `ollama`. For an Ollama server running on a different machine, not the one breakthrough itself is on (e.g. `http://192.168.1.50:11434/v1` — keep the trailing `/v1`). `""` (the default) means use the built-in default. |
-| API key (encrypted) | Stores the key encrypted under a passphrase you choose, asked for once per run and kept in memory only — never written to disk |
+| Provider | `anthropic`, `openai`, `deepseek`, `gemini`, `ollama` (no API key needed — the server doesn't have to be this same machine, see "Ollama base URL" below), or `custom` (any other OpenAI-compatible endpoint, see "Custom base URL" below) |
+| Model | Overrides the selected provider's own default — stored per provider, so switching Provider never shows another provider's own override. The dropdown is filled from that provider's own live model list, fetched once a real API key is configured. Enter/Space cycles through it like a carousel — wrapping around, never stopping on "(enter manually...)" along the way; press `m` instead to open that free-text field directly and type an ID that was never fetched or stored before. For Ollama specifically, a server whose own GET /v1/models 404s (some Ollama-compatible servers never implement it, only their native API) falls back to GET /api/tags automatically |
+| Effort | Overrides the model's own default reasoning effort — also stored per provider. Anthropic/DeepSeek offer whichever levels that specific model actually supports (in descending order: max, xhigh, high, medium, low), OpenAI's own fixed set otherwise (its API never reports this per model); the same `m`-key free-text entry as Model above |
+| API key file (plain text) | An optional path to a plain-text file holding the selected provider's own key — stored per provider (OpenAI and Custom, or any two providers, never read the same file), not as one shared field. Tab completes a path while typing, a non-empty value must resolve to a real file, and this row warns (without blocking) if the file's own permissions are looser than 0600. Hidden while Provider is `ollama`, which needs no key at all |
+| Ollama base URL | Overrides Ollama's own built-in default server address (`http://localhost:11434/v1`) — only shown while Provider above is `ollama`. For an Ollama server running on a different machine, not the one breakthrough itself is on (e.g. `http://192.168.1.50:11434/v1` — keep the trailing `/v1`). `""` (the default) means use the built-in default |
+| Custom base URL | The address of an OpenAI-compatible endpoint this app has no built-in default for at all (a self-hosted gateway, a hosted aggregator such as `https://api.publicai.co/v1`, ...) — only shown while Provider above is `custom`. `""` (the default) means no server is configured yet |
+| API key (encrypted) | Stores the key encrypted under a passphrase you choose, asked for once per run and kept in memory only — never written to disk. Hidden while Provider is `ollama`, which needs no key at all |
 | Machiavelli Mode | See below |
 
 Resolution order for the key actually used: a well-known environment
 variable (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`DEEPSEEK_API_KEY`/
-`GEMINI_API_KEY`, matching the provider above) first, then the
-plain-text file, then the encrypted tier. If the encrypted tier is
-what ends up supplying the key and it's still locked this run,
-opening the sidebar forces a passphrase prompt right there before any
-question can be typed, rather than only discovering the lock after a
-question already failed. Ollama needs none of this at all — it talks
-to a local server (`http://localhost:11434` by default) instead of a
-real API, so none of the three tiers above ever apply to it. That
-default assumes Ollama runs on the same machine breakthrough does;
-"Ollama base URL" above points it at a server running elsewhere on
-the network instead.
+`GEMINI_API_KEY`/`BREAKTHROUGH_CUSTOM_API_KEY`, matching the provider
+above) first, then the plain-text file, then the encrypted tier. If
+the encrypted tier is what ends up supplying the key and it's still
+locked this run, opening the sidebar forces a passphrase prompt right
+there before any question can be typed, rather than only discovering
+the lock after a question already failed. Ollama needs none of this
+at all — it talks to its own server (`http://localhost:11434` by
+default, or wherever "Ollama base URL" above points it instead)
+rather than a real API, so none of the three tiers above ever apply to
+it, and the API key rows above are hidden entirely while it's
+selected. "Custom" does need a real key, the same three-tier way every
+other provider but Ollama does — there's no way to know in advance
+whether a given OpenAI-compatible endpoint requires one. This also
+means listing available models is a real, authenticated call to the
+provider — a stored-but-locked encrypted key blocks the live model
+list the exact same way it would block Reply itself; Machiavelli Mode
+has nothing to do with this at all, since it only controls what
+*context* is forwarded alongside a key that's already resolved.
+
+Model/Effort's own "" (default) choice shows one of three things
+instead of a model name, depending on why: "(enter passphrase to
+see)" when a key is stored but the encrypted tier is still locked;
+"(no API key configured)" when nothing at all is configured yet for
+this provider; "(not available)" for any other reason the live list
+isn't available (still fetching, the fetch failed outright, or the
+provider — currently only "custom" — has no built-in default model of
+its own to report in the first place).
 
 Two buttons, also under this category: "Edit system prompt" opens
 `~/.config/breakthrough/consigliere-system-prompt.txt` (created with a
@@ -2778,7 +2798,7 @@ the only sign anything was actually wrong.
 
 | Key | Action |
 |---|---|
-| Filter field | Case-insensitive substring over Source and Message, narrowing the list live and highlighting every match |
+| Filter field | A boolean query over Source and Message, narrowing the list live and highlighting every positively-matching term (never one whose own absence is what made an entry match — see `not`/`nand`/`nor` below). A bare word is a case-insensitive substring match, same as before; two words with nothing between them (`foo bar`) mean AND, the same as typing several words always has. `AND`, `OR`, `NAND`, `NOR`, `NOT` (case-insensitive) combine terms or parenthesized groups — `nand`/`nor` are the negated forms of `and`/`or` (`a nand b` is `not (a and b)`), precedence is `not` tightest, then `and`/`nand`, then `or`/`nor`, and parentheses override it: `keyword1 and (keyword2 or keyword3)` means exactly what it reads as. Quote a term in double quotes to search for a literal `and`/`or`/`not`/`nand`/`nor`, or one containing a parenthesis or whitespace an operator would otherwise swallow. An expression that doesn't parse simply isn't applied, the same "no error shown, that part of the filter is just off" contract an unparseable Time/Level expression already has |
 | Time field | Filter by when the entry happened — `before <moment>`, `after <moment>`, or `between <moment> and <moment>`, where a moment is an absolute date/time or a relative one such as `7 days`, `2 hours ago`, or `30 minutes`; a relative moment on its own (`last 7 days`) is shorthand for "within that span". Exact same syntax as the Action Log's own Time field (and the panel's own Modified-time filter — see [Filtering](#filtering)). |
 | Level field (`>=`) | A *minimum* severity ("warn" shows WARN and everything worse — ERROR, FATAL — not just exact matches); an entry with no recognized level never passes this filter, even "trace" |
 | `Tab` / `Shift+Tab` | Move between Filter, Time, Level, the timeline, and the list |

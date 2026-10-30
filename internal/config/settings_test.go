@@ -352,3 +352,80 @@ func TestSetKeyThenLoadRoundTrips(t *testing.T) {
 		t.Errorf("ColorScheme = %q, want %q", s.ColorScheme, "solarized")
 	}
 }
+
+// TestMigrateLegacyConsigliereModelEffortMovesValueToCurrentProvider
+// pins the migration's own main case: a still-present legacy
+// consigliere_model/consigliere_effort value is moved into whichever
+// provider was selected, and the legacy lines are removed from the
+// file so this doesn't keep reasserting itself over a since-chosen
+// per-provider override.
+func TestMigrateLegacyConsigliereModelEffortMovesValueToCurrentProvider(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "config")
+	writeFile(t, userPath, "consigliere_provider = openai\nconsigliere_model = gpt-5\nconsigliere_effort = high\n")
+
+	s, _ := Load(filepath.Join(dir, "system-does-not-exist"), userPath)
+	MigrateLegacyConsigliereModelEffort(&s, userPath)
+
+	if s.ConsigliereOpenAIModel != "gpt-5" {
+		t.Errorf("ConsigliereOpenAIModel = %q, want %q", s.ConsigliereOpenAIModel, "gpt-5")
+	}
+	if s.ConsigliereOpenAIEffort != "high" {
+		t.Errorf("ConsigliereOpenAIEffort = %q, want %q", s.ConsigliereOpenAIEffort, "high")
+	}
+	if s.ConsigliereModel != "" || s.ConsigliereEffort != "" {
+		t.Errorf("legacy fields = %q/%q, want both cleared after migration", s.ConsigliereModel, s.ConsigliereEffort)
+	}
+
+	data, err := os.ReadFile(userPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if strings.Contains(content, "consigliere_model") || strings.Contains(content, "consigliere_effort = high") {
+		t.Errorf("legacy lines should have been removed from the file, got:\n%s", content)
+	}
+	if !strings.Contains(content, "consigliere_openai_model = gpt-5") {
+		t.Errorf("new per-provider key should have been written, got:\n%s", content)
+	}
+}
+
+// TestMigrateLegacyConsigliereModelEffortNeverOverwritesANewerOverride
+// pins the other half: once the user has set a per-provider override
+// themselves since migrating, a still-present (now stale) legacy value
+// must never clobber it again on a later run.
+func TestMigrateLegacyConsigliereModelEffortNeverOverwritesANewerOverride(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "config")
+	writeFile(t, userPath, "consigliere_provider = openai\nconsigliere_model = stale-model\nconsigliere_openai_model = chosen-since\n")
+
+	s, _ := Load(filepath.Join(dir, "system-does-not-exist"), userPath)
+	MigrateLegacyConsigliereModelEffort(&s, userPath)
+
+	if s.ConsigliereOpenAIModel != "chosen-since" {
+		t.Errorf("ConsigliereOpenAIModel = %q, want the newer override preserved, not the stale legacy value", s.ConsigliereOpenAIModel)
+	}
+}
+
+// TestMigrateLegacyConsigliereModelEffortNoopWithoutLegacyValues pins
+// the common case once migrated: nothing to do, nothing written.
+func TestMigrateLegacyConsigliereModelEffortNoopWithoutLegacyValues(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "config")
+	writeFile(t, userPath, "consigliere_provider = anthropic\n")
+
+	s, _ := Load(filepath.Join(dir, "system-does-not-exist"), userPath)
+	before, err := os.ReadFile(userPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	MigrateLegacyConsigliereModelEffort(&s, userPath)
+
+	after, err := os.ReadFile(userPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("file changed with no legacy values present:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}

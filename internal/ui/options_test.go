@@ -81,7 +81,13 @@ func optionRowByKey(r *Root, key string) (int, bool) {
 	if !ok {
 		return 0, false
 	}
-	for row, dr := range optionCategoryDisplayRows(cat) {
+	// Against the live, filtered display — the same rows
+	// activateOptionRow/optionAtRow actually operate on by row number,
+	// so a row index this returns is directly usable there. A row
+	// optionSpec.visible currently hides for r's own live state is
+	// correctly reported as "not found" here too: there is no row
+	// number for it to click.
+	for row, dr := range optionCategoryDisplayRows(r, cat) {
 		if dr.header == "" && dr.opt.key == key {
 			return row, true
 		}

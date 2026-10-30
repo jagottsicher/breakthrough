@@ -23,6 +23,13 @@ import (
 // (see Root.resetSetting).
 var loadInitialSettings = func() (config.Settings, map[string]config.Origin, []config.NamedTheme, []string) {
 	settings, origins, warnings := config.LoadWithOrigins(config.SystemConfigFile(), config.UserConfigFile())
+	// One-time cleanup for whoever still has the pre-per-provider
+	// consigliere_model/consigliere_effort lines (see
+	// config.ConsigliereModel's own doc comment) — must run here, not
+	// inside LoadWithOrigins itself, since it needs to write back to
+	// the user's own config file, something a plain parse-and-merge
+	// otherwise never does.
+	config.MigrateLegacyConsigliereModelEffort(&settings, config.UserConfigFile())
 	schemes := config.LoadColorSchemes(config.SystemColorSchemeDir(), config.UserColorSchemeDir())
 	return settings, origins, schemes, warnings
 }
