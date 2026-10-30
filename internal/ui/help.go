@@ -469,8 +469,11 @@ var helpText = strings.TrimLeft(`
 [::b]AI Consigliere ("gC")[::-]
 
   A chat sidebar talking to a real AI provider (Anthropic, OpenAI,
-  DeepSeek, or Gemini — or a local Ollama server, no API key needed
-  at all) about whatever's currently on screen — reachable from the
+  DeepSeek, Gemini, an Ollama server anywhere reachable on the
+  network — not only this same machine — with no API key needed at
+  all, or a Custom OpenAI-compatible endpoint for anything else, e.g.
+  a self-hosted gateway or a hosted aggregator) about whatever's
+  currently on screen — reachable from the
   file panel and every full-screen catalog screen: Log Holepunch, Git
   Breach, Firewall, Mounts, Sessions, SSH Keys, Action Log, Undertow,
   Toolbox, Compare Faultline, a remote connection, anywhere "gC" is
@@ -508,11 +511,15 @@ var helpText = strings.TrimLeft(`
   Configured entirely under Options → AI Consigliere: Provider,
   Model, Effort, the API key (environment variable, an opt-in
   plain-text file, or encrypted under a passphrase asked for once per
-  run — none of this applies to Ollama, which needs no key at all),
-  "Ollama base URL" (overrides the built-in "same machine as
-  breakthrough" default, for a server running elsewhere on the
-  network — only read while Provider is "ollama"), an
-  editable/resettable system prompt, and "Machiavelli Mode"
+  run — none of this applies to Ollama, which needs no key at all;
+  hidden entirely while Provider is "Ollama" for exactly that
+  reason), "Ollama base URL" (overrides the built-in default,
+  for an Ollama server anywhere reachable on the network, not only
+  this same machine — only shown while Provider is "Ollama"),
+  "Custom base URL" (the address of an OpenAI-compatible endpoint
+  this app has no built-in default for at all, e.g. a self-hosted
+  gateway or a hosted aggregator — only shown while Provider is
+  "Custom"), an editable/resettable system prompt, and "Machiavelli Mode"
   — off by default, gated behind a warning you have to scroll to the
   end of before it does anything — which lets Log Holepunch forward
   the lines currently matching its own filters, Git Breach forward

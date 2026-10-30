@@ -284,6 +284,59 @@ func TestConsigliereOllamaBaseURLFallsBackToTheDefault(t *testing.T) {
 	}
 }
 
+// TestBuildConsigliereProviderForCustomUsesTheConfiguredBaseURL pins
+// "custom"'s own defining difference from every other provider here:
+// it has no built-in BaseURL/Model default of its own at all, so both
+// are passed through exactly as configured, and it resolves a real key
+// the same three-tier way openai/deepseek/gemini do (unlike Ollama).
+func TestBuildConsigliereProviderForCustomUsesTheConfiguredBaseURL(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "custom"
+	root.settings.ConsigliereCustomBaseURL = "https://api.publicai.co/v1"
+	root.settings.ConsigliereModel = "some-model"
+
+	got, ok := root.buildConsigliereProvider().(consigliere.OpenAICompat)
+	if !ok {
+		t.Fatalf("buildConsigliereProvider() = %T, want consigliere.OpenAICompat", root.buildConsigliereProvider())
+	}
+	if want := "https://api.publicai.co/v1"; got.BaseURL != want {
+		t.Errorf("BaseURL = %q, want %q", got.BaseURL, want)
+	}
+	if want := "some-model"; got.Model != want {
+		t.Errorf("Model = %q, want %q", got.Model, want)
+	}
+}
+
+// TestConsigliereBaseURLOverride pins consigliereBaseURLOverride's own
+// three branches directly: Ollama and "custom" each read their own
+// setting, every other provider gets "" since
+// listConsigliereModelsFunc's own per-provider constant already covers
+// it.
+func TestConsigliereBaseURLOverride(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereOllamaBaseURL = "http://192.168.1.50:11434/v1"
+	root.settings.ConsigliereCustomBaseURL = "https://api.publicai.co/v1"
+
+	if got, want := root.consigliereBaseURLOverride("ollama"), "http://192.168.1.50:11434/v1"; got != want {
+		t.Errorf("consigliereBaseURLOverride(%q) = %q, want %q", "ollama", got, want)
+	}
+	if got, want := root.consigliereBaseURLOverride("custom"), "https://api.publicai.co/v1"; got != want {
+		t.Errorf("consigliereBaseURLOverride(%q) = %q, want %q", "custom", got, want)
+	}
+	if got, want := root.consigliereBaseURLOverride("anthropic"), ""; got != want {
+		t.Errorf("consigliereBaseURLOverride(%q) = %q, want %q", "anthropic", got, want)
+	}
+}
+
+// TestConsigliereEnvVarForProviderCustom pins the one env var name
+// "custom" has that no other provider shares — chosen under this
+// app's own name since the endpoint itself has none it could assume.
+func TestConsigliereEnvVarForProviderCustom(t *testing.T) {
+	if got, want := consigliereEnvVarForProvider("custom"), "BREAKTHROUGH_CUSTOM_API_KEY"; got != want {
+		t.Errorf("consigliereEnvVarForProvider(%q) = %q, want %q", "custom", got, want)
+	}
+}
+
 // TestTabInConsigliereInputMovesFocusToHistory pins the sidebar's own
 // real keyboard path to the scrollable history: InputField's own
 // SetDoneFunc claims Tab before it could ever reach CycleFocusShortcut

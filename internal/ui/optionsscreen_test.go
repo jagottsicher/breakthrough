@@ -658,7 +658,7 @@ func TestCopyMoveIsASubsectionOfBehaviorNotItsOwnCategory(t *testing.T) {
 	selectOptionCategory(t, r, "Behavior")
 
 	headerRow := -1
-	rows := optionCategoryDisplayRows(mustOptionCategory(t, "Behavior"))
+	rows := optionCategoryDisplayRows(r, mustOptionCategory(t, "Behavior"))
 	for i, dr := range rows {
 		if dr.header == "Copy & Move" {
 			headerRow = i
@@ -699,6 +699,94 @@ func mustOptionCategory(t *testing.T, name string) optionCategory {
 // optionCategoryDisplayRows' own contract directly: a header appears
 // exactly once, right before the first option of its own section, not
 // once per option in it.
+// TestOptionCategoryDisplayRowsHidesInvisibleOption pins
+// optionSpec.visible's own contract directly, independent of any real
+// AI Consigliere row: an option whose visible func reports false for r
+// simply isn't in the display rows at all, as if it weren't in
+// cat.options in the first place; r == nil (the test-only, unfiltered
+// path optionRowByKey no longer uses, but settingValueByKey's own
+// contract still relies on cat.options itself staying untouched by
+// this) must show every option regardless.
+func TestOptionCategoryDisplayRowsHidesInvisibleOption(t *testing.T) {
+	cat := optionCategory{
+		name: "test",
+		options: []optionSpec{
+			{key: "a"},
+			{key: "b", visible: func(r *Root) bool { return false }},
+			{key: "c"},
+		},
+	}
+
+	r := &Root{}
+	var keys []string
+	for _, dr := range optionCategoryDisplayRows(r, cat) {
+		keys = append(keys, dr.opt.key)
+	}
+	if want := []string{"a", "c"}; len(keys) != len(want) || keys[0] != want[0] || keys[1] != want[1] {
+		t.Errorf("keys = %v, want %v", keys, want)
+	}
+
+	var allKeys []string
+	for _, dr := range optionCategoryDisplayRows(nil, cat) {
+		allKeys = append(allKeys, dr.opt.key)
+	}
+	if want := []string{"a", "b", "c"}; len(allKeys) != len(want) {
+		t.Errorf("unfiltered keys = %v, want %v", allKeys, want)
+	}
+}
+
+// TestConsigliereProviderSpecificRowsAreHiddenForOtherProviders pins
+// the user's own explicit complaints: "Ollama base URL" and "Custom
+// base URL" must each only show up while Provider is set to the
+// matching value, and the two API-key rows must be hidden entirely
+// while Provider is "ollama" (which needs no key at all).
+func TestConsigliereProviderSpecificRowsAreHiddenForOtherProviders(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	r.settings.ConsigliereProvider = "anthropic"
+	if _, ok := optionRowByKey(r, "consigliere_ollama_base_url"); ok {
+		t.Error("\"Ollama base URL\" should be hidden while Provider is \"anthropic\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_custom_base_url"); ok {
+		t.Error("\"Custom base URL\" should be hidden while Provider is \"anthropic\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_api_key_file"); !ok {
+		t.Error("the plain-text API key row should be shown while Provider is \"anthropic\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_api_key_secret"); !ok {
+		t.Error("the encrypted API key row should be shown while Provider is \"anthropic\"")
+	}
+
+	r.settings.ConsigliereProvider = "ollama"
+	if _, ok := optionRowByKey(r, "consigliere_ollama_base_url"); !ok {
+		t.Error("\"Ollama base URL\" should be shown while Provider is \"ollama\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_custom_base_url"); ok {
+		t.Error("\"Custom base URL\" should stay hidden while Provider is \"ollama\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_api_key_file"); ok {
+		t.Error("the plain-text API key row should be hidden while Provider is \"ollama\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_api_key_secret"); ok {
+		t.Error("the encrypted API key row should be hidden while Provider is \"ollama\"")
+	}
+
+	r.settings.ConsigliereProvider = "custom"
+	if _, ok := optionRowByKey(r, "consigliere_ollama_base_url"); ok {
+		t.Error("\"Ollama base URL\" should stay hidden while Provider is \"custom\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_custom_base_url"); !ok {
+		t.Error("\"Custom base URL\" should be shown while Provider is \"custom\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_api_key_file"); !ok {
+		t.Error("the plain-text API key row should be shown while Provider is \"custom\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_api_key_secret"); !ok {
+		t.Error("the encrypted API key row should be shown while Provider is \"custom\"")
+	}
+}
+
 func TestOptionCategoryDisplayRowsInsertsHeaderOnce(t *testing.T) {
 	cat := optionCategory{
 		name: "test",
@@ -710,7 +798,7 @@ func TestOptionCategoryDisplayRowsInsertsHeaderOnce(t *testing.T) {
 		},
 	}
 
-	rows := optionCategoryDisplayRows(cat)
+	rows := optionCategoryDisplayRows(nil, cat)
 
 	var headers []string
 	for _, dr := range rows {
@@ -768,7 +856,7 @@ func TestOptionsArrowKeysSkipTheSubsectionHeader(t *testing.T) {
 	r.app.SetFocus(r.optionsTable)
 
 	headerRow, ok := func() (int, bool) {
-		for i, dr := range optionCategoryDisplayRows(mustOptionCategory(t, "Behavior")) {
+		for i, dr := range optionCategoryDisplayRows(r, mustOptionCategory(t, "Behavior")) {
 			if dr.header == "Copy & Move" {
 				return i, true
 			}
@@ -806,7 +894,7 @@ func TestOptionCategoryDisplayRowsInsertsBlankRowBetweenSections(t *testing.T) {
 		},
 	}
 
-	rows := optionCategoryDisplayRows(cat)
+	rows := optionCategoryDisplayRows(nil, cat)
 
 	var got []string
 	for _, dr := range rows {
@@ -849,7 +937,7 @@ func TestOptionAtRowReturnsFalseForBlankRow(t *testing.T) {
 	}
 	blankRow := copyRow - 2 // header sits right before copyRow; the blank spacer, one further back
 
-	rows := optionCategoryDisplayRows(mustOptionCategory(t, "Behavior"))
+	rows := optionCategoryDisplayRows(r, mustOptionCategory(t, "Behavior"))
 	if !rows[blankRow].blank {
 		t.Fatalf("setup: row %d isn't the blank spacer row (got %+v)", blankRow, rows[blankRow])
 	}

@@ -135,6 +135,25 @@ type optionSpec struct {
 	// just reflexively accepted the way a short openConfirm question
 	// would let it be.
 	confirmEnable string
+
+	// visible, when non-nil, decides whether this row is shown at all in
+	// the Options screen's own rendered table — currently only the AI
+	// Consigliere rows whose relevance depends on which provider is
+	// selected (the base-URL rows, and the two API-key rows, which
+	// Ollama needs neither of). Deliberately checked only where rows are
+	// listed for RENDERING (optionCategoryDisplayRows) — never at
+	// key-based lookup against the config package's own full catalog
+	// (settingValueByKey, and the schema-coverage tests that iterate
+	// cat.options directly), which must keep resolving every row
+	// regardless of which provider happens to be selected right now, or
+	// a hidden row's own setting would silently stop being reachable by
+	// key even though its value is still very much in force.
+	// optionRowByKey (test-only) is a deliberate exception: it returns a
+	// row NUMBER, meant to be fed straight into activateOptionRow/
+	// optionAtRow, so it has to resolve against the same filtered
+	// display those use, not the full catalog. Nil (the default) means
+	// always visible, same as every row before this field existed.
+	visible func(*Root) bool
 }
 
 // doc returns the config-package metadata for this setting — its kind,
@@ -177,6 +196,22 @@ func withPathCompletion(opt optionSpec) optionSpec {
 func withConfirmEnable(opt optionSpec, warning string) optionSpec {
 	opt.confirmEnable = warning
 	return opt
+}
+
+// withVisible stamps opt with visible (see optionSpec.visible's own
+// doc comment) — the same small wrapper shape withSection/
+// withPathCompletion/withConfirmEnable already establish for a field
+// only a handful of options ever set.
+func withVisible(opt optionSpec, visible func(*Root) bool) optionSpec {
+	opt.visible = visible
+	return opt
+}
+
+// consigliereProviderIs builds a visible func for the common case of a
+// row that only applies to one specific Provider value — the base-URL
+// rows below.
+func consigliereProviderIs(provider string) func(*Root) bool {
+	return func(r *Root) bool { return r.settings.ConsigliereProvider == provider }
 }
 
 // machiavelliModeWarning is consigliere_hardcore_mode's own
@@ -1441,7 +1476,13 @@ func optionCategories() []optionCategory {
 							{value: "openai", label: "OpenAI (ChatGPT)"},
 							{value: "deepseek", label: "DeepSeek"},
 							{value: "gemini", label: "Google (Gemini)"},
-							{value: "ollama", label: "Ollama (local)"},
+							// "Ollama", not "Ollama (local)" — per the
+							// user's own explicit report, that reads as if
+							// only a server on this exact machine could
+							// ever work, when "Ollama base URL" below
+							// already lets it point anywhere reachable.
+							{value: "ollama", label: "Ollama"},
+							{value: "custom", label: "Custom (OpenAI-compatible)"},
 						}
 					},
 				},
@@ -1479,7 +1520,7 @@ func optionCategories() []optionCategory {
 					},
 					choices: func(r *Root) []optionChoice { return r.consigliereEffortChoices() },
 				},
-				withPathCompletion(stringOption("consigliere_api_key_file", "API key file (plain text)",
+				withVisible(withPathCompletion(stringOption("consigliere_api_key_file", "API key file (plain text)",
 					"An optional path to a plain-text file holding the selected provider's "+
 						"API key — the deliberately unencrypted, opt-in tier: protected only by "+
 						"this file's own permissions, nothing more. \"\" (the default) means this "+
@@ -1505,8 +1546,8 @@ func optionCategories() []optionCategory {
 						// runs from here directly).
 						r.refreshConsigliereModelCacheIfSelected()
 					},
-				)),
-				stringOption("consigliere_ollama_base_url", "Ollama base URL",
+				)), func(r *Root) bool { return !consigliereProviderNeedsNoKey(r.settings.ConsigliereProvider) }),
+				withVisible(stringOption("consigliere_ollama_base_url", "Ollama base URL",
 					"Overrides Ollama's own built-in default server address "+
 						"(\"http://localhost:11434/v1\") — only read while Provider "+
 						"above is \"ollama\". A real, reported gap: the built-in "+
@@ -1528,7 +1569,21 @@ func optionCategories() []optionCategory {
 						// refreshConsigliereModelCacheIfSelected's own doc
 						// comment.
 						r.refreshConsigliereModelCacheIfSelected()
-					}),
+					}), consigliereProviderIs("ollama")),
+				withVisible(stringOption("consigliere_custom_base_url", "Custom base URL",
+					"The OpenAI-compatible server address Provider \"Custom\" talks to — "+
+						"only read while Provider above is \"custom\". Unlike every other "+
+						"provider here, \"custom\" has no built-in default of its own at "+
+						"all: it exists specifically for an endpoint this app doesn't know "+
+						"about ahead of time, such as a self-hosted gateway or a hosted "+
+						"aggregator (e.g. \"https://api.publicai.co/v1\"). \"\" (the "+
+						"default) means no server is configured yet.",
+					func(r *Root) string { return r.settings.ConsigliereCustomBaseURL },
+					func(r *Root, v string) {
+						r.settings.ConsigliereCustomBaseURL = v
+						r.persistSetting("consigliere_custom_base_url", v)
+						r.refreshConsigliereModelCacheIfSelected()
+					}), consigliereProviderIs("custom")),
 				{
 					key:   "consigliere_api_key_secret",
 					label: "API key (encrypted)",
@@ -1543,6 +1598,9 @@ func optionCategories() []optionCategory {
 						"stored key back out through this screen — only replace it.",
 					value:        func(r *Root) string { return r.consigliereAPIKeyStatus() },
 					secretAction: func(r *Root) { r.openAPIKeyDialog(r.settings.ConsigliereProvider) },
+					visible: func(r *Root) bool {
+						return !consigliereProviderNeedsNoKey(r.settings.ConsigliereProvider)
+					},
 				},
 				withConfirmEnable(boolOption("consigliere_hardcore_mode", "Machiavelli Mode",
 					"Lets Log Holepunch's own context snapshot forward the actual "+
@@ -1587,6 +1645,8 @@ func consigliereEnvVarForProvider(provider string) string {
 		return "DEEPSEEK_API_KEY"
 	case "gemini":
 		return "GEMINI_API_KEY"
+	case "custom":
+		return "BREAKTHROUGH_CUSTOM_API_KEY"
 	default:
 		// "ollama" falls through here too — it needs no key at all
 		// (see OllamaDefaultBaseURL's own doc comment), so there's no
@@ -1960,6 +2020,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.ConsigliereAPIKeyFile, true
 	case "consigliere_ollama_base_url":
 		return s.ConsigliereOllamaBaseURL, true
+	case "consigliere_custom_base_url":
+		return s.ConsigliereCustomBaseURL, true
 	case "consigliere_model":
 		return s.ConsigliereModel, true
 	case "consigliere_effort":

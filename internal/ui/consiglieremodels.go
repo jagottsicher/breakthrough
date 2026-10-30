@@ -21,7 +21,7 @@ const consigliereModelFetchTimeout = 15 * time.Second
 // whichever provider is asked for, the same switch
 // buildConsigliereProvider's own doc comment establishes for Reply
 // itself.
-var listConsigliereModelsFunc = func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
+var listConsigliereModelsFunc = func(ctx context.Context, providerName, key, baseURLOverride string) ([]consigliere.ModelInfo, error) {
 	switch providerName {
 	case "openai":
 		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.OpenAIDefaultBaseURL, nil)
@@ -30,11 +30,16 @@ var listConsigliereModelsFunc = func(ctx context.Context, providerName, key, oll
 	case "gemini":
 		return consigliere.ListOpenAICompatModels(ctx, key, consigliere.GeminiDefaultBaseURL, nil)
 	case "ollama":
-		// ollamaBaseURLOverride, not the bare constant: see
+		// baseURLOverride, not the bare constant: see
 		// ConsigliereOllamaBaseURL's own doc comment
 		// (internal/config/settings.go) — the model list has to come
 		// from the same server Reply itself will actually talk to.
-		return consigliere.ListOpenAICompatModels(ctx, key, firstNonEmptyConsigliereModel(ollamaBaseURLOverride, consigliere.OllamaDefaultBaseURL), nil)
+		return consigliere.ListOpenAICompatModels(ctx, key, firstNonEmptyConsigliereModel(baseURLOverride, consigliere.OllamaDefaultBaseURL), nil)
+	case "custom":
+		// No built-in fallback at all — see ConsigliereCustomBaseURL's
+		// own doc comment: this provider exists specifically for an
+		// endpoint this app has no default for in the first place.
+		return consigliere.ListOpenAICompatModels(ctx, key, baseURLOverride, nil)
 	default:
 		return consigliere.ListAnthropicModels(ctx, key, consigliere.AnthropicDefaultBaseURL, nil)
 	}
@@ -93,7 +98,7 @@ func (r *Root) refreshConsigliereModelCache() {
 		cancel()
 		r.consigliereModelFetchInFlight[provider] = false
 	}, func() {
-		models, err := listConsigliereModelsFunc(ctx, provider, key, r.settings.ConsigliereOllamaBaseURL)
+		models, err := listConsigliereModelsFunc(ctx, provider, key, r.consigliereBaseURLOverride(provider))
 		cancel()
 		r.app.QueueUpdateDraw(func() {
 			r.finishConsigliereModelFetch(provider, models, err)

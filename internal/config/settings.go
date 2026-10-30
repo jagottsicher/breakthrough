@@ -597,6 +597,18 @@ type Settings struct {
 	// endpoint, never something a user would point elsewhere.
 	ConsigliereOllamaBaseURL string
 
+	// ConsigliereCustomBaseURL is the server address Provider "custom"
+	// talks to — unlike every other provider, which has its own fixed,
+	// documented endpoint (or Ollama's own locally-assumed default),
+	// "custom" has no default of its own at all: it exists specifically
+	// for an OpenAI-compatible API this app doesn't know about ahead of
+	// time (a self-hosted gateway, an aggregator like
+	// platform.publicai.co, ...) — a real, reported gap Provider's own
+	// fixed set otherwise had no way to cover. Read the exact same way
+	// ConsigliereOllamaBaseURL is, just with no built-in fallback to
+	// fall back to.
+	ConsigliereCustomBaseURL string
+
 	// ConsigliereModel overrides the selected provider's own built-in
 	// default model ID (internal/consigliere's
 	// Anthropic/OpenAI/DeepSeekDefaultModel consts) — "" (the default)
@@ -997,6 +1009,8 @@ func (s *Settings) apply(key, value string) error {
 		s.ConsigliereAPIKeyFile = value
 	case "consigliere_ollama_base_url":
 		s.ConsigliereOllamaBaseURL = value
+	case "consigliere_custom_base_url":
+		s.ConsigliereCustomBaseURL = value
 	case "consigliere_model":
 		s.ConsigliereModel = value
 	case "consigliere_effort":

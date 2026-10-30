@@ -715,7 +715,14 @@ func SettingDocs() []SettingDoc {
 			Key:         "consigliere_ollama_base_url",
 			Default:     d.ConsigliereOllamaBaseURL,
 			Kind:        KindString,
-			Summary:     `Overrides Ollama's own built-in default server address ("http://localhost:11434/v1"), for an Ollama server running on a different machine. Only read while Provider is "ollama". "" means use that default.`,
+			Summary:     `Overrides Ollama's own built-in default server address ("http://localhost:11434/v1") — any reachable Ollama server, not only one on this same machine. Only read while Provider is "ollama". "" means use that default.`,
+			Implemented: true,
+		},
+		{
+			Key:         "consigliere_custom_base_url",
+			Default:     d.ConsigliereCustomBaseURL,
+			Kind:        KindString,
+			Summary:     `The server address Provider "custom" talks to — an OpenAI-compatible API this app has no built-in default for (a self-hosted gateway, an aggregator, ...). Only read while Provider is "custom".`,
 			Implemented: true,
 		},
 		{

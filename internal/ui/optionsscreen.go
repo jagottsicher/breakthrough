@@ -510,10 +510,24 @@ func (dr optionDisplayRow) isOption() bool {
 // A category with no sectioned options at all (every option.section ==
 // "") produces exactly one display row per option, the original,
 // header-and-spacer-free shape.
-func optionCategoryDisplayRows(cat optionCategory) []optionDisplayRow {
+//
+// r filters out any option whose own visible func reports false for the
+// application's current state (see optionSpec.visible's own doc
+// comment) — a row an option.section run skips this way is treated
+// exactly as if it weren't in cat.options at all, so a whole section
+// whose every option is currently hidden produces no header for it
+// either. r == nil deliberately disables this filtering entirely
+// (every option shown, regardless of visible) — used by the test-only
+// optionRowByKey, which has to keep resolving against the complete,
+// unfiltered catalog even for a row the live application state would
+// currently hide.
+func optionCategoryDisplayRows(r *Root, cat optionCategory) []optionDisplayRow {
 	rows := make([]optionDisplayRow, 0, len(cat.options))
 	sawSection := false
 	for i, opt := range cat.options {
+		if opt.visible != nil && r != nil && !opt.visible(r) {
+			continue
+		}
 		if opt.section != "" && (i == 0 || cat.options[i-1].section != opt.section) {
 			if sawSection {
 				rows = append(rows, optionDisplayRow{blank: true})
@@ -554,7 +568,7 @@ func (r *Root) renderOptions() {
 		return
 	}
 
-	for row, dr := range optionCategoryDisplayRows(categories[r.optionsCategory]) {
+	for row, dr := range optionCategoryDisplayRows(r, categories[r.optionsCategory]) {
 		if dr.blank {
 			r.optionsTable.SetCell(row, optionsColLabel, tview.NewTableCell("").SetSelectable(false))
 			r.optionsTable.SetCell(row, optionsColValue, tview.NewTableCell("").SetSelectable(false))
@@ -637,7 +651,7 @@ func (r *Root) firstSelectableOptionsRow() int {
 	if !ok {
 		return 0
 	}
-	for row, dr := range optionCategoryDisplayRows(cat) {
+	for row, dr := range optionCategoryDisplayRows(r, cat) {
 		if dr.isOption() {
 			return row
 		}
@@ -791,7 +805,7 @@ func (r *Root) optionAtRow(row int) (optionSpec, bool) {
 	if !ok {
 		return optionSpec{}, false
 	}
-	rows := optionCategoryDisplayRows(cat)
+	rows := optionCategoryDisplayRows(r, cat)
 	if row < 0 || row >= len(rows) || !rows[row].isOption() {
 		return optionSpec{}, false
 	}

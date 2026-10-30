@@ -110,6 +110,34 @@ func TestRefreshConsigliereModelCachePassesTheConfiguredOllamaBaseURL(t *testing
 	}
 }
 
+// TestRefreshConsigliereModelCachePassesTheConfiguredCustomBaseURL is
+// TestRefreshConsigliereModelCachePassesTheConfiguredOllamaBaseURL's
+// own counterpart for "custom" — the same real, reported gap, just for
+// the provider that has no built-in default of its own at all, rather
+// than one that falls back to localhost.
+func TestRefreshConsigliereModelCachePassesTheConfiguredCustomBaseURL(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	t.Setenv("BREAKTHROUGH_CUSTOM_API_KEY", "custom-test-key")
+	r.settings.ConsigliereProvider = "custom"
+	r.settings.ConsigliereCustomBaseURL = "https://api.publicai.co/v1"
+	calls := make(chan string, 1)
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
+		calls <- ollamaBaseURLOverride
+		return nil, nil
+	})
+
+	r.refreshConsigliereModelCache()
+
+	select {
+	case got := <-calls:
+		if want := "https://api.publicai.co/v1"; got != want {
+			t.Errorf("fetch called with baseURLOverride = %q, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("fetch was never called")
+	}
+}
+
 // TestRefreshConsigliereModelCacheCallsFetchWithResolvedKey pins the
 // synchronous half: a key is actually available, so the fetch is
 // attempted (not skipped) with the right provider/key pair, and
