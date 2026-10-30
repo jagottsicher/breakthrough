@@ -61,14 +61,16 @@ breaking when something is missing:
   menu and drag-selection. Practically every terminal from the last
   decade has it. It is entirely optional: every mouse action has a
   keyboard equivalent, by design, because a lot of this program's use
-  happens over SSH. `F3` toggles mouse reporting off when you want your
+  happens over SSH. `om` toggles mouse reporting off when you want your
   terminal's own text selection back.
 - **An enhanced keyboard protocol** (kitty's CSI-u or xterm's
-  `modifyOtherKeys`) *only* for `Ctrl`+digit and `Ctrl`+`Tab`. Terminals
+  `modifyOtherKeys`) *only* for `Ctrl`+digit and `Ctrl`+`T`. Terminals
   that don't implement either — several VTE-based ones among them —
   simply never deliver those combinations. Every feature they reach has
   a second path that needs no such support: `Alt`+digit for the same
-  tabs, and `F4` for the tab switcher.
+  tabs, and the plain `t` key for the tab switcher itself (`Ctrl`+`T`
+  only adds the convenience of pressing it again, while the switcher is
+  already open, to walk to the next tab).
 
 `tmux` and `screen` are fully supported, including mouse reporting
 (`set -g mouse on` in tmux).
@@ -232,14 +234,14 @@ you want, and inside tmux, `set -g default-terminal "tmux-256color"`.
 the font lacks the box-drawing/geometric ranges. `locale` will tell you
 the first; most monospace fonts intended for terminals cover the second.
 
-**Clicking does nothing.** Mouse reporting is off or unsupported. `F3`
+**Clicking does nothing.** Mouse reporting is off or unsupported. `om`
 toggles it; the status bar shows "Mouse on"/"Mouse off". Inside tmux,
 `set -g mouse on`.
 
-**`Ctrl`+digit or `Ctrl`+`Tab` do nothing.** Your terminal can't report
+**`Ctrl`+digit or `Ctrl`+`T` do nothing.** Your terminal can't report
 those combinations — see [Terminal requirements](#terminal-requirements).
-Use `Alt`+digit or `F4` instead; both are bound to the same features
-precisely for this case.
+Use `Alt`+digit for tabs, or the plain `t` key for the tab switcher
+itself, instead.
 
 **Nothing happens on a key that should work.** The command line at the
 bottom takes priority over global shortcuts while it has focus, since it

@@ -74,10 +74,16 @@ local git repository containing the active panel's own current
 directory — its own diff pane toggles between a unified pager and a
 side-by-side view (`v`) — an AI Consigliere chat sidebar (`gC`,
 reachable from anywhere in the app) talking to a real Anthropic/
-OpenAI/DeepSeek/Gemini provider, or a local Ollama server, about
-whatever's currently on screen, with an opt-in "Machiavelli Mode" for
-forwarding actual Log Holepunch/Git breach diff/Firewall ruleset
-content rather than just metadata — a Sessions screen (`js`) listing local GNU screen, tmux, and
+OpenAI/DeepSeek/Gemini provider, an Ollama server anywhere reachable
+on the network (not only this same machine — falls back to Ollama's
+own native model listing when a server doesn't implement the
+OpenAI-compatible one), or a Custom OpenAI-compatible endpoint this
+app has no built-in default for — Model/Effort/the plain-text API key
+file are each stored per provider, so switching providers never shows
+another one's own override, with an opt-in "Machiavelli Mode" for
+forwarding actual Log Holepunch/Git breach diff/Firewall ruleset/
+Action Log entry/Undertow operation content rather than just
+metadata — a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once
@@ -108,11 +114,12 @@ is installed (neomutt, aerc, himalaya, mail, or mailx — configurable
 under Options when more than one is present), plus a status-bar mail
 badge ("Email") showing an unread count from a configured Maildir or mbox
 mailbox, or the current user's own system mailbox (`/var/mail`),
-auto-detected. Progress bars for long-running file operations are
-what's planned next — see
-[docs/whitepaper.md](docs/whitepaper.md) for the full concept and
-vision, and follow along or join in on
-[Discussions](https://github.com/jagottsicher/breakthrough/discussions).
+auto-detected, plus progress bars with a live byte/item count and ETA
+for Paste, Rsync, and Compress/Extract jobs. See
+[docs/whitepaper.md](docs/whitepaper.md) for the project's own
+founding vision and concept, and follow along or join in on
+[Discussions](https://github.com/jagottsicher/breakthrough/discussions)
+for what's being considered next.
 
 ## Architecture
 
@@ -1243,17 +1250,27 @@ Lightning Network ⚡️ using the sponsor button above.
   there), terminal tabs (keystrokes go to the shell), or one-shot
   dialogs. Talks to a real Anthropic/OpenAI/DeepSeek/Gemini provider
   (API key via an environment variable, an opt-in plain-text file, or
-  encrypted under a passphrase asked for once per run), or a local
-  Ollama server (no key needed at all), with live model/reasoning-
-  effort selection and an editable, resettable system prompt. Every
-  question carries a description of whatever screen is currently open
-  — counts and metadata, never a log line's, diff's, rule's, or file's
-  own content — plus whichever sections of breakthrough's own
-  documentation a local, lexical search finds relevant. "Machiavelli
-  Mode", off by default and gated behind a scroll-to-the-end warning,
-  is the one opt-in exception: it lets Log Holepunch forward the lines
-  currently matching its own filters, Git Breach forward whatever diff
-  is currently shown in Main, Firewall forward its full ruleset,
-  Action Log forward the matching entries' own messages, and Undertow
-  forward every operation's own source/target path, all verbatim.
+  encrypted under a passphrase asked for once per run), an Ollama
+  server anywhere reachable on the network — not only this same
+  machine — with no key needed at all, or a Custom OpenAI-compatible
+  endpoint (any other self-hosted gateway or hosted aggregator) with
+  its own three-tier key like every provider but Ollama. Model,
+  Effort, and the plain-text key file are each stored per provider, so
+  switching providers never shows another one's own override; the
+  live model/effort list is fetched once a real key is available (an
+  Ollama-compatible server whose GET /v1/models 404s falls back to
+  Ollama's own native model listing automatically), cycling through it
+  wraps like a carousel, and "m" opens a free-text field to type an ID
+  that was never fetched or stored before. Plus an editable, resettable
+  system prompt. Every question carries a description of whatever
+  screen is currently open — counts and metadata, never a log line's,
+  diff's, rule's, or file's own content — plus whichever sections of
+  breakthrough's own documentation a local, lexical search finds
+  relevant. "Machiavelli Mode", off by default and gated behind a
+  scroll-to-the-end warning, is the one opt-in exception: it lets Log
+  Holepunch forward the lines currently matching its own filters, Git
+  Breach forward whatever diff is currently shown in Main, Firewall
+  forward its full ruleset, Action Log forward the matching entries'
+  own messages, and Undertow forward every operation's own
+  source/target path, all verbatim.
 
