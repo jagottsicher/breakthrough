@@ -48,6 +48,34 @@ It is explicitly not an attempt to rebuild Midnight Commander — the goal is
 its own UX philosophy, closer to classic GUI file managers, just in the
 terminal.
 
+## Your own AI advisor, embedded right where you work
+
+`gC` opens a non-modal chat sidebar from anywhere in breakthrough — the
+file panel, Log Holepunch, Git Breach, Firewall, Action Log, Undertow,
+and more. Every question already carries a description of whatever's
+on screen: directory contents, a diff, a ruleset, filtered log lines —
+so you ask without ever copy-pasting context by hand.
+
+<p align="left">
+  <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-10-30%2019-11-20.png">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-30%2019-11-20.png" width="100%">
+  </a>
+</p>
+
+**Bring your own model.** Anthropic, OpenAI, DeepSeek, Gemini, a
+local-or-remote Ollama server, or any other OpenAI-compatible
+endpoint — including hosted ones like Switzerland's own
+[Apertus](https://publicai.co) via platform.publicai.co. Model,
+effort, and API key are all configured per provider, so switching
+between them never bleeds one provider's settings into another.
+
+**Machiavelli Mode** is the one opt-in step further: off by default,
+gated behind a warning you have to actually scroll through before it
+does anything. Turn it on and the Consigliere sees the real thing —
+actual log lines, the real diff, the full firewall ruleset — not just
+counts and metadata. For the sysadmin who wants a second pair of eyes
+on what's actually happening, not a guess based on summaries.
+
 ## Status
 
 Actively developed and usable day to day. Everything described in
