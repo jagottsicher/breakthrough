@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+
 	"github.com/jagottsicher/breakthrough/internal/apikey"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
 )
@@ -378,6 +381,67 @@ func TestConsigliereModelChoicesDefaultLabelDistinguishesLockedFromNoKey(t *test
 	choices = r.consigliereModelChoices()
 	if want := "(enter passphrase to see)"; choices[0].label != want {
 		t.Errorf("choices[0].label = %q, want %q (a key is stored, just locked)", choices[0].label, want)
+	}
+}
+
+// TestConsigliereModelRowBlankCommitResetsToDefault pins the user's
+// own explicit report: typing something into Model and then clearing
+// the field again used to do nothing at all (editOptionValue's own
+// ordinary "blank commit is a no-op" rule — see
+// optionSpec.emptyMeansDefault's own doc comment) — the only way back
+// to "use the built-in default" was "Reset category", which also
+// discards every other AI Consigliere setting (Provider, API key
+// file, ...) along with it.
+func TestConsigliereModelRowBlankCommitResetsToDefault(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "AI Consigliere")
+	r.settings.ConsigliereAnthropicModel = "some-garbage-the-user-typed"
+
+	row, ok := optionRowByKey(r, "consigliere_anthropic_model")
+	if !ok {
+		t.Fatal("no consigliere_anthropic_model row")
+	}
+	opt, _ := r.optionAtRow(row)
+
+	r.editOptionValue(opt)
+	r.optionsInput.SetText("")
+	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.settings.ConsigliereAnthropicModel != "" {
+		t.Errorf("ConsigliereAnthropicModel = %q, want a blank commit to reset it to the built-in default", r.settings.ConsigliereAnthropicModel)
+	}
+}
+
+// TestConsigliereModelRowApplyRetriggersTheFetch pins the other half
+// of the same report: once Model/Effort has just been typed into (or
+// reset), a fetch that was never attempted — or previously failed —
+// deserves another try, the same "a value changed, retry" reasoning
+// the base-URL rows' own apply already follows (see
+// refreshConsigliereModelCacheIfSelected).
+func TestConsigliereModelRowApplyRetriggersTheFetch(t *testing.T) {
+	r := rootWithConsigliereKey(t)
+	for i, cat := range optionCategories() {
+		if cat.name == "AI Consigliere" {
+			r.optionsCategory = i
+		}
+	}
+	calls := make(chan struct{}, 2)
+	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, baseURLOverride string) ([]consigliere.ModelInfo, error) {
+		calls <- struct{}{}
+		return []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}, nil
+	})
+
+	row, ok := optionRowByKey(r, "consigliere_anthropic_model")
+	if !ok {
+		t.Fatal("no consigliere_anthropic_model row")
+	}
+	opt, _ := r.optionAtRow(row)
+	opt.apply(r, "a-typed-in-model")
+
+	select {
+	case <-calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("typing a new model should have retried the model fetch")
 	}
 }
 

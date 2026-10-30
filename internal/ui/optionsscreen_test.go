@@ -201,6 +201,61 @@ func TestCycleOptionChoiceOntoTypedEntrySentinelOpensFreeTextInput(t *testing.T)
 	}
 }
 
+// TestEditOptionValueBlankCommitIsNoOpWithoutEmptyMeansDefault pins
+// editOptionValue's own ordinary rule, unchanged: for a ordinary
+// KindString row, clearing the field and pressing Enter leaves the
+// previous value alone rather than applying "" — the behavior
+// optionSpec.emptyMeansDefault's own doc comment explicitly opts out
+// of for Model/Effort (see
+// TestEditOptionValueBlankCommitAppliesWhenEmptyMeansDefault).
+func TestEditOptionValueBlankCommitIsNoOpWithoutEmptyMeansDefault(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	applied := false
+	opt := optionSpec{
+		key:   "test",
+		label: "Test",
+		value: func(*Root) string { return "old-value" },
+		apply: func(*Root, string) { applied = true },
+	}
+
+	r.editOptionValue(opt)
+	r.optionsInput.SetText("")
+	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if applied {
+		t.Error("apply should not have been called for a blank commit without emptyMeansDefault")
+	}
+}
+
+// TestEditOptionValueBlankCommitAppliesWhenEmptyMeansDefault pins the
+// user's own explicit report: typing something into Model/Effort and
+// then clearing the field again used to do nothing at all — no way
+// back to "use the built-in default" short of "Reset category", which
+// also discards every other AI Consigliere setting along with it.
+func TestEditOptionValueBlankCommitAppliesWhenEmptyMeansDefault(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	var got string
+	applied := false
+	opt := optionSpec{
+		key:               "test",
+		label:             "Test",
+		value:             func(*Root) string { return "old-value" },
+		apply:             func(_ *Root, v string) { applied = true; got = v },
+		emptyMeansDefault: true,
+	}
+
+	r.editOptionValue(opt)
+	r.optionsInput.SetText("")
+	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if !applied {
+		t.Fatal("apply should have been called with \"\" for a blank commit with emptyMeansDefault")
+	}
+	if got != "" {
+		t.Errorf("apply was called with %q, want \"\"", got)
+	}
+}
+
 func TestConfirmEnableOptionAsksBeforeTurningOn(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	r.SetRect(0, 0, 100, 40)
@@ -489,9 +544,34 @@ func TestOptionsInfoOpensAndCloses(t *testing.T) {
 		t.Errorf("info text = %q, want it to name the config key", got)
 	}
 
-	r.hideOverlay() // Escape's own action
+	r.hideOverlay() // same effect a real Escape keypress should have — see TestOptionsInfoRealEscapeKeypressCloses for that
 	if r.activePage != optionsPage {
 		t.Errorf("activePage = %q after closing the info window, want back on %q", r.activePage, optionsPage)
+	}
+}
+
+// TestOptionsInfoRealEscapeKeypressCloses pins a real, reported gap
+// TestOptionsInfoOpensAndCloses' own call to hideOverlay directly never
+// could have caught: tview.TextView.InputHandler only calls its own
+// done func on Escape/Enter/Tab/Backtab if one was actually set
+// (verified directly against its source) — with none ever bound to
+// r.optionsInfo, a real Escape keypress on the focused popup did
+// nothing at all, leaving no keyboard way to close it (only the
+// mouse-only captureOutsideClick). Drives the actual widget's own
+// InputHandler, the same way a real keypress would reach it once it
+// has focus, rather than calling hideOverlay directly.
+func TestOptionsInfoRealEscapeKeypressCloses(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '?', tcell.ModNone), func(tview.Primitive) {})
+	if r.activePage != optionsInfoPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, optionsInfoPage)
+	}
+
+	r.optionsInfo.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.activePage != optionsPage {
+		t.Errorf("activePage = %q after a real Escape keypress on the info popup, want back on %q", r.activePage, optionsPage)
 	}
 }
 

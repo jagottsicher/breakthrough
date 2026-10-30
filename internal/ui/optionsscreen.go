@@ -197,6 +197,16 @@ func (r *Root) newOptionsScreen() {
 	r.optionsInfo.SetWrap(true)
 	r.optionsInfo.SetWordWrap(true)
 	r.optionsInfo.SetBorderPadding(1, 1, 2, 2)
+	// A real, reported gap: the comment above (and the popup's own
+	// "Escape or a click outside closes this" footer — see
+	// showOptionInfo) claimed Escape already worked, but
+	// tview.TextView.InputHandler only ever calls its own done func on
+	// Escape/Enter/Tab/Backtab if one was actually set (verified
+	// directly against its source) — with none bound here, Escape did
+	// nothing at all, leaving no keyboard way out of this popup
+	// whatsoever (only the mouse-only captureOutsideClick). The same
+	// SetDoneFunc newHelpView/the error popup already have.
+	r.optionsInfo.SetDoneFunc(func(tcell.Key) { r.hideOverlay() })
 
 	// One shared input field for a typed value, repopulated per use —
 	// the same "one widget, reused" pattern r.prompt already follows.
@@ -955,7 +965,7 @@ func (r *Root) editOptionValue(opt optionSpec) {
 				r.renderOptions()
 				return
 			}
-			if value != "" {
+			if value != "" || opt.emptyMeansDefault {
 				opt.apply(r, value)
 			}
 		}

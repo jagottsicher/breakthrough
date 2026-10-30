@@ -136,6 +136,17 @@ type optionSpec struct {
 	// would let it be.
 	confirmEnable string
 
+	// emptyMeansDefault marks a KindString row without choices (editOptionValue,
+	// not cycleOptionChoice) where "" is itself a meaningful, applicable
+	// value — "use the built-in default" — rather than editOptionValue's
+	// own ordinary default of treating a cleared field as "nothing
+	// typed, leave the old value alone" (right for a path or a
+	// required value, wrong here: a real, reported gap left Model/
+	// Effort with no way back to "" once something else had been typed
+	// in, since clearing the field and pressing Enter silently did
+	// nothing at all).
+	emptyMeansDefault bool
+
 	// visible, when non-nil, decides whether this row is shown at all in
 	// the Options screen's own rendered table — currently only the AI
 	// Consigliere rows whose relevance depends on which provider is
@@ -254,10 +265,31 @@ func consigliereModelOptionFor(provider, providerLabel string, noBuiltinDefault 
 		help:  help,
 		value: func(r *Root) string { return r.settings.ConsigliereModelFor(provider) },
 		apply: func(r *Root, v string) {
+			key := consigliereModelEffortKeyFor(provider, "model")
+			if v == "" {
+				// A real, reported gap: clearing this field used to do
+				// nothing at all (editOptionValue's own ordinary "empty
+				// means nothing typed" rule — see
+				// optionSpec.emptyMeansDefault's own doc comment), with
+				// no other way back to "use the built-in default" once
+				// something else had been typed in. Goes through
+				// resetSetting, not a bare persistSetting(key, ""): that
+				// actually removes the override (see UnsetKey's own doc
+				// comment on why), rather than pinning an explicit ""
+				// that would permanently shadow a system-tier default an
+				// administrator set.
+				v = r.resetSetting(key)
+			} else {
+				r.persistSetting(key, v)
+			}
 			r.settings.SetConsigliereModelFor(provider, v)
-			r.persistSetting(consigliereModelEffortKeyFor(provider, "model"), v)
+			// A typed-in ID (or a reset back to "") may change what the
+			// live list itself has to say about it — same reasoning the
+			// base-URL rows' own apply already follows.
+			r.refreshConsigliereModelCacheIfSelected()
 		},
-		choices: func(r *Root) []optionChoice { return r.consigliereModelChoices() },
+		choices:           func(r *Root) []optionChoice { return r.consigliereModelChoices() },
+		emptyMeansDefault: true,
 	}, consigliereProviderIs(provider))
 }
 
@@ -276,10 +308,20 @@ func consigliereEffortOptionFor(provider, providerLabel string) optionSpec {
 			"request itself.", providerLabel),
 		value: func(r *Root) string { return r.settings.ConsigliereEffortFor(provider) },
 		apply: func(r *Root, v string) {
+			key := consigliereModelEffortKeyFor(provider, "effort")
+			if v == "" {
+				// See consigliereModelOptionFor's own identical apply
+				// for why this goes through resetSetting rather than a
+				// bare persistSetting(key, "").
+				v = r.resetSetting(key)
+			} else {
+				r.persistSetting(key, v)
+			}
 			r.settings.SetConsigliereEffortFor(provider, v)
-			r.persistSetting(consigliereModelEffortKeyFor(provider, "effort"), v)
+			r.refreshConsigliereModelCacheIfSelected()
 		},
-		choices: func(r *Root) []optionChoice { return r.consigliereEffortChoices() },
+		choices:           func(r *Root) []optionChoice { return r.consigliereEffortChoices() },
+		emptyMeansDefault: true,
 	}, consigliereProviderIs(provider))
 }
 
