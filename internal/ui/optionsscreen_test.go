@@ -618,6 +618,39 @@ func TestOptionsInfoRealEscapeKeypressCloses(t *testing.T) {
 	}
 }
 
+// TestPushOverlayIgnoresADuplicatePushOfTheAlreadyTopmostPage pins a
+// real, reported bug: showOptionInfo (and any other pushOverlay
+// caller) opened twice in a row before the first popup's own Draw
+// ever reached the screen — fast clicks/keypresses arriving in a
+// burst — stacked two frames under the one page name. Pages itself
+// only ever tracks one Visible flag per name, so a single Escape
+// afterward reported "below" as that second, now-invisible stale
+// frame instead of whatever was genuinely underneath — appearing to
+// pop straight past an overlay that was actually still open, landing
+// on whatever screen was open before it ever did. A second push of
+// the already-topmost page must now do nothing.
+func TestPushOverlayIgnoresADuplicatePushOfTheAlreadyTopmostPage(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	row, ok := optionRowByKey(r, "show_hidden")
+	if !ok {
+		t.Fatal("no show_hidden row")
+	}
+	opt, _ := r.optionAtRow(row)
+
+	r.showOptionInfo(opt)
+	r.showOptionInfo(opt)
+
+	if len(r.overlayStack) != 2 { // the base "options" page, plus exactly one "options-info" frame
+		t.Fatalf("overlayStack = %+v, want exactly 2 frames (the duplicate push should have been ignored)", r.overlayStack)
+	}
+
+	r.hideOverlay()
+	if r.activePage != optionsPage {
+		t.Errorf("activePage = %q after one hideOverlay, want back on %q directly — not a second, stale frame still in the way", r.activePage, optionsPage)
+	}
+}
+
 // TestOptionsTabCyclesFocus pins the focus ring: Tab walks from the
 // categories through the table and every button, then wraps.
 func TestOptionsTabCyclesFocus(t *testing.T) {

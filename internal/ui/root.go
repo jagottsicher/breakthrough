@@ -3883,6 +3883,22 @@ func (r *Root) showOverlayWithRestore(page string, widget tview.Primitive, resto
 // list so draw order actually matches stacking order, regardless of which
 // page happened to be AddPage'd first.
 func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) {
+	// A real, reported bug without this: pushing the same page twice
+	// in a row (e.g. two "?" presses arriving before the first popup's
+	// own Draw ever reaches the screen, during a burst of fast
+	// clicks/keypresses) stacked two frames under one page name — Pages
+	// itself only ever tracks one Visible flag per name, so hiding the
+	// first one away again left a second, now-invisible frame still on
+	// overlayStack. hideOverlay would then report "below" as that
+	// stale, already-hidden frame instead of whatever was genuinely
+	// underneath, which is exactly a single Escape appearing to pop
+	// straight past the overlay that's actually still open — onto
+	// whatever screen was open before it. A second push of the already-
+	// topmost page is always redundant anyway (it's already shown,
+	// already focused), so this simply does nothing instead.
+	if len(r.overlayStack) > 0 && r.overlayStack[len(r.overlayStack)-1].page == page {
+		return
+	}
 	r.overlayStack = append(r.overlayStack, overlayFrame{page: page, widget: widget, restore: restore})
 	r.activePage = page
 	r.activeWidget = widget
