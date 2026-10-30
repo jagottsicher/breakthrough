@@ -556,7 +556,7 @@ func (r *Root) consigliereNeedsUnlock() bool {
 	if !r.apiKeySession.HasProvider(provider) {
 		return false
 	}
-	_, tier, err := apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFile, provider, r.apiKeySession)
+	_, tier, err := apikey.Resolve(consigliereEnvVarForProvider(provider), r.settings.ConsigliereAPIKeyFileFor(provider), provider, r.apiKeySession)
 	return err == nil && tier == apikey.TierNone
 }
 
@@ -1714,9 +1714,9 @@ var errConsigliereLocked = errors.New("API key is stored but locked — unlock i
 // of the run (see consigliere.KeyFunc's own doc comment).
 func (r *Root) buildConsigliereProvider() consigliere.Provider {
 	providerName := r.settings.ConsigliereProvider
-	model := r.settings.ConsigliereModel
-	effort := r.settings.ConsigliereEffort
-	keyFile := r.settings.ConsigliereAPIKeyFile
+	model := r.settings.ConsigliereModelFor(providerName)
+	effort := r.settings.ConsigliereEffortFor(providerName)
+	keyFile := r.settings.ConsigliereAPIKeyFileFor(providerName)
 	session := r.apiKeySession
 
 	keyFunc := func() (string, error) {
@@ -1768,6 +1768,20 @@ func (r *Root) buildConsigliereProvider() consigliere.Provider {
 			Effort:  effort,
 			APIKey:  func() (string, error) { return "ollama", nil },
 		}
+	case "custom":
+		// No built-in Model default at all, unlike every other
+		// provider here — see ConsigliereCustomBaseURL's own doc
+		// comment: this provider exists specifically for an endpoint
+		// this app has no prior knowledge of, so an empty model is
+		// passed through as-is rather than silently substituting some
+		// other provider's own default, which would almost certainly
+		// be wrong here.
+		return consigliere.OpenAICompat{
+			BaseURL: r.settings.ConsigliereCustomBaseURL,
+			Model:   model,
+			Effort:  effort,
+			APIKey:  keyFunc,
+		}
 	default: // "anthropic", and anything unrecognized (e.g. a hand-edited config)
 		return consigliere.Anthropic{
 			Model:  model, // "" already means "use AnthropicDefaultModel" — see Anthropic.Reply
@@ -1798,6 +1812,23 @@ func (r *Root) consigliereOllamaBaseURL() string {
 		return url
 	}
 	return consigliere.OllamaDefaultBaseURL
+}
+
+// consigliereBaseURLOverride is refreshConsigliereModelCache's own
+// way of asking "does provider need a base URL override at all, and
+// if so, which one" without that function needing to know Ollama and
+// "custom" apart itself — "" for every other provider, meaning
+// listConsigliereModelsFunc's own per-provider constant already
+// covers it.
+func (r *Root) consigliereBaseURLOverride(provider string) string {
+	switch provider {
+	case "ollama":
+		return r.consigliereOllamaBaseURL()
+	case "custom":
+		return r.settings.ConsigliereCustomBaseURL
+	default:
+		return ""
+	}
 }
 
 // submitConsigliereUnlock is Enter's own action while

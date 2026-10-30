@@ -164,6 +164,98 @@ func TestToggleOptionAppliesLiveAndPersists(t *testing.T) {
 // own gate: activating the row while it's off must not apply anything
 // yet, only open the scroll-to-acknowledge notice — accepting it (once
 // scrolled to the end) is what actually flips the setting.
+// TestCycleOptionChoiceOntoTypedEntrySentinelOpensFreeTextInput pins a
+// real, reported gap: the Model/Effort rows only ever offered what a
+// live fetch returned or what's already stored — with the encrypted
+// key locked (or a failed fetch), there was no way to type a brand
+// new model ID through this screen at all. Cycling onto the
+// typed-entry sentinel (always the last choice — see
+// appendConsigliereTypedEntryChoice) must open the ordinary free-text
+// input instead of ever applying the sentinel value itself.
+func TestCycleOptionChoiceOntoTypedEntrySentinelOpensFreeTextInput(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	row, ok := optionRowByKey(r, "consigliere_anthropic_model")
+	if !ok {
+		t.Fatal("no consigliere_anthropic_model row")
+	}
+	opt, _ := r.optionAtRow(row)
+	choices := opt.choices(r)
+	last := choices[len(choices)-1]
+	if last.value != consigliereTypedEntrySentinel {
+		t.Fatalf("last choice = %+v, want the typed-entry sentinel", last)
+	}
+
+	// Cycle all the way around to land on the sentinel (the one before
+	// wrapping back to "").
+	for i := 0; i < len(choices)-1; i++ {
+		r.activateOptionRow(row)
+	}
+
+	if r.activePage != optionsInputPage {
+		t.Errorf("activePage = %q, want the free-text input open", r.activePage)
+	}
+	if got := r.settings.ConsigliereAnthropicModel; got == string(consigliereTypedEntrySentinel) {
+		t.Error("the sentinel itself must never be applied as a real model ID")
+	}
+}
+
+// TestEditOptionValueBlankCommitIsNoOpWithoutEmptyMeansDefault pins
+// editOptionValue's own ordinary rule, unchanged: for a ordinary
+// KindString row, clearing the field and pressing Enter leaves the
+// previous value alone rather than applying "" — the behavior
+// optionSpec.emptyMeansDefault's own doc comment explicitly opts out
+// of for Model/Effort (see
+// TestEditOptionValueBlankCommitAppliesWhenEmptyMeansDefault).
+func TestEditOptionValueBlankCommitIsNoOpWithoutEmptyMeansDefault(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	applied := false
+	opt := optionSpec{
+		key:   "test",
+		label: "Test",
+		value: func(*Root) string { return "old-value" },
+		apply: func(*Root, string) { applied = true },
+	}
+
+	r.editOptionValue(opt)
+	r.optionsInput.SetText("")
+	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if applied {
+		t.Error("apply should not have been called for a blank commit without emptyMeansDefault")
+	}
+}
+
+// TestEditOptionValueBlankCommitAppliesWhenEmptyMeansDefault pins the
+// user's own explicit report: typing something into Model/Effort and
+// then clearing the field again used to do nothing at all — no way
+// back to "use the built-in default" short of "Reset category", which
+// also discards every other AI Consigliere setting along with it.
+func TestEditOptionValueBlankCommitAppliesWhenEmptyMeansDefault(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	var got string
+	applied := false
+	opt := optionSpec{
+		key:               "test",
+		label:             "Test",
+		value:             func(*Root) string { return "old-value" },
+		apply:             func(_ *Root, v string) { applied = true; got = v },
+		emptyMeansDefault: true,
+	}
+
+	r.editOptionValue(opt)
+	r.optionsInput.SetText("")
+	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if !applied {
+		t.Fatal("apply should have been called with \"\" for a blank commit with emptyMeansDefault")
+	}
+	if got != "" {
+		t.Errorf("apply was called with %q, want \"\"", got)
+	}
+}
+
 func TestConfirmEnableOptionAsksBeforeTurningOn(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	r.SetRect(0, 0, 100, 40)
@@ -452,9 +544,34 @@ func TestOptionsInfoOpensAndCloses(t *testing.T) {
 		t.Errorf("info text = %q, want it to name the config key", got)
 	}
 
-	r.hideOverlay() // Escape's own action
+	r.hideOverlay() // same effect a real Escape keypress should have — see TestOptionsInfoRealEscapeKeypressCloses for that
 	if r.activePage != optionsPage {
 		t.Errorf("activePage = %q after closing the info window, want back on %q", r.activePage, optionsPage)
+	}
+}
+
+// TestOptionsInfoRealEscapeKeypressCloses pins a real, reported gap
+// TestOptionsInfoOpensAndCloses' own call to hideOverlay directly never
+// could have caught: tview.TextView.InputHandler only calls its own
+// done func on Escape/Enter/Tab/Backtab if one was actually set
+// (verified directly against its source) — with none ever bound to
+// r.optionsInfo, a real Escape keypress on the focused popup did
+// nothing at all, leaving no keyboard way to close it (only the
+// mouse-only captureOutsideClick). Drives the actual widget's own
+// InputHandler, the same way a real keypress would reach it once it
+// has focus, rather than calling hideOverlay directly.
+func TestOptionsInfoRealEscapeKeypressCloses(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '?', tcell.ModNone), func(tview.Primitive) {})
+	if r.activePage != optionsInfoPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, optionsInfoPage)
+	}
+
+	r.optionsInfo.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.activePage != optionsPage {
+		t.Errorf("activePage = %q after a real Escape keypress on the info popup, want back on %q", r.activePage, optionsPage)
 	}
 }
 
@@ -658,7 +775,7 @@ func TestCopyMoveIsASubsectionOfBehaviorNotItsOwnCategory(t *testing.T) {
 	selectOptionCategory(t, r, "Behavior")
 
 	headerRow := -1
-	rows := optionCategoryDisplayRows(mustOptionCategory(t, "Behavior"))
+	rows := optionCategoryDisplayRows(r, mustOptionCategory(t, "Behavior"))
 	for i, dr := range rows {
 		if dr.header == "Copy & Move" {
 			headerRow = i
@@ -699,6 +816,94 @@ func mustOptionCategory(t *testing.T, name string) optionCategory {
 // optionCategoryDisplayRows' own contract directly: a header appears
 // exactly once, right before the first option of its own section, not
 // once per option in it.
+// TestOptionCategoryDisplayRowsHidesInvisibleOption pins
+// optionSpec.visible's own contract directly, independent of any real
+// AI Consigliere row: an option whose visible func reports false for r
+// simply isn't in the display rows at all, as if it weren't in
+// cat.options in the first place; r == nil (the test-only, unfiltered
+// path optionRowByKey no longer uses, but settingValueByKey's own
+// contract still relies on cat.options itself staying untouched by
+// this) must show every option regardless.
+func TestOptionCategoryDisplayRowsHidesInvisibleOption(t *testing.T) {
+	cat := optionCategory{
+		name: "test",
+		options: []optionSpec{
+			{key: "a"},
+			{key: "b", visible: func(r *Root) bool { return false }},
+			{key: "c"},
+		},
+	}
+
+	r := &Root{}
+	var keys []string
+	for _, dr := range optionCategoryDisplayRows(r, cat) {
+		keys = append(keys, dr.opt.key)
+	}
+	if want := []string{"a", "c"}; len(keys) != len(want) || keys[0] != want[0] || keys[1] != want[1] {
+		t.Errorf("keys = %v, want %v", keys, want)
+	}
+
+	var allKeys []string
+	for _, dr := range optionCategoryDisplayRows(nil, cat) {
+		allKeys = append(allKeys, dr.opt.key)
+	}
+	if want := []string{"a", "b", "c"}; len(allKeys) != len(want) {
+		t.Errorf("unfiltered keys = %v, want %v", allKeys, want)
+	}
+}
+
+// TestConsigliereProviderSpecificRowsAreHiddenForOtherProviders pins
+// the user's own explicit complaints: "Ollama base URL" and "Custom
+// base URL" must each only show up while Provider is set to the
+// matching value, and the two API-key rows must be hidden entirely
+// while Provider is "ollama" (which needs no key at all).
+func TestConsigliereProviderSpecificRowsAreHiddenForOtherProviders(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "AI Consigliere")
+
+	r.settings.ConsigliereProvider = "anthropic"
+	if _, ok := optionRowByKey(r, "consigliere_ollama_base_url"); ok {
+		t.Error("\"Ollama base URL\" should be hidden while Provider is \"anthropic\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_custom_base_url"); ok {
+		t.Error("\"Custom base URL\" should be hidden while Provider is \"anthropic\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_anthropic_api_key_file"); !ok {
+		t.Error("the plain-text API key row should be shown while Provider is \"anthropic\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_api_key_secret"); !ok {
+		t.Error("the encrypted API key row should be shown while Provider is \"anthropic\"")
+	}
+
+	r.settings.ConsigliereProvider = "ollama"
+	if _, ok := optionRowByKey(r, "consigliere_ollama_base_url"); !ok {
+		t.Error("\"Ollama base URL\" should be shown while Provider is \"ollama\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_custom_base_url"); ok {
+		t.Error("\"Custom base URL\" should stay hidden while Provider is \"ollama\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_anthropic_api_key_file"); ok {
+		t.Error("anthropic's own API key row should stay hidden while Provider is \"ollama\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_api_key_secret"); ok {
+		t.Error("the encrypted API key row should be hidden while Provider is \"ollama\"")
+	}
+
+	r.settings.ConsigliereProvider = "custom"
+	if _, ok := optionRowByKey(r, "consigliere_ollama_base_url"); ok {
+		t.Error("\"Ollama base URL\" should stay hidden while Provider is \"custom\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_custom_base_url"); !ok {
+		t.Error("\"Custom base URL\" should be shown while Provider is \"custom\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_custom_api_key_file"); !ok {
+		t.Error("the plain-text API key row should be shown while Provider is \"custom\"")
+	}
+	if _, ok := optionRowByKey(r, "consigliere_api_key_secret"); !ok {
+		t.Error("the encrypted API key row should be shown while Provider is \"custom\"")
+	}
+}
+
 func TestOptionCategoryDisplayRowsInsertsHeaderOnce(t *testing.T) {
 	cat := optionCategory{
 		name: "test",
@@ -710,7 +915,7 @@ func TestOptionCategoryDisplayRowsInsertsHeaderOnce(t *testing.T) {
 		},
 	}
 
-	rows := optionCategoryDisplayRows(cat)
+	rows := optionCategoryDisplayRows(nil, cat)
 
 	var headers []string
 	for _, dr := range rows {
@@ -768,7 +973,7 @@ func TestOptionsArrowKeysSkipTheSubsectionHeader(t *testing.T) {
 	r.app.SetFocus(r.optionsTable)
 
 	headerRow, ok := func() (int, bool) {
-		for i, dr := range optionCategoryDisplayRows(mustOptionCategory(t, "Behavior")) {
+		for i, dr := range optionCategoryDisplayRows(r, mustOptionCategory(t, "Behavior")) {
 			if dr.header == "Copy & Move" {
 				return i, true
 			}
@@ -806,7 +1011,7 @@ func TestOptionCategoryDisplayRowsInsertsBlankRowBetweenSections(t *testing.T) {
 		},
 	}
 
-	rows := optionCategoryDisplayRows(cat)
+	rows := optionCategoryDisplayRows(nil, cat)
 
 	var got []string
 	for _, dr := range rows {
@@ -849,7 +1054,7 @@ func TestOptionAtRowReturnsFalseForBlankRow(t *testing.T) {
 	}
 	blankRow := copyRow - 2 // header sits right before copyRow; the blank spacer, one further back
 
-	rows := optionCategoryDisplayRows(mustOptionCategory(t, "Behavior"))
+	rows := optionCategoryDisplayRows(r, mustOptionCategory(t, "Behavior"))
 	if !rows[blankRow].blank {
 		t.Fatalf("setup: row %d isn't the blank spacer row (got %+v)", blankRow, rows[blankRow])
 	}

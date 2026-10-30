@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // ModelInfo is one model a provider's own "list models" endpoint
@@ -218,6 +219,64 @@ func ListOpenAICompatModels(ctx context.Context, apiKey, baseURL string, client 
 			info.EffortLevels = m.Effort.SupportedLevels
 		}
 		out = append(out, info)
+	}
+	return out, nil
+}
+
+// ollamaTagsResponse is Ollama's own native GET /api/tags response
+// shape (github.com/ollama/ollama/docs/api.md#list-local-models,
+// checked 2026-10-31) — only the one field this package actually
+// reads; every other documented field (modified_at, size, digest,
+// details...) is irrelevant to populating a Model dropdown.
+type ollamaTagsResponse struct {
+	Models []struct {
+		Name string `json:"name"`
+	} `json:"models"`
+}
+
+// ListOllamaNativeModels calls Ollama's own native GET /api/tags —
+// ListOpenAICompatModels' own fallback for "ollama" specifically (see
+// internal/ui/consiglieremodels.go's listConsigliereModelsFunc), for a
+// real, reported case: an Ollama-compatible server (not Ollama's own
+// reference implementation) that implements chat completions and this
+// native tags listing, but never the OpenAI-compatible GET /v1/models
+// at all — a 404 there otherwise left the Model dropdown permanently
+// empty even though the server genuinely has models and genuinely
+// answers real questions.
+//
+// baseURL's own trailing "/v1" (see OllamaDefaultBaseURL) is stripped
+// first: that's an OpenAI-compatibility path segment this native
+// endpoint doesn't live under, unlike /v1/models.
+func ListOllamaNativeModels(ctx context.Context, baseURL string, client *http.Client) ([]ModelInfo, error) {
+	root := strings.TrimSuffix(firstNonEmpty(baseURL, OllamaDefaultBaseURL), "/v1")
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, root+"/api/tags", nil)
+	if err != nil {
+		return nil, fmt.Errorf("consigliere: building Ollama tags request: %w", err)
+	}
+
+	resp, err := httpClient(client).Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("consigliere: calling Ollama tags endpoint: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("consigliere: reading Ollama tags response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("consigliere: Ollama tags endpoint returned status %d", resp.StatusCode)
+	}
+
+	var parsed ollamaTagsResponse
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("consigliere: parsing Ollama tags response: %w", err)
+	}
+
+	out := make([]ModelInfo, 0, len(parsed.Models))
+	for _, m := range parsed.Models {
+		out = append(out, ModelInfo{ID: m.Name})
 	}
 	return out, nil
 }

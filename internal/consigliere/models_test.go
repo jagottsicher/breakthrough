@@ -174,3 +174,53 @@ func TestListOpenAICompatModelsSurfacesAMalformedSuccessBody(t *testing.T) {
 		t.Fatal("want an error for a 200 response whose body doesn't parse")
 	}
 }
+
+// TestListOllamaNativeModelsParsesNamesAndStripsV1 pins
+// ListOllamaNativeModels' own two defining behaviors: it reads
+// "name", Ollama's native field (not OpenAI's "id"), and it strips a
+// configured baseURL's own trailing "/v1" before calling /api/tags,
+// since that native endpoint doesn't live under the OpenAI-compat
+// path segment.
+func TestListOllamaNativeModelsParsesNamesAndStripsV1(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_, _ = w.Write([]byte(`{
+			"models": [
+				{"name": "qwen2.5:1.5b", "size": 123},
+				{"name": "llama3.2:1b"}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	models, err := ListOllamaNativeModels(context.Background(), server.URL+"/v1", nil)
+	if err != nil {
+		t.Fatalf("ListOllamaNativeModels: %v", err)
+	}
+
+	if gotPath != "/api/tags" {
+		t.Errorf("request path = %q, want %q (baseURL's own trailing /v1 stripped)", gotPath, "/api/tags")
+	}
+	if len(models) != 2 {
+		t.Fatalf("models = %+v", models)
+	}
+	if models[0].ID != "qwen2.5:1.5b" || models[1].ID != "llama3.2:1b" {
+		t.Errorf("models = %+v", models)
+	}
+}
+
+// TestListOllamaNativeModelsSurfacesServerError mirrors
+// TestListOpenAICompatModelsSurfacesServerError's own identical shape
+// for the native tags endpoint.
+func TestListOllamaNativeModelsSurfacesServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	_, err := ListOllamaNativeModels(context.Background(), server.URL, nil)
+	if err == nil {
+		t.Fatal("want an error for a 404 response")
+	}
+}

@@ -197,6 +197,16 @@ func (r *Root) newOptionsScreen() {
 	r.optionsInfo.SetWrap(true)
 	r.optionsInfo.SetWordWrap(true)
 	r.optionsInfo.SetBorderPadding(1, 1, 2, 2)
+	// A real, reported gap: the comment above (and the popup's own
+	// "Escape or a click outside closes this" footer — see
+	// showOptionInfo) claimed Escape already worked, but
+	// tview.TextView.InputHandler only ever calls its own done func on
+	// Escape/Enter/Tab/Backtab if one was actually set (verified
+	// directly against its source) — with none bound here, Escape did
+	// nothing at all, leaving no keyboard way out of this popup
+	// whatsoever (only the mouse-only captureOutsideClick). The same
+	// SetDoneFunc newHelpView/the error popup already have.
+	r.optionsInfo.SetDoneFunc(func(tcell.Key) { r.hideOverlay() })
 
 	// One shared input field for a typed value, repopulated per use —
 	// the same "one widget, reused" pattern r.prompt already follows.
@@ -510,10 +520,24 @@ func (dr optionDisplayRow) isOption() bool {
 // A category with no sectioned options at all (every option.section ==
 // "") produces exactly one display row per option, the original,
 // header-and-spacer-free shape.
-func optionCategoryDisplayRows(cat optionCategory) []optionDisplayRow {
+//
+// r filters out any option whose own visible func reports false for the
+// application's current state (see optionSpec.visible's own doc
+// comment) — a row an option.section run skips this way is treated
+// exactly as if it weren't in cat.options at all, so a whole section
+// whose every option is currently hidden produces no header for it
+// either. r == nil deliberately disables this filtering entirely
+// (every option shown, regardless of visible) — used by the test-only
+// optionRowByKey, which has to keep resolving against the complete,
+// unfiltered catalog even for a row the live application state would
+// currently hide.
+func optionCategoryDisplayRows(r *Root, cat optionCategory) []optionDisplayRow {
 	rows := make([]optionDisplayRow, 0, len(cat.options))
 	sawSection := false
 	for i, opt := range cat.options {
+		if opt.visible != nil && r != nil && !opt.visible(r) {
+			continue
+		}
 		if opt.section != "" && (i == 0 || cat.options[i-1].section != opt.section) {
 			if sawSection {
 				rows = append(rows, optionDisplayRow{blank: true})
@@ -554,7 +578,7 @@ func (r *Root) renderOptions() {
 		return
 	}
 
-	for row, dr := range optionCategoryDisplayRows(categories[r.optionsCategory]) {
+	for row, dr := range optionCategoryDisplayRows(r, categories[r.optionsCategory]) {
 		if dr.blank {
 			r.optionsTable.SetCell(row, optionsColLabel, tview.NewTableCell("").SetSelectable(false))
 			r.optionsTable.SetCell(row, optionsColValue, tview.NewTableCell("").SetSelectable(false))
@@ -637,7 +661,7 @@ func (r *Root) firstSelectableOptionsRow() int {
 	if !ok {
 		return 0
 	}
-	for row, dr := range optionCategoryDisplayRows(cat) {
+	for row, dr := range optionCategoryDisplayRows(r, cat) {
 		if dr.isOption() {
 			return row
 		}
@@ -725,6 +749,21 @@ func (r *Root) renderOptionValue(opt optionSpec, value string) string {
 // The provenance itself is still worth knowing occasionally, and still
 // shown, in the one place with room to explain it properly: the info
 // window (see showOptionInfo).
+// isConsigliereModelOrEffortKey reports whether key is one of the
+// twelve per-provider "Model"/"Effort" rows (see
+// consigliereModelOptionFor/consigliereEffortOptionFor in
+// optioncatalog.go) — optionDefaultHint/showOptionInfo both need to
+// single these out, regardless of which provider's own copy a given
+// row is, to surface consigliereModelFetchErr.
+func isConsigliereModelOrEffortKey(key string) bool {
+	for _, provider := range []string{"anthropic", "openai", "deepseek", "gemini", "ollama", "custom"} {
+		if key == consigliereModelEffortKeyFor(provider, "model") || key == consigliereModelEffortKeyFor(provider, "effort") {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Root) optionDefaultHint(opt optionSpec) string {
 	// The Model/Effort rows' own live choices come from a background
 	// fetch that can fail for reasons entirely outside this screen
@@ -735,7 +774,7 @@ func (r *Root) optionDefaultHint(opt optionSpec) string {
 	// show just "(default: ...)"/"(model default)", and nothing else
 	// in this screen ever reads consigliereModelFetchErr (a real,
 	// reported case of exactly that silent failure).
-	if opt.key == "consigliere_model" || opt.key == "consigliere_effort" {
+	if isConsigliereModelOrEffortKey(opt.key) {
 		provider := r.settings.ConsigliereProvider
 		if err, ok := r.consigliereModelFetchErr[provider]; ok {
 			// Capped — a real provider error can run well past a
@@ -791,7 +830,7 @@ func (r *Root) optionAtRow(row int) (optionSpec, bool) {
 	if !ok {
 		return optionSpec{}, false
 	}
-	rows := optionCategoryDisplayRows(cat)
+	rows := optionCategoryDisplayRows(r, cat)
 	if row < 0 || row >= len(rows) || !rows[row].isOption() {
 		return optionSpec{}, false
 	}
@@ -867,6 +906,21 @@ func (r *Root) cycleOptionChoice(opt optionSpec) {
 		}
 	}
 
+	// consigliereTypedEntrySentinel (consiglieremodels.go) is the one
+	// deliberate exception to "activating the row *is* the change"
+	// above: Model/Effort need a way to type an arbitrary ID that was
+	// never fetched or stored before — a real, reported gap, since
+	// every other choice on those two rows only ever comes from a
+	// live fetch or an already-stored override, with no way to type a
+	// brand new one through this screen at all. Cycling onto it opens
+	// the same free-text input every KindString row without choices
+	// already gets (editOptionValue), rather than applying the
+	// sentinel value itself.
+	if choices[next].value == consigliereTypedEntrySentinel {
+		r.editOptionValue(opt)
+		return
+	}
+
 	opt.apply(r, choices[next].value)
 	r.renderOptions()
 }
@@ -911,7 +965,7 @@ func (r *Root) editOptionValue(opt optionSpec) {
 				r.renderOptions()
 				return
 			}
-			if value != "" {
+			if value != "" || opt.emptyMeansDefault {
 				opt.apply(r, value)
 			}
 		}
@@ -1048,7 +1102,7 @@ func (r *Root) showOptionInfo(opt optionSpec) {
 	// failure (see optionDefaultHint) — the full error belongs here
 	// instead, the one place in this screen that already has room for
 	// a long explanation.
-	if opt.key == "consigliere_model" || opt.key == "consigliere_effort" {
+	if isConsigliereModelOrEffortKey(opt.key) {
 		if err, ok := r.consigliereModelFetchErr[r.settings.ConsigliereProvider]; ok {
 			fmt.Fprintf(&b, "\n\n[::d]Model list fetch failed:[::-] %s", err.Error())
 		}
