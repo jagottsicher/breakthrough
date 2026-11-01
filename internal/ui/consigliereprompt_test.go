@@ -115,7 +115,7 @@ func TestConsigliereMachiavelliLogLinesRespectsALoweredTier(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		entries = append(entries, logview.Entry{Raw: fmt.Sprintf("distinct-log-line-%d", i)})
 	}
-	root.logAuditAllEntries = entries
+	root.log.AllEntries = entries
 
 	got := root.consigliereMachiavelliLogLines()
 
@@ -129,7 +129,7 @@ func TestConsigliereMachiavelliLogLinesRespectsALoweredTier(t *testing.T) {
 
 // TestConsigliereMachiavelliLogLinesMatchesTheTableSOrderWhenReversed
 // pins a real, reported gap: logAuditVisibleEntries always returns
-// oldest-first, but flipping the Time column (logAuditNewestFirst)
+// oldest-first, but flipping the Time column (log.NewestFirst)
 // reverses what the table itself shows — the forwarded block used to
 // still take the oldest entries regardless, so a user looking at this
 // month's events at the top of their screen got lines from the start
@@ -146,9 +146,9 @@ func TestConsigliereMachiavelliLogLinesMatchesTheTableSOrderWhenReversed(t *test
 	for i := 0; i < 5; i++ {
 		entries = append(entries, logview.Entry{Raw: fmt.Sprintf("entry-%d", i)})
 	}
-	root.logAuditAllEntries = entries
+	root.log.AllEntries = entries
 
-	// Default order (oldest-first, logAuditNewestFirst's own false
+	// Default order (oldest-first, log.NewestFirst's own false
 	// zero value): the table's own top 3 rows are entry-0..entry-2 —
 	// the forwarded block must be exactly those, not some other slice.
 	got := root.consigliereMachiavelliLogLines()
@@ -168,7 +168,7 @@ func TestConsigliereMachiavelliLogLinesMatchesTheTableSOrderWhenReversed(t *test
 	// table's own top 3 rows are now entry-4..entry-2 — the forwarded
 	// block must follow, not keep reading from the front of the
 	// unreversed list.
-	root.logAuditNewestFirst = true
+	root.log.NewestFirst = true
 	gotReversed := root.consigliereMachiavelliLogLines()
 	for _, want := range []string{"entry-4", "entry-3", "entry-2"} {
 		if !strings.Contains(gotReversed, want) {
@@ -368,7 +368,7 @@ func TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.consigliereExitPage = logAuditSelectionPage // stale: wherever it was opened from
 	root.activePage = logAuditViewerPage             // live: wherever it actually is now
-	root.logAuditDir = "/var/log/myapp"
+	root.log.Dir = "/var/log/myapp"
 
 	got := root.consigliereContextSnapshot()
 
@@ -395,11 +395,11 @@ func TestConsigliereContextSnapshotDispatchesToFirewall(t *testing.T) {
 
 func TestLogAuditContextSnapshotIncludesDirectoryAndFilters(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.logAuditDir = "/var/log/myapp"
-	root.logAuditKeywordField.SetText("timeout")
-	root.logAuditLevelField.SetText("error")
-	root.logAuditTimelineStartLabel = "2026-10-01"
-	root.logAuditTimelineEndLabel = "2026-10-28"
+	root.log.Dir = "/var/log/myapp"
+	root.log.KeywordField.SetText("timeout")
+	root.log.LevelField.SetText("error")
+	root.log.TimelineStartLabel = "2026-10-01"
+	root.log.TimelineEndLabel = "2026-10-28"
 
 	got := root.logAuditContextSnapshot()
 
@@ -435,7 +435,7 @@ func TestLogAuditContextSnapshotAlwaysIncludesAvailableActions(t *testing.T) {
 func TestLogAuditContextSnapshotOmitsLogLinesByDefault(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = logAuditViewerPage
-	root.logAuditAllEntries = []logview.Entry{{Raw: "2026-10-28 secret=topsecret123 user logged in"}}
+	root.log.AllEntries = []logview.Entry{{Raw: "2026-10-28 secret=topsecret123 user logged in"}}
 
 	got := root.logAuditContextSnapshot()
 
@@ -452,7 +452,7 @@ func TestLogAuditContextSnapshotIncludesMatchedLinesUnderMachiavelliMode(t *test
 	root := newPlainKeyRoot(t)
 	root.activePage = logAuditViewerPage
 	root.settings.ConsigliereHardcoreMode = true
-	root.logAuditAllEntries = []logview.Entry{{Raw: "2026-10-28 secret=topsecret123 user logged in"}}
+	root.log.AllEntries = []logview.Entry{{Raw: "2026-10-28 secret=topsecret123 user logged in"}}
 
 	got := root.logAuditContextSnapshot()
 
@@ -470,9 +470,9 @@ func TestLogAuditContextSnapshotIncludesDetailEntryUnderMachiavelliMode(t *testi
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0) // app.log group, sorted before syslog
+	r.log.Table.Select(1, 0) // app.log group, sorted before syslog
 	r.openLogAuditViewer()
-	r.logAuditViewerTable.Select(1, 0)
+	r.log.ViewerTable.Select(1, 0)
 	r.openLogAuditDetail(1)
 	r.settings.ConsigliereHardcoreMode = true
 
@@ -490,9 +490,9 @@ func TestLogAuditContextSnapshotOmitsDetailEntryWithoutMachiavelliMode(t *testin
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
-	r.logAuditViewerTable.Select(1, 0)
+	r.log.ViewerTable.Select(1, 0)
 	r.openLogAuditDetail(1)
 
 	got := r.logAuditContextSnapshot()
@@ -511,7 +511,7 @@ func TestLogAuditContextSnapshotIncludesStatisticsRegardlessOfMachiavelliMode(t 
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 	r.openLogAuditStats()
 
@@ -535,7 +535,7 @@ func TestLogAuditContextSnapshotMachiavelliModeOnlyAppliesToTheViewerPage(t *tes
 	root := newPlainKeyRoot(t)
 	root.activePage = logAuditSelectionPage
 	root.settings.ConsigliereHardcoreMode = true
-	root.logAuditAllEntries = []logview.Entry{{Raw: "2026-10-28 secret=topsecret123 user logged in"}}
+	root.log.AllEntries = []logview.Entry{{Raw: "2026-10-28 secret=topsecret123 user logged in"}}
 
 	got := root.logAuditContextSnapshot()
 

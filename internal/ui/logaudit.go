@@ -24,19 +24,19 @@ import (
 // change between two "jL" presses just as easily as its mount table
 // or activity log can.
 func (r *Root) openLogAudit() {
-	r.logAuditDir = r.panel.path
+	r.log.Dir = r.panel.path
 	r.reloadLogAuditDiscovery()
-	r.showOverlay(logAuditSelectionPage, r.logAuditSelectionLayout)
-	r.app.SetFocus(r.logAuditTable)
+	r.showOverlay(logAuditSelectionPage, r.log.SelectionLayout)
+	r.app.SetFocus(r.log.Table)
 }
 
-// reloadLogAuditDiscovery re-runs Discover against logAuditDir — the
+// reloadLogAuditDiscovery re-runs Discover against log.Dir — the
 // same "reflect the real, current state" contract reloadActivityLog
 // already has for "r".
 func (r *Root) reloadLogAuditDiscovery() {
-	groups, err := logview.Discover(r.currentLogAuditSource(), r.logAuditDir)
-	r.logAuditGroups = groups
-	r.logAuditDiscoverErr = err
+	groups, err := logview.Discover(r.currentLogAuditSource(), r.log.Dir)
+	r.log.Groups = groups
+	r.log.DiscoverErr = err
 	r.renderLogAuditSelection()
 }
 
@@ -44,15 +44,15 @@ func (r *Root) closeLogAuditSelection() {
 	r.hideOverlay()
 }
 
-// logAuditGroupAt returns logAuditGroups[row-1] — row is a table row
+// logAuditGroupAt returns log.Groups[row-1] — row is a table row
 // (1-based, header at 0), the same offset every other screen's own
 // table-row-to-data mapping uses (see e.g. renderActivityLog).
 func (r *Root) logAuditGroupAt(row int) (logview.FileGroup, bool) {
 	idx := row - 1
-	if idx < 0 || idx >= len(r.logAuditGroups) {
+	if idx < 0 || idx >= len(r.log.Groups) {
 		return logview.FileGroup{}, false
 	}
-	return r.logAuditGroups[idx], true
+	return r.log.Groups[idx], true
 }
 
 // openLogAuditViewer reads and merges every file in the group under
@@ -66,36 +66,36 @@ func (r *Root) logAuditGroupAt(row int) (logview.FileGroup, bool) {
 // unlike Copy/Cut's own checkbox-or-cursor convention, there's no
 // "act on several, independently of where the cursor ends up"
 // use case this screen actually needs. The group read is remembered
-// (logAuditGroupOpen) so "r" can re-read it without going back through
+// (log.GroupOpen) so "r" can re-read it without going back through
 // the selection screen.
 func (r *Root) openLogAuditViewer() {
-	row, _ := r.logAuditTable.GetSelection()
+	row, _ := r.log.Table.GetSelection()
 	group, ok := r.logAuditGroupAt(row)
 	if !ok {
 		return
 	}
-	r.logAuditGroupOpen = group
+	r.log.GroupOpen = group
 	r.refreshLogAuditViewerData()
-	r.logAuditKeywordField.SetText("")
-	r.logAuditTimeField.SetText("")
-	r.logAuditLevelField.SetText("")
+	r.log.KeywordField.SetText("")
+	r.log.TimeField.SetText("")
+	r.log.LevelField.SetText("")
 	// Newest-first, not the Merge's own oldest-first order — per the
 	// user's own explicit request, the same "most recent at the top"
 	// default every other reasonable default for triaging a log
 	// actually wants. Still just the opening default: the Time column
 	// header (logauditscreen.go) toggles it for the rest of the session.
-	r.logAuditNewestFirst = true
+	r.log.NewestFirst = true
 	r.renderLogAuditViewer()
-	r.pushOverlay(logAuditViewerPage, r.logAuditViewerLayout, nil)
-	// The list, not logAuditKeywordField — per the user's own explicit
+	r.pushOverlay(logAuditViewerPage, r.log.ViewerLayout, nil)
+	// The list, not log.KeywordField — per the user's own explicit
 	// request: opening the viewer should land you ready to read/navigate
 	// entries right away, not typing into a filter first (see
 	// renderLogAuditFocusIndicator, logauditscreen.go, for the visible
 	// cue this now gives).
-	r.app.SetFocus(r.logAuditViewerTable)
+	r.app.SetFocus(r.log.ViewerTable)
 }
 
-// refreshLogAuditViewerData re-reads and re-merges logAuditGroupOpen's
+// refreshLogAuditViewerData re-reads and re-merges log.GroupOpen's
 // own files and stores the result directly on r — used for every
 // *synchronous* read (the initial open, and "r"'s own manual refresh):
 // a one-off, user-triggered action blocking briefly is the same
@@ -105,11 +105,11 @@ func (r *Root) openLogAuditViewer() {
 // *repeating* read needs the heavier I/O kept off the UI goroutine
 // instead.
 func (r *Root) refreshLogAuditViewerData() {
-	entries, files, skipped, err := readLogAuditGroup(r.currentLogAuditSource(), r.logAuditGroupOpen)
-	r.logAuditAllEntries = entries
-	r.logAuditFiles = files
-	r.logAuditSkipped = skipped
-	r.logAuditParseErr = err
+	entries, files, skipped, err := readLogAuditGroup(r.currentLogAuditSource(), r.log.GroupOpen)
+	r.log.AllEntries = entries
+	r.log.Files = files
+	r.log.Skipped = skipped
+	r.log.ParseErr = err
 }
 
 // readLogAuditGroup does the actual read/parse/merge work for group,
@@ -185,7 +185,7 @@ func (r *Root) closeLogAuditViewer() {
 }
 
 // logAuditFollowInterval is how often a running follow re-reads
-// logAuditGroupOpen's own files — frequent enough to feel live for an
+// log.GroupOpen's own files — frequent enough to feel live for an
 // admin watching an active service, infrequent enough that it isn't
 // re-parsing a growing file every fraction of a second. Phase 2 reads
 // every file fresh each tick (see refreshLogAuditViewerData) rather
@@ -197,37 +197,37 @@ const logAuditFollowInterval = 2 * time.Second
 // toggleLogAuditFollow is "f" in the viewer — starts or stops a
 // running follow.
 func (r *Root) toggleLogAuditFollow() {
-	if r.logAuditFollowing {
+	if r.log.Following {
 		r.stopLogAuditFollow()
 		return
 	}
 	r.startLogAuditFollow()
 }
 
-// startLogAuditFollow begins re-reading logAuditGroupOpen's own files
+// startLogAuditFollow begins re-reading log.GroupOpen's own files
 // every logAuditFollowInterval, the "tail -f, but for the merged
 // audit view" the user asked for explicitly — a no-op if already
 // running.
 func (r *Root) startLogAuditFollow() {
-	if r.logAuditFollowing {
+	if r.log.Following {
 		return
 	}
-	r.logAuditFollowing = true
+	r.log.Following = true
 
 	ctx, cancel := context.WithCancel(context.Background())
-	r.logAuditFollowCancel = cancel
+	r.log.FollowCancel = cancel
 
 	// safeGo, the same as every other background ticker in this
 	// package (see startChord/animateChordCountdown): a panic here
 	// ends the follow cleanly instead of taking the whole process
 	// down silently. group is captured once, by value, here — not
-	// read from r.logAuditGroupOpen inside the ticker loop itself —
+	// read from r.log.GroupOpen inside the ticker loop itself —
 	// so this goroutine never touches a Root field concurrently with
 	// the UI goroutine; see readLogAuditGroup's own doc comment for
 	// why the read work itself has to happen out here, off the UI
 	// goroutine, with only the already-computed result (not the I/O)
 	// handed to QueueUpdateDraw.
-	group := r.logAuditGroupOpen
+	group := r.log.GroupOpen
 	source := r.currentLogAuditSource()
 	r.safeGo("log audit follow", func() { r.stopLogAuditFollow() }, func() {
 		ticker := time.NewTicker(logAuditFollowInterval)
@@ -259,11 +259,11 @@ func (r *Root) startLogAuditFollow() {
 // off, the viewer closed, or a background panic) — safe to call even
 // when nothing is running.
 func (r *Root) stopLogAuditFollow() {
-	if r.logAuditFollowCancel != nil {
-		r.logAuditFollowCancel()
-		r.logAuditFollowCancel = nil
+	if r.log.FollowCancel != nil {
+		r.log.FollowCancel()
+		r.log.FollowCancel = nil
 	}
-	r.logAuditFollowing = false
+	r.log.Following = false
 }
 
 // tickLogAuditFollow applies one follow tick's own already-read result
@@ -274,31 +274,31 @@ func (r *Root) stopLogAuditFollow() {
 // only case Select should move it: an admin watching the tail end
 // should keep seeing the tail end once new lines arrive, but one who
 // scrolled away to read an older entry must not be yanked back to
-// it). Which row that is depends on logAuditNewestFirst — row 1 (new
+// it). Which row that is depends on log.NewestFirst — row 1 (new
 // entries appear at the top) when true, the last row (they appear at
 // the bottom, same as a plain `tail -f`) when false, the default.
 func (r *Root) tickLogAuditFollow(entries []logview.Entry, files, skipped int, err error) {
-	rowCount := r.logAuditViewerTable.GetRowCount()
-	cur, _ := r.logAuditViewerTable.GetSelection()
+	rowCount := r.log.ViewerTable.GetRowCount()
+	cur, _ := r.log.ViewerTable.GetSelection()
 	tailRow := rowCount - 1
-	if r.logAuditNewestFirst {
+	if r.log.NewestFirst {
 		tailRow = 1
 	}
 	stayedAtTail := rowCount > 1 && cur == tailRow
 
-	r.logAuditAllEntries = entries
-	r.logAuditFiles = files
-	r.logAuditSkipped = skipped
-	r.logAuditParseErr = err
+	r.log.AllEntries = entries
+	r.log.Files = files
+	r.log.Skipped = skipped
+	r.log.ParseErr = err
 	r.renderLogAuditViewer()
 
 	if stayedAtTail {
-		if newCount := r.logAuditViewerTable.GetRowCount(); newCount > 1 {
+		if newCount := r.log.ViewerTable.GetRowCount(); newCount > 1 {
 			newTailRow := newCount - 1
-			if r.logAuditNewestFirst {
+			if r.log.NewestFirst {
 				newTailRow = 1
 			}
-			r.logAuditViewerTable.Select(newTailRow, 0)
+			r.log.ViewerTable.Select(newTailRow, 0)
 		}
 	}
 }

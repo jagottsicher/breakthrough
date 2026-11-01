@@ -76,21 +76,21 @@ func TestOpenLogAuditDiscoversAndReadsRemoteFiles(t *testing.T) {
 	}
 
 	r.openLogAudit()
-	if len(r.logAuditGroups) != 1 || r.logAuditGroups[0].Base != "app.log" {
-		t.Fatalf("logAuditGroups = %+v, want one group for app.log — Discover must have gone through the remote client, not the local filesystem", r.logAuditGroups)
+	if len(r.log.Groups) != 1 || r.log.Groups[0].Base != "app.log" {
+		t.Fatalf("log.Groups = %+v, want one group for app.log — Discover must have gone through the remote client, not the local filesystem", r.log.Groups)
 	}
 
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
-	if r.logAuditFiles != 1 {
-		t.Fatalf("logAuditFiles = %d, want 1", r.logAuditFiles)
+	if r.log.Files != 1 {
+		t.Fatalf("log.Files = %d, want 1", r.log.Files)
 	}
-	if len(r.logAuditAllEntries) != 1 {
-		t.Fatalf("len(logAuditAllEntries) = %d, want 1", len(r.logAuditAllEntries))
+	if len(r.log.AllEntries) != 1 {
+		t.Fatalf("len(log.AllEntries) = %d, want 1", len(r.log.AllEntries))
 	}
-	if r.logAuditAllEntries[0].Level != logview.LevelError {
-		t.Errorf("entries[0].Level = %v, want LevelError — the remote file's own real content should have been read and parsed", r.logAuditAllEntries[0].Level)
+	if r.log.AllEntries[0].Level != logview.LevelError {
+		t.Errorf("entries[0].Level = %v, want LevelError — the remote file's own real content should have been read and parsed", r.log.AllEntries[0].Level)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestRenderLogAuditSelectionTitleNamesTheRemoteConnectionWhenRemote(t *testi
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	if got := r.logAuditTitleBar.GetText(true); strings.Contains(got, "testhost") {
+	if got := r.log.TitleBar.GetText(true); strings.Contains(got, "testhost") {
 		t.Errorf("local title = %q, want no connection name", got)
 	}
 
@@ -114,7 +114,7 @@ func TestRenderLogAuditSelectionTitleNamesTheRemoteConnectionWhenRemote(t *testi
 		t.Fatalf("connectRemote: %v", err)
 	}
 	r.openLogAudit()
-	if got := r.logAuditTitleBar.GetText(true); !strings.Contains(got, "testhost") {
+	if got := r.log.TitleBar.GetText(true); !strings.Contains(got, "testhost") {
 		t.Errorf("remote title = %q, want it to name the connection (testhost)", got)
 	}
 }
@@ -127,8 +127,8 @@ func TestOpenLogAuditDiscoversGroups(t *testing.T) {
 	if r.activePage != logAuditSelectionPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, logAuditSelectionPage)
 	}
-	if len(r.logAuditGroups) != 2 {
-		t.Fatalf("len(logAuditGroups) = %d, want 2 (app.log, syslog)", len(r.logAuditGroups))
+	if len(r.log.Groups) != 2 {
+		t.Fatalf("len(log.Groups) = %d, want 2 (app.log, syslog)", len(r.log.Groups))
 	}
 }
 
@@ -137,17 +137,17 @@ func TestOpenLogAuditViewerOpensGroupUnderCursor(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	r.logAuditTable.Select(1, 0) // row 1 = logAuditGroups[0], the app.log group (sorted before syslog)
+	r.log.Table.Select(1, 0) // row 1 = log.Groups[0], the app.log group (sorted before syslog)
 	r.openLogAuditViewer()
 
 	if r.activePage != logAuditViewerPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, logAuditViewerPage)
 	}
-	if r.logAuditFiles != 1 {
-		t.Fatalf("logAuditFiles = %d, want 1 (just app.log)", r.logAuditFiles)
+	if r.log.Files != 1 {
+		t.Fatalf("log.Files = %d, want 1 (just app.log)", r.log.Files)
 	}
-	if len(r.logAuditAllEntries) != 2 {
-		t.Fatalf("len(logAuditAllEntries) = %d, want 2", len(r.logAuditAllEntries))
+	if len(r.log.AllEntries) != 2 {
+		t.Fatalf("len(log.AllEntries) = %d, want 2", len(r.log.AllEntries))
 	}
 }
 
@@ -159,10 +159,10 @@ func TestOpenLogAuditViewerFocusesTheList(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
-	if !r.logAuditViewerTable.HasFocus() {
+	if !r.log.ViewerTable.HasFocus() {
 		t.Error("opening the viewer should focus the list, not a filter field")
 	}
 }
@@ -179,21 +179,21 @@ func TestLogAuditFocusIndicatorReflectsTableFocus(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer() // focuses the table — see the test above
 
-	if got := r.logAuditFocusIndicator.GetBackgroundColor(); got != r.theme.InputFocusedBackground {
+	if got := r.log.FocusIndicator.GetBackgroundColor(); got != r.theme.InputFocusedBackground {
 		t.Errorf("focus indicator background = %v, want InputFocusedBackground %v while the list has focus", got, r.theme.InputFocusedBackground)
 	}
 
-	r.app.SetFocus(r.logAuditKeywordField)
+	r.app.SetFocus(r.log.KeywordField)
 	// PanelBackground, not SurfaceBackground: the viewer table itself
 	// moved to PanelBackground per the user's own explicit request to
 	// bring every full-screen catalog in line with the main screen it
-	// fully covers (see logAuditViewerTable's own comment) — this
+	// fully covers (see log.ViewerTable's own comment) — this
 	// indicator blends into the table it's a cue for while unfocused,
 	// so it moved with it.
-	if got := r.logAuditFocusIndicator.GetBackgroundColor(); got != r.theme.PanelBackground {
+	if got := r.log.FocusIndicator.GetBackgroundColor(); got != r.theme.PanelBackground {
 		t.Errorf("focus indicator background = %v, want PanelBackground %v once focus moves to a filter field", got, r.theme.PanelBackground)
 	}
 }
@@ -203,7 +203,7 @@ func TestLogAuditFocusIndicatorReflectsTableFocus(t *testing.T) {
 // reverse" convention the panel's own column headers already use (see
 // sortArrow, panel.go) — per the user's own explicit request to read
 // the list old->new or new->old. Opens newest-first by default (see
-// openLogAuditViewer's own doc comment on logAuditNewestFirst, per a
+// openLogAuditViewer's own doc comment on log.NewestFirst, per a
 // later, separate explicit request), so this test's own "before"
 // state is newest-first, toggling to oldest-first — the opposite
 // direction from when that default was still oldest-first.
@@ -211,7 +211,7 @@ func TestLogAuditTimeHeaderClickTogglesSortOrder(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir) // app.log: error @16:04:21, then info @16:04:23
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
 	firstEntry := func() logview.Entry {
@@ -222,20 +222,20 @@ func TestLogAuditTimeHeaderClickTogglesSortOrder(t *testing.T) {
 		return e
 	}
 
-	if !r.logAuditNewestFirst {
+	if !r.log.NewestFirst {
 		t.Fatal("setup: opening the viewer should default to newest-first")
 	}
 	if got := firstEntry(); got.Level != logview.LevelInfo {
 		t.Fatalf("before toggling, row 1 = %+v, want the newest entry (Info @16:04:23) — newest-first is the default", got)
 	}
 
-	header := r.logAuditViewerTable.GetCell(0, logAuditColTime)
+	header := r.log.ViewerTable.GetCell(0, logAuditColTime)
 	if header.Clicked == nil {
 		t.Fatal("Time header has no Clicked handler")
 	}
 	header.Clicked()
-	if r.logAuditNewestFirst {
-		t.Fatal("clicking the Time header should have cleared logAuditNewestFirst")
+	if r.log.NewestFirst {
+		t.Fatal("clicking the Time header should have cleared log.NewestFirst")
 	}
 	if got := firstEntry(); got.Level != logview.LevelError {
 		t.Errorf("after toggling to oldest-first, row 1 = %+v, want the oldest entry (Error @16:04:21)", got)
@@ -244,7 +244,7 @@ func TestLogAuditTimeHeaderClickTogglesSortOrder(t *testing.T) {
 	// renderLogAuditViewer (called from the Clicked handler itself)
 	// replaces row 0's cell outright via SetCell, same as every other
 	// row — header's own copy is now stale.
-	if got := r.logAuditViewerTable.GetCell(0, logAuditColTime).Text; !strings.Contains(got, "↑") {
+	if got := r.log.ViewerTable.GetCell(0, logAuditColTime).Text; !strings.Contains(got, "↑") {
 		t.Errorf("Time header = %q, want a ↑ arrow once sorted oldest-first", got)
 	}
 }
@@ -254,7 +254,7 @@ func TestCloseLogAuditViewerReturnsToSelection(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 	r.closeLogAuditViewer()
 
@@ -268,13 +268,13 @@ func TestNavigateLogAuditLevelFindsAndWrapsErrors(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
-	r.logAuditViewerTable.Select(1, 0)
+	r.log.ViewerTable.Select(1, 0)
 	r.navigateLogAuditLevel(logview.LevelError)
 
-	e, ok := r.logAuditEntryAt(func() int { row, _ := r.logAuditViewerTable.GetSelection(); return row }())
+	e, ok := r.logAuditEntryAt(func() int { row, _ := r.log.ViewerTable.GetSelection(); return row }())
 	if !ok || e.Level != logview.LevelError {
 		t.Fatalf("after navigateLogAuditLevel(Error), selected entry = %+v, ok=%v, want an Error row", e, ok)
 	}
@@ -285,11 +285,11 @@ func TestRenderLogAuditViewerFiltersByKeyword(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
-	r.logAuditKeywordField.SetText("timeout")
-	if got := r.logAuditViewerTable.GetRowCount(); got != 2 { // header + 1 match
+	r.log.KeywordField.SetText("timeout")
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 { // header + 1 match
 		t.Fatalf("GetRowCount() after filter = %d, want 2 (header + 1 match)", got)
 	}
 }
@@ -308,14 +308,14 @@ func TestRenderLogAuditViewerNotesTruncationInTitle(t *testing.T) {
 		t.Fatalf("WriteFile big.log: %v", err)
 	}
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
-	title := r.logAuditViewerTitle.GetText(true)
+	title := r.log.ViewerTitle.GetText(true)
 	if !strings.Contains(title, fmt.Sprintf("showing first %d", logAuditMaxRenderedRows)) {
 		t.Errorf("title = %q, want an explicit truncation notice", title)
 	}
-	if got := r.logAuditViewerTable.GetRowCount(); got != logAuditMaxRenderedRows+1 { // +1 header
+	if got := r.log.ViewerTable.GetRowCount(); got != logAuditMaxRenderedRows+1 { // +1 header
 		t.Errorf("GetRowCount() = %d, want %d (header + cap)", got, logAuditMaxRenderedRows+1)
 	}
 }
@@ -340,19 +340,19 @@ func TestRenderLogAuditViewerKeepsGoodEntriesWhenOneFileFails(t *testing.T) {
 	}
 
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
-	if r.logAuditParseErr == nil {
+	if r.log.ParseErr == nil {
 		t.Fatal("setup: expected app.log.1.gz to fail to parse")
 	}
-	if len(r.logAuditAllEntries) != 1 {
-		t.Fatalf("len(logAuditAllEntries) = %d, want 1 (app.log's own entry, kept despite the other file's error)", len(r.logAuditAllEntries))
+	if len(r.log.AllEntries) != 1 {
+		t.Fatalf("len(log.AllEntries) = %d, want 1 (app.log's own entry, kept despite the other file's error)", len(r.log.AllEntries))
 	}
-	if got := r.logAuditViewerTable.GetRowCount(); got != 2 { // header + the one good entry
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 { // header + the one good entry
 		t.Errorf("GetRowCount() = %d, want 2 (header + 1 entry) — the error must not blank the whole table", got)
 	}
-	if title := r.logAuditViewerTitle.GetText(true); !strings.Contains(title, "1 file failed") {
+	if title := r.log.ViewerTitle.GetText(true); !strings.Contains(title, "1 file failed") {
 		t.Errorf("title = %q, want the error surfaced as a note, not silently dropped", title)
 	}
 }
@@ -387,7 +387,7 @@ func TestRestyleLogAuditFilterFieldsFixesStuckFocusColorOnMouseClick(t *testing.
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
 	screen := tcell.NewSimulationScreen("")
@@ -404,30 +404,30 @@ func TestRestyleLogAuditFilterFieldsFixesStuckFocusColorOnMouseClick(t *testing.
 		return bg
 	}
 
-	clickPrimitive(r, r.logAuditKeywordField)
+	clickPrimitive(r, r.log.KeywordField)
 	r.Draw(screen)
-	if got := fieldBG(r.logAuditKeywordField); got != r.theme.InputFocusedBackground {
+	if got := fieldBG(r.log.KeywordField); got != r.theme.InputFocusedBackground {
 		t.Fatalf("setup: Keyword bg = %v after its own click, want InputFocusedBackground %v", got, r.theme.InputFocusedBackground)
 	}
 
-	clickPrimitive(r, r.logAuditTimeField)
+	clickPrimitive(r, r.log.TimeField)
 	r.Draw(screen)
-	if got := fieldBG(r.logAuditKeywordField); got != r.theme.InputBackground {
+	if got := fieldBG(r.log.KeywordField); got != r.theme.InputBackground {
 		t.Errorf("Keyword bg = %v after clicking Time, want it back to InputBackground %v, not stuck highlighted", got, r.theme.InputBackground)
 	}
-	if got := fieldBG(r.logAuditTimeField); got != r.theme.InputFocusedBackground {
+	if got := fieldBG(r.log.TimeField); got != r.theme.InputFocusedBackground {
 		t.Errorf("Time bg = %v, want InputFocusedBackground %v (it's the one just clicked)", got, r.theme.InputFocusedBackground)
 	}
 
-	clickPrimitive(r, r.logAuditLevelField)
+	clickPrimitive(r, r.log.LevelField)
 	r.Draw(screen)
-	if got := fieldBG(r.logAuditKeywordField); got != r.theme.InputBackground {
+	if got := fieldBG(r.log.KeywordField); got != r.theme.InputBackground {
 		t.Errorf("Keyword bg = %v after clicking Level, want InputBackground %v", got, r.theme.InputBackground)
 	}
-	if got := fieldBG(r.logAuditTimeField); got != r.theme.InputBackground {
+	if got := fieldBG(r.log.TimeField); got != r.theme.InputBackground {
 		t.Errorf("Time bg = %v after clicking Level, want InputBackground %v — not stuck highlighted either", got, r.theme.InputBackground)
 	}
-	if got := fieldBG(r.logAuditLevelField); got != r.theme.InputFocusedBackground {
+	if got := fieldBG(r.log.LevelField); got != r.theme.InputFocusedBackground {
 		t.Errorf("Level bg = %v, want InputFocusedBackground %v (it's the one just clicked)", got, r.theme.InputFocusedBackground)
 	}
 }
@@ -442,16 +442,16 @@ func TestLogAuditFilterLabelsAreShortWithExamplesAsPlaceholders(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
 	for _, tc := range []struct {
 		field *tview.InputField
 		label string
 	}{
-		{r.logAuditKeywordField, "Filter: "},
-		{r.logAuditTimeField, "Time: "},
-		{r.logAuditLevelField, "Level >= "},
+		{r.log.KeywordField, "Filter: "},
+		{r.log.TimeField, "Time: "},
+		{r.log.LevelField, "Level >= "},
 	} {
 		if got := tc.field.GetLabel(); got != tc.label {
 			t.Errorf("label = %q, want %q", got, tc.label)
@@ -488,8 +488,8 @@ func TestRenderLogAuditSelectionShowsSizeAndModified(t *testing.T) {
 	writeLogAuditFixture(t, dir) // app.log has real content, non-zero size/mtime
 	r := newTestRootForLogAudit(t, dir)
 
-	sizeText := r.logAuditTable.GetCell(1, logAuditSelSize).Text
-	modText := r.logAuditTable.GetCell(1, logAuditSelModified).Text
+	sizeText := r.log.Table.GetCell(1, logAuditSelSize).Text
+	modText := r.log.Table.GetCell(1, logAuditSelModified).Text
 	if sizeText == "" {
 		t.Error("Size column is empty, want the newest file's humanized size")
 	}
@@ -611,18 +611,18 @@ func TestToggleLogAuditFollowStartsAndStopsTicker(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
-	if r.logAuditFollowing {
+	if r.log.Following {
 		t.Fatal("follow should start off")
 	}
 	r.toggleLogAuditFollow()
-	if !r.logAuditFollowing || r.logAuditFollowCancel == nil {
+	if !r.log.Following || r.log.FollowCancel == nil {
 		t.Fatal("toggle should start following")
 	}
 	r.toggleLogAuditFollow()
-	if r.logAuditFollowing || r.logAuditFollowCancel != nil {
+	if r.log.Following || r.log.FollowCancel != nil {
 		t.Fatal("toggle again should stop following")
 	}
 }
@@ -631,13 +631,13 @@ func TestCloseLogAuditViewerStopsFollow(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
 	r.startLogAuditFollow()
 	r.closeLogAuditViewer()
 
-	if r.logAuditFollowing {
+	if r.log.Following {
 		t.Error("closing the viewer should stop a running follow")
 	}
 }
@@ -648,10 +648,10 @@ func TestOpenLogAuditDetailShowsRawOnlyWhenDifferentFromMessage(t *testing.T) {
 	jsonDir := t.TempDir()
 	writeLogAuditFixture(t, jsonDir)
 	r := newTestRootForLogAudit(t, jsonDir)
-	r.logAuditTable.Select(1, 0) // app.log group, sorted before syslog
+	r.log.Table.Select(1, 0) // app.log group, sorted before syslog
 	r.openLogAuditViewer()
 	r.openLogAuditDetail(1)
-	if got := r.logAuditDetailView.GetText(true); !strings.Contains(got, "Raw:") {
+	if got := r.log.DetailView.GetText(true); !strings.Contains(got, "Raw:") {
 		t.Errorf("detail view for a JSON entry = %q, want a Raw: section", got)
 	}
 
@@ -662,10 +662,10 @@ func TestOpenLogAuditDetailShowsRawOnlyWhenDifferentFromMessage(t *testing.T) {
 		t.Fatalf("WriteFile plain.log: %v", err)
 	}
 	r2 := newTestRootForLogAudit(t, plainDir)
-	r2.logAuditTable.Select(1, 0)
+	r2.log.Table.Select(1, 0)
 	r2.openLogAuditViewer()
 	r2.openLogAuditDetail(1)
-	if got := r2.logAuditDetailView.GetText(true); strings.Contains(got, "Raw:") {
+	if got := r2.log.DetailView.GetText(true); strings.Contains(got, "Raw:") {
 		t.Errorf("detail view for a FormatPlain entry = %q, want no redundant Raw: section", got)
 	}
 }
@@ -683,7 +683,7 @@ func TestClickLogAuditSelectionCellOpensTheViewer(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	cell := r.logAuditTable.GetCell(1, logAuditSelName)
+	cell := r.log.Table.GetCell(1, logAuditSelName)
 	if cell.Clicked == nil {
 		t.Fatal("row 1's own Name cell has no Clicked handler")
 	}
@@ -702,10 +702,10 @@ func TestClickLogAuditViewerCellOpensTheDetail(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
-	cell := r.logAuditViewerTable.GetCell(1, logAuditColMessage)
+	cell := r.log.ViewerTable.GetCell(1, logAuditColMessage)
 	if cell.Clicked == nil {
 		t.Fatal("row 1's own Message cell has no Clicked handler")
 	}
@@ -730,13 +730,13 @@ func TestDoubleClickLogAuditSelectionRowStillOpensTheViewer(t *testing.T) {
 	r := newTestRootForLogAudit(t, dir)
 	drawRoot(t, r, 100, 30)
 
-	rectX, rectY, _, _ := r.logAuditTable.GetInnerRect()
+	rectX, rectY, _, _ := r.log.Table.GetInnerRect()
 	fallbackCalled := false
 	fallback := func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		fallbackCalled = true
 		return action, event
 	}
-	capture := chainTableDoubleClick(r.logAuditTable, fallback)
+	capture := chainTableDoubleClick(r.log.Table, fallback)
 
 	capture(tview.MouseLeftDoubleClick, tcell.NewEventMouse(rectX, rectY+1, tcell.ButtonPrimary, 0))
 
@@ -756,17 +756,17 @@ func TestDoubleClickLogAuditViewerRowStillOpensTheDetail(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 	drawRoot(t, r, 100, 30)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 	drawRoot(t, r, 100, 30)
 
-	rectX, rectY, _, _ := r.logAuditViewerTable.GetInnerRect()
+	rectX, rectY, _, _ := r.log.ViewerTable.GetInnerRect()
 	fallbackCalled := false
 	fallback := func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		fallbackCalled = true
 		return action, event
 	}
-	capture := chainTableDoubleClick(r.logAuditViewerTable, fallback)
+	capture := chainTableDoubleClick(r.log.ViewerTable, fallback)
 
 	capture(tview.MouseLeftDoubleClick, tcell.NewEventMouse(rectX, rectY+1, tcell.ButtonPrimary, 0))
 
@@ -787,22 +787,22 @@ func TestDoubleClickLogAuditViewerRowStillOpensTheDetail(t *testing.T) {
 // whenever focus moves on, never live.
 func TestLogAuditTimeFieldDoesNotFilterLiveButDoesOnEnterOrLeave(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	allRows := r.logAuditViewerTable.GetRowCount()
+	allRows := r.log.ViewerTable.GetRowCount()
 	if allRows <= 1 {
 		t.Fatalf("setup: table has %d rows, want more than just the header", allRows)
 	}
 
 	// A filter that excludes every one of the fixture's 20 entries
 	// (all in October 2026) — typing it should change nothing yet.
-	r.logAuditTimeField.SetText("after 2030-01-01")
-	if got := r.logAuditViewerTable.GetRowCount(); got != allRows {
+	r.log.TimeField.SetText("after 2030-01-01")
+	if got := r.log.ViewerTable.GetRowCount(); got != allRows {
 		t.Errorf("row count = %d after merely setting the Time field's text, want unchanged %d (no live filtering)", got, allRows)
 	}
 
-	r.logAuditTimeField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.log.TimeField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 	// 2, not 1: header row + the table's own "No entries match the
 	// current filter." row, not just a bare header.
-	if got := r.logAuditViewerTable.GetRowCount(); got != 2 {
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 {
 		t.Errorf("row count = %d after Enter, want 2 (header + the no-match row — the filter excludes everything)", got)
 	}
 }
@@ -818,18 +818,18 @@ func TestLogAuditTimeFieldDoesNotFilterLiveButDoesOnEnterOrLeave(t *testing.T) {
 // specifically so it exercises that real gap rather than bypassing it.
 func TestLogAuditTimeFieldAppliesOnLeavingViaMouseClick(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	allRows := r.logAuditViewerTable.GetRowCount()
+	allRows := r.log.ViewerTable.GetRowCount()
 
-	clickPrimitive(r, r.logAuditTimeField)
-	r.logAuditTimeField.SetText("after 2030-01-01")
-	if got := r.logAuditViewerTable.GetRowCount(); got != allRows {
+	clickPrimitive(r, r.log.TimeField)
+	r.log.TimeField.SetText("after 2030-01-01")
+	if got := r.log.ViewerTable.GetRowCount(); got != allRows {
 		t.Fatalf("setup: row count = %d after setting the Time field's text, want unchanged %d", got, allRows)
 	}
 
-	clickPrimitive(r, r.logAuditKeywordField)
+	clickPrimitive(r, r.log.KeywordField)
 	// 2, not 1: header row + the table's own "No entries match the
 	// current filter." row, not just a bare header.
-	if got := r.logAuditViewerTable.GetRowCount(); got != 2 {
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 {
 		t.Errorf("row count = %d after clicking away to Keyword, want 2 (header + no-match row — the Time filter should now be applied)", got)
 	}
 }
@@ -837,7 +837,7 @@ func TestLogAuditTimeFieldAppliesOnLeavingViaMouseClick(t *testing.T) {
 // writeLogAuditTimelineFixture writes 20 JSON-Lines entries, one per
 // second, all on the same calendar day — predictable enough to drive
 // the interactive timeline without hand-computing bucket boundaries:
-// tests read back whatever logAuditTimelineBucketCount/MinT/MaxT the
+// tests read back whatever log.TimelineBucketCount/MinT/MaxT the
 // real render actually produced (see openLogAuditTimelineViewer) and
 // build their own expectations from that, the same "don't predict the
 // rendering pipeline's width math by hand" approach logAuditBucketTimeRange's
@@ -857,7 +857,7 @@ func writeLogAuditTimelineFixture(t *testing.T, dir string) {
 
 // openLogAuditTimelineViewer opens the viewer on writeLogAuditTimelineFixture's
 // own single group, draws it at width x height (a real Draw pass is
-// what gives logAuditTimelineView a real, non-zero rect — see
+// what gives log.TimelineView a real, non-zero rect — see
 // logAuditTimelineUnlaidOutWidth's own doc comment), and fails the
 // test outright if that didn't leave at least 2 buckets: every test
 // using this helper needs room to select a sub-range, not just one
@@ -867,100 +867,100 @@ func openLogAuditTimelineViewer(t *testing.T, width, height int) *Root {
 	dir := t.TempDir()
 	writeLogAuditTimelineFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 	drawRoot(t, r, width, height)
-	if r.logAuditTimelineBucketCount < 2 {
-		t.Fatalf("setup: bucketCount = %d at %dx%d, want at least 2 — widen the test's own draw size", r.logAuditTimelineBucketCount, width, height)
+	if r.log.TimelineBucketCount < 2 {
+		t.Fatalf("setup: bucketCount = %d at %dx%d, want at least 2 — widen the test's own draw size", r.log.TimelineBucketCount, width, height)
 	}
 	return r
 }
 
 func TestLogAuditTimelineArrowKeysMoveAndCollapseSelection(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	r.app.SetFocus(r.logAuditTimelineView)
-	if !r.logAuditTimelineFocused {
-		t.Fatal("setup: focusing the timeline should set logAuditTimelineFocused")
+	r.app.SetFocus(r.log.TimelineView)
+	if !r.log.TimelineFocused {
+		t.Fatal("setup: focusing the timeline should set log.TimelineFocused")
 	}
-	if r.logAuditTimelineAnchor != 0 || r.logAuditTimelineCursor != 0 {
-		t.Fatalf("setup: anchor,cursor = %d,%d, want 0,0 on a fresh render", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	if r.log.TimelineAnchor != 0 || r.log.TimelineCursor != 0 {
+		t.Fatalf("setup: anchor,cursor = %d,%d, want 0,0 on a fresh render", r.log.TimelineAnchor, r.log.TimelineCursor)
 	}
 
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
-	if r.logAuditTimelineAnchor != 2 || r.logAuditTimelineCursor != 2 {
-		t.Errorf("after two plain Rights: anchor,cursor = %d,%d, want 2,2 (collapsed)", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	if r.log.TimelineAnchor != 2 || r.log.TimelineCursor != 2 {
+		t.Errorf("after two plain Rights: anchor,cursor = %d,%d, want 2,2 (collapsed)", r.log.TimelineAnchor, r.log.TimelineCursor)
 	}
 
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
-	if r.logAuditTimelineAnchor != 1 || r.logAuditTimelineCursor != 1 {
-		t.Errorf("after a plain Left: anchor,cursor = %d,%d, want 1,1", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	if r.log.TimelineAnchor != 1 || r.log.TimelineCursor != 1 {
+		t.Errorf("after a plain Left: anchor,cursor = %d,%d, want 1,1", r.log.TimelineAnchor, r.log.TimelineCursor)
 	}
 }
 
 func TestLogAuditTimelineCursorClampsAtBothEnds(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	r.app.SetFocus(r.logAuditTimelineView)
+	r.app.SetFocus(r.log.TimelineView)
 
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
-	if r.logAuditTimelineCursor != 0 {
-		t.Errorf("Left at the very first bucket: cursor = %d, want clamped to 0", r.logAuditTimelineCursor)
+	if r.log.TimelineCursor != 0 {
+		t.Errorf("Left at the very first bucket: cursor = %d, want clamped to 0", r.log.TimelineCursor)
 	}
 
-	last := r.logAuditTimelineBucketCount - 1
-	for i := 0; i < r.logAuditTimelineBucketCount+3; i++ {
+	last := r.log.TimelineBucketCount - 1
+	for i := 0; i < r.log.TimelineBucketCount+3; i++ {
 		r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
 	}
-	if r.logAuditTimelineCursor != last {
-		t.Errorf("Right past the last bucket repeatedly: cursor = %d, want clamped to %d", r.logAuditTimelineCursor, last)
+	if r.log.TimelineCursor != last {
+		t.Errorf("Right past the last bucket repeatedly: cursor = %d, want clamped to %d", r.log.TimelineCursor, last)
 	}
 }
 
 func TestLogAuditTimelineShiftArrowExtendsFromTheFixedAnchor(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	r.app.SetFocus(r.logAuditTimelineView)
+	r.app.SetFocus(r.log.TimelineView)
 
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
-	if r.logAuditTimelineCursor != 2 {
-		t.Fatalf("setup: cursor = %d, want 2", r.logAuditTimelineCursor)
+	if r.log.TimelineCursor != 2 {
+		t.Fatalf("setup: cursor = %d, want 2", r.log.TimelineCursor)
 	}
 
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
-	if r.logAuditTimelineAnchor != 2 {
-		t.Errorf("anchor = %d after three Shift+Right, want 2 (unchanged — it must stay at the pre-Shift cursor position)", r.logAuditTimelineAnchor)
+	if r.log.TimelineAnchor != 2 {
+		t.Errorf("anchor = %d after three Shift+Right, want 2 (unchanged — it must stay at the pre-Shift cursor position)", r.log.TimelineAnchor)
 	}
-	if r.logAuditTimelineCursor != 5 {
-		t.Errorf("cursor = %d after three Shift+Right from 2, want 5", r.logAuditTimelineCursor)
+	if r.log.TimelineCursor != 5 {
+		t.Errorf("cursor = %d after three Shift+Right from 2, want 5", r.log.TimelineCursor)
 	}
 
 	// A plain arrow (Shift released) must collapse the just-built range.
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
-	if r.logAuditTimelineAnchor != 6 || r.logAuditTimelineCursor != 6 {
-		t.Errorf("anchor,cursor = %d,%d after a plain Right, want 6,6 (collapsed)", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	if r.log.TimelineAnchor != 6 || r.log.TimelineCursor != 6 {
+		t.Errorf("anchor,cursor = %d,%d after a plain Right, want 6,6 (collapsed)", r.log.TimelineAnchor, r.log.TimelineCursor)
 	}
 }
 
 func TestLogAuditTimelineShiftArrowSelectsLeftwardJustAsWell(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	r.app.SetFocus(r.logAuditTimelineView)
+	r.app.SetFocus(r.log.TimelineView)
 	for i := 0; i < 5; i++ {
 		r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
 	}
-	if r.logAuditTimelineCursor != 5 {
-		t.Fatalf("setup: cursor = %d, want 5", r.logAuditTimelineCursor)
+	if r.log.TimelineCursor != 5 {
+		t.Fatalf("setup: cursor = %d, want 5", r.log.TimelineCursor)
 	}
 
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModShift))
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModShift))
-	if r.logAuditTimelineAnchor != 5 || r.logAuditTimelineCursor != 3 {
-		t.Fatalf("anchor,cursor = %d,%d after two Shift+Left from 5, want 5,3", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	if r.log.TimelineAnchor != 5 || r.log.TimelineCursor != 3 {
+		t.Fatalf("anchor,cursor = %d,%d after two Shift+Left from 5, want 5,3", r.log.TimelineAnchor, r.log.TimelineCursor)
 	}
 
-	start := min(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
-	end := max(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	start := min(r.log.TimelineAnchor, r.log.TimelineCursor)
+	end := max(r.log.TimelineAnchor, r.log.TimelineCursor)
 	if start != 3 || end != 5 {
 		t.Errorf("selection range = [%d,%d], want [3,5] regardless of having been built leftward", start, end)
 	}
@@ -975,22 +975,22 @@ func TestLogAuditTimelineShiftArrowSelectsLeftwardJustAsWell(t *testing.T) {
 // re-bucket needs to run).
 func TestLogAuditTimelineEnterCommitsSelectionToTimeField(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	r.app.SetFocus(r.logAuditTimelineView)
+	r.app.SetFocus(r.log.TimelineView)
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModShift))
 
-	wantFrom, _ := logAuditBucketTimeRange(r.logAuditTimelineMinT, r.logAuditTimelineMaxT, r.logAuditTimelineBucketCount, 1)
-	_, wantTo := logAuditBucketTimeRange(r.logAuditTimelineMinT, r.logAuditTimelineMaxT, r.logAuditTimelineBucketCount, 2)
+	wantFrom, _ := logAuditBucketTimeRange(r.log.TimelineMinT, r.log.TimelineMaxT, r.log.TimelineBucketCount, 1)
+	_, wantTo := logAuditBucketTimeRange(r.log.TimelineMinT, r.log.TimelineMaxT, r.log.TimelineBucketCount, 2)
 
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 
-	if !r.logAuditTimeField.HasFocus() {
+	if !r.log.TimeField.HasFocus() {
 		t.Error("committing should move focus to the Time field")
 	}
-	if r.logAuditTimelineFocused {
-		t.Error("committing should clear logAuditTimelineFocused (focus moved away)")
+	if r.log.TimelineFocused {
+		t.Error("committing should clear log.TimelineFocused (focus moved away)")
 	}
-	got := r.logAuditTimeField.GetText()
+	got := r.log.TimeField.GetText()
 	wantPrefix := "between " + wantFrom.Truncate(time.Second).Format("2006-01-02 15:04:05")
 	if !strings.HasPrefix(got, wantPrefix) {
 		t.Errorf("Time field = %q, want it to start with %q", got, wantPrefix)
@@ -1009,16 +1009,16 @@ func TestLogAuditTimelineEnterCommitsSelectionToTimeField(t *testing.T) {
 	// 1-2 out of the fixture's 20 one-second-apart entries — the table
 	// must already reflect that right now, not only after some further
 	// Enter.
-	if got := r.logAuditViewerTable.GetRowCount(); got >= 21 {
+	if got := r.log.ViewerTable.GetRowCount(); got >= 21 {
 		t.Errorf("row count = %d right after committing, want it already narrowed (fixture has 20 entries + header = 21 unfiltered)", got)
 	}
 }
 
 func TestLogAuditTimelineSpaceAlsoCommits(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	r.app.SetFocus(r.logAuditTimelineView)
+	r.app.SetFocus(r.log.TimelineView)
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
-	if r.logAuditTimeField.GetText() == "" {
+	if r.log.TimeField.GetText() == "" {
 		t.Error("Space should commit the current (single-bucket) selection, same as Enter")
 	}
 }
@@ -1026,46 +1026,46 @@ func TestLogAuditTimelineSpaceAlsoCommits(t *testing.T) {
 func TestLogAuditTimelineTabOrderBetweenLevelFieldAndTable(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
 
-	r.app.SetFocus(r.logAuditLevelField)
-	r.logAuditLevelField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
-	if !r.logAuditTimelineView.HasFocus() {
+	r.app.SetFocus(r.log.LevelField)
+	r.log.LevelField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
+	if !r.log.TimelineView.HasFocus() {
 		t.Error("Tab from the Level field should land on the Timeline, not the table directly")
 	}
 
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
-	if !r.logAuditViewerTable.HasFocus() {
+	if !r.log.ViewerTable.HasFocus() {
 		t.Error("Tab from the Timeline should land on the table")
 	}
 
 	r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
-	if !r.logAuditTimelineView.HasFocus() {
+	if !r.log.TimelineView.HasFocus() {
 		t.Error("Backtab from the table should land back on the Timeline")
 	}
 
 	r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
-	if !r.logAuditLevelField.HasFocus() {
+	if !r.log.LevelField.HasFocus() {
 		t.Error("Backtab from the Timeline should land on the Level field")
 	}
 }
 
 func TestLogAuditTimelineMouseClickSelectsSingleBucket(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	viewX, viewY, _, _ := r.logAuditTimelineView.GetInnerRect()
-	clickCol := viewX + r.logAuditTimelineBarCol + 3
+	viewX, viewY, _, _ := r.log.TimelineView.GetInnerRect()
+	clickCol := viewX + r.log.TimelineBarCol + 3
 
 	r.captureLogAuditTimelineMouse(tview.MouseLeftDown, tcell.NewEventMouse(clickCol, viewY, tcell.Button1, 0))
-	if !r.logAuditTimelineView.HasFocus() {
+	if !r.log.TimelineView.HasFocus() {
 		t.Error("clicking a bucket should give the timeline keyboard focus")
 	}
-	if r.logAuditTimelineAnchor != 3 || r.logAuditTimelineCursor != 3 {
-		t.Errorf("anchor,cursor = %d,%d after clicking bucket 3, want 3,3", r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	if r.log.TimelineAnchor != 3 || r.log.TimelineCursor != 3 {
+		t.Errorf("anchor,cursor = %d,%d after clicking bucket 3, want 3,3", r.log.TimelineAnchor, r.log.TimelineCursor)
 	}
 
 	r.captureLogAuditTimelineMouse(tview.MouseLeftUp, tcell.NewEventMouse(clickCol, viewY, tcell.ButtonNone, 0))
-	if r.logAuditTimelineDragging {
+	if r.log.TimelineDragging {
 		t.Error("MouseLeftUp should end the drag")
 	}
-	if r.logAuditTimeField.GetText() == "" {
+	if r.log.TimeField.GetText() == "" {
 		t.Error("releasing on the same bucket should still commit a (single-bucket) selection")
 	}
 }
@@ -1077,41 +1077,41 @@ func TestLogAuditTimelineMouseClickSelectsSingleBucket(t *testing.T) {
 // of which edge the drag started from.
 func TestLogAuditTimelineMouseDragSelectsRangeRegardlessOfDirection(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	viewX, viewY, _, _ := r.logAuditTimelineView.GetInnerRect()
-	col := func(bucket int) int { return viewX + r.logAuditTimelineBarCol + bucket }
+	viewX, viewY, _, _ := r.log.TimelineView.GetInnerRect()
+	col := func(bucket int) int { return viewX + r.log.TimelineBarCol + bucket }
 
 	r.captureLogAuditTimelineMouse(tview.MouseLeftDown, tcell.NewEventMouse(col(6), viewY, tcell.Button1, 0))
 	r.captureLogAuditTimelineMouse(tview.MouseMove, tcell.NewEventMouse(col(2), viewY, tcell.Button1, 0))
-	if !r.logAuditTimelineDragging {
+	if !r.log.TimelineDragging {
 		t.Fatal("setup: should still be dragging")
 	}
-	start := min(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
-	end := max(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	start := min(r.log.TimelineAnchor, r.log.TimelineCursor)
+	end := max(r.log.TimelineAnchor, r.log.TimelineCursor)
 	if start != 2 || end != 6 {
 		t.Fatalf("mid-drag selection = [%d,%d], want [2,6] (dragged from 6 to 2)", start, end)
 	}
 
 	r.captureLogAuditTimelineMouse(tview.MouseLeftUp, tcell.NewEventMouse(col(2), viewY, tcell.ButtonNone, 0))
-	if r.logAuditTimelineDragging {
+	if r.log.TimelineDragging {
 		t.Error("MouseLeftUp should end the drag")
 	}
-	if r.logAuditTimeField.GetText() == "" {
+	if r.log.TimeField.GetText() == "" {
 		t.Error("releasing after a leftward drag should still commit a selection")
 	}
 }
 
 func TestLogAuditTimelineMouseMoveStrayReleaseStillCommits(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	viewX, viewY, _, _ := r.logAuditTimelineView.GetInnerRect()
-	col := func(bucket int) int { return viewX + r.logAuditTimelineBarCol + bucket }
+	viewX, viewY, _, _ := r.log.TimelineView.GetInnerRect()
+	col := func(bucket int) int { return viewX + r.log.TimelineBarCol + bucket }
 
 	r.captureLogAuditTimelineMouse(tview.MouseLeftDown, tcell.NewEventMouse(col(1), viewY, tcell.Button1, 0))
 	r.captureLogAuditTimelineMouse(tview.MouseMove, tcell.NewEventMouse(col(4), viewY, tcell.ButtonNone, 0))
 
-	if r.logAuditTimelineDragging {
+	if r.log.TimelineDragging {
 		t.Error("a MouseMove with no button held should end the drag, same as a real MouseLeftUp")
 	}
-	if r.logAuditTimeField.GetText() == "" {
+	if r.log.TimeField.GetText() == "" {
 		t.Error("a stray button-released move should still commit, not silently drop the selection")
 	}
 }
@@ -1125,25 +1125,25 @@ func TestLogAuditTimelineMouseMoveStrayReleaseStillCommits(t *testing.T) {
 // renderLogAuditViewer.
 func TestLogAuditTimelineFreezesWhileFocused(t *testing.T) {
 	r := openLogAuditTimelineViewer(t, 200, 50)
-	before := r.logAuditTimelineView.GetText(true)
-	beforeCount := r.logAuditTimelineBucketCount
+	before := r.log.TimelineView.GetText(true)
+	beforeCount := r.log.TimelineBucketCount
 
-	r.app.SetFocus(r.logAuditTimelineView)
+	r.app.SetFocus(r.log.TimelineView)
 
-	moreEntries := append([]logview.Entry{}, r.logAuditAllEntries...)
-	moreEntries = append(moreEntries, logview.Entry{Time: r.logAuditTimelineMaxT.Add(time.Hour), Message: "later"})
+	moreEntries := append([]logview.Entry{}, r.log.AllEntries...)
+	moreEntries = append(moreEntries, logview.Entry{Time: r.log.TimelineMaxT.Add(time.Hour), Message: "later"})
 	r.renderLogAuditTimeline(moreEntries)
 
-	if got := r.logAuditTimelineView.GetText(true); got != before {
+	if got := r.log.TimelineView.GetText(true); got != before {
 		t.Errorf("timeline text changed while focused, want it frozen: before=%q after=%q", before, got)
 	}
-	if r.logAuditTimelineBucketCount != beforeCount {
-		t.Errorf("bucketCount changed while focused: %d -> %d, want unchanged (frozen)", beforeCount, r.logAuditTimelineBucketCount)
+	if r.log.TimelineBucketCount != beforeCount {
+		t.Errorf("bucketCount changed while focused: %d -> %d, want unchanged (frozen)", beforeCount, r.log.TimelineBucketCount)
 	}
 
-	r.app.SetFocus(r.logAuditViewerTable)
+	r.app.SetFocus(r.log.ViewerTable)
 	r.renderLogAuditTimeline(moreEntries)
-	if got := r.logAuditTimelineView.GetText(true); got == before {
+	if got := r.log.TimelineView.GetText(true); got == before {
 		t.Error("after focus leaves, the timeline should resume reflecting new entries, not stay frozen forever")
 	}
 }
@@ -1170,17 +1170,17 @@ func TestGCReachesAIConsigliereFromEveryLogAuditCapture(t *testing.T) {
 			return r.captureLogAuditSelectionTableKey
 		}},
 		{"Viewer", func(r *Root) func(*tcell.EventKey) *tcell.EventKey {
-			r.logAuditTable.Select(1, 0)
+			r.log.Table.Select(1, 0)
 			r.openLogAuditViewer()
 			return r.captureLogAuditViewerTableKey
 		}},
 		{"Timeline", func(r *Root) func(*tcell.EventKey) *tcell.EventKey {
-			r.logAuditTable.Select(1, 0)
+			r.log.Table.Select(1, 0)
 			r.openLogAuditViewer()
 			return r.captureLogAuditTimelineKey
 		}},
 		{"Detail", func(r *Root) func(*tcell.EventKey) *tcell.EventKey {
-			r.logAuditTable.Select(1, 0)
+			r.log.Table.Select(1, 0)
 			r.openLogAuditViewer()
 			r.openLogAuditDetail(1)
 			return r.captureLogAuditDetailKey
@@ -1262,7 +1262,7 @@ func TestGCUnknownSecondKeyInLogAuditDoesNotCloseTheScreen(t *testing.T) {
 			return r.captureLogAuditSelectionTableKey, logAuditSelectionPage
 		}},
 		{"Viewer", func(r *Root) (func(*tcell.EventKey) *tcell.EventKey, string) {
-			r.logAuditTable.Select(1, 0)
+			r.log.Table.Select(1, 0)
 			r.openLogAuditViewer()
 			return r.captureLogAuditViewerTableKey, logAuditViewerPage
 		}},
@@ -1297,7 +1297,7 @@ func TestTabBacktabReachConsigliereFromLogAuditSelection(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 	r.showConsigliere()
-	r.app.SetFocus(r.logAuditTable)
+	r.app.SetFocus(r.log.Table)
 
 	if got := r.captureLogAuditSelectionTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
 		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
@@ -1317,10 +1317,10 @@ func TestTabFromLogAuditViewerTableReachesConsigliere(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 	r.showConsigliere()
-	r.app.SetFocus(r.logAuditViewerTable)
+	r.app.SetFocus(r.log.ViewerTable)
 
 	if got := r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
 		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
@@ -1334,16 +1334,16 @@ func TestBacktabFromLogAuditKeywordReachesConsigliere(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 	r.showConsigliere()
 
-	r.app.SetFocus(r.logAuditKeywordField)
+	r.app.SetFocus(r.log.KeywordField)
 	// Drives the field's own SetDoneFunc through its real
 	// InputHandler, the same pattern this package's other field-chain
 	// tests already use (tview.InputField exposes no direct way to
 	// call a DoneFunc set on it).
-	r.logAuditKeywordField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.log.KeywordField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	// Lands on consigliereHistory, not consigliereInput, whenever
 	// there's something to scroll to (the default, tiny Root rect this
@@ -1365,11 +1365,11 @@ func TestTabBacktabReachConsigliereFromLogAuditDetail(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 	r.openLogAuditDetail(1)
 	r.showConsigliere()
-	r.app.SetFocus(r.logAuditDetailView)
+	r.app.SetFocus(r.log.DetailView)
 
 	if got := r.captureLogAuditDetailKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
 		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
@@ -1384,22 +1384,22 @@ func TestTabBacktabReachConsigliereFromLogAuditDetail(t *testing.T) {
 // TestSearchDragCanMoveUpAndLeft (search_test.go): dragging up/left
 // must work exactly like dragging down/right, not just one direction
 // (see dragLogAuditDetailMouseCapture's own doc comment on why
-// captureOutsideClick needs its own logAuditDetailDragging check for
+// captureOutsideClick needs its own log.DetailDragging check for
 // this).
 func TestLogAuditDetailDragCanMoveUpAndLeft(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 	drawRoot(t, r, 300, 40)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 	r.openLogAuditDetail(1)
 
 	r.moveLogAuditDetail(150, 20)
-	startX, startY, width, height := r.logAuditDetailLayout.GetRect()
+	startX, startY, width, height := r.log.DetailLayout.GetRect()
 
 	r.dragLogAuditDetailMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
-	if !r.logAuditDetailDragging {
+	if !r.log.DetailDragging {
 		t.Fatal("setup: pressing the title bar should have started a drag")
 	}
 
@@ -1407,15 +1407,15 @@ func TestLogAuditDetailDragCanMoveUpAndLeft(t *testing.T) {
 	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(newX+2, newY, tcell.ButtonPrimary, 0))
 	r.captureOutsideClick(tview.MouseLeftUp, tcell.NewEventMouse(newX+2, newY, tcell.ButtonNone, 0))
 
-	gotX, gotY, gotWidth, gotHeight := r.logAuditDetailLayout.GetRect()
+	gotX, gotY, gotWidth, gotHeight := r.log.DetailLayout.GetRect()
 	if gotX != newX || gotY != newY {
 		t.Errorf("rect = (%d,%d), want (%d,%d) — dragging up/left should move the dialog exactly like dragging down/right does", gotX, gotY, newX, newY)
 	}
 	if gotWidth != width || gotHeight != height {
 		t.Errorf("size changed during a pure move: (%d,%d) -> (%d,%d), want unchanged", width, height, gotWidth, gotHeight)
 	}
-	if r.logAuditDetailDragging {
-		t.Error("logAuditDetailDragging should be false after MouseLeftUp")
+	if r.log.DetailDragging {
+		t.Error("log.DetailDragging should be false after MouseLeftUp")
 	}
 }
 
@@ -1428,12 +1428,12 @@ func TestLogAuditDetailAltArrowMovesTheDialog(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 	drawRoot(t, r, 300, 40)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 	r.openLogAuditDetail(1)
 
 	r.moveLogAuditDetail(150, 20)
-	startX, startY, _, _ := r.logAuditDetailLayout.GetRect()
+	startX, startY, _, _ := r.log.DetailLayout.GetRect()
 
 	if got := r.captureLogAuditDetailKey(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModAlt)); got != nil {
 		t.Fatalf("capture(Alt+Up) = %v, want nil (consumed)", got)
@@ -1442,7 +1442,7 @@ func TestLogAuditDetailAltArrowMovesTheDialog(t *testing.T) {
 		t.Fatalf("capture(Alt+Left) = %v, want nil (consumed)", got)
 	}
 
-	gotX, gotY, _, _ := r.logAuditDetailLayout.GetRect()
+	gotX, gotY, _, _ := r.log.DetailLayout.GetRect()
 	if gotX != startX-1 || gotY != startY-1 {
 		t.Errorf("rect = (%d,%d), want (%d,%d) after Alt+Up then Alt+Left", gotX, gotY, startX-1, startY-1)
 	}
@@ -1461,9 +1461,9 @@ func TestLogAuditTimeFieldLabelTurnsRedOnAnUnparseableExpression(t *testing.T) {
 	r := newTestRootForLogAudit(t, dir)
 	r.openLogAuditViewer()
 
-	r.logAuditTimeField.SetText("between 2026-10-26 00:00:01 and 2026-10-26 29:59:59")
+	r.log.TimeField.SetText("between 2026-10-26 00:00:01 and 2026-10-26 29:59:59")
 
-	got, _, _ := r.logAuditTimeField.GetLabelStyle().Decompose()
+	got, _, _ := r.log.TimeField.GetLabelStyle().Decompose()
 	if want := tcell.ColorRed; got != want {
 		t.Errorf("label color = %v, want %v for an unparseable expression", got, want)
 	}
@@ -1480,14 +1480,14 @@ func TestLogAuditTimeFieldLabelTurnsGreenOnAParseableExpression(t *testing.T) {
 	r := newTestRootForLogAudit(t, dir)
 	r.openLogAuditViewer()
 
-	r.logAuditTimeField.SetText("last 7 days")
-	got, _, _ := r.logAuditTimeField.GetLabelStyle().Decompose()
+	r.log.TimeField.SetText("last 7 days")
+	got, _, _ := r.log.TimeField.GetLabelStyle().Decompose()
 	if want := tcell.ColorLime; got != want {
 		t.Errorf("label color = %v, want %v for a parseable expression", got, want)
 	}
 
-	r.logAuditTimeField.SetText("")
-	got, _, _ = r.logAuditTimeField.GetLabelStyle().Decompose()
+	r.log.TimeField.SetText("")
+	got, _, _ = r.log.TimeField.GetLabelStyle().Decompose()
 	if want := tcell.ColorLime; got != want {
 		t.Errorf("label color = %v, want %v for an empty field", got, want)
 	}
@@ -1504,9 +1504,9 @@ func TestLogAuditKeywordFieldLabelTurnsRedOnAnUnparseableExpression(t *testing.T
 	r := newTestRootForLogAudit(t, dir)
 	r.openLogAuditViewer()
 
-	r.logAuditKeywordField.SetText("foo AND (bar")
+	r.log.KeywordField.SetText("foo AND (bar")
 
-	got, _, _ := r.logAuditKeywordField.GetLabelStyle().Decompose()
+	got, _, _ := r.log.KeywordField.GetLabelStyle().Decompose()
 	if want := tcell.ColorRed; got != want {
 		t.Errorf("label color = %v, want %v for an unparseable expression", got, want)
 	}
@@ -1521,14 +1521,14 @@ func TestLogAuditKeywordFieldLabelTurnsGreenOnAParseableExpression(t *testing.T)
 	r := newTestRootForLogAudit(t, dir)
 	r.openLogAuditViewer()
 
-	r.logAuditKeywordField.SetText("foo AND (bar OR baz)")
-	got, _, _ := r.logAuditKeywordField.GetLabelStyle().Decompose()
+	r.log.KeywordField.SetText("foo AND (bar OR baz)")
+	got, _, _ := r.log.KeywordField.GetLabelStyle().Decompose()
 	if want := tcell.ColorLime; got != want {
 		t.Errorf("label color = %v, want %v for a parseable expression", got, want)
 	}
 
-	r.logAuditKeywordField.SetText("")
-	got, _, _ = r.logAuditKeywordField.GetLabelStyle().Decompose()
+	r.log.KeywordField.SetText("")
+	got, _, _ = r.log.KeywordField.GetLabelStyle().Decompose()
 	if want := tcell.ColorLime; got != want {
 		t.Errorf("label color = %v, want %v for an empty field", got, want)
 	}
@@ -1545,9 +1545,9 @@ func TestLogAuditLevelFieldLabelTurnsRedOnAnUnrecognizedLevel(t *testing.T) {
 	r := newTestRootForLogAudit(t, dir)
 	r.openLogAuditViewer()
 
-	r.logAuditLevelField.SetText("wrn")
+	r.log.LevelField.SetText("wrn")
 
-	got, _, _ := r.logAuditLevelField.GetLabelStyle().Decompose()
+	got, _, _ := r.log.LevelField.GetLabelStyle().Decompose()
 	if want := tcell.ColorRed; got != want {
 		t.Errorf("label color = %v, want %v for an unrecognized level", got, want)
 	}
@@ -1562,14 +1562,14 @@ func TestLogAuditLevelFieldLabelTurnsGreenOnARecognizedLevel(t *testing.T) {
 	r := newTestRootForLogAudit(t, dir)
 	r.openLogAuditViewer()
 
-	r.logAuditLevelField.SetText("warn")
-	got, _, _ := r.logAuditLevelField.GetLabelStyle().Decompose()
+	r.log.LevelField.SetText("warn")
+	got, _, _ := r.log.LevelField.GetLabelStyle().Decompose()
 	if want := tcell.ColorLime; got != want {
 		t.Errorf("label color = %v, want %v for a recognized level", got, want)
 	}
 
-	r.logAuditLevelField.SetText("")
-	got, _, _ = r.logAuditLevelField.GetLabelStyle().Decompose()
+	r.log.LevelField.SetText("")
+	got, _, _ = r.log.LevelField.GetLabelStyle().Decompose()
 	if want := tcell.ColorLime; got != want {
 		t.Errorf("label color = %v, want %v for an empty field", got, want)
 	}
@@ -1587,9 +1587,9 @@ func TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere(t *testing.T
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
-	r.app.SetFocus(r.logAuditViewerTable)
+	r.app.SetFocus(r.log.ViewerTable)
 	// The real "gC" entry path, not a direct showConsigliere() call —
 	// that's what actually sets consigliereForwardExit (see
 	// startConsigliereChord's own doc comment), the whole thing this
@@ -1599,11 +1599,11 @@ func TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere(t *testing.T
 
 	tabFrom := func(current tview.Primitive) tview.Primitive {
 		switch current {
-		case r.logAuditViewerTable:
+		case r.log.ViewerTable:
 			r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
-		case r.logAuditKeywordField, r.logAuditTimeField, r.logAuditLevelField:
+		case r.log.KeywordField, r.log.TimeField, r.log.LevelField:
 			current.(*tview.InputField).InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
-		case r.logAuditTimelineView:
+		case r.log.TimelineView:
 			r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		case r.consigliereInput:
 			r.handleConsigliereInputDone(tcell.KeyTab)
@@ -1627,11 +1627,11 @@ func TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere(t *testing.T
 
 	want := map[string]tview.Primitive{
 		"consigliereInput": r.consigliereInput,
-		"Keyword":          r.logAuditKeywordField,
-		"Time":             r.logAuditTimeField,
-		"Level":            r.logAuditLevelField,
-		"Timeline":         r.logAuditTimelineView,
-		"Table":            r.logAuditViewerTable,
+		"Keyword":          r.log.KeywordField,
+		"Time":             r.log.TimeField,
+		"Level":            r.log.LevelField,
+		"Timeline":         r.log.TimelineView,
+		"Table":            r.log.ViewerTable,
 	}
 	for name, stop := range want {
 		found := false
@@ -1649,7 +1649,7 @@ func TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere(t *testing.T
 
 // TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing
 // is the exact scenario the user reported: open the AI Consigliere
-// from Log Audit's own selection screen (gC while r.logAuditTable has
+// from Log Audit's own selection screen (gC while r.log.Table has
 // focus — captures consigliereReturnFocus pointing at it), then drill
 // into a specific file's viewer (still open, per the user's own
 // earlier explicit request that it survive this) — the selection
@@ -1669,16 +1669,16 @@ func TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing
 		t.Fatal("setup: \"gC\" from the selection screen should have opened the sidebar")
 	}
 
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer() // still open while this runs, per the user's own explicit request
 
 	tabFrom := func(current tview.Primitive) tview.Primitive {
 		switch current {
-		case r.logAuditViewerTable:
+		case r.log.ViewerTable:
 			r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
-		case r.logAuditKeywordField, r.logAuditTimeField, r.logAuditLevelField:
+		case r.log.KeywordField, r.log.TimeField, r.log.LevelField:
 			current.(*tview.InputField).InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
-		case r.logAuditTimelineView:
+		case r.log.TimelineView:
 			r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		case r.consigliereInput:
 			r.handleConsigliereInputDone(tcell.KeyTab)
@@ -1695,7 +1695,7 @@ func TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing
 	for i := 0; i < 8; i++ {
 		current = tabFrom(current)
 		visited = append(visited, current)
-		if current == r.logAuditTable {
+		if current == r.log.Table {
 			t.Fatalf("Tab landed on the hidden selection table (covered by the viewer, not destroyed): %v", visited)
 		}
 		if current == r.consigliereInput && i > 0 {
@@ -1704,11 +1704,11 @@ func TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing
 	}
 
 	want := map[string]tview.Primitive{
-		"Keyword":  r.logAuditKeywordField,
-		"Time":     r.logAuditTimeField,
-		"Level":    r.logAuditLevelField,
-		"Timeline": r.logAuditTimelineView,
-		"Table":    r.logAuditViewerTable,
+		"Keyword":  r.log.KeywordField,
+		"Time":     r.log.TimeField,
+		"Level":    r.log.LevelField,
+		"Timeline": r.log.TimelineView,
+		"Table":    r.log.ViewerTable,
 	}
 	for name, stop := range want {
 		found := false
@@ -1737,7 +1737,7 @@ func TestEscapeClosesConsigliereEvenAfterDrillingToADifferentPage(t *testing.T) 
 	r.captureLogAuditSelectionTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
 	r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone))
 
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
 	r.handleConsigliereInputDone(tcell.KeyEscape)

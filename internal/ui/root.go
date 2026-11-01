@@ -26,7 +26,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
-	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/mounts"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
@@ -673,8 +672,8 @@ type Root struct {
 	// (unlike every full-screen catalog above, which always shows the
 	// same thing regardless of where the panel is). Two overlay layers,
 	// stacked via pushOverlay rather than one screen with an internal
-	// mode switch: logAuditSelectionLayout lists the logrotate families
-	// Discover found in that directory, logAuditViewerLayout — pushed
+	// mode switch: log.SelectionLayout lists the logrotate families
+	// Discover found in that directory, log.ViewerLayout — pushed
 	// on top once opened — shows the merged, chronological result of
 	// whichever one the cursor was on when Enter was pressed (no
 	// checkbox/multi-select — see openLogAuditViewer's own doc comment
@@ -682,30 +681,15 @@ type Root struct {
 	// again rather than closing straight to the panel, the same "layer
 	// by layer" unwind every other stacked overlay in this app already
 	// gives for free.
-	logAuditSelectionLayout *tview.Flex
-	logAuditTitleBar        *tview.TextView
-	logAuditTable           *tview.Table
-	logAuditScrollbar       *verticalScrollbar
-	logAuditHint            *tview.TextView
-	logAuditHintSpans       []listHintSpan
-	logAuditDir             string
-	logAuditGroups          []logview.FileGroup
-	logAuditDiscoverErr     error
+	log logAuditState
 
-	logAuditViewerLayout *tview.Flex
-	logAuditViewerTitle  *tview.TextView
-	logAuditKeywordField *tview.InputField
-	logAuditTimeField    *tview.InputField
-	logAuditLevelField   *tview.InputField
-	// logAuditFilterRow is the Flex wrapping the three fields above —
+	// log.FilterRow is the Flex wrapping the three fields above —
 	// themed to the same SurfaceBackground as everything else on this
 	// screen (see applyLogAuditTheme) so a rounding gap between the
 	// three proportionally-sized fields shows the right color instead
 	// of tview's own default black, the background mismatch the
 	// user's own explicit report flagged.
-	logAuditFilterRow    *tview.Flex
-	logAuditTimelineView *tview.TextView
-	// logAuditTimelineBarCol/BucketCount/MinT/MaxT are the geometry
+	// log.TimelineBarCol/BucketCount/MinT/MaxT are the geometry
 	// renderLogAuditTimeline itself actually drew last — persisted
 	// rather than re-derived, since logAuditTimelineText's own internal
 	// width clamping means a second, independent recomputation can
@@ -714,21 +698,13 @@ type Root struct {
 	// hit-test (mouse) and bucket-to-time lookup (keyboard commit) goes
 	// through these, never through a fresh call to
 	// logAuditTimelineBuckets.
-	logAuditTimelineBarCol      int
-	logAuditTimelineBucketCount int
-	logAuditTimelineMinT        time.Time
-	logAuditTimelineMaxT        time.Time
-	// logAuditTimelineCounts/Severity/StartLabel/EndLabel are the
+	// log.TimelineCounts/Severity/StartLabel/EndLabel are the
 	// bucket data the last successful (non-frozen) render actually
 	// computed — repaintLogAuditTimeline rebuilds the displayed text
 	// from these on every selection change instead of re-scanning
-	// logAuditAllEntries, so a moved cursor is never the thing that
+	// log.AllEntries, so a moved cursor is never the thing that
 	// quietly un-freezes a frozen timeline.
-	logAuditTimelineCounts     []int
-	logAuditTimelineSeverity   []logview.Level
-	logAuditTimelineStartLabel string
-	logAuditTimelineEndLabel   string
-	// logAuditTimelineFocused/Anchor/Cursor/Dragging are the Timeline's
+	// log.TimelineFocused/Anchor/Cursor/Dragging are the Timeline's
 	// own selection state — anchor+cursor is the same "text selection"
 	// shape searchFocusedIdx's own span-based focus uses, just with a
 	// range instead of a single index: a plain Left/Right collapses the
@@ -739,14 +715,10 @@ type Root struct {
 	// change (bucketCount/minT/maxT) — see renderLogAuditTimeline note —
 	// since a stale index into a bucket count that no longer exists is
 	// worse than losing the selection.
-	logAuditTimelineFocused  bool
-	logAuditTimelineAnchor   int
-	logAuditTimelineCursor   int
-	logAuditTimelineDragging bool
-	// logAuditTimeFieldFocused is restyleLogAuditFocusTargets' own
+	// log.TimeFieldFocused is restyleLogAuditFocusTargets' own
 	// tracked state of whether the Time field (not the timeline) has
 	// focus — kept explicitly rather than queried via
-	// logAuditTimeField.HasFocus(), which the exact same tview gap
+	// log.TimeField.HasFocus(), which the exact same tview gap
 	// restyleLogAuditFocusTargets's own doc comment already documents
 	// (Blur never forwards from InputField's embedded TextArea on a
 	// mouse-driven focus change) makes just as unreliable for this as
@@ -754,24 +726,13 @@ type Root struct {
 	// filter (see its own SetDoneFunc comment on why it isn't live)
 	// once focus actually leaves it, including via a mouse click that
 	// skips straight past every other field.
-	logAuditTimeFieldFocused bool
-	// logAuditFocusIndicator fills the row between logAuditTimelineView
-	// and logAuditViewerTable's own header — previously just the
+	// log.FocusIndicator fills the row between log.TimelineView
+	// and log.ViewerTable's own header — previously just the
 	// table's own blank top border-padding, repurposed per the user's
 	// own explicit request as a "the list has focus" indicator, so
 	// Tab-cycling through the three filter fields and landing back on
 	// the list is visible at a glance rather than only inferable from
 	// which row is highlighted.
-	logAuditFocusIndicator  *tview.TextView
-	logAuditViewerTable     *tview.Table
-	logAuditViewerScrollbar *verticalScrollbar
-	logAuditViewerHint      *tview.TextView
-	logAuditViewerSpans     []listHintSpan
-	logAuditGroupOpen       logview.FileGroup // the group the viewer is currently showing — see reopenLogAuditViewer
-	logAuditAllEntries      []logview.Entry
-	logAuditFiles           int
-	logAuditSkipped         int
-	logAuditParseErr        error
 
 	// The Git breach dashboard (see gitbreach.go/gitbreachscreen.go) —
 	// "jg", this app's first genuine multi-pane screen rather than one
@@ -963,7 +924,7 @@ type Root struct {
 	gitBreachDiffSplitSpacer     *tview.Box
 	gitBreachDiffRawText         string
 	gitBreachDiffFiles           []compare.FileDiff
-	// logAuditNewestFirst toggles the viewer table's own sort order —
+	// log.NewestFirst toggles the viewer table's own sort order —
 	// a click on the Time column header (see renderLogAuditViewer),
 	// per the user's own explicit request to be able to read either
 	// direction without reopening the group. Deliberately not bound to
@@ -971,29 +932,17 @@ type Root struct {
 	// false (oldest-first, Merge's own natural chronological order) is
 	// the default — the same order "tail -f" itself reads in, which
 	// matters most while Follow is on.
-	logAuditNewestFirst bool
-	// logAuditFollowing/logAuditFollowCancel — "f" toggles a live
-	// re-read of logAuditGroupOpen every logAuditFollowInterval (see
+	// log.Following/log.FollowCancel — "f" toggles a live
+	// re-read of log.GroupOpen every logAuditFollowInterval (see
 	// startLogAuditFollow/stopLogAuditFollow in logaudit.go), the
 	// "tail -f, but for the merged stream" view asked for explicitly.
-	logAuditFollowing    bool
-	logAuditFollowCancel context.CancelFunc
 
 	// The detail modal ("Enter" on a viewer row) — same shape as
 	// messagesDetailLayout/messagesDetailView (messagedetail.go).
-	logAuditDetailTitleBar *tview.TextView
-	logAuditDetailView     *tview.TextView
-	logAuditDetailLayout   *tview.Flex
 
 	// The Statistics modal ("s" on a viewer row) — counts by level and
 	// by source over whatever the viewer currently shows (see
 	// logAuditStats in logauditstats.go).
-	logAuditStatsTitleBar   *tview.TextView
-	logAuditStatsView       *tview.TextView
-	logAuditStatsScrollbar  *verticalScrollbar
-	logAuditStatsHScrollbar *horizontalScrollbar
-	logAuditStatsSpacer     *tview.Box
-	logAuditStatsLayout     *tview.Flex
 
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
@@ -2456,7 +2405,7 @@ type Root struct {
 	searchDragging                       bool
 	searchDragOffsetX, searchDragOffsetY int
 
-	// logAuditDetailDragging/logAuditDetailDragOffsetX/Y are
+	// log.DetailDragging/log.DetailDragOffsetX/Y are
 	// dragLogAuditDetailMouseCapture's own equivalent of
 	// searchDragging/searchDragOffsetX/Y just above, for the Log entry
 	// detail dialog's own title bar (logauditscreen.go) — same shape,
@@ -2466,8 +2415,6 @@ type Root struct {
 	// no close glyph, unlike Properties/Search: Escape already closes
 	// this dialog, and the user explicitly asked for dragging only, not
 	// another way to close it.
-	logAuditDetailDragging                               bool
-	logAuditDetailDragOffsetX, logAuditDetailDragOffsetY int
 
 	// propertiesFocusIndex is Properties' own keyboard-navigation cursor
 	// (see setPropertiesFocus/movePropertiesFocus/capturePropertiesKey):
@@ -3478,10 +3425,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// Activity Log screens' own comments above give; the detail modal
 	// (false) is centered and sized to its own content instead, the
 	// same as messagesDetailPage just above.
-	r.AddPage(logAuditSelectionPage, r.logAuditSelectionLayout, true, false)
-	r.AddPage(logAuditViewerPage, r.logAuditViewerLayout, true, false)
-	r.AddPage(logAuditDetailPage, r.logAuditDetailLayout, false, false)
-	r.AddPage(logAuditStatsPage, r.logAuditStatsLayout, false, false)
+	r.AddPage(logAuditSelectionPage, r.log.SelectionLayout, true, false)
+	r.AddPage(logAuditViewerPage, r.log.ViewerLayout, true, false)
+	r.AddPage(logAuditDetailPage, r.log.DetailLayout, false, false)
+	r.AddPage(logAuditStatsPage, r.log.StatsLayout, false, false)
 	// resize=true: the Git breach dashboard deliberately fills the whole
 	// terminal too, the same reasoning every other full-screen catalog's
 	// own comment above gives.
@@ -4137,7 +4084,7 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// searchDragging/propertiesDragging above: dragging up/left past
 	// the not-yet-updated rect would otherwise stop reaching
 	// dragLogAuditDetailMouseCapture at all.
-	if r.logAuditDetailDragging {
+	if r.log.DetailDragging {
 		return r.dragLogAuditDetailMouseCapture(action, event)
 	}
 
@@ -4145,10 +4092,10 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// searchDragging/propertiesDragging just above: the bar is a
 	// single thin row, so a drag that so much as jitters one pixel up
 	// or down off it would otherwise fall through to ordinary
-	// position-based dispatch mid-drag, leaving logAuditTimelineDragging
+	// position-based dispatch mid-drag, leaving log.TimelineDragging
 	// stuck true forever (and the timeline frozen forever with it — see
 	// renderLogAuditTimeline's own doc comment on that field).
-	if r.logAuditTimelineDragging {
+	if r.log.TimelineDragging {
 		return r.captureLogAuditTimelineMouse(action, event)
 	}
 

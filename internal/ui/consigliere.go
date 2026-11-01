@@ -249,11 +249,11 @@ func (r *Root) consigliereForwardExitTarget() tview.Primitive {
 func (r *Root) consigliereCurrentHostEdges() (backward, forward tview.Primitive) {
 	switch r.activePage {
 	case logAuditSelectionPage:
-		return r.logAuditTable, r.logAuditTable
+		return r.log.Table, r.log.Table
 	case logAuditViewerPage:
-		return r.logAuditViewerTable, r.logAuditKeywordField
+		return r.log.ViewerTable, r.log.KeywordField
 	case logAuditDetailPage:
-		return r.logAuditDetailView, r.logAuditDetailView
+		return r.log.DetailView, r.log.DetailView
 	case gitBreachPage:
 		focusables := r.gitBreachFocusables()
 		if len(focusables) == 0 {
@@ -1085,7 +1085,7 @@ func (r *Root) consigliereMachiavelliTerminalScreen(tab *shellTab) string {
 // best-effort ranking.
 //
 // Never includes a single log line's own text by default —
-// logAuditKeywordField etc. are the filter *controls*, not the
+// log.KeywordField etc. are the filter *controls*, not the
 // matched entries themselves, and a real credential or secret sitting
 // in a log line is exactly the kind of thing this must never forward
 // to a third-party provider without the user explicitly having
@@ -1102,19 +1102,19 @@ func (r *Root) consigliereMachiavelliTerminalScreen(tab *shellTab) string {
 func (r *Root) logAuditContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Log Holepunch.\n")
-	if r.logAuditDir != "" {
-		fmt.Fprintf(&b, "Log directory: %s\n", r.logAuditDir)
+	if r.log.Dir != "" {
+		fmt.Fprintf(&b, "Log directory: %s\n", r.log.Dir)
 	}
-	if r.logAuditTimelineStartLabel != "" || r.logAuditTimelineEndLabel != "" {
-		fmt.Fprintf(&b, "Visible time range: %s to %s\n", r.logAuditTimelineStartLabel, r.logAuditTimelineEndLabel)
+	if r.log.TimelineStartLabel != "" || r.log.TimelineEndLabel != "" {
+		fmt.Fprintf(&b, "Visible time range: %s to %s\n", r.log.TimelineStartLabel, r.log.TimelineEndLabel)
 	}
-	if kw := strings.TrimSpace(r.logAuditKeywordField.GetText()); kw != "" {
+	if kw := strings.TrimSpace(r.log.KeywordField.GetText()); kw != "" {
 		fmt.Fprintf(&b, "Current keyword filter: %s\n", kw)
 	}
-	if lvl := strings.TrimSpace(r.logAuditLevelField.GetText()); lvl != "" {
+	if lvl := strings.TrimSpace(r.log.LevelField.GetText()); lvl != "" {
 		fmt.Fprintf(&b, "Current level filter: %s\n", lvl)
 	}
-	if tf := strings.TrimSpace(r.logAuditTimeField.GetText()); tf != "" {
+	if tf := strings.TrimSpace(r.log.TimeField.GetText()); tf != "" {
 		fmt.Fprintf(&b, "Current time filter: %s\n", tf)
 	}
 	b.WriteString(logAuditViewerAvailableActions)
@@ -1209,20 +1209,20 @@ func (r *Root) consigliereMachiavelliLogLines() string {
 	}
 	// A real, reported gap: logAuditVisibleEntries always returns
 	// oldest-first (the same order renderLogAuditViewer starts from),
-	// but logAuditNewestFirst can reverse the table's own display —
+	// but log.NewestFirst can reverse the table's own display —
 	// without this, flipping that arrow left this function still
 	// taking the first N of the UNreversed list, so a user looking at
 	// today's entries at the top of their screen got lines from the
 	// very start of a months-old log file instead. Matching
 	// renderLogAuditViewer's own reverse step here keeps "the first N"
 	// meaning the same N rows actually at the top of the table.
-	if r.logAuditNewestFirst {
+	if r.log.NewestFirst {
 		shown = slices.Clone(shown)
 		slices.Reverse(shown)
 	}
 	var b strings.Builder
 	order := "oldest first"
-	if r.logAuditNewestFirst {
+	if r.log.NewestFirst {
 		order = "newest first"
 	}
 	// States the order explicitly: without this, there's no way for
@@ -1243,7 +1243,7 @@ func (r *Root) consigliereMachiavelliLogLines() string {
 		// alone whether the omitted lines are older or newer than what
 		// was actually sent, which is exactly the ambiguity that misled
 		// a real question about "what's in these lines" before this fix.
-		if r.logAuditNewestFirst {
+		if r.log.NewestFirst {
 			fmt.Fprintf(&b, "(%d further matching lines, older than these, not shown)\n", len(shown)-n)
 		} else {
 			fmt.Fprintf(&b, "(%d further matching lines, newer than these, not shown)\n", len(shown)-n)
@@ -1260,7 +1260,7 @@ func (r *Root) consigliereMachiavelliLogLines() string {
 // comment), rather than needing a separate field to track it. No cap
 // needed: this is always exactly one entry, never an open-ended list.
 func (r *Root) consigliereMachiavelliLogDetailEntry() string {
-	row, _ := r.logAuditViewerTable.GetSelection()
+	row, _ := r.log.ViewerTable.GetSelection()
 	e, ok := r.logAuditEntryAt(row)
 	if !ok {
 		return ""

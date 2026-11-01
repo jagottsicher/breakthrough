@@ -451,7 +451,7 @@ func lightenColor(c tcell.Color, delta int32) tcell.Color {
 // follow it too, instead of the bordered-box look this screen started
 // with. The body itself also tints (PopupBackground, this app's own
 // already-established "distinct secondary surface" role — see
-// logAuditTimelineView's own doc comment for the same reasoning
+// log.TimelineView's own doc comment for the same reasoning
 // applied there — vs. the baseline SurfaceBackground every box's body
 // otherwise sits on) per the user's own further, explicitly optional
 // request that an active box read as visually distinct beyond just its

@@ -173,7 +173,7 @@ func logAuditTimelineText(entries []logview.Entry, width int, theme config.Resol
 // counts/severity (via logAuditTimelineBuildText below) without
 // re-scanning entries — load-bearing for renderLogAuditTimeline's own
 // freeze-while-focused behavior (root.go's own doc comment on
-// logAuditTimelineFocused): the entries scan is what gets frozen, not
+// log.TimelineFocused): the entries scan is what gets frozen, not
 // the text-building step, so a moved cursor still repaints instantly.
 // barCol is the bar's own first column relative to this view's inner
 // rect (len(startLabel) plus the one separating space) — persisted by
@@ -289,7 +289,7 @@ func logAuditTimelineBuildText(counts []int, severity []logview.Level, startLabe
 
 // logAuditTimelineUnlaidOutWidth is tview.Box's own default width
 // (verified directly against NewBox in box.go, not assumed) — what
-// logAuditTimelineView.GetRect() still reports the very first time
+// log.TimelineView.GetRect() still reports the very first time
 // renderLogAuditTimeline runs for a freshly-opened group, since
 // openLogAuditViewer calls renderLogAuditViewer (and so this) before
 // pushOverlay, and pushOverlay alone never cascades a real rect down
@@ -317,7 +317,7 @@ const logAuditTimelineUnlaidOutWidth = 15
 // past logAuditTimelineUnlaidOutWidth — see its own doc comment), else
 // the whole screen's width as a reasonable first guess.
 func (r *Root) renderLogAuditTimeline(entries []logview.Entry) {
-	if r.logAuditTimelineFocused || r.logAuditTimelineDragging {
+	if r.log.TimelineFocused || r.log.TimelineDragging {
 		// Frozen. The only way this runs while the timeline itself
 		// holds focus or a mouse drag is in progress is a follow-mode
 		// tick (renderLogAuditViewer's own caller) — never a filter
@@ -333,7 +333,7 @@ func (r *Root) renderLogAuditTimeline(entries []logview.Entry) {
 		return
 	}
 
-	_, _, width, _ := r.logAuditTimelineView.GetRect()
+	_, _, width, _ := r.log.TimelineView.GetRect()
 	if width <= logAuditTimelineUnlaidOutWidth {
 		if _, _, screenWidth, _ := r.GetRect(); screenWidth > 4 {
 			width = screenWidth - 4
@@ -344,31 +344,31 @@ func (r *Root) renderLogAuditTimeline(entries []logview.Entry) {
 
 	counts, severity, startLabel, endLabel, barCol, bucketCount, minT, maxT, ok := logAuditTimelineLayout(entries, width)
 	if !ok {
-		r.logAuditTimelineCounts = nil
-		r.logAuditTimelineSeverity = nil
-		r.logAuditTimelineBucketCount = 0
-		r.logAuditTimelineView.SetText("")
+		r.log.TimelineCounts = nil
+		r.log.TimelineSeverity = nil
+		r.log.TimelineBucketCount = 0
+		r.log.TimelineView.SetText("")
 		return
 	}
 
-	if bucketCount != r.logAuditTimelineBucketCount || !minT.Equal(r.logAuditTimelineMinT) || !maxT.Equal(r.logAuditTimelineMaxT) {
+	if bucketCount != r.log.TimelineBucketCount || !minT.Equal(r.log.TimelineMinT) || !maxT.Equal(r.log.TimelineMaxT) {
 		// Geometry changed since the last render (new filter, resize,
 		// or simply the first render ever) — any previously selected
 		// bucket index may no longer even exist at this size. Reset
 		// rather than clamp: a clamped-but-silently-different selection
 		// after a commit would be harder to make sense of than no
 		// selection at all.
-		r.logAuditTimelineAnchor = 0
-		r.logAuditTimelineCursor = 0
+		r.log.TimelineAnchor = 0
+		r.log.TimelineCursor = 0
 	}
-	r.logAuditTimelineCounts = counts
-	r.logAuditTimelineSeverity = severity
-	r.logAuditTimelineStartLabel = startLabel
-	r.logAuditTimelineEndLabel = endLabel
-	r.logAuditTimelineBarCol = barCol
-	r.logAuditTimelineBucketCount = bucketCount
-	r.logAuditTimelineMinT = minT
-	r.logAuditTimelineMaxT = maxT
+	r.log.TimelineCounts = counts
+	r.log.TimelineSeverity = severity
+	r.log.TimelineStartLabel = startLabel
+	r.log.TimelineEndLabel = endLabel
+	r.log.TimelineBarCol = barCol
+	r.log.TimelineBucketCount = bucketCount
+	r.log.TimelineMinT = minT
+	r.log.TimelineMaxT = maxT
 
 	r.repaintLogAuditTimeline()
 }
@@ -381,12 +381,12 @@ func (r *Root) renderLogAuditTimeline(entries []logview.Entry) {
 // must never itself be what silently un-freezes a frozen timeline.
 func (r *Root) repaintLogAuditTimeline() {
 	selStart, selEnd := -1, -1
-	if r.logAuditTimelineFocused || r.logAuditTimelineDragging {
-		selStart = min(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
-		selEnd = max(r.logAuditTimelineAnchor, r.logAuditTimelineCursor)
+	if r.log.TimelineFocused || r.log.TimelineDragging {
+		selStart = min(r.log.TimelineAnchor, r.log.TimelineCursor)
+		selEnd = max(r.log.TimelineAnchor, r.log.TimelineCursor)
 	}
-	text := logAuditTimelineBuildText(r.logAuditTimelineCounts, r.logAuditTimelineSeverity, r.logAuditTimelineStartLabel, r.logAuditTimelineEndLabel, r.theme, selStart, selEnd)
-	r.logAuditTimelineView.SetText(text)
+	text := logAuditTimelineBuildText(r.log.TimelineCounts, r.log.TimelineSeverity, r.log.TimelineStartLabel, r.log.TimelineEndLabel, r.theme, selStart, selEnd)
+	r.log.TimelineView.SetText(text)
 }
 
 // logAuditLevelCount/logAuditSourceCount are logAuditCountsByLevel/
@@ -490,60 +490,60 @@ func logAuditStatsText(entries []logview.Entry) string {
 // startup — the same build-once/repopulate-on-open shape every other
 // overlay in this package uses.
 func (r *Root) newLogAuditStatsScreen() {
-	r.logAuditStatsTitleBar = newPlainTitleBar("Statistics")
+	r.log.StatsTitleBar = newPlainTitleBar("Statistics")
 
-	r.logAuditStatsView = tview.NewTextView()
-	r.logAuditStatsView.SetWrap(false)
-	r.logAuditStatsView.SetBorderPadding(0, 0, 1, 1)
-	r.logAuditStatsView.SetInputCapture(r.captureLogAuditStatsKey)
+	r.log.StatsView = tview.NewTextView()
+	r.log.StatsView.SetWrap(false)
+	r.log.StatsView.SetBorderPadding(0, 0, 1, 1)
+	r.log.StatsView.SetInputCapture(r.captureLogAuditStatsKey)
 
-	// PopupBackground, matching logAuditStatsView's own static background
+	// PopupBackground, matching log.StatsView's own static background
 	// (see applyLogAuditStatsTheme) — never focus-dependent the way Git
 	// Breach's own boxes are, so a plain closure rather than the
 	// scrollbar's own PanelBackground default is all this needs.
 	popupTrackColor := func() tcell.Color { return r.theme.PopupBackground }
 
-	r.logAuditStatsScrollbar = newVerticalScrollbarForTextView(r, r.logAuditStatsView)
-	r.logAuditStatsScrollbar.EnableTextDensityMinimap() // logAuditStatsView is SetWrap(false)
-	r.logAuditStatsScrollbar.SetTrackColorFunc(popupTrackColor)
+	r.log.StatsScrollbar = newVerticalScrollbarForTextView(r, r.log.StatsView)
+	r.log.StatsScrollbar.EnableTextDensityMinimap() // log.StatsView is SetWrap(false)
+	r.log.StatsScrollbar.SetTrackColorFunc(popupTrackColor)
 	topRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.logAuditStatsView, 0, 1, true).
-		AddItem(r.logAuditStatsScrollbar, 1, 0, false)
-	topRow.SetMouseCapture(r.logAuditStatsScrollbar.captureMouse)
+		AddItem(r.log.StatsView, 0, 1, true).
+		AddItem(r.log.StatsScrollbar, 1, 0, false)
+	topRow.SetMouseCapture(r.log.StatsScrollbar.captureMouse)
 
 	// The horizontal counterpart, same corner handling as Compare's own
 	// diff view (comparediff.go): a reserved spacer column under the
 	// vertical bar, so the two bars' rects never share a cell.
-	r.logAuditStatsHScrollbar = newHorizontalScrollbarForTextView(r, r.logAuditStatsView)
-	r.logAuditStatsHScrollbar.SetTrackColorFunc(popupTrackColor)
-	r.logAuditStatsSpacer = tview.NewBox().SetBackgroundColor(r.theme.PopupBackground)
+	r.log.StatsHScrollbar = newHorizontalScrollbarForTextView(r, r.log.StatsView)
+	r.log.StatsHScrollbar.SetTrackColorFunc(popupTrackColor)
+	r.log.StatsSpacer = tview.NewBox().SetBackgroundColor(r.theme.PopupBackground)
 	hBarRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.logAuditStatsHScrollbar, 0, 1, false).
-		AddItem(r.logAuditStatsSpacer, 1, 0, false)
-	hBarRow.SetMouseCapture(r.logAuditStatsHScrollbar.captureMouse)
+		AddItem(r.log.StatsHScrollbar, 0, 1, false).
+		AddItem(r.log.StatsSpacer, 1, 0, false)
+	hBarRow.SetMouseCapture(r.log.StatsHScrollbar.captureMouse)
 
 	contentRow := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(topRow, 0, 1, true).
 		AddItem(hBarRow, 1, 0, false)
 
-	r.logAuditStatsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.logAuditStatsTitleBar, 1, 0, false).
+	r.log.StatsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.log.StatsTitleBar, 1, 0, false).
 		AddItem(contentRow, 0, 1, true)
 }
 
 // logAuditViewerVisibleEntries recomputes the viewer's own current
-// Keyword/Time/Level filter over logAuditAllEntries — the same
+// Keyword/Time/Level filter over log.AllEntries — the same
 // logAuditEntryVisible call renderLogAuditViewer makes, shared here so
 // Statistics reports on exactly what the table is currently showing,
 // not the whole unfiltered group.
 func (r *Root) logAuditViewerVisibleEntries() []logview.Entry {
-	query, hasQuery := logAuditKeywordQuery(r.logAuditKeywordField.GetText())
-	timeExpr := r.logAuditTimeField.GetText()
-	levelText := r.logAuditLevelField.GetText()
+	query, hasQuery := logAuditKeywordQuery(r.log.KeywordField.GetText())
+	timeExpr := r.log.TimeField.GetText()
+	levelText := r.log.LevelField.GetText()
 	now := time.Now()
 
 	var shown []logview.Entry
-	for _, e := range r.logAuditAllEntries {
+	for _, e := range r.log.AllEntries {
 		if logAuditEntryVisible(e, query, hasQuery, timeExpr, levelText, now) {
 			shown = append(shown, e)
 		}
@@ -556,7 +556,7 @@ func (r *Root) logAuditViewerVisibleEntries() []logview.Entry {
 // shape openMessageDetail/openLogAuditDetail already establish.
 func (r *Root) openLogAuditStats() {
 	text := logAuditStatsText(r.logAuditViewerVisibleEntries())
-	r.logAuditStatsView.SetText(text)
+	r.log.StatsView.SetText(text)
 
 	width := logAuditStatsMaxWidth
 	if _, _, screenWidth, _ := r.GetRect(); screenWidth > 2 && width > screenWidth-2 {
@@ -570,8 +570,8 @@ func (r *Root) openLogAuditStats() {
 	_, _, screenWidth, screenHeight := r.GetRect()
 	x, y, boxWidth, boxHeight := r.clampToScreen((screenWidth-textWidth)/2, (screenHeight-height)/2, textWidth, height)
 
-	r.logAuditStatsLayout.SetRect(x, y, boxWidth, boxHeight)
-	r.pushOverlay(logAuditStatsPage, r.logAuditStatsLayout, nil)
+	r.log.StatsLayout.SetRect(x, y, boxWidth, boxHeight)
+	r.pushOverlay(logAuditStatsPage, r.log.StatsLayout, nil)
 }
 
 func (r *Root) closeLogAuditStats() {
@@ -593,12 +593,12 @@ func (r *Root) captureLogAuditStatsKey(event *tcell.EventKey) *tcell.EventKey {
 // same way applyMessageDetailTheme/applyActivityLogTheme already are,
 // called from applyLogAuditTheme.
 func (r *Root) applyLogAuditStatsTheme(theme config.ResolvedTheme) {
-	if r.logAuditStatsView == nil {
+	if r.log.StatsView == nil {
 		return
 	}
-	r.logAuditStatsLayout.SetBackgroundColor(theme.PopupBackground)
-	r.logAuditStatsView.SetBackgroundColor(theme.PopupBackground)
-	r.logAuditStatsView.SetTextColor(theme.TextColor)
-	r.logAuditStatsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.logAuditStatsTitleBar.SetTextColor(theme.TextColor)
+	r.log.StatsLayout.SetBackgroundColor(theme.PopupBackground)
+	r.log.StatsView.SetBackgroundColor(theme.PopupBackground)
+	r.log.StatsView.SetTextColor(theme.TextColor)
+	r.log.StatsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.log.StatsTitleBar.SetTextColor(theme.TextColor)
 }
