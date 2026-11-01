@@ -263,7 +263,7 @@ func TestOpenActivityLogFallbackNoticeShowsTheMessage(t *testing.T) {
 // the checkboxText-prefixed List item (see this file's own
 // activityLogNoticeCheckboxText) actually flips both the stored bool
 // and the rendered glyph, the same ●/○ pair checkboxText already uses
-// elsewhere in this package (sedFlagsList).
+// elsewhere in this package (sed.FlagsList).
 func TestToggleActivityLogNoticeDontShowAgainFlipsTheCheckboxGlyph(t *testing.T) {
 	r, _, _ := newTestRootWithFile(t)
 	r.openActivityLogFallbackNotice("activity log: fallback")

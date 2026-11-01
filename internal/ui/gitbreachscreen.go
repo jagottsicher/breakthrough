@@ -553,7 +553,7 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	// background, so the "selected row" color silently changes from row
 	// to row instead of reading as one consistent selection bar. Same
 	// fix, same reasoning, as sshKeysTable/connectionMenuTable/
-	// sedPreviewTable/tabSwitcher already apply.
+	// sed.PreviewTable/tabSwitcher already apply.
 	selStyle := tcell.StyleDefault.Background(theme.SelectionBackground).Foreground(theme.TextColor)
 	r.gitBreachFilesTable.SetSelectedStyle(selStyle)
 	r.gitBreachBranchesTable.SetSelectedStyle(selStyle)

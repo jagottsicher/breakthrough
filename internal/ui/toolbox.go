@@ -873,7 +873,7 @@ func (r *Root) newToolboxFormScreen() {
 	// FocusedBackground to every item it owns, so a checkbox added
 	// through it could never keep a look distinct from a real text
 	// field's (the same established reason newSedForm's own doc comment
-	// gives for sedFlagsList).
+	// gives for sed.FlagsList).
 	r.toolboxFormToggles = tview.NewList().ShowSecondaryText(false)
 	r.toolboxFormToggles.SetHighlightFullLine(true)
 	r.toolboxFormToggles.SetDoneFunc(r.hideOverlay) // Escape
@@ -930,7 +930,7 @@ func (r *Root) openToolboxForm(name string, fields []toolboxFormField, build fun
 	// itemPadding between them + 2 rows of the Form's own top/bottom
 	// border padding) — the same derivation newCompressLayout's own doc
 	// comment spells out for its own, smaller form. Toggle rows: one
-	// each, no padding — a plain List, the same as sedFlagsList's own 5
+	// each, no padding — a plain List, the same as sed.FlagsList's own 5
 	// rows for 5 flags. Plus titlebar/preview/buttons, one row each.
 	textOrChoice, toggles := toolboxFormRowCounts(fields)
 	height := 1 + (2*textOrChoice + 1) + toggles + 1 + 1
@@ -1059,7 +1059,7 @@ func (r *Root) renderToolboxForm() {
 	// above and toolboxFormCancelBtn's own SetExitFunc picks back up
 	// below — a List has no SetExitFunc the way Button does, so this is
 	// the only place to intercept them (the identical shape
-	// sedFlagsList's own doc comment already establishes).
+	// sed.FlagsList's own doc comment already establishes).
 	r.toolboxFormToggles.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
@@ -1226,7 +1226,7 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
-	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// to sshKeysTable/connectionMenuTable/sed.PreviewTable/tabSwitcher/
 	// gitBreach's tables, for the identical reason.
 	r.toolboxTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).

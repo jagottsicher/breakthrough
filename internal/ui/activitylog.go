@@ -71,7 +71,7 @@ func (r *Root) newActivityLogger() (logger *activitylog.Logger, notice string, i
 
 // activityLogNoticeCheckboxText renders the "Don't show this again" list
 // item — checkboxText's own ●/○ prefix (see panel.go), the same
-// pattern sedFlagsList already uses for a toggle that lives in a List
+// pattern sed.FlagsList already uses for a toggle that lives in a List
 // rather than a tview.Form (see this file's own activityLogNotice*
 // field doc comment on Root for why).
 func activityLogNoticeCheckboxText(checked bool) string {
