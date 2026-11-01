@@ -1091,7 +1091,7 @@ func (r *Root) renderToolboxForm() {
 	// Tab wraps back to the form's own first field through
 	// toolboxForm.SetFocus(0) then r.app.SetFocus(r.toolboxForm), not a
 	// direct named-field jump — the identical, real, previously-fixed
-	// bug connectConnectBtn's own doc comment (connectdialog.go) found
+	// bug connect.ConnectBtn's own doc comment (connectdialog.go) found
 	// first: a direct jump leaves the Form's own internal focusedElement
 	// counter stale, so the next Backtab from that field lands wrong.
 	r.toolboxFormRunBtn.SetExitFunc(func(key tcell.Key) {
