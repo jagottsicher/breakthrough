@@ -111,7 +111,10 @@ file are each stored per provider, so switching providers never shows
 another one's own override, with an opt-in "Machiavelli Mode" for
 forwarding actual Log Holepunch/Git breach diff/Firewall ruleset/
 Action Log entry/Undertow operation content rather than just
-metadata — a Sessions screen (`js`) listing local GNU screen, tmux, and
+metadata, capped at one of five named sizes (Tiny through Max) also
+chosen per provider, so a small local model behind Ollama can be kept
+to a tighter cap than a provider with a much larger context window —
+a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once
@@ -1300,5 +1303,8 @@ Lightning Network ⚡️ using the sponsor button above.
   Breach forward whatever diff is currently shown in Main, Firewall
   forward its full ruleset, Action Log forward the matching entries'
   own messages, and Undertow forward every operation's own
-  source/target path, all verbatim.
+  source/target path, all verbatim, up to "Context size"'s own cap —
+  Tiny/Small/Medium/Large/Max, also stored per provider, Max (the
+  default) being the original 50 lines/rules/entries/operations and
+  250 diff lines.
 
