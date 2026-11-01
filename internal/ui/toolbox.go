@@ -1226,7 +1226,7 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
-	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// to ssh.KeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
 	// gitBreach's tables, for the identical reason.
 	r.toolboxTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
@@ -1252,7 +1252,7 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 
 	// toolboxForm and friends (see toolboxFormField's own doc comment in
 	// this file) — every new widget that overlay introduced needs its
-	// own explicit line here, the same rule sshShellForm's own block
+	// own explicit line here, the same rule ssh.ShellForm's own block
 	// above spells out: nothing gets themed automatically just by
 	// existing.
 	if r.toolboxForm != nil {

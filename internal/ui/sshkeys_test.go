@@ -108,12 +108,12 @@ func TestRenderSSHKeysShowsTheErrorInPlaceOfRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.sshKeysErr = errors.New("open /home/x/.ssh: permission denied")
-	r.sshKeysPairs = nil
+	r.ssh.KeysErr = errors.New("open /home/x/.ssh: permission denied")
+	r.ssh.KeysPairs = nil
 
 	r.renderSSHKeys()
 
-	got := strings.TrimSpace(r.sshKeysTable.GetCell(1, sshKeysColName).Text)
+	got := strings.TrimSpace(r.ssh.KeysTable.GetCell(1, sshKeysColName).Text)
 	if !strings.Contains(got, "permission denied") {
 		t.Errorf("row 1 = %q, want it to show the read error", got)
 	}
@@ -126,12 +126,12 @@ func TestRenderSSHKeysShowsAPlaceholderWhenEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.sshKeysErr = nil
-	r.sshKeysPairs = nil
+	r.ssh.KeysErr = nil
+	r.ssh.KeysPairs = nil
 
 	r.renderSSHKeys()
 
-	got := strings.TrimSpace(r.sshKeysTable.GetCell(1, sshKeysColName).Text)
+	got := strings.TrimSpace(r.ssh.KeysTable.GetCell(1, sshKeysColName).Text)
 	if !strings.Contains(got, "No SSH key pairs found") {
 		t.Errorf("row 1 = %q, want the empty-scan placeholder", got)
 	}
@@ -151,10 +151,10 @@ func TestReloadSSHKeysTreatsAMissingDirAsEmptyNotAnError(t *testing.T) {
 
 	r.reloadSSHKeys()
 
-	if r.sshKeysErr != nil {
-		t.Errorf("sshKeysErr = %v, want nil for a simply-missing ~/.ssh", r.sshKeysErr)
+	if r.ssh.KeysErr != nil {
+		t.Errorf("ssh.KeysErr = %v, want nil for a simply-missing ~/.ssh", r.ssh.KeysErr)
 	}
-	got := strings.TrimSpace(r.sshKeysTable.GetCell(1, sshKeysColName).Text)
+	got := strings.TrimSpace(r.ssh.KeysTable.GetCell(1, sshKeysColName).Text)
 	if !strings.Contains(got, "No SSH key pairs found") {
 		t.Errorf("row 1 = %q, want the empty-scan placeholder", got)
 	}
@@ -165,9 +165,9 @@ func TestRenderSSHKeysRowValuesAndColors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.sshKeysErr = nil
-	r.sshKeysAgent = map[string]bool{"SHA256:loaded": true}
-	r.sshKeysPairs = []sshkeys.KeyPair{
+	r.ssh.KeysErr = nil
+	r.ssh.KeysAgent = map[string]bool{"SHA256:loaded": true}
+	r.ssh.KeysPairs = []sshkeys.KeyPair{
 		{
 			Name: "id_ed25519", HasPrivate: true, HasPublic: true,
 			Type: "ed25519", Bits: 256, Fingerprint: "SHA256:loaded",
@@ -187,36 +187,36 @@ func TestRenderSSHKeysRowValuesAndColors(t *testing.T) {
 	r.renderSSHKeys()
 
 	// Row 1: fully loaded, unencrypted, strict permissions, agent-loaded.
-	if got := r.sshKeysTable.GetCell(1, sshKeysColType).Text; strings.TrimSpace(got) != "ed25519 256" {
+	if got := r.ssh.KeysTable.GetCell(1, sshKeysColType).Text; strings.TrimSpace(got) != "ed25519 256" {
 		t.Errorf("row 1 Type = %q, want \"ed25519 256\"", got)
 	}
-	if got := r.sshKeysTable.GetCell(1, sshKeysColAgent).Text; strings.TrimSpace(got) != "✔" {
+	if got := r.ssh.KeysTable.GetCell(1, sshKeysColAgent).Text; strings.TrimSpace(got) != "✔" {
 		t.Errorf("row 1 Agent = %q, want ✔", got)
 	}
-	if got := cellTextColor(r.sshKeysTable.GetCell(1, sshKeysColAgent)); got != r.theme.EntryExecutable {
+	if got := cellTextColor(r.ssh.KeysTable.GetCell(1, sshKeysColAgent)); got != r.theme.EntryExecutable {
 		t.Errorf("row 1 Agent color = %v, want EntryExecutable", got)
 	}
 
 	// Row 2: permissive private key file, not loaded in the agent.
-	if got := r.sshKeysTable.GetCell(2, sshKeysColPerms).Text; strings.TrimSpace(got) != "644" {
+	if got := r.ssh.KeysTable.GetCell(2, sshKeysColPerms).Text; strings.TrimSpace(got) != "644" {
 		t.Errorf("row 2 Perms = %q, want 644", got)
 	}
-	if got := cellTextColor(r.sshKeysTable.GetCell(2, sshKeysColPerms)); got != r.theme.WarningText {
+	if got := cellTextColor(r.ssh.KeysTable.GetCell(2, sshKeysColPerms)); got != r.theme.WarningText {
 		t.Errorf("row 2 Perms color = %v, want WarningText for a permissive private key", got)
 	}
-	if got := r.sshKeysTable.GetCell(2, sshKeysColAgent).Text; strings.TrimSpace(got) != "✘" {
+	if got := r.ssh.KeysTable.GetCell(2, sshKeysColAgent).Text; strings.TrimSpace(got) != "✘" {
 		t.Errorf("row 2 Agent = %q, want ✘", got)
 	}
 
 	// Row 3: no private key at all — Encrypted/Perms both show "–", and
 	// the Note column says so.
-	if got := r.sshKeysTable.GetCell(3, sshKeysColEncrypted).Text; strings.TrimSpace(got) != "–" {
+	if got := r.ssh.KeysTable.GetCell(3, sshKeysColEncrypted).Text; strings.TrimSpace(got) != "–" {
 		t.Errorf("row 3 Encrypted = %q, want –", got)
 	}
-	if got := r.sshKeysTable.GetCell(3, sshKeysColPerms).Text; strings.TrimSpace(got) != "–" {
+	if got := r.ssh.KeysTable.GetCell(3, sshKeysColPerms).Text; strings.TrimSpace(got) != "–" {
 		t.Errorf("row 3 Perms = %q, want –", got)
 	}
-	if got := r.sshKeysTable.GetCell(3, sshKeysColNote).Text; !strings.Contains(got, "no private key file") {
+	if got := r.ssh.KeysTable.GetCell(3, sshKeysColNote).Text; !strings.Contains(got, "no private key file") {
 		t.Errorf("row 3 Note = %q, want it to mention the missing private key", got)
 	}
 }
@@ -267,9 +267,9 @@ func TestRenderSSHKeysSelectedRowUsesOneUniformHighlightColor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.sshKeysErr = nil
-	r.sshKeysAgent = map[string]bool{"SHA256:loaded": true}
-	r.sshKeysPairs = []sshkeys.KeyPair{
+	r.ssh.KeysErr = nil
+	r.ssh.KeysAgent = map[string]bool{"SHA256:loaded": true}
+	r.ssh.KeysPairs = []sshkeys.KeyPair{
 		{
 			Name: "id_ed25519", HasPrivate: true, HasPublic: true,
 			Type: "ed25519", Bits: 256, Fingerprint: "SHA256:loaded",
@@ -286,9 +286,9 @@ func TestRenderSSHKeysSelectedRowUsesOneUniformHighlightColor(t *testing.T) {
 	defer screen.Fini()
 	const screenWidth, screenHeight = 200, 20
 	screen.SetSize(screenWidth, screenHeight)
-	r.sshKeysTable.SetRect(0, 0, screenWidth, screenHeight)
-	r.sshKeysTable.Select(1, 0)
-	r.sshKeysTable.Draw(screen)
+	r.ssh.KeysTable.SetRect(0, 0, screenWidth, screenHeight)
+	r.ssh.KeysTable.Select(1, 0)
+	r.ssh.KeysTable.Draw(screen)
 
 	// Locate the selected data row, and three of its own cells (Name —
 	// always plain Text — plus Agent and Comment, the two that used to
@@ -373,16 +373,16 @@ func TestSSHKeysReloadIntoAnErrorNeverHangsOnDown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.sshKeysErr = errors.New("permission denied")
-	r.sshKeysPairs = nil
+	r.ssh.KeysErr = errors.New("permission denied")
+	r.ssh.KeysPairs = nil
 	r.renderSSHKeys()
-	r.sshKeysTable.Select(15, 0) // simulate a stale cursor from a much longer previous list
+	r.ssh.KeysTable.Select(15, 0) // simulate a stale cursor from a much longer previous list
 
 	r.renderSSHKeys() // still errors — re-renders down to just 2 rows
 
 	done := make(chan struct{})
 	go func() {
-		r.sshKeysTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+		r.ssh.KeysTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
 		close(done)
 	}()
 	select {

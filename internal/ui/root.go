@@ -34,7 +34,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/rclone"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
-	"github.com/jagottsicher/breakthrough/internal/sshkeys"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
@@ -592,63 +591,30 @@ type Root struct {
 	messagesDetailTitleBar *tview.TextView
 	messagesDetailView     *tview.TextView
 
-	// The SSH Keys screen ("jk", see sshkeys.go) — Stage 1 (read-only) of
-	// feature_ideas.txt's own SSH-Key-Verwaltung entry: an inventory of
+	// The SSH Keys screen ("jk", see sshkeys.go) — Stage 1 (read-only)
+	// of feature_ideas.txt's own SSH-Key-Verwaltung entry: an inventory of
 	// the user's own local SSH key pairs under ~/.ssh (internal/sshkeys),
 	// plain read-only rows like Mounts/Firewall rather than Sessions' own
-	// per-row action cells — nothing here is a destructive or even a
-	// mutating action yet. sshKeysPairs/sshKeysErr/sshKeysAgent hold the
-	// last read result, refreshed by reloadSSHKeys (on open, and on "r").
-	sshKeysLayout    *tview.Flex
-	sshKeysTitleBar  *tview.TextView
-	sshKeysHint      *tview.TextView
-	sshKeysHintSpans []listHintSpan
-	sshKeysTable     *tview.Table
-	sshKeysScrollbar *verticalScrollbar
-	sshKeysPairs     []sshkeys.KeyPair
-	sshKeysErr       error
-	sshKeysAgent     map[string]bool
-
-	// sshKeysGenerate* make up the SSH Keys screen's own "Generate key"
+	// per-row action cells — nothing here is destructive or even a
+	// mutating action yet. ssh.KeysPairs/ssh.KeysErr/ssh.KeysAgent hold
+	// the last read result, refreshed by reloadSSHKeys (on open, and on "r").
+	//
+	// ssh.KeysGenerate* make up the SSH Keys screen's own "Generate key"
 	// form ("a", see sshkeysgenerate.go and feature_ideas.txt's own
 	// SSH-Key-Verwaltung Stufe 2) — Algorithm is a dropdown, so the form
 	// is rebuilt fresh on every open and on every Algorithm change (see
 	// renderSSHKeysGenerateForm), the same "Clear(true) then
 	// AddFormItem" shape newFirewallAddRuleForm's own doc comment
-	// establishes. The plain sshKeysGenerateXxx fields below mirror the
+	// establishes. The plain ssh.KeysGenerateXxx fields below mirror the
 	// form's own current values, the same "value mirror" shape
-	// duplicateStrategy and friends already establish.
-	sshKeysGenerateLayout       *tview.Flex
-	sshKeysGenerateTitleBar     *tview.TextView
-	sshKeysGenerateForm         *tview.Form
-	sshKeysGenerateStatus       *tview.TextView
-	sshKeysGenerateButtons      *tview.Flex
-	sshKeysGenerateCancelBtn    *tview.Button
-	sshKeysGenerateGenerateBtn  *tview.Button
-	sshKeysGenerateAlgorithm    string
-	sshKeysGenerateBits         int
-	sshKeysGenerateFilenameText string
-	sshKeysGenerateCommentText  string
-
-	// sshKeysCopy* make up the SSH Keys screen's own "Copy to server"
-	// form ("c", see sshkeyscopy.go and feature_ideas.txt's own
-	// SSH-Key-Verwaltung Stufe 3) — installs the selected key pair's own
-	// public half into a remote user's authorized_keys. sshKeysCopyPick*
-	// reuses r.picker (see openSSHKeysCopyTabPicker), the same shared,
-	// repopulated-per-open List openRsyncTabPicker's own picker already
-	// establishes.
-	sshKeysCopyLayout    *tview.Flex
-	sshKeysCopyTitleBar  *tview.TextView
-	sshKeysCopyForm      *tview.Form
-	sshKeysCopyPickBtn   *tview.Button
-	sshKeysCopyStatus    *tview.TextView
-	sshKeysCopyButtons   *tview.Flex
-	sshKeysCopyCancelBtn *tview.Button
-	sshKeysCopyGoBtn     *tview.Button
-	sshKeysCopyKeyName   string
-	sshKeysCopyHostText  string
-	sshKeysCopyPortText  string
-	sshKeysCopyUserText  string
+	// duplicate.Strategy and friends already establish.
+	//
+	// ssh.KeysCopy* is the "Copy public key" dialog (see
+	// sshkeyscopy.go and feature_ideas.txt's own SSH-Key-Verwaltung
+	// Stufe 3) — ssh.KeysCopyPickBtn opens the host picker (r.picker via
+	// openSSHKeysCopyTabPicker), the same shared, repopulated-per-open
+	// List openRsyncTabPicker's own picker already establishes.
+	ssh sshState
 
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
@@ -1468,47 +1434,29 @@ type Root struct {
 	// there unexplained for however long that subprocess takes.
 	cloudMountPending map[string]string
 
-	// sshShellMenuTable/TitleBar/Layout is the "gs" chord's own dropdown
+	// ssh.ShellMenuTable/TitleBar/Layout is the "gs" chord's own dropdown
 	// (see sshshell.go) — the same per-cell Table shape
 	// connectionMenuTable just above establishes, reading the exact
 	// same history, just with no "active"/eject concept of its own:
-	// launching a shell is a one-off, there's nothing ongoing to detach
-	// from the way an SFTP-mounted panel has. sshShellMenuTitleBar
+	// launching a shell is a one-off, with nothing ongoing to detach
+	// from the way an SFTP-mounted panel has. ssh.ShellMenuTitleBar
 	// carries its own close glyph (see renderSSHShellMenuTitleBar), the
 	// same toolWindowCloseButtonCol convention Help/Properties already
-	// use — per the user's own explicit request that this dropdown (and
-	// the dialog below) offer a mouse-clickable close, not just Escape.
-	sshShellMenuTable       *tview.Table
-	sshShellMenuTitleBar    *tview.TextView
-	sshShellMenuLayout      *tview.Flex
-	sshShellMenuHistoryRows map[int]remotefs.Connection
-
-	// sshShellForm/.../sshShellLayout make up "Add new ssh connection"
+	// use — per the user's own explicit request the dropdown (and the
+	// dialog below) offer a mouse-clickable close, not just Escape.
+	//
+	// ssh.ShellForm/.../ssh.ShellLayout make up "Add new ssh connection"
 	// (see sshshell.go) — Host/Port/User, the same three fields
-	// connectForm already has, plus four checkboxes for the one-off
+	// connect.Form already has, plus the four checkboxes a one-off
 	// ssh flags a saved entry can carry (see remotefs.Connection's own
-	// Shell* fields; plainFormCheckbox for why these are that type, not
-	// a bare *tview.Checkbox). No password field: a real `ssh` process
+	// Shell* fields; plainFormCheckbox for why that type, not a
+	// bare *tview.Checkbox). No password field: the real `ssh` process
 	// gets the real terminal handed to it (see launchSSHShell), so it
 	// prompts for one itself exactly like running ssh from a bare shell
-	// would. sshShellTitleBar carries its own close glyph, the same as
-	// sshShellMenuTitleBar above (see renderSSHShellTitleBar).
-	sshShellForm                *tview.Form
-	sshShellHostField           *tview.InputField
-	sshShellPortField           *tview.InputField
-	sshShellUserField           *tview.InputField
-	sshShellAgentCheckbox       *plainFormCheckbox
-	sshShellCompressionCheckbox *plainFormCheckbox
-	sshShellVerboseCheckbox     *plainFormCheckbox
-	sshShellX11Checkbox         *plainFormCheckbox
-	sshShellStatus              *tview.TextView
-	sshShellCancelBtn           *tview.Button
-	sshShellOpenBtn             *tview.Button
-	sshShellButtons             *tview.Flex
-	sshShellTitleBar            *tview.TextView
-	sshShellLayout              *tview.Flex
-
-	// sshShellSubmit, when set, is what runSSHShellFromDialog calls
+	// would. ssh.ShellTitleBar carries its own close glyph, the same as
+	// ssh.ShellMenuTitleBar above (see renderSSHShellTitleBar).
+	//
+	// ssh.ShellSubmit, when set, is what runSSHShellFromDialog calls
 	// instead of its own default r.launchSSHShell — cleared again right
 	// after, a one-shot override. This is the entire hook the Shells
 	// menu's own "+ New shell…" row needs to reuse this whole dialog/
@@ -1517,7 +1465,6 @@ type Root struct {
 	// r.openSSHShellDialog(remotefs.Connection{}) unchanged. The "gs"
 	// launcher's own default path (this field left nil) is completely
 	// untouched.
-	sshShellSubmit func(remotefs.Connection)
 
 	// duplicateForm/duplicateButtons/duplicateLayout together make up the
 	// "Multiply" dialog (see duplicate.go). Unlike Sed Replace's own
@@ -3157,12 +3104,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// two-pieces shape the Connect dialog/
 	// connection dropdown pair just above has, reading the exact same
 	// history.
-	r.sshShellForm = r.newSSHShellForm()
-	r.sshShellButtons = r.newSSHShellButtons()
-	r.sshShellLayout = r.newSSHShellLayout()
-	r.sshShellMenuTable = r.newSSHShellMenuTable()
-	r.sshShellMenuTitleBar = r.newSSHShellMenuTitleBar()
-	r.sshShellMenuLayout = r.newSSHShellMenuLayout()
+	r.ssh.ShellForm = r.newSSHShellForm()
+	r.ssh.ShellButtons = r.newSSHShellButtons()
+	r.ssh.ShellLayout = r.newSSHShellLayout()
+	r.ssh.ShellMenuTable = r.newSSHShellMenuTable()
+	r.ssh.ShellMenuTitleBar = r.newSSHShellMenuTitleBar()
+	r.ssh.ShellMenuLayout = r.newSSHShellMenuLayout()
 
 	// The Terminal switcher (Alt+T/"T" — see terminalswitcher.go), the
 	// same two-pieces shape tabSwitcher's own construction below uses.
@@ -3247,16 +3194,16 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The SSH Keys screen's own "Generate key" form (see
 	// sshkeysgenerate.go).
-	r.sshKeysGenerateForm = r.newSSHKeysGenerateForm()
-	r.sshKeysGenerateButtons = r.newSSHKeysGenerateButtons()
-	r.sshKeysGenerateLayout = r.newSSHKeysGenerateLayout()
+	r.ssh.KeysGenerateForm = r.newSSHKeysGenerateForm()
+	r.ssh.KeysGenerateButtons = r.newSSHKeysGenerateButtons()
+	r.ssh.KeysGenerateLayout = r.newSSHKeysGenerateLayout()
 
 	// The SSH Keys screen's own "Copy to server" form (see
 	// sshkeyscopy.go).
-	r.sshKeysCopyForm = r.newSSHKeysCopyForm()
-	r.sshKeysCopyPickBtn = r.newSSHKeysCopyPickButton()
-	r.sshKeysCopyButtons = r.newSSHKeysCopyButtons()
-	r.sshKeysCopyLayout = r.newSSHKeysCopyLayout()
+	r.ssh.KeysCopyForm = r.newSSHKeysCopyForm()
+	r.ssh.KeysCopyPickBtn = r.newSSHKeysCopyPickButton()
+	r.ssh.KeysCopyButtons = r.newSSHKeysCopyButtons()
+	r.ssh.KeysCopyLayout = r.newSSHKeysCopyLayout()
 
 	// The Activity Log screen (see activitylogscreen.go/openActivityLog)
 	// — a fifth full-screen catalog, same build-once/repopulate-on-open
@@ -3460,9 +3407,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the SSH Keys screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall/Sessions screens' own comments above give.
-	r.AddPage(sshKeysPage, r.sshKeysLayout, true, false)
-	r.AddPage(sshKeysGeneratePage, r.sshKeysGenerateLayout, false, false)
-	r.AddPage(sshKeysCopyPage, r.sshKeysCopyLayout, false, false)
+	r.AddPage(sshKeysPage, r.ssh.KeysLayout, true, false)
+	r.AddPage(sshKeysGeneratePage, r.ssh.KeysGenerateLayout, false, false)
+	r.AddPage(sshKeysCopyPage, r.ssh.KeysCopyLayout, false, false)
 	// resize=true: the Messages screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall/Sessions/SSH Keys screens' own comments above give.
@@ -3501,8 +3448,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(cloudRemoteDialogPage, r.cloudRemoteDialogLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
-	r.AddPage(sshShellDialogPage, r.sshShellLayout, false, false)
-	r.AddPage(sshShellMenuPage, r.sshShellMenuLayout, false, false)
+	r.AddPage(sshShellDialogPage, r.ssh.ShellLayout, false, false)
+	r.AddPage(sshShellMenuPage, r.ssh.ShellMenuLayout, false, false)
 	r.AddPage(terminalSwitcherPage, r.terminalSwitcherLayout, false, false)
 	// resize=true: the hidden Easter egg overlay fills the whole
 	// terminal too, the same reasoning every other full-screen catalog's

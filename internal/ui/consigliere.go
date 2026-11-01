@@ -1519,11 +1519,11 @@ const consigliereMaxSSHKeys = 50
 func (r *Root) sshKeysContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: SSH Keys.\n")
-	if r.sshKeysErr != nil {
-		fmt.Fprintf(&b, "Could not read the current key inventory: %v\n", r.sshKeysErr)
+	if r.ssh.KeysErr != nil {
+		fmt.Fprintf(&b, "Could not read the current key inventory: %v\n", r.ssh.KeysErr)
 		return strings.TrimSpace(b.String())
 	}
-	pairs := r.sshKeysPairs
+	pairs := r.ssh.KeysPairs
 	fmt.Fprintf(&b, "%d key pairs:\n", len(pairs))
 	n := len(pairs)
 	if n > consigliereMaxSSHKeys {

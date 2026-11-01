@@ -13,7 +13,7 @@ import (
 )
 
 // newSSHKeysCopyTestRoot builds a Root with $HOME pointed at a fresh
-// ~/.ssh (see sshHomeDir) and pairs already loaded into sshKeysPairs
+// ~/.ssh (see sshHomeDir) and pairs already loaded into ssh.KeysPairs
 // and the table, so openSSHKeysCopy's own row-selection logic has
 // something real to read — the same shape newFirewallAddRuleTestRoot
 // establishes for its own screen's prerequisite state.
@@ -24,8 +24,8 @@ func newSSHKeysCopyTestRoot(t *testing.T, pairs []sshkeys.KeyPair) *Root {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.sshKeysErr = nil
-	r.sshKeysPairs = pairs
+	r.ssh.KeysErr = nil
+	r.ssh.KeysPairs = pairs
 	r.renderSSHKeys()
 	return r
 }
@@ -44,7 +44,7 @@ func TestOpenSSHKeysCopyRejectsAKeyWithNoPublicHalf(t *testing.T) {
 	r := newSSHKeysCopyTestRoot(t, []sshkeys.KeyPair{
 		{Name: "orphan_key", HasPrivate: true, HasPublic: false},
 	})
-	r.sshKeysTable.Select(1, 0)
+	r.ssh.KeysTable.Select(1, 0)
 
 	r.openSSHKeysCopy()
 
@@ -57,24 +57,24 @@ func TestOpenSSHKeysCopyPrefillsFromTheSelectedRow(t *testing.T) {
 	r := newSSHKeysCopyTestRoot(t, []sshkeys.KeyPair{
 		{Name: "id_ed25519", HasPrivate: true, HasPublic: true},
 	})
-	r.sshKeysTable.Select(1, 0)
+	r.ssh.KeysTable.Select(1, 0)
 
 	r.openSSHKeysCopy()
 
 	if r.activePage != sshKeysCopyPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, sshKeysCopyPage)
 	}
-	if r.sshKeysCopyKeyName != "id_ed25519" {
-		t.Errorf("sshKeysCopyKeyName = %q, want id_ed25519", r.sshKeysCopyKeyName)
+	if r.ssh.KeysCopyKeyName != "id_ed25519" {
+		t.Errorf("ssh.KeysCopyKeyName = %q, want id_ed25519", r.ssh.KeysCopyKeyName)
 	}
-	if r.sshKeysCopyPortText != "22" {
-		t.Errorf("sshKeysCopyPortText = %q, want the default port 22", r.sshKeysCopyPortText)
+	if r.ssh.KeysCopyPortText != "22" {
+		t.Errorf("ssh.KeysCopyPortText = %q, want the default port 22", r.ssh.KeysCopyPortText)
 	}
 }
 
 func TestCancelSSHKeysCopyClosesTheForm(t *testing.T) {
 	r := newSSHKeysCopyTestRoot(t, []sshkeys.KeyPair{{Name: "id_ed25519", HasPrivate: true, HasPublic: true}})
-	r.sshKeysTable.Select(1, 0)
+	r.ssh.KeysTable.Select(1, 0)
 	r.openSSHKeysCopy()
 
 	r.cancelSSHKeysCopy()
@@ -86,19 +86,19 @@ func TestCancelSSHKeysCopyClosesTheForm(t *testing.T) {
 
 func TestSubmitSSHKeysCopyRejectsAnInvalidPort(t *testing.T) {
 	r := newSSHKeysCopyTestRoot(t, []sshkeys.KeyPair{{Name: "id_ed25519", HasPrivate: true, HasPublic: true}})
-	r.sshKeysTable.Select(1, 0)
+	r.ssh.KeysTable.Select(1, 0)
 	r.openSSHKeysCopy()
-	r.sshKeysCopyPortText = "not-a-port"
-	r.sshKeysCopyHostText = "example.com"
-	r.sshKeysCopyUserText = "jens"
+	r.ssh.KeysCopyPortText = "not-a-port"
+	r.ssh.KeysCopyHostText = "example.com"
+	r.ssh.KeysCopyUserText = "jens"
 
 	r.submitSSHKeysCopy()
 
 	if r.activePage != sshKeysCopyPage {
 		t.Errorf("activePage = %q, want to stay on the Copy to server form after a validation error", r.activePage)
 	}
-	if got := r.sshKeysCopyStatus.GetText(true); got == "" {
-		t.Error("sshKeysCopyStatus is empty, want the port error reported in place")
+	if got := r.ssh.KeysCopyStatus.GetText(true); got == "" {
+		t.Error("ssh.KeysCopyStatus is empty, want the port error reported in place")
 	}
 }
 
@@ -120,10 +120,10 @@ func writeTestKeyPair(t *testing.T, home, name string) {
 func TestSubmitSSHKeysCopyShowsConfirmWithTheExactCommand(t *testing.T) {
 	r := newSSHKeysCopyTestRoot(t, []sshkeys.KeyPair{{Name: "id_ed25519", HasPrivate: true, HasPublic: true}})
 	writeTestKeyPair(t, os.Getenv("HOME"), "id_ed25519")
-	r.sshKeysTable.Select(1, 0)
+	r.ssh.KeysTable.Select(1, 0)
 	r.openSSHKeysCopy()
-	r.sshKeysCopyHostText = "example.com"
-	r.sshKeysCopyUserText = "jens"
+	r.ssh.KeysCopyHostText = "example.com"
+	r.ssh.KeysCopyUserText = "jens"
 
 	r.submitSSHKeysCopy()
 
@@ -142,7 +142,7 @@ func TestSubmitSSHKeysCopyShowsConfirmWithTheExactCommand(t *testing.T) {
 func TestApplySSHKeysCopyLogsActionAndClosesTheForm(t *testing.T) {
 	r := newSSHKeysCopyTestRoot(t, []sshkeys.KeyPair{{Name: "id_ed25519", HasPrivate: true, HasPublic: true}})
 	writeTestKeyPair(t, os.Getenv("HOME"), "id_ed25519")
-	r.sshKeysTable.Select(1, 0)
+	r.ssh.KeysTable.Select(1, 0)
 	r.openSSHKeysCopy()
 	readLog := attachTestActivityLog(t, r)
 
@@ -170,7 +170,7 @@ func TestApplySSHKeysCopyLogsActionAndClosesTheForm(t *testing.T) {
 func TestApplySSHKeysCopyReportsAFailedPasswordlessTest(t *testing.T) {
 	r := newSSHKeysCopyTestRoot(t, []sshkeys.KeyPair{{Name: "id_ed25519", HasPrivate: true, HasPublic: true}})
 	writeTestKeyPair(t, os.Getenv("HOME"), "id_ed25519")
-	r.sshKeysTable.Select(1, 0)
+	r.ssh.KeysTable.Select(1, 0)
 	r.openSSHKeysCopy()
 	readLog := attachTestActivityLog(t, r)
 

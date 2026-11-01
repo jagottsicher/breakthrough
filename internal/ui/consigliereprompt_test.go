@@ -864,7 +864,7 @@ func TestConsigliereContextSnapshotDispatchesToSessions(t *testing.T) {
 // first place.
 func TestSSHKeysContextSnapshotIncludesKeyPairs(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.sshKeysPairs = []sshkeys.KeyPair{
+	root.ssh.KeysPairs = []sshkeys.KeyPair{
 		{Name: "id_ed25519", Type: "ed25519", Bits: 256, Encrypted: true, AgentLoaded: true},
 	}
 
@@ -881,7 +881,7 @@ func TestSSHKeysContextSnapshotIncludesKeyPairs(t *testing.T) {
 // case: a failed scan is surfaced, not a silently empty snapshot.
 func TestSSHKeysContextSnapshotReportsReadError(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.sshKeysErr = errors.New("reading ~/.ssh: permission denied")
+	root.ssh.KeysErr = errors.New("reading ~/.ssh: permission denied")
 
 	got := root.sshKeysContextSnapshot()
 
@@ -898,7 +898,7 @@ func TestSSHKeysContextSnapshotCapsKeyList(t *testing.T) {
 	for i := 0; i < consigliereMaxSSHKeys+5; i++ {
 		pairs = append(pairs, sshkeys.KeyPair{Name: "distinct-key"})
 	}
-	root.sshKeysPairs = pairs
+	root.ssh.KeysPairs = pairs
 
 	got := root.sshKeysContextSnapshot()
 
@@ -912,7 +912,7 @@ func TestSSHKeysContextSnapshotCapsKeyList(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToSSHKeys(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = sshKeysPage
-	root.sshKeysPairs = []sshkeys.KeyPair{{Name: "id_ed25519"}}
+	root.ssh.KeysPairs = []sshkeys.KeyPair{{Name: "id_ed25519"}}
 
 	got := root.consigliereContextSnapshot()
 
