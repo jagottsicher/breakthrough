@@ -65,7 +65,10 @@ Preflight, before anything else:
 git log main..develop --oneline        # what the release will contain
 git log develop..main --oneline        # MUST be empty
 ```
-A non-empty `develop..main` means someone committed directly to `main` (against this project's own workflow) — this breaks the release build (`docs/code-index.json`'s stored hash goes stale, causing a "git is in a dirty state" CI failure). If this happens: `git cherry-pick <those commits>` onto a new branch off `develop`, regenerate the index, and route them through develop properly before continuing — do not just force `main` back in line.
+A non-empty `develop..main` can mean two different things — check which before reacting:
+
+1. **A genuinely new, unresolved direct commit to `main`.** This breaks the release build (`docs/code-index.json`'s stored hash goes stale, causing a "git is in a dirty state" CI failure). Fix: `git cherry-pick <those commits>` onto a new branch off `develop`, regenerate the index, and route them through develop properly before continuing — do not just force `main` back in line.
+2. **An already-resolved historical false positive.** A commit fixed this way in the past keeps its original hash on `main` forever, but the cherry-pick onto develop creates a *new* hash with the same content — so it will show up in this list indefinitely even though nothing is actually missing. Before cherry-picking anything, confirm there's a real problem: `git diff origin/main origin/develop -- <file>` for the files the listed commits touch. If the only differences are things develop is *ahead* on (your own unreleased work), not things only `main` has, it's case 2 — nothing to do.
 
 Then:
 ```sh
