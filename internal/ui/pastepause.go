@@ -105,7 +105,7 @@ func (r *Root) renderPastePauseDialog(job *pasteJob) {
 	if n := len(r.pasteQueue); n > 0 {
 		msg += fmt.Sprintf(" (%d more queued)", n)
 	}
-	if r.rsyncJob != nil || r.compressJob != nil {
+	if r.rsync.Job != nil || r.compressJob != nil {
 		msg += " Rsync/Compress keep running."
 	}
 	r.pastePauseDialogTitleBar.SetText(" " + msg + " ")

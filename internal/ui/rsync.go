@@ -27,7 +27,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/rsync"
 )
 
-// Flag labels for rsyncFlagsList — constants rather than repeated
+// Flag labels for rsync.FlagsList — constants rather than repeated
 // literals so a typo in one place can't silently desync the item text
 // from the map key read back in currentRsyncJob, the same reasoning
 // sedFlagOrder's own doc comment gives for its identical shape.
@@ -40,6 +40,37 @@ const (
 )
 
 var rsyncFlagOrder = []string{rsyncLabelCopyContents, rsyncLabelArchive, rsyncLabelCompress, rsyncLabelDelete, rsyncLabelDryRun}
+
+// rsyncState holds the "Rsync" dialog's widgets/form values, the
+// bottom bar's own cancel-segment range, and the backgrounded job/
+// queue (see rsyncjob.go).
+type rsyncState struct {
+	Form               *tview.Form
+	SourceField        *tview.InputField
+	DestinationField   *tview.InputField
+	ExcludesField      *tview.InputField
+	ExtraArgsField     *tview.InputField
+	FlagsList          *tview.List
+	Flags              map[string]bool
+	PreviewView        *tview.TextView
+	Spacer             *tview.Box
+	CancelBtn          *tview.Button
+	RunBtn             *tview.Button
+	RunBackgroundBtn   *tview.Button
+	Buttons            *tview.Flex
+	TitleBar           *tview.TextView
+	ContentLayout      *tview.Flex
+	Layout             *tview.Flex
+	PickSourceBtn      *tview.Button
+	PickDestinationBtn *tview.Button
+	PickButtons        *tview.Flex
+	SourceDefault      rsyncFieldDefault
+	DestinationDefault rsyncFieldDefault
+	HintView           *tview.TextView
+	CancelSpan         buttonBarSpan
+	Job                *rsyncJob
+	Queue              []queuedRsync
+}
 
 // openRsync is the "R" key's (see keymap.go) and the context menu's
 // own action: builds Source/Destination defaults from whatever's
@@ -60,7 +91,7 @@ var rsyncFlagOrder = []string{rsyncLabelCopyContents, rsyncLabelArchive, rsyncLa
 func (r *Root) openRsync() {
 	r.resetRsyncForm()
 
-	// height is rsyncTitleBar's own row (1) plus newRsyncContentLayout's
+	// height is rsync.TitleBar's own row (1) plus newRsyncContentLayout's
 	// own stacked rows (9 + 5 + 2 + 1 + 1 + 1 + 1 = 20), checked against
 	// a real render (see this dialog's own live-tmux verification): a
 	// shorter value silently clips the bottom rows, the same lesson
@@ -80,8 +111,8 @@ func (r *Root) openRsync() {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.rsyncLayout.SetRect(x, y, width, height)
-	r.showOverlay(rsyncPage, r.rsyncLayout)
+	r.rsync.Layout.SetRect(x, y, width, height)
+	r.showOverlay(rsyncPage, r.rsync.Layout)
 }
 
 // defaultRsyncSource is openRsync's own Source default — see its doc
@@ -303,7 +334,7 @@ func (r *Root) newRsyncForm() *tview.Form {
 	return f
 }
 
-// resetRsyncForm rebuilds rsyncForm's fields and rsyncFlagsList's
+// resetRsyncForm rebuilds rsync.Form's fields and rsync.FlagsList's
 // toggles fresh for this open — Clear(true) first, the same reasoning
 // resetSedForm's own doc comment gives (Form has no other way to
 // remove everything a previous open left behind).
@@ -321,39 +352,39 @@ func (r *Root) newRsyncForm() *tview.Form {
 // starting point between the two — see internal/rsync's own
 // CopyContents doc comment for what the choice actually changes.
 func (r *Root) resetRsyncForm() {
-	r.rsyncForm.Clear(true)
+	r.rsync.Form.Clear(true)
 
-	r.rsyncSourceDefault = r.defaultRsyncSource()
-	r.rsyncSourceField = tview.NewInputField().SetLabel("Source")
-	r.rsyncSourceField.SetText(r.rsyncSourceDefault.text)
-	r.rsyncSourceField.SetChangedFunc(func(string) { r.renderRsyncPreview() })
-	r.rsyncForm.AddFormItem(r.rsyncSourceField)
+	r.rsync.SourceDefault = r.defaultRsyncSource()
+	r.rsync.SourceField = tview.NewInputField().SetLabel("Source")
+	r.rsync.SourceField.SetText(r.rsync.SourceDefault.text)
+	r.rsync.SourceField.SetChangedFunc(func(string) { r.renderRsyncPreview() })
+	r.rsync.Form.AddFormItem(r.rsync.SourceField)
 
-	r.rsyncDestinationDefault = r.defaultRsyncDestination()
-	r.rsyncDestinationField = tview.NewInputField().SetLabel("Destination")
-	r.rsyncDestinationField.SetText(r.rsyncDestinationDefault.text)
-	r.rsyncDestinationField.SetChangedFunc(func(string) { r.renderRsyncPreview() })
-	r.rsyncForm.AddFormItem(r.rsyncDestinationField)
+	r.rsync.DestinationDefault = r.defaultRsyncDestination()
+	r.rsync.DestinationField = tview.NewInputField().SetLabel("Destination")
+	r.rsync.DestinationField.SetText(r.rsync.DestinationDefault.text)
+	r.rsync.DestinationField.SetChangedFunc(func(string) { r.renderRsyncPreview() })
+	r.rsync.Form.AddFormItem(r.rsync.DestinationField)
 
-	r.rsyncExcludesField = tview.NewInputField().SetLabel("Exclude (comma-separated patterns)")
-	r.rsyncExcludesField.SetChangedFunc(func(string) { r.renderRsyncPreview() })
-	r.rsyncForm.AddFormItem(r.rsyncExcludesField)
+	r.rsync.ExcludesField = tview.NewInputField().SetLabel("Exclude (comma-separated patterns)")
+	r.rsync.ExcludesField.SetChangedFunc(func(string) { r.renderRsyncPreview() })
+	r.rsync.Form.AddFormItem(r.rsync.ExcludesField)
 
-	r.rsyncExtraArgsField = tview.NewInputField().SetLabel("Extra flags")
-	r.rsyncExtraArgsField.SetChangedFunc(func(string) { r.renderRsyncPreview() })
-	r.rsyncForm.AddFormItem(r.rsyncExtraArgsField)
+	r.rsync.ExtraArgsField = tview.NewInputField().SetLabel("Extra flags")
+	r.rsync.ExtraArgsField.SetChangedFunc(func(string) { r.renderRsyncPreview() })
+	r.rsync.Form.AddFormItem(r.rsync.ExtraArgsField)
 
 	// Tab off the form's own last field would otherwise just wrap back
-	// to Source instead of ever reaching rsyncFlagsList — the same
+	// to Source instead of ever reaching rsync.FlagsList — the same
 	// "verified directly against tview's own Form.Focus, not guessed"
 	// gap newConnectForm's own doc comment already found and fixed for
 	// the Connect dialog: Form.Focus unconditionally overwrites any
 	// SetDoneFunc with its own SetFinishedFunc whenever the form gains
 	// focus, so SetInputCapture — which runs first — is the only place
 	// left to intercept it.
-	r.rsyncExtraArgsField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	r.rsync.ExtraArgsField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.rsyncFlagsList)
+			r.app.SetFocus(r.rsync.FlagsList)
 			return nil
 		}
 		return event
@@ -365,23 +396,23 @@ func (r *Root) resetRsyncForm() {
 	// runRsync/runRsyncBackground's own doc comment): whatever
 	// combination Rsync last actually ran with becomes the new starting
 	// point here.
-	r.rsyncFlags = map[string]bool{
+	r.rsync.Flags = map[string]bool{
 		rsyncLabelCopyContents: r.settings.RsyncCopyContents,
 		rsyncLabelArchive:      r.settings.RsyncArchive,
 		rsyncLabelCompress:     r.settings.RsyncCompress,
 		rsyncLabelDelete:       r.settings.RsyncDelete,
 		rsyncLabelDryRun:       r.settings.RsyncDryRun,
 	}
-	r.rsyncFlagsList.Clear()
+	r.rsync.FlagsList.Clear()
 	for _, label := range rsyncFlagOrder {
 		label := label // capture for the closure below
-		r.rsyncFlagsList.AddItem(rsyncFlagItemText(label, r.rsyncFlags[label]), "", 0, func() { r.toggleRsyncFlag(label) })
+		r.rsync.FlagsList.AddItem(rsyncFlagItemText(label, r.rsync.Flags[label]), "", 0, func() { r.toggleRsyncFlag(label) })
 	}
 
 	r.renderRsyncPreview()
 }
 
-// rsyncFlagItemText renders one rsyncFlagsList row — the same filled/
+// rsyncFlagItemText renders one rsync.FlagsList row — the same filled/
 // outline-circle glyph (see checkboxText) sedFlagItemText already uses
 // for its own identical shape, so a boolean toggle looks the same
 // everywhere in this app regardless of which dialog it's in.
@@ -396,15 +427,15 @@ func rsyncFlagItemText(label string, checked bool) string {
 // (that dialog only ever previews on demand, via its own "Preview"
 // button, never live on every change).
 func (r *Root) toggleRsyncFlag(label string) {
-	r.rsyncFlags[label] = !r.rsyncFlags[label]
+	r.rsync.Flags[label] = !r.rsync.Flags[label]
 	for i, l := range rsyncFlagOrder {
 		if l == label {
-			r.rsyncFlagsList.SetItemText(i, rsyncFlagItemText(label, r.rsyncFlags[label]), "")
+			r.rsync.FlagsList.SetItemText(i, rsyncFlagItemText(label, r.rsync.Flags[label]), "")
 			break
 		}
 	}
 	if label == rsyncLabelCopyContents {
-		r.applyRsyncCopyContentsFlagToField(r.rsyncFlags[label])
+		r.applyRsyncCopyContentsFlagToField(r.rsync.Flags[label])
 	}
 	r.renderRsyncPreview()
 }
@@ -422,7 +453,7 @@ func (r *Root) toggleRsyncFlag(label string) {
 // comment for why this cosmetic edit doesn't lose a connection's own
 // tracked port the way a real edit deliberately would.
 //
-// A file default (rsyncSourceDefault.isFile) is special-cased instead:
+// A file default (rsync.SourceDefault.isFile) is special-cased instead:
 // "contents" has no meaning for a plain file, so checking the box
 // while the field still reads exactly that file's own default path
 // substitutes its parent directory (with the trailing "/") instead of
@@ -438,38 +469,38 @@ func (r *Root) toggleRsyncFlag(label string) {
 // no-op, never overriding something the user actually typed" guarantee
 // the plain slash-toggle below already gives.
 func (r *Root) applyRsyncCopyContentsFlagToField(on bool) {
-	text := r.rsyncSourceField.GetText()
+	text := r.rsync.SourceField.GetText()
 	if text == "" {
 		return
 	}
-	if d := r.rsyncSourceDefault; d.isFile {
+	if d := r.rsync.SourceDefault; d.isFile {
 		switch {
 		case on && text == d.text:
-			r.rsyncSourceField.SetText(d.parentDirWithSlash())
+			r.rsync.SourceField.SetText(d.parentDirWithSlash())
 			return
 		case !on && text == d.parentDirWithSlash():
-			r.rsyncSourceField.SetText(d.text)
+			r.rsync.SourceField.SetText(d.text)
 			return
 		}
 	}
 	switch {
 	case on && !strings.HasSuffix(text, "/"):
-		r.rsyncSourceField.SetText(text + "/")
+		r.rsync.SourceField.SetText(text + "/")
 	case !on && strings.HasSuffix(text, "/"):
-		r.rsyncSourceField.SetText(strings.TrimSuffix(text, "/"))
+		r.rsync.SourceField.SetText(strings.TrimSuffix(text, "/"))
 	}
 }
 
-// newRsyncFlagsList builds rsyncFlagsList once, from NewRoot — see
+// newRsyncFlagsList builds rsync.FlagsList once, from NewRoot — see
 // newRsyncForm's own package doc comment for why the five flag
 // toggles live here instead of as Form checkboxes. Repopulated fresh
-// on every open (see resetRsyncForm), the same as rsyncForm's own
+// on every open (see resetRsyncForm), the same as rsync.Form's own
 // fields.
 func (r *Root) newRsyncFlagsList() *tview.List {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetHighlightFullLine(true)
 	l.SetDoneFunc(r.hideOverlay) // Escape
-	// Tab/Backtab continue the same chain rsyncExtraArgsField's own
+	// Tab/Backtab continue the same chain rsync.ExtraArgsField's own
 	// SetInputCapture starts — a List has no SetExitFunc the way
 	// Button does, so this is the only place to intercept them; Escape
 	// itself is deliberately left alone here (passed straight through
@@ -478,10 +509,10 @@ func (r *Root) newRsyncFlagsList() *tview.List {
 	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.rsyncPickSourceBtn)
+			r.app.SetFocus(r.rsync.PickSourceBtn)
 			return nil
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.rsyncExtraArgsField)
+			r.app.SetFocus(r.rsync.ExtraArgsField)
 			return nil
 		}
 		return event
@@ -496,7 +527,7 @@ func (r *Root) newRsyncPreviewView() *tview.TextView {
 	return v
 }
 
-// newRsyncHintView builds rsyncHintView once — see its own doc comment
+// newRsyncHintView builds rsync.HintView once — see its own doc comment
 // on the Root struct for what it's for and why it's always present,
 // just blank when there's nothing to say.
 func (r *Root) newRsyncHintView() *tview.TextView {
@@ -506,132 +537,132 @@ func (r *Root) newRsyncHintView() *tview.TextView {
 	return v
 }
 
-// newRsyncPickButtons builds rsyncPickSourceBtn/rsyncPickDestinationBtn
+// newRsyncPickButtons builds rsync.PickSourceBtn/rsync.PickDestinationBtn
 // once, from NewRoot — each opens openRsyncTabPicker for its own field.
 // A real button pair, not a new keybinding: see the Root struct's own
-// doc comment on rsyncPickSourceBtn for why.
+// doc comment on rsync.PickSourceBtn for why.
 func (r *Root) newRsyncPickButtons() *tview.Flex {
-	pickSource := func() { r.openRsyncTabPicker(r.rsyncSourceField, &r.rsyncSourceDefault) }
-	pickDestination := func() { r.openRsyncTabPicker(r.rsyncDestinationField, &r.rsyncDestinationDefault) }
+	pickSource := func() { r.openRsyncTabPicker(r.rsync.SourceField, &r.rsync.SourceDefault) }
+	pickDestination := func() { r.openRsyncTabPicker(r.rsync.DestinationField, &r.rsync.DestinationDefault) }
 
-	r.rsyncPickSourceBtn = tview.NewButton("Pick source tab…").SetSelectedFunc(pickSource)
-	r.rsyncPickDestinationBtn = tview.NewButton("Pick destination tab…").SetSelectedFunc(pickDestination)
-	r.rsyncPickSourceBtn.SetInputCapture(spaceAlsoActivates(pickSource))
-	r.rsyncPickDestinationBtn.SetInputCapture(spaceAlsoActivates(pickDestination))
+	r.rsync.PickSourceBtn = tview.NewButton("Pick source tab…").SetSelectedFunc(pickSource)
+	r.rsync.PickDestinationBtn = tview.NewButton("Pick destination tab…").SetSelectedFunc(pickDestination)
+	r.rsync.PickSourceBtn.SetInputCapture(spaceAlsoActivates(pickSource))
+	r.rsync.PickDestinationBtn.SetInputCapture(spaceAlsoActivates(pickDestination))
 
-	// Tab/Backtab continue the chain rsyncFlagsList's own
-	// SetInputCapture starts and rsyncCancelBtn's own SetExitFunc picks
+	// Tab/Backtab continue the chain rsync.FlagsList's own
+	// SetInputCapture starts and rsync.CancelBtn's own SetExitFunc picks
 	// back up — see newRsyncButtons' own doc comment for the whole
 	// cycle.
-	r.rsyncPickSourceBtn.SetExitFunc(func(key tcell.Key) {
+	r.rsync.PickSourceBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.rsyncPickDestinationBtn)
+			r.app.SetFocus(r.rsync.PickDestinationBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.rsyncFlagsList)
+			r.app.SetFocus(r.rsync.FlagsList)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-	r.rsyncPickDestinationBtn.SetExitFunc(func(key tcell.Key) {
+	r.rsync.PickDestinationBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.rsyncCancelBtn)
+			r.app.SetFocus(r.rsync.CancelBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.rsyncPickSourceBtn)
+			r.app.SetFocus(r.rsync.PickSourceBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.rsyncPickSourceBtn, 0, 1, false).
-		AddItem(r.rsyncPickDestinationBtn, 0, 1, false)
+		AddItem(r.rsync.PickSourceBtn, 0, 1, false).
+		AddItem(r.rsync.PickDestinationBtn, 0, 1, false)
 }
 
-// newRsyncButtons builds rsyncForm's own action row once, from
+// newRsyncButtons builds rsync.Form's own action row once, from
 // NewRoot — a real Cancel/Run button pair, the same established shape
 // newDuplicateButtons/newChmodButtons/newSearchButtons already use for
 // theirs (see duplicateButtons' own doc comment on root.go for why
 // this, not a vertical List).
 func (r *Root) newRsyncButtons() *tview.Flex {
-	r.rsyncCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
-	r.rsyncRunBtn = tview.NewButton("Run").SetSelectedFunc(r.runRsync)
-	r.rsyncRunBackgroundBtn = tview.NewButton("Run in background").SetSelectedFunc(r.runRsyncBackground)
-	r.rsyncCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
-	r.rsyncRunBtn.SetInputCapture(spaceAlsoActivates(r.runRsync))
-	r.rsyncRunBackgroundBtn.SetInputCapture(spaceAlsoActivates(r.runRsyncBackground))
+	r.rsync.CancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
+	r.rsync.RunBtn = tview.NewButton("Run").SetSelectedFunc(r.runRsync)
+	r.rsync.RunBackgroundBtn = tview.NewButton("Run in background").SetSelectedFunc(r.runRsyncBackground)
+	r.rsync.CancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
+	r.rsync.RunBtn.SetInputCapture(spaceAlsoActivates(r.runRsync))
+	r.rsync.RunBackgroundBtn.SetInputCapture(spaceAlsoActivates(r.runRsyncBackground))
 
-	// Tab/Backtab close the chain rsyncExtraArgsField/rsyncFlagsList/
-	// rsyncPickButtons' own SetInputCapture/SetExitFunc calls start —
+	// Tab/Backtab close the chain rsync.ExtraArgsField/rsync.FlagsList/
+	// rsync.PickButtons' own SetInputCapture/SetExitFunc calls start —
 	// the same shape newConnectButtons' own doc comment explains in
 	// full: cycles Pick destination tab… -> Cancel -> Run -> Run in
 	// background -> back to Source, and the reverse.
-	r.rsyncCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.rsync.CancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.rsyncRunBtn)
+			r.app.SetFocus(r.rsync.RunBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.rsyncPickDestinationBtn)
+			r.app.SetFocus(r.rsync.PickDestinationBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-	r.rsyncRunBtn.SetExitFunc(func(key tcell.Key) {
+	r.rsync.RunBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.rsyncRunBackgroundBtn)
+			r.app.SetFocus(r.rsync.RunBackgroundBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.rsyncCancelBtn)
+			r.app.SetFocus(r.rsync.CancelBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-	r.rsyncRunBackgroundBtn.SetExitFunc(func(key tcell.Key) {
+	r.rsync.RunBackgroundBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
 			// Form.SetFocus(0), not a direct
-			// r.app.SetFocus(r.rsyncSourceField) — the identical real,
+			// r.app.SetFocus(r.rsync.SourceField) — the identical real,
 			// user-reported bug connectdialog.go's own
 			// connectConnectBtn.SetExitFunc found and fixed first (see
 			// its own doc comment for the full tview.Form internals):
-			// naming the field directly here left rsyncForm's own
+			// naming the field directly here left rsync.Form's own
 			// focusedElement counter stale, so the next Backtab from
 			// Source landed on the wrong field instead of wrapping back
 			// to Extra flags.
-			r.rsyncForm.SetFocus(0)
-			r.app.SetFocus(r.rsyncForm)
+			r.rsync.Form.SetFocus(0)
+			r.app.SetFocus(r.rsync.Form)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.rsyncRunBtn)
+			r.app.SetFocus(r.rsync.RunBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.rsyncCancelBtn, 0, 1, false).
-		AddItem(r.rsyncRunBtn, 0, 1, false).
-		AddItem(r.rsyncRunBackgroundBtn, 0, 1, false)
+		AddItem(r.rsync.CancelBtn, 0, 1, false).
+		AddItem(r.rsync.RunBtn, 0, 1, false).
+		AddItem(r.rsync.RunBackgroundBtn, 0, 1, false)
 }
 
-// newRsyncLayout wraps rsyncTitleBar (" Rsync ") above
-// rsyncContentLayout — the same widget/layout split
+// newRsyncLayout wraps rsync.TitleBar (" Rsync ") above
+// rsync.ContentLayout — the same widget/layout split
 // menu/menuTitleBar/menuLayout already established, mirrored by every
 // other dialog in this app.
 func (r *Root) newRsyncLayout() *tview.Flex {
-	r.rsyncTitleBar = newPlainTitleBar("Rsync")
-	r.rsyncContentLayout = r.newRsyncContentLayout()
+	r.rsync.TitleBar = newPlainTitleBar("Rsync")
+	r.rsync.ContentLayout = r.newRsyncContentLayout()
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.rsyncTitleBar, 1, 0, false).
-		AddItem(r.rsyncContentLayout, 0, 1, true)
+		AddItem(r.rsync.TitleBar, 1, 0, false).
+		AddItem(r.rsync.ContentLayout, 0, 1, true)
 }
 
-// newRsyncContentLayout stacks rsyncForm, rsyncFlagsList,
-// rsyncPreviewView (its own always-visible row, never a Form item —
+// newRsyncContentLayout stacks rsync.Form, rsync.FlagsList,
+// rsync.PreviewView (its own always-visible row, never a Form item —
 // see this file's own doc comment on root.go for the real bug that
-// shape rules out), rsyncHintView, rsyncSpacer, and rsyncButtons.
+// shape rules out), rsync.HintView, rsync.Spacer, and rsync.Buttons.
 //
-// 6 rows for rsyncForm: four fields (height 1 each) plus itemPadding
+// 6 rows for rsync.Form: four fields (height 1 each) plus itemPadding
 // (1 row between each pair, i.e. 3) plus 2 rows of the Form's own top/
 // bottom border padding — 4 + 3 + 2 - 3 = ... verified directly
 // against a real render (see this dialog's own live-tmux
@@ -639,7 +670,7 @@ func (r *Root) newRsyncLayout() *tview.Flex {
 // "check, don't just compute" discipline every dialog height in this
 // app's own history already had to learn the hard way at least once.
 //
-// rsyncHintView is a fixed extra row, always reserved, rather than a
+// rsync.HintView is a fixed extra row, always reserved, rather than a
 // row that only appears when there's actually a remote→remote hint to
 // show: a dialog whose own total height silently changes depending on
 // what Source/Destination happen to resolve to right now is a worse
@@ -648,13 +679,13 @@ func (r *Root) newRsyncLayout() *tview.Flex {
 // absorb it (checked directly, not assumed).
 func (r *Root) newRsyncContentLayout() *tview.Flex {
 	layout := tview.NewFlex().SetDirection(tview.FlexRow)
-	layout.AddItem(r.rsyncForm, 9, 0, true)
-	layout.AddItem(r.rsyncFlagsList, 5, 0, false)
-	layout.AddItem(r.rsyncPreviewView, 2, 0, false)
-	layout.AddItem(r.rsyncHintView, 1, 0, false)
-	layout.AddItem(r.rsyncPickButtons, 1, 0, false)
-	layout.AddItem(r.rsyncSpacer, 1, 0, false)
-	layout.AddItem(r.rsyncButtons, 1, 0, false)
+	layout.AddItem(r.rsync.Form, 9, 0, true)
+	layout.AddItem(r.rsync.FlagsList, 5, 0, false)
+	layout.AddItem(r.rsync.PreviewView, 2, 0, false)
+	layout.AddItem(r.rsync.HintView, 1, 0, false)
+	layout.AddItem(r.rsync.PickButtons, 1, 0, false)
+	layout.AddItem(r.rsync.Spacer, 1, 0, false)
+	layout.AddItem(r.rsync.Buttons, 1, 0, false)
 	return layout
 }
 
@@ -663,25 +694,25 @@ func (r *Root) newRsyncContentLayout() *tview.Flex {
 // and the job actually run on "Run" can never disagree about what's
 // about to happen.
 //
-// Source/Destination go through rsyncSourceDefault/
-// rsyncDestinationDefault's own endpoint method: still exactly what
+// Source/Destination go through rsync.SourceDefault/
+// rsync.DestinationDefault's own endpoint method: still exactly what
 // was defaulted from a connected panel, so its Host/Port/User travel
 // through too, or plain rsync remote syntax (or a local path) for
 // anything the user has since typed by hand — see rsyncFieldDefault's
 // own doc comment.
 func (r *Root) currentRsyncJob() rsync.Job {
-	excludes := splitRsyncExcludes(r.rsyncExcludesField.GetText())
+	excludes := splitRsyncExcludes(r.rsync.ExcludesField.GetText())
 	return rsync.Job{
-		Source:       r.rsyncSourceDefault.endpoint(r.rsyncSourceField.GetText()),
-		Destination:  r.rsyncDestinationDefault.endpoint(r.rsyncDestinationField.GetText()),
-		CopyContents: r.rsyncFlags[rsyncLabelCopyContents],
-		Archive:      r.rsyncFlags[rsyncLabelArchive],
-		Compress:     r.rsyncFlags[rsyncLabelCompress],
-		Delete:       r.rsyncFlags[rsyncLabelDelete],
-		DryRun:       r.rsyncFlags[rsyncLabelDryRun],
+		Source:       r.rsync.SourceDefault.endpoint(r.rsync.SourceField.GetText()),
+		Destination:  r.rsync.DestinationDefault.endpoint(r.rsync.DestinationField.GetText()),
+		CopyContents: r.rsync.Flags[rsyncLabelCopyContents],
+		Archive:      r.rsync.Flags[rsyncLabelArchive],
+		Compress:     r.rsync.Flags[rsyncLabelCompress],
+		Delete:       r.rsync.Flags[rsyncLabelDelete],
+		DryRun:       r.rsync.Flags[rsyncLabelDryRun],
 		Progress:     true,
 		Excludes:     excludes,
-		ExtraArgs:    strings.TrimSpace(r.rsyncExtraArgsField.GetText()),
+		ExtraArgs:    strings.TrimSpace(r.rsync.ExtraArgsField.GetText()),
 	}
 }
 
@@ -700,20 +731,20 @@ func splitRsyncExcludes(text string) []string {
 	return patterns
 }
 
-// renderRsyncPreview updates rsyncPreviewView with the exact command
+// renderRsyncPreview updates rsync.PreviewView with the exact command
 // currentRsyncJob would run right now — recomputed on every keystroke
 // and every flag toggle, so a change is always reflected before "Run"
 // is ever pressed, the same "never run something consequential
 // without showing what it is first" principle this project already
 // applies to the remote-archive confirm dialog. Also refreshes
-// rsyncHintView (see its own doc comment).
+// rsync.HintView (see its own doc comment).
 //
 // --delete is called out in the theme's own warning color when it's
 // on: the one flag here that turns a sync into "also remove whatever
 // isn't in Source anymore", worth a visibly different look rather
 // than blending into the rest of the command.
 func (r *Root) renderRsyncPreview() {
-	if r.rsyncPreviewView == nil {
+	if r.rsync.PreviewView == nil {
 		return
 	}
 	job := r.currentRsyncJob()
@@ -721,8 +752,8 @@ func (r *Root) renderRsyncPreview() {
 	if job.Delete {
 		command = strings.Replace(command, "'--delete'", "["+colorTag(r.theme.WarningText)+"]'--delete'[-]", 1)
 	}
-	r.rsyncPreviewView.SetText(command)
-	r.rsyncHintView.SetText(rsyncRelayHint(job, r.theme))
+	r.rsync.PreviewView.SetText(command)
+	r.rsync.HintView.SetText(rsyncRelayHint(job, r.theme))
 }
 
 // rsyncRelayHint is a one-line, warning-colored notice shown only when
@@ -792,7 +823,7 @@ func (r *Root) runRsync() {
 	r.runShellCommandFullScreen(job.Command(), activitylog.CategoryRsync)
 }
 
-// persistRsyncFlags writes rsyncFlags back to settings, self-adapting
+// persistRsyncFlags writes rsync.Flags back to settings, self-adapting
 // the same way applyDuplicateSelection already does for Duplicate: both
 // runRsync and runRsyncBackground call this once Source/Destination
 // have actually validated, so an aborted attempt never overwrites a
@@ -800,7 +831,7 @@ func (r *Root) runRsync() {
 func (r *Root) persistRsyncFlags() {
 	apply := func(key, label string) {
 		if opt, ok := optionSpecByKey(key); ok {
-			opt.apply(r, strconv.FormatBool(r.rsyncFlags[label]))
+			opt.apply(r, strconv.FormatBool(r.rsync.Flags[label]))
 		}
 	}
 	apply("rsync_copy_contents", rsyncLabelCopyContents)
@@ -855,10 +886,10 @@ func (r *Root) runRsyncBackground() {
 // AuthMethod doc comment), so there's nothing here to warn about
 // either way.
 func (r *Root) refuseBackgroundPasswordAuth(job rsync.Job) error {
-	if endpointTracksPasswordAuth(job.Source, r.rsyncSourceDefault) {
+	if endpointTracksPasswordAuth(job.Source, r.rsync.SourceDefault) {
 		return rsyncPasswordAuthRefusal("Source")
 	}
-	if endpointTracksPasswordAuth(job.Destination, r.rsyncDestinationDefault) {
+	if endpointTracksPasswordAuth(job.Destination, r.rsync.DestinationDefault) {
 		return rsyncPasswordAuthRefusal("Destination")
 	}
 	return nil

@@ -133,13 +133,13 @@ func (r *Root) resetSedForm() {
 	// back to Find instead of ever reaching sedFlagsList — the same
 	// "verified directly against tview's own Form.Focus, not guessed"
 	// gap newConnectForm's own doc comment already found and fixed for
-	// the Connect dialog (and rsyncExtraArgsField for Rsync): Form.Focus
+	// the Connect dialog (and rsync.ExtraArgsField for Rsync): Form.Focus
 	// unconditionally overwrites any SetDoneFunc with its own
 	// SetFinishedFunc whenever the form gains focus, so SetInputCapture
 	// — which runs first — is the only place left to intercept it. Set
 	// fresh here, in resetSedForm, rather than once in newSedForm: this
 	// field is itself rebuilt fresh on every open (see resetSedForm's
-	// own doc comment), unlike connectTagsField/rsyncExtraArgsField,
+	// own doc comment), unlike connectTagsField/rsync.ExtraArgsField,
 	// which are each built once and kept.
 	r.sedAdvancedField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
@@ -222,7 +222,7 @@ func (r *Root) newSedFlagsList() *tview.List {
 	// SetInputCapture starts and sedActions' own SetInputCapture picks
 	// back up below — a List has no SetExitFunc the way Button does,
 	// so this is the only place to intercept them (the identical shape
-	// rsyncFlagsList's own doc comment already establishes for Rsync);
+	// rsync.FlagsList's own doc comment already establishes for Rsync);
 	// Escape itself is deliberately left alone here (falls through via
 	// the final "return event"), reaching the List's own native
 	// handling and, through it, SetDoneFunc above. Previously missing

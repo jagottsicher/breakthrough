@@ -180,7 +180,7 @@ func TestPauseResumeSelectedTransferCenterOperationIgnoresRsync(t *testing.T) {
 	t.Cleanup(cancel)
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path}
 	job.opID = r.operations.Start(string(notify.CategoryRsync), "/a", r.panel.path)
-	r.rsyncJob = job
+	r.rsync.Job = job
 	r.openTransferCenter()
 	r.transferCenterTable.Select(1, 0)
 

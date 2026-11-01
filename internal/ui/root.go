@@ -1200,7 +1200,7 @@ type Root struct {
 	activityLogNoticeDontShowAgain bool
 	// activityLogNoticeSpacer1/2 are the blank rows between header/
 	// message/checkbox/buttons — named and styled the same way
-	// duplicateSpacer/compressSpacer/rsyncSpacer already are (see their
+	// duplicateSpacer/compressSpacer/rsync.Spacer already are (see their
 	// own doc comments) rather than left as anonymous tview.NewBox()
 	// calls, since a plain Box defaults to tview's own built-in
 	// PrimitiveBackgroundColor, not this dialog's SurfaceBackground —
@@ -1628,69 +1628,39 @@ type Root struct {
 	compressFormatIndex     int
 	compressOutputName      string
 
-	// The "Rsync" dialog (see rsync.go) — source/destination and the
-	// free-text Excludes/Extra flags fields live in rsyncForm; the five
+	// "Rsync" dialog (see rsync.go) — source/destination and
+	// free-text Excludes/Extra flags fields live in rsync.Form; the five
 	// boolean toggles (Copy contents/Archive/Compress/Delete/Dry run)
-	// live in rsyncFlagsList instead, the same List-with-a-relabeling-
+	// live in rsync.FlagsList instead, the same List-with-a-relabeling-
 	// glyph shape newSedFlagsList's own doc comment explains (a
 	// tview.Form checkbox can never keep a background different from a
-	// real text field's own). rsyncPreviewView is its own always-
-	// visible sibling row below the Form, never a Form item — the same
-	// "living outside the Form rules out a whole real bug class" reason
-	// duplicatePreviewView's own doc comment gives. rsyncButtons is a
-	// real Cancel/Run button pair, the current established shape for a
-	// dialog's own action row (see duplicateButtons' own doc comment),
+	// real text field's own). rsync.PreviewView is its own always-
+	// visible sibling row below Form, never a Form item — the same
+	// "living outside Form rules out a whole real bug class" reason
+	// duplicatePreviewView's own doc comment gives. rsync.Buttons is a
+	// real Cancel/Run button pair, the current established shape this
+	// dialog's own action row (see duplicate.Buttons' own doc comment),
 	// not Sed Replace's older vertical-List actions.
-	rsyncForm             *tview.Form
-	rsyncSourceField      *tview.InputField
-	rsyncDestinationField *tview.InputField
-	rsyncExcludesField    *tview.InputField
-	rsyncExtraArgsField   *tview.InputField
-	rsyncFlagsList        *tview.List
-	rsyncFlags            map[string]bool
-	rsyncPreviewView      *tview.TextView
-	rsyncSpacer           *tview.Box
-	rsyncCancelBtn        *tview.Button
-	rsyncRunBtn           *tview.Button
-	rsyncRunBackgroundBtn *tview.Button
-	rsyncButtons          *tview.Flex
-	rsyncTitleBar         *tview.TextView
-	rsyncContentLayout    *tview.Flex
-	rsyncLayout           *tview.Flex
-
-	// rsyncPickSourceBtn/rsyncPickDestinationBtn open the tab picker
-	// (see openRsyncTabPicker) for Source/Destination respectively —
-	// their own row, rsyncPickButtons, sits right above the Cancel/Run/
-	// Run in background row. A button, not a new keybinding: this
-	// project's own keymap rules leave no room for a further Ctrl
-	// combination or function key, and a button reaches every existing
-	// "quick, discoverable, keyboard *and* mouse" bar this app's
-	// dialogs already clear via Tab-focus + Enter/Space, the same as
-	// Cancel/Run themselves.
-	rsyncPickSourceBtn      *tview.Button
-	rsyncPickDestinationBtn *tview.Button
-	rsyncPickButtons        *tview.Flex
-
-	// rsyncSourceDefault/rsyncDestinationDefault record exactly what
-	// defaultRsyncSource/defaultRsyncDestination prefilled
-	// rsyncSourceField/rsyncDestinationField with when the dialog was
-	// last opened — see rsyncFieldDefault's own doc comment on why:
-	// currentRsyncJob needs this to tell "field still reads exactly
-	// what a connected panel was defaulted to, so its own port travels
-	// through to the real rsync invocation too" apart from "user typed
-	// something else since, treat as plain text with no knowable port".
-	// rsyncHintView is a single always-reserved row beneath
-	// rsyncPreviewView for the one thing the preview line itself has no
-	// room for: a visible warning when both Source and Destination
-	// resolve to a remote host, since rsync -e ssh always relays
-	// through this machine rather than transferring directly
-	// server-to-server. Blank whenever that doesn't apply, rather than
-	// a conditionally-hidden row — see newRsyncContentLayout's own doc
+	//
+	// rsync.PickSourceBtn/rsync.PickDestinationBtn open the tab picker
+	// (see openRsyncTabPicker) for Source/Destination respectively — their
+	// own row, rsync.PickButtons, sits right above the Cancel/Run/Run in
+	// background row.
+	//
+	// rsync.SourceDefault/rsync.DestinationDefault back
+	// defaultRsyncSource/defaultRsyncDestination telling "still what
+	// resetRsyncForm filled in, update it through real rsync invocation
+	// too" apart from "user typed something else since, treat as plain
+	// text with no knowable port". rsync.HintView is a single always-
+	// reserved row beneath rsync.PreviewView for one thing the preview
+	// line itself has no room for: a visible warning when both Source and
+	// Destination resolve to a remote host, since rsync -e ssh always
+	// relays through this machine rather than transferring directly
+	// server-to-server. Blank whenever it doesn't apply, rather than a
+	// conditionally-hidden row — see newRsyncContentLayout's own doc
 	// comment on why a fixed row budget is simpler than resizing the
 	// dialog live.
-	rsyncSourceDefault      rsyncFieldDefault
-	rsyncDestinationDefault rsyncFieldDefault
-	rsyncHintView           *tview.TextView
+	rsync rsyncState
 
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
@@ -2317,7 +2287,7 @@ type Root struct {
 	// the mail badge (mailBadgeSpan, bottombar.go's own mailBadgeText)
 	// — launches the configured mail client, the same action "ge"
 	// already reaches — and each of the three background-job progress
-	// segments' own "✕" (pasteCancelSpan/rsyncCancelSpan/
+	// segments' own "✕" (pasteCancelSpan/rsync.CancelSpan/
 	// compressCancelSpan) — asks to stop just the currently running
 	// job, never its queue (see bgjobcancel.go's own
 	// confirmCancelCurrentPaste/Rsync/Compress). Each is zero-value (an
@@ -2346,7 +2316,6 @@ type Root struct {
 	clipboardClearSpan  buttonBarSpan
 	mailBadgeSpan       buttonBarSpan
 	pasteCancelSpan     buttonBarSpan
-	rsyncCancelSpan     buttonBarSpan
 	compressCancelSpan  buttonBarSpan
 	labelScanCancelSpan buttonBarSpan
 	gitStatusSpan       buttonBarSpan
@@ -2525,17 +2494,6 @@ type Root struct {
 	// whenever nothing is waiting.
 	pasteQueue []queuedPaste
 
-	// rsyncJob is the currently-running backgrounded rsync, if any (see
-	// startRsyncBackground's own doc comment in rsyncjob.go) — entirely
-	// independent of pasteJob above: the two never share state, a lock,
-	// or a queue, since a Paste and a background rsync are two separate
-	// process trees with nothing to serialize between them. nil whenever
-	// no background rsync is currently running.
-	rsyncJob *rsyncJob
-	// rsyncQueue mirrors pasteQueue for a background rsync asked for
-	// while one is already running — see advanceRsyncQueue.
-	rsyncQueue []queuedRsync
-
 	// compressJob is the currently-running backgrounded Compress or
 	// Extract, if any (see startCompressJob's own doc comment in
 	// compressjob.go) — entirely independent of pasteJob/rsyncJob above
@@ -2543,7 +2501,7 @@ type Root struct {
 	// separate process tree with nothing to serialize against either.
 	// nil whenever no background Compress/Extract is currently running.
 	compressJob *compressJob
-	// compressQueue mirrors rsyncQueue for a further Compress/Extract
+	// compressQueue mirrors rsync.Queue for a further Compress/Extract
 	// asked for while one is already running — see advanceCompressQueue.
 	compressQueue []compressRequest
 
@@ -3101,14 +3059,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The "Rsync" dialog (see rsync.go) — same "built once here,
 	// contents rebuilt fresh per open" shape as Multiply just above.
-	r.rsyncForm = r.newRsyncForm()
-	r.rsyncFlagsList = r.newRsyncFlagsList()
-	r.rsyncPreviewView = r.newRsyncPreviewView()
-	r.rsyncHintView = r.newRsyncHintView()
-	r.rsyncSpacer = tview.NewBox()
-	r.rsyncPickButtons = r.newRsyncPickButtons()
-	r.rsyncButtons = r.newRsyncButtons()
-	r.rsyncLayout = r.newRsyncLayout()
+	r.rsync.Form = r.newRsyncForm()
+	r.rsync.FlagsList = r.newRsyncFlagsList()
+	r.rsync.PreviewView = r.newRsyncPreviewView()
+	r.rsync.HintView = r.newRsyncHintView()
+	r.rsync.Spacer = tview.NewBox()
+	r.rsync.PickButtons = r.newRsyncPickButtons()
+	r.rsync.Buttons = r.newRsyncButtons()
+	r.rsync.Layout = r.newRsyncLayout()
 
 	// The "Connect" dialog and its own host-key trust prompt (see
 	// connectdialog.go/hostkeyconfirm.go) — a fixed field set, built
@@ -3412,7 +3370,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
 	r.AddPage(compressPage, r.compressLayout, false, false)
-	r.AddPage(rsyncPage, r.rsyncLayout, false, false)
+	r.AddPage(rsyncPage, r.rsync.Layout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just below gives.
@@ -4526,7 +4484,7 @@ func (r *Root) RequestCancel() {
 	// Ctrl+C path deliberately stays coarse. Unaffected by, and unaware
 	// of, Paste's own pause dialog above — see pastepause.go's own
 	// package doc comment.
-	if r.rsyncJob != nil || r.compressJob != nil {
+	if r.rsync.Job != nil || r.compressJob != nil {
 		r.openConfirm("Cancel the running Rsync and/or Compress/Extract job(s)? Their own queued jobs are dropped too.", "Yes, cancel them", func() {
 			r.cancelRsyncJob()
 			r.cancelCompressJob()

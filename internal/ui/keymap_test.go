@@ -313,7 +313,7 @@ func TestChordMenuCancelRsyncOpensItsOwnDialog(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	root.rsyncJob = &rsyncJob{ctx: ctx, cancel: cancel}
+	root.rsync.Job = &rsyncJob{ctx: ctx, cancel: cancel}
 	root.HandlePlainKey(runeEvent('m'))
 	root.HandlePlainKey(runeEvent('R'))
 	if root.activePage != bgJobCancelPage {

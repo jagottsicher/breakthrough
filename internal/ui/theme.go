@@ -252,7 +252,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// SurfaceBackground, matching styleList's own call just above — a
 	// plain tview.NewBox() defaults to tview's own built-in
 	// PrimitiveBackgroundColor otherwise, the same mismatch
-	// duplicateSpacer/compressSpacer/rsyncSpacer's own doc comments
+	// duplicateSpacer/compressSpacer/rsync.Spacer's own doc comments
 	// already warn about.
 	r.activityLogNoticeSpacer1.SetBackgroundColor(theme.SurfaceBackground)
 	r.activityLogNoticeSpacer2.SetBackgroundColor(theme.SurfaceBackground)
@@ -712,25 +712,25 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.compressTitleBar.SetTextColor(theme.TextColor)
 	}
 
-	r.rsyncForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.rsyncForm.SetLabelColor(theme.TextColor)
-	r.rsyncForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.rsyncForm.SetFieldTextColor(theme.TextColor)
-	styleList(r.rsyncFlagsList, theme)
-	r.rsyncPreviewView.SetBackgroundColor(theme.SurfaceBackground)
-	r.rsyncPreviewView.SetTextColor(theme.TextColor)
-	r.rsyncHintView.SetBackgroundColor(theme.SurfaceBackground)
-	r.rsyncHintView.SetTextColor(theme.TextColor)
-	r.rsyncSpacer.SetBackgroundColor(theme.SurfaceBackground)
-	r.rsyncPickButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.rsyncPickSourceBtn, theme)
-	styleButton(r.rsyncPickDestinationBtn, theme)
-	r.rsyncButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.rsyncCancelBtn, theme)
-	styleButton(r.rsyncRunBtn, theme)
-	styleButton(r.rsyncRunBackgroundBtn, theme)
-	r.rsyncTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.rsyncTitleBar.SetTextColor(theme.TextColor)
+	r.rsync.Form.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsync.Form.SetLabelColor(theme.TextColor)
+	r.rsync.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.rsync.Form.SetFieldTextColor(theme.TextColor)
+	styleList(r.rsync.FlagsList, theme)
+	r.rsync.PreviewView.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsync.PreviewView.SetTextColor(theme.TextColor)
+	r.rsync.HintView.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsync.HintView.SetTextColor(theme.TextColor)
+	r.rsync.Spacer.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsync.PickButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.rsync.PickSourceBtn, theme)
+	styleButton(r.rsync.PickDestinationBtn, theme)
+	r.rsync.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.rsync.CancelBtn, theme)
+	styleButton(r.rsync.RunBtn, theme)
+	styleButton(r.rsync.RunBackgroundBtn, theme)
+	r.rsync.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.rsync.TitleBar.SetTextColor(theme.TextColor)
 
 	r.sedPreviewStatus.SetBackgroundColor(theme.SurfaceBackground)
 	r.sedPreviewStatus.SetTextColor(theme.TextColor)
