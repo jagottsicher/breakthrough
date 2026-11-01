@@ -28,6 +28,28 @@ const hashOperationType = "hash"
 
 const propertiesPage = "properties"
 
+// propertiesState holds the Properties overlay's widgets, title-bar
+// drag state, currently shown target/stat/hashes, in-progress edit
+// (Dirty), and keyboard-navigation cursor (FocusIndex).
+type propertiesState struct {
+	Pages       *tview.Pages
+	TitleBar    *tview.TextView
+	Text        *tview.TextView
+	EditField   *tview.InputField
+	EditTarget  propertyField
+	Buttons     *tview.Flex
+	CancelBtn   *tview.Button
+	SaveBtn     *tview.Button
+	Dragging    bool
+	DragOffsetX int
+	DragOffsetY int
+	FocusIndex  int
+	Target      string
+	Stat        fsops.Info
+	Hashes      *fsops.Hashes
+	Dirty       bool
+}
+
 // propertyField identifies one editable region within the Properties
 // overlay — see propertySpan and propertiesBuilder.
 type propertyField int
@@ -64,7 +86,7 @@ const (
 // newPropertiesView) follow immediately after, as stops
 // len(currentFieldOrder()) and len(currentFieldOrder())+1 — not part of
 // this slice themselves, since they're real tview.Button widgets with
-// their own focus, not text spans within propertiesText.
+// their own focus, not text spans within properties.Text.
 //
 // fieldRecursiveApplyOwner/fieldRecursiveApplyGroup are deliberately NOT
 // listed here — see currentFieldOrder, which is what every caller
@@ -83,7 +105,7 @@ var baseFieldOrder = []propertyField{
 // target, with fieldRecursiveApplyOwner and fieldRecursiveApplyGroup
 // spliced in right after fieldOwner and fieldGroup respectively —
 // matching exactly where recursiveApplyToggle appends each one's own
-// glyph — once isDirish(r.propertiesStat) is true. Unchanged for
+// glyph — once isDirish(r.properties.Stat) is true. Unchanged for
 // anything else, since a non-directory target never shows either toggle
 // at all (see renderProperties' own isDirish guards); every
 // Tab-navigation function below reads the order through this method
@@ -101,7 +123,7 @@ var baseFieldOrder = []propertyField{
 // (see savePropertiesEdit's own two separate Chown/ChownRecursive
 // dispatches).
 func (r *Root) currentFieldOrder() []propertyField {
-	if !isDirish(r.propertiesStat) {
+	if !isDirish(r.properties.Stat) {
 		return baseFieldOrder
 	}
 	order := make([]propertyField, 0, len(baseFieldOrder)+2)
@@ -119,7 +141,7 @@ func (r *Root) currentFieldOrder() []propertyField {
 
 // propertyFieldIndex returns field's position in the Properties
 // overlay's current field order (see currentFieldOrder) — used both to
-// seed propertiesFocusIndex when a field is clicked (see
+// seed properties.FocusIndex when a field is clicked (see
 // activatePropertyField) and, in reverse, by focusedPropertyField to
 // render the right one highlighted.
 func (r *Root) propertyFieldIndex(field propertyField) (int, bool) {
@@ -220,7 +242,7 @@ func (pb *propertiesBuilder) field(label, value string) {
 
 // focusTag returns the style tag/reset pair a span for field should use:
 // a brighter, bolder "this one has keyboard focus" style (pb.theme's own
-// FocusedBackground) if it's the one propertiesFocusIndex currently
+// FocusedBackground) if it's the one properties.FocusIndex currently
 // points at (focused — see focusedPropertyField), otherwise the plain
 // "this is editable" style (pb.theme's EditableBackground) every field
 // already had. Neither ever touches the foreground color, only
@@ -358,41 +380,41 @@ func (pb *propertiesBuilder) mtimeField(t time.Time, focused propertyField) {
 }
 
 // newPropertiesView creates the Properties overlay: a read-only text
-// display (propertiesText) that individual fields' values are drawn on
+// display (properties.Text) that individual fields' values are drawn on
 // top of the highlighted spans of (see propertiesBuilder), a single
-// reusable inline input (propertiesEditField, shown only while text-
+// reusable inline input (properties.EditField, shown only while text-
 // editing a field, repositioned over whichever one that is — the same
 // "one shared field, repositioned per use" approach Root.rename/
 // Root.prompt already use), and a Cancel/Save button row
-// (propertiesButtons) visible from the moment Properties opens (see
+// (properties.Buttons) visible from the moment Properties opens (see
 // openProperties) — not gated behind any edit having started, per the
 // user's own request. All three live in their own tview.Pages
-// (r.properties) rather than Root's top-level one: unlike Root's
-// overlays, which are mutually exclusive, propertiesText must stay
-// visible under propertiesEditField/propertiesButtons, and tview.Pages
+// (r.properties.Pages) rather than Root's top-level one: unlike Root's
+// overlays, which are mutually exclusive, properties.Text must stay
+// visible under properties.EditField/properties.Buttons, and tview.Pages
 // happily shows multiple of its own pages at once as long as nothing
 // tells it not to — Root's showOverlay/hideOverlay only enforce
 // single-overlay-at-a-time as their own policy on top of that, not a
 // limitation of Pages itself.
 //
-// Keyboard navigation between the fields inside propertiesText and the
+// Keyboard navigation between the fields inside properties.Text and the
 // two buttons is hand-rolled (see capturePropertiesKey,
 // setPropertiesFocus, movePropertiesFocus) rather than left to tview's
 // own focus system, for the same reason every other click target in this
 // overlay is tracked via propertySpan instead of tview's region/
-// Highlight mechanism: propertiesText's fields aren't separate
+// Highlight mechanism: properties.Text's fields aren't separate
 // Primitives tview could cycle focus between on its own. The two buttons
 // ARE real Primitives, though, and do get real keyboard focus once
-// navigation reaches them (see propertiesCancelBtn/propertiesSaveBtn's
+// navigation reaches them (see properties.CancelBtn/properties.SaveBtn's
 // SetExitFunc below) — their own InputHandler already does the right
 // thing for Enter; SetInputCapture adds the same for Space, per the
 // user's own request that either activate a focused button.
 func (r *Root) newPropertiesView() *tview.Pages {
-	r.propertiesText = tview.NewTextView()
-	r.propertiesText.SetBorderPadding(0, 0, 1, 1)
-	r.propertiesText.SetDynamicColors(true) // needed for focusTag's style tags
-	r.propertiesText.SetInputCapture(r.capturePropertiesKey)
-	r.propertiesText.SetMouseCapture(r.capturePropertiesMouse)
+	r.properties.Text = tview.NewTextView()
+	r.properties.Text.SetBorderPadding(0, 0, 1, 1)
+	r.properties.Text.SetDynamicColors(true) // needed for focusTag's style tags
+	r.properties.Text.SetInputCapture(r.capturePropertiesKey)
+	r.properties.Text.SetMouseCapture(r.capturePropertiesMouse)
 
 	// Colored via r.theme.FocusedBackground (see Root.applyTheme), not
 	// r.theme.EditableBackground: this field is only ever shown for
@@ -400,32 +422,32 @@ func (r *Root) newPropertiesView() *tview.Pages {
 	// comment), so it should always carry that look, not the plainer
 	// "merely editable" one the span underneath no longer shows once
 	// this covers it.
-	r.propertiesEditField = tview.NewInputField()
-	r.propertiesEditField.SetDoneFunc(r.finishPropertyEdit)
+	r.properties.EditField = tview.NewInputField()
+	r.properties.EditField.SetDoneFunc(r.finishPropertyEdit)
 	// Installed once here, not per-activation: octalDigitCapture's own
-	// active() check already looks at propertiesEditTarget fresh on
+	// active() check already looks at properties.EditTarget fresh on
 	// every keystroke, so it only actually changes what typing does
 	// while fieldPermOctal is the field currently being edited — every
 	// other field type (Name, Owner/Group's text fallback, the
 	// date/time fields) types normally, untouched by this at all.
-	r.propertiesEditField.SetInputCapture(octalDigitCapture(r.propertiesEditField, func() bool {
-		return r.propertiesEditTarget == fieldPermOctal
+	r.properties.EditField.SetInputCapture(octalDigitCapture(r.properties.EditField, func() bool {
+		return r.properties.EditTarget == fieldPermOctal
 	}))
 
-	r.propertiesButtons = r.newPropertiesButtons()
+	r.properties.Buttons = r.newPropertiesButtons()
 
 	// A one-row "Properties" title bar, the same shape toolWindow's own
 	// (see toolwindow.go) and Details' own (see detailssidebar.go) title
 	// bars have, per the user's own explicit request that every one of
-	// these panels get one. Positioned like propertiesButtons below —
+	// these panels get one. Positioned like properties.Buttons below —
 	// an absolutely-positioned page of its own within pages (see
 	// resizeProperties) — rather than left to resize=true the way
-	// propertiesText is: reserving its own row is what
+	// properties.Text is: reserving its own row is what
 	// pages.SetBorderPadding(1, 0, 0, 0) just below actually does, by
-	// shrinking propertiesText's own resize=true inner rect to leave
+	// shrinking properties.Text's own resize=true inner rect to leave
 	// room for it.
-	r.propertiesTitleBar = tview.NewTextView()
-	r.propertiesTitleBar.SetWrap(false)
+	r.properties.TitleBar = tview.NewTextView()
+	r.properties.TitleBar.SetWrap(false)
 	// Text is set by renderPropertiesTitleBar instead, not here: it needs
 	// the window's own current width, not yet known at construction time
 	// (see resizeProperties/moveProperties, both of which call it once
@@ -433,10 +455,10 @@ func (r *Root) newPropertiesView() *tview.Pages {
 
 	pages := tview.NewPages()
 	pages.SetBorderPadding(1, 0, 0, 0)
-	pages.AddPage("text", r.propertiesText, true, true)
-	pages.AddPage("editfield", r.propertiesEditField, false, false)
-	pages.AddPage("buttons", r.propertiesButtons, false, true)
-	pages.AddPage("titlebar", r.propertiesTitleBar, false, true)
+	pages.AddPage("text", r.properties.Text, true, true)
+	pages.AddPage("editfield", r.properties.EditField, false, false)
+	pages.AddPage("buttons", r.properties.Buttons, false, true)
+	pages.AddPage("titlebar", r.properties.TitleBar, false, true)
 
 	// Installed on pages itself, the shared ancestor of all three pages
 	// above — see hashesMouseCapture's own doc comment for why that's
@@ -460,14 +482,14 @@ func (r *Root) newPropertiesView() *tview.Pages {
 
 // newPropertiesButtons builds the always-visible Cancel/Save row (see
 // newPropertiesView) and stores the two buttons directly
-// (propertiesCancelBtn/propertiesSaveBtn) — setPropertiesFocus needs to
+// (properties.CancelBtn/properties.SaveBtn) — setPropertiesFocus needs to
 // give either of them real keyboard focus individually, which the Flex
 // container alone doesn't let it address.
 func (r *Root) newPropertiesButtons() *tview.Flex {
-	r.propertiesCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelPropertiesEdit)
-	r.propertiesSaveBtn = tview.NewButton("Save").SetSelectedFunc(r.savePropertiesEdit)
-	r.propertiesCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelPropertiesEdit))
-	r.propertiesSaveBtn.SetInputCapture(spaceAlsoActivates(r.savePropertiesEdit))
+	r.properties.CancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelPropertiesEdit)
+	r.properties.SaveBtn = tview.NewButton("Save").SetSelectedFunc(r.savePropertiesEdit)
+	r.properties.CancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelPropertiesEdit))
+	r.properties.SaveBtn.SetInputCapture(spaceAlsoActivates(r.savePropertiesEdit))
 
 	// n is deliberately NOT captured once here: newPropertiesButtons runs
 	// exactly once, at widget construction, but currentFieldOrder's own
@@ -484,7 +506,7 @@ func (r *Root) newPropertiesButtons() *tview.Flex {
 	// place from either button: cancelPropertiesEdit, matching Escape's
 	// meaning everywhere else it's already used in this overlay (and in
 	// every other overlay in this app).
-	r.propertiesCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.properties.CancelBtn.SetExitFunc(func(key tcell.Key) {
 		n := len(r.currentFieldOrder())
 		switch key {
 		case tcell.KeyTab:
@@ -495,7 +517,7 @@ func (r *Root) newPropertiesButtons() *tview.Flex {
 			r.cancelPropertiesEdit()
 		}
 	})
-	r.propertiesSaveBtn.SetExitFunc(func(key tcell.Key) {
+	r.properties.SaveBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
 			r.setPropertiesFocus(0) // wrap to the first field
@@ -508,20 +530,20 @@ func (r *Root) newPropertiesButtons() *tview.Flex {
 	// A plain mouse click also moves real tview focus to a button
 	// (Button.MouseHandler's own MouseLeftDown case) without going
 	// through setPropertiesFocus at all — SetFocusFunc is what keeps
-	// propertiesFocusIndex (and so the rendered highlight) in sync with
+	// properties.FocusIndex (and so the rendered highlight) in sync with
 	// that path too, not just the keyboard one.
-	r.propertiesCancelBtn.SetFocusFunc(func() {
-		r.propertiesFocusIndex = len(r.currentFieldOrder())
+	r.properties.CancelBtn.SetFocusFunc(func() {
+		r.properties.FocusIndex = len(r.currentFieldOrder())
 		r.rerenderProperties()
 	})
-	r.propertiesSaveBtn.SetFocusFunc(func() {
-		r.propertiesFocusIndex = len(r.currentFieldOrder()) + 1
+	r.properties.SaveBtn.SetFocusFunc(func() {
+		r.properties.FocusIndex = len(r.currentFieldOrder()) + 1
 		r.rerenderProperties()
 	})
 
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
-	flex.AddItem(r.propertiesCancelBtn, 0, 1, false)
-	flex.AddItem(r.propertiesSaveBtn, 0, 1, false)
+	flex.AddItem(r.properties.CancelBtn, 0, 1, false)
+	flex.AddItem(r.properties.SaveBtn, 0, 1, false)
 	return flex
 }
 
@@ -579,7 +601,7 @@ func (r *Root) openProperties() {
 	x, y := r.propertiesAnchor()
 	r.resizeProperties(x, y)
 
-	r.showOverlayWithRestore(propertiesPage, r.properties, r.restoreProperties)
+	r.showOverlayWithRestore(propertiesPage, r.properties.Pages, r.restoreProperties)
 }
 
 // propertiesCurrentEntry is the Properties button/'i' key's actual
@@ -627,17 +649,17 @@ func (r *Root) loadPropertiesTarget() error {
 	}
 
 	r.cancelHashComputationOperation() // a previous target's own hash computation, if still running, is now stale
-	r.propertiesTarget = r.target
-	r.propertiesStat = info
+	r.properties.Target = r.target
+	r.properties.Stat = info
 	// Adopts Details' own result immediately if it already has one for
 	// this exact file (see detailsHashesFor's own doc comment) — nil
 	// otherwise, same as always. Per the user's own explicit request:
 	// opening Properties on a file Details already hashed shouldn't
 	// show a fresh "press h" hint (or need recomputing) just because
 	// Properties itself is only now opening on it.
-	r.propertiesHashes = r.detailsHashesFor(r.propertiesTarget)
-	r.propertiesDirty = false
-	r.propertiesFocusIndex = -1 // nothing focused yet — see setPropertiesFocus
+	r.properties.Hashes = r.detailsHashesFor(r.properties.Target)
+	r.properties.Dirty = false
+	r.properties.FocusIndex = -1 // nothing focused yet — see setPropertiesFocus
 	r.stagedName = info.Name
 	r.stagedMode = info.Mode.Perm()
 	r.stagedMtime = info.ModTime
@@ -647,15 +669,15 @@ func (r *Root) loadPropertiesTarget() error {
 	r.stagedRecursiveGroup = false
 
 	r.renderProperties()
-	r.properties.HidePage("editfield")
+	r.properties.Pages.HidePage("editfield")
 	return nil
 }
 
 // renderProperties rebuilds the Properties overlay's text from
-// propertiesStat (the read-only fields) and the staged values (Name,
+// properties.Stat (the read-only fields) and the staged values (Name,
 // Permissions, Modified — see openProperties), plus a hash section for
 // anything that isn't a directory (or resolves to one — see isDirish): a
-// hint to compute them until propertiesHashes is set, then the digests
+// hint to compute them until properties.Hashes is set, then the digests
 // themselves. Called after every edit (a permission toggle, finishing a
 // text field, computing hashes, a focus change) to keep the display,
 // propertySpans, and the focus highlight all in sync with current state.
@@ -665,43 +687,43 @@ func (r *Root) renderProperties() {
 
 	pb.editableField("Name", r.stagedName, fieldName, focused)
 	pb.newline()
-	pb.field("Type", classifyKind(r.propertiesStat))
+	pb.field("Type", classifyKind(r.properties.Stat))
 	pb.newline()
 	pb.permissionsField(r.stagedMode, focused)
-	if r.propertiesStat.Nlink > 1 && !r.propertiesStat.IsDir {
+	if r.properties.Stat.Nlink > 1 && !r.properties.Stat.IsDir {
 		// Not shown for directories: every directory has Nlink >= 2
 		// trivially (its own "." entry, plus each subdirectory's ".."),
 		// which isn't the "this content also exists under another name"
 		// signal that's actually worth flagging.
 		pb.newline()
-		pb.field("Links", fmt.Sprintf("%d (shared with other names)", r.propertiesStat.Nlink))
+		pb.field("Links", fmt.Sprintf("%d (shared with other names)", r.properties.Stat.Nlink))
 	}
 	pb.newline()
 	pb.editableField("Owner", r.stagedOwner, fieldOwner, focused)
-	if isDirish(r.propertiesStat) {
+	if isDirish(r.properties.Stat) {
 		pb.recursiveApplyToggle(fieldRecursiveApplyOwner, r.stagedRecursiveOwner)
 	}
 	pb.newline()
 	pb.editableField("Group", r.stagedGroup, fieldGroup, focused)
-	if isDirish(r.propertiesStat) {
+	if isDirish(r.properties.Stat) {
 		pb.recursiveApplyToggle(fieldRecursiveApplyGroup, r.stagedRecursiveGroup)
 	}
 	pb.newline()
-	pb.field("Size", sizeWithBytes(r.propertiesStat.Size))
+	pb.field("Size", sizeWithBytes(r.properties.Stat.Size))
 	pb.newline()
 	pb.mtimeField(r.stagedMtime, focused)
 	pb.newline()
-	pb.field("Path", r.propertiesStat.Path)
-	if r.propertiesStat.IsSymlink && r.propertiesStat.LinkTarget != "" {
+	pb.field("Path", r.properties.Stat.Path)
+	if r.properties.Stat.IsSymlink && r.properties.Stat.LinkTarget != "" {
 		pb.newline()
-		pb.field("Link target", r.propertiesStat.LinkTarget)
+		pb.field("Link target", r.properties.Stat.LinkTarget)
 	}
-	if r.propertiesStat.MountPoint {
+	if r.properties.Stat.MountPoint {
 		pb.newline()
 		pb.field("Mount point", "yes")
 	}
-	if r.propertiesStat.IsSymlink {
-		if chain := fsops.ResolveChain(r.propertiesTarget); len(chain.Hops) > 1 {
+	if r.properties.Stat.IsSymlink {
+		if chain := fsops.ResolveChain(r.properties.Target); len(chain.Hops) > 1 {
 			// Only shown once there's an actual chain (more than one
 			// hop) — a simple single-target symlink is already fully
 			// described by "Link target" and "Type" above.
@@ -711,23 +733,23 @@ func (r *Root) renderProperties() {
 	}
 
 	text := pb.b.String()
-	if !isDirish(r.propertiesStat) {
+	if !isDirish(r.properties.Stat) {
 		r.hashSectionRow = pb.row + 2 // +1 past the fields' own last line, +1 for the blank separator
 		r.hashButtonWidth = 0
 		switch {
 		case r.hashInProgress:
-			text += "\n\n" + hashAnimationFrames[r.hashAnimFrame%len(hashAnimationFrames)] + " Computing hashes" + hashProgressSuffix(r.hashBytesRead.Load(), r.propertiesStat.Size)
-		case r.propertiesHashes == nil:
+			text += "\n\n" + hashAnimationFrames[r.hashAnimFrame%len(hashAnimationFrames)] + " Computing hashes" + hashProgressSuffix(r.hashBytesRead.Load(), r.properties.Stat.Size)
+		case r.properties.Hashes == nil:
 			hint, width := singleKeyHint(r.theme, "h", "to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512")
 			text += "\n\n" + hint
 			r.hashButtonWidth = width
 		default:
-			text += "\n\n" + hashLines(r.propertiesHashes, "", propertiesHashFieldWidth)
+			text += "\n\n" + hashLines(r.properties.Hashes, "", propertiesHashFieldWidth)
 		}
 	}
 
 	r.propertySpans = pb.spans
-	r.propertiesText.SetText(text)
+	r.properties.Text.SetText(text)
 }
 
 // resizeProperties recomputes the overlay's rect from its current text
@@ -735,11 +757,11 @@ func (r *Root) renderProperties() {
 // where it last was — openProperties passes the context menu's own
 // position (first open), everything else passes wherever the overlay
 // currently sits (a resize after an edit, not a reposition). Two lines
-// are reserved beyond propertiesText's own content: the Cancel/Save row
+// are reserved beyond properties.Text's own content: the Cancel/Save row
 // at the bottom and the title bar at the top (see newPropertiesView),
 // both visible for as long as Properties itself is — leaving either out
 // of the reserved height would leave it with nothing of its own to sit
-// on, overlapping propertiesText's own first/last line instead.
+// on, overlapping properties.Text's own first/last line instead.
 // propertiesAnchor is where the Properties window opens: over the row it
 // is actually about.
 //
@@ -774,17 +796,17 @@ func (r *Root) propertiesAnchor() (x, y int) {
 }
 
 func (r *Root) resizeProperties(x, y int) {
-	width, height := textSize(r.propertiesText.GetText(true))
+	width, height := textSize(r.properties.Text.GetText(true))
 	height += 2 // reserved title bar row (top) + button row (bottom)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 
-	r.properties.SetRect(x, y, width, height)
-	r.propertiesTitleBar.SetRect(x, y, width, 1)
-	r.propertiesButtons.SetRect(x, y+height-1, width, 1)
+	r.properties.Pages.SetRect(x, y, width, height)
+	r.properties.TitleBar.SetRect(x, y, width, 1)
+	r.properties.Buttons.SetRect(x, y+height-1, width, 1)
 	r.renderPropertiesTitleBar(width)
 }
 
-// renderPropertiesTitleBar sets propertiesTitleBar's own text to
+// renderPropertiesTitleBar sets properties.TitleBar's own text to
 // " Properties ", padded out to width columns, with a close glyph
 // (toolWindowCloseGlyph, the same one toolWindow's/Help's own title bars
 // already use — see their own doc comments) in its own top-right corner
@@ -801,12 +823,12 @@ func (r *Root) renderPropertiesTitleBar(width int) {
 	if padding < 0 {
 		padding = 0
 	}
-	r.propertiesTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
+	r.properties.TitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
 }
 
 // moveProperties repositions Properties to (x, y) without touching its
 // own current width/height — resizeProperties' own drag-time
-// counterpart: that one recomputes size fresh from propertiesText's own
+// counterpart: that one recomputes size fresh from properties.Text's own
 // content on every call (right for "just opened" and "content just
 // changed"), which a drag must never do, or the window would keep
 // snapping back to its content-fit size on every mouse-move event
@@ -819,12 +841,12 @@ func (r *Root) renderPropertiesTitleBar(width int) {
 // where it first opens stays anchored to the clicked row's own panel,
 // exactly as before.
 func (r *Root) moveProperties(x, y int) {
-	_, _, width, height := r.properties.GetRect()
+	_, _, width, height := r.properties.Pages.GetRect()
 	x, y, width, height = r.clampToScreen(x, y, width, height)
 
-	r.properties.SetRect(x, y, width, height)
-	r.propertiesTitleBar.SetRect(x, y, width, 1)
-	r.propertiesButtons.SetRect(x, y+height-1, width, 1)
+	r.properties.Pages.SetRect(x, y, width, height)
+	r.properties.TitleBar.SetRect(x, y, width, 1)
+	r.properties.Buttons.SetRect(x, y+height-1, width, 1)
 	r.renderPropertiesTitleBar(width)
 }
 
@@ -832,7 +854,7 @@ func (r *Root) moveProperties(x, y int) {
 // — the common tail of every edit action (permission toggle, finishing a
 // text field, computing hashes).
 func (r *Root) rerenderProperties() {
-	x, y, _, _ := r.properties.GetRect()
+	x, y, _, _ := r.properties.Pages.GetRect()
 	r.renderProperties()
 	r.resizeProperties(x, y)
 }
@@ -844,7 +866,7 @@ func (r *Root) rerenderProperties() {
 // Save is the only way out, so a stray click can't silently discard or
 // lose track of an in-progress edit.
 func (r *Root) markPropertiesDirty() {
-	r.propertiesDirty = true
+	r.properties.Dirty = true
 }
 
 // cancelPropertiesEdit is the Cancel button: closes the overlay without
@@ -865,10 +887,10 @@ func (r *Root) cancelPropertiesEdit() {
 // an automatic retry or rollback.
 func (r *Root) savePropertiesEdit() {
 	r.cancelHashComputationOperation()
-	target := r.propertiesTarget
+	target := r.properties.Target
 	var firstErr error
 
-	if r.stagedName != r.propertiesStat.Name {
+	if r.stagedName != r.properties.Stat.Name {
 		newPath, err := fsops.Rename(target, r.stagedName)
 		if err != nil {
 			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", target, r.stagedName, err))
@@ -879,7 +901,7 @@ func (r *Root) savePropertiesEdit() {
 			target = newPath
 		}
 	}
-	if firstErr == nil && r.stagedMode != r.propertiesStat.Mode.Perm() {
+	if firstErr == nil && r.stagedMode != r.properties.Stat.Mode.Perm() {
 		if err := fsops.Chmod(target, r.stagedMode); err != nil {
 			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chmod %q: %v", target, err))
 			firstErr = err
@@ -890,13 +912,13 @@ func (r *Root) savePropertiesEdit() {
 	// Compared at whole-second precision, not with Equal directly: the
 	// Modified date/time fields (see parseDate/parseTime) only ever
 	// show and edit whole seconds, zeroing out whatever sub-second
-	// precision propertiesStat.ModTime originally had the moment either
+	// precision properties.Stat.ModTime originally had the moment either
 	// half is committed — including by just tabbing through it without
 	// actually typing a new value. Comparing at full precision would
 	// treat that precision loss alone as a real change and write it,
 	// even though nothing the user could see or intentionally edit
 	// here actually differs.
-	if firstErr == nil && !r.stagedMtime.Truncate(time.Second).Equal(r.propertiesStat.ModTime.Truncate(time.Second)) {
+	if firstErr == nil && !r.stagedMtime.Truncate(time.Second).Equal(r.properties.Stat.ModTime.Truncate(time.Second)) {
 		if err := fsops.SetModTime(target, r.stagedMtime); err != nil {
 			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("set modified time on %q: %v", target, err))
 			firstErr = err
@@ -918,7 +940,7 @@ func (r *Root) savePropertiesEdit() {
 	// the target is a directory in the first place
 	// (renderProperties/currentFieldOrder both gate their own row behind
 	// isDirish), so no extra guard is needed here beyond reading them.
-	if firstErr == nil && r.stagedOwner != r.propertiesStat.Owner {
+	if firstErr == nil && r.stagedOwner != r.properties.Stat.Owner {
 		if uid, err := fsops.ResolveUID(r.stagedOwner); err != nil {
 			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q owner to %q: %v", target, r.stagedOwner, err))
 			firstErr = err
@@ -935,7 +957,7 @@ func (r *Root) savePropertiesEdit() {
 			}
 		}
 	}
-	if firstErr == nil && r.stagedGroup != r.propertiesStat.Group {
+	if firstErr == nil && r.stagedGroup != r.properties.Stat.Group {
 		if gid, err := fsops.ResolveGID(r.stagedGroup); err != nil {
 			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q group to %q: %v", target, r.stagedGroup, err))
 			firstErr = err
@@ -961,10 +983,10 @@ func (r *Root) savePropertiesEdit() {
 	// comment on why that isn't rolled back) may still have really
 	// renamed/rechmod'd/etc. the file before hitting whatever failed
 	// next, and target already reflects that. Checked against
-	// propertiesTarget, not the possibly-just-renamed target itself:
+	// properties.Target, not the possibly-just-renamed target itself:
 	// that's the file Details would have been showing beforehand, under
 	// its original, pre-edit path.
-	r.refreshDetailsIfShowing(r.propertiesTarget, target)
+	r.refreshDetailsIfShowing(r.properties.Target, target)
 
 	r.hideOverlay()
 	r.showError(r.panel.load(r.panel.path))
@@ -1035,13 +1057,13 @@ func (r *Root) toggleRecursiveApply(staged *bool) {
 // field, so it also marks the overlay dirty (see markPropertiesDirty) —
 // even a permission click that gets toggled right back counts, matching
 // "as soon as you click one to edit" as literally as it says — and moves
-// propertiesFocusIndex to this field, so Tab afterwards continues
+// properties.FocusIndex to this field, so Tab afterwards continues
 // naturally from wherever was just clicked rather than wherever keyboard
 // navigation last left off.
 func (r *Root) activatePropertyField(span propertySpan) {
 	r.markPropertiesDirty()
 	if idx, ok := r.propertyFieldIndex(span.field); ok {
-		r.propertiesFocusIndex = idx
+		r.properties.FocusIndex = idx
 	}
 	r.rerenderProperties()
 
@@ -1058,7 +1080,7 @@ func (r *Root) activatePropertyField(span propertySpan) {
 		r.toggleRecursiveApply(&r.stagedRecursiveGroup)
 		return
 	case fieldOwner:
-		r.openOwnerGroupPicker(pickUser, r.propertiesStat.UID, r.propertyFieldPosition(span), func(name string, _ int) {
+		r.openOwnerGroupPicker(pickUser, r.properties.Stat.UID, r.propertyFieldPosition(span), func(name string, _ int) {
 			r.stagedOwner = name
 			r.resumeProperties()
 		}, r.resumeProperties, func() {
@@ -1066,7 +1088,7 @@ func (r *Root) activatePropertyField(span propertySpan) {
 		})
 		return
 	case fieldGroup:
-		r.openOwnerGroupPicker(pickGroup, r.propertiesStat.GID, r.propertyFieldPosition(span), func(name string, _ int) {
+		r.openOwnerGroupPicker(pickGroup, r.properties.Stat.GID, r.propertyFieldPosition(span), func(name string, _ int) {
 			r.stagedGroup = name
 			r.resumeProperties()
 		}, r.resumeProperties, func() {
@@ -1115,7 +1137,7 @@ func (r *Root) activatePropertyField(span propertySpan) {
 // (hideOverlay's own pop) already restored its focus (see
 // restoreProperties, its frame's own restore callback) before this even
 // runs — so there's nothing left to do here beyond reflecting whatever
-// changed. propertiesDirty and every staged value survive the round trip
+// changed. properties.Dirty and every staged value survive the round trip
 // untouched regardless: they're plain Root fields, not tied to whether
 // the picker happened to be open.
 func (r *Root) resumeProperties() {
@@ -1123,7 +1145,7 @@ func (r *Root) resumeProperties() {
 }
 
 // restoreProperties re-applies whichever concrete Properties sub-widget
-// should hold real keyboard focus for propertiesFocusIndex's current
+// should hold real keyboard focus for properties.FocusIndex's current
 // value. Properties keeps several sub-widgets simultaneously visible
 // (see newPropertiesView), so the overlay stack's own generic "just
 // refocus whatever widget this frame was pushed with" isn't precise
@@ -1133,20 +1155,20 @@ func (r *Root) resumeProperties() {
 // owner/group picker — currently the only thing that ever layers on top
 // of it — closes.
 func (r *Root) restoreProperties() {
-	r.setPropertiesFocus(r.propertiesFocusIndex)
+	r.setPropertiesFocus(r.properties.FocusIndex)
 }
 
-// focusedPropertyField returns which field, if any, propertiesFocusIndex
+// focusedPropertyField returns which field, if any, properties.FocusIndex
 // currently points at (see setPropertiesFocus) — fieldNone once the
 // index has moved past the last field stop onto Cancel/Save, or before
 // Tab has ever been pressed (index -1, Properties' state right after
 // opening — see openProperties).
 func (r *Root) focusedPropertyField() propertyField {
 	order := r.currentFieldOrder()
-	if r.propertiesFocusIndex < 0 || r.propertiesFocusIndex >= len(order) {
+	if r.properties.FocusIndex < 0 || r.properties.FocusIndex >= len(order) {
 		return fieldNone
 	}
-	return order[r.propertiesFocusIndex]
+	return order[r.properties.FocusIndex]
 }
 
 // propertySpanForField returns the current propertySpan for field, if
@@ -1187,7 +1209,7 @@ func isAutoEditField(field propertyField) bool {
 // (len(currentFieldOrder())), or the Save button
 // (len(currentFieldOrder())+1) — re-rendering so the highlighted field
 // (if any) matches, and giving the concrete widget that stop actually
-// lives on real keyboard focus: propertiesText for a field (see
+// lives on real keyboard focus: properties.Text for a field (see
 // capturePropertiesKey's Tab/Backtab/Enter handling), or the button
 // itself, whose own InputHandler and SetExitFunc (see
 // newPropertiesButtons) take over navigation from there. Landing on a
@@ -1199,25 +1221,25 @@ func isAutoEditField(field propertyField) bool {
 // after the picker closes needs, regardless of why setPropertiesFocus is
 // running.
 func (r *Root) setPropertiesFocus(idx int) {
-	r.propertiesFocusIndex = idx
+	r.properties.FocusIndex = idx
 	r.rerenderProperties()
 
 	order := r.currentFieldOrder()
 	n := len(order)
 	switch idx {
 	case n:
-		r.app.SetFocus(r.propertiesCancelBtn)
+		r.app.SetFocus(r.properties.CancelBtn)
 	case n + 1:
-		r.app.SetFocus(r.propertiesSaveBtn)
+		r.app.SetFocus(r.properties.SaveBtn)
 	default:
-		r.app.SetFocus(r.propertiesText)
+		r.app.SetFocus(r.properties.Text)
 		if idx >= 0 && idx < n && isAutoEditField(order[idx]) {
 			r.activateFocusedPropertyStop()
 		}
 	}
 }
 
-// movePropertiesFocus advances propertiesFocusIndex by delta (+1 for
+// movePropertiesFocus advances properties.FocusIndex by delta (+1 for
 // Tab, -1 for Backtab) among the field stops — only ever called while a
 // field stop (or nothing, idx < 0) currently holds focus, via
 // capturePropertiesKey; Cancel/Save, once reached, hand navigation off
@@ -1226,7 +1248,7 @@ func (r *Root) setPropertiesFocus(idx int) {
 // them.
 func (r *Root) movePropertiesFocus(delta int) {
 	n := len(r.currentFieldOrder())
-	idx := r.propertiesFocusIndex + delta
+	idx := r.properties.FocusIndex + delta
 	switch {
 	case idx < 0:
 		idx = n + 1 // wrap to Save
@@ -1245,10 +1267,10 @@ func (r *Root) movePropertiesFocus(delta int) {
 // actually draws are meant to always agree).
 func (r *Root) activateFocusedPropertyStop() {
 	order := r.currentFieldOrder()
-	if r.propertiesFocusIndex < 0 || r.propertiesFocusIndex >= len(order) {
+	if r.properties.FocusIndex < 0 || r.properties.FocusIndex >= len(order) {
 		return
 	}
-	field := order[r.propertiesFocusIndex]
+	field := order[r.properties.FocusIndex]
 	if span, ok := r.propertySpanForField(field); ok {
 		r.activatePropertyField(span)
 	}
@@ -1278,26 +1300,26 @@ func (r *Root) activateFocusedPropertyStop() {
 // here, since its own active() check already tells it when
 // fieldPermOctal is (and isn't) the field currently being edited.
 func (r *Root) activateInlineTextField(span propertySpan, prefill string, minWidth int) {
-	r.propertiesEditTarget = span.field
-	r.propertiesEditField.SetText(prefill)
+	r.properties.EditTarget = span.field
+	r.properties.EditField.SetText(prefill)
 	if span.field == fieldPermOctal {
-		r.propertiesEditField.SetAcceptanceFunc(func(textToCheck string, lastChar rune) bool {
+		r.properties.EditField.SetAcceptanceFunc(func(textToCheck string, lastChar rune) bool {
 			return len(textToCheck) <= 4
 		})
-		resetInlineFieldCursorToStart(r.propertiesEditField)
+		resetInlineFieldCursorToStart(r.properties.EditField)
 	} else {
-		r.propertiesEditField.SetAcceptanceFunc(nil)
+		r.properties.EditField.SetAcceptanceFunc(nil)
 	}
 
-	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	rectX, rectY, _, _ := r.properties.Text.GetInnerRect()
 	width := span.endCol - span.startCol
 	if width < minWidth {
 		width = minWidth
 	}
-	r.propertiesEditField.SetRect(rectX+span.startCol, rectY+span.row, width, 1)
+	r.properties.EditField.SetRect(rectX+span.startCol, rectY+span.row, width, 1)
 
-	r.properties.ShowPage("editfield")
-	r.app.SetFocus(r.propertiesEditField)
+	r.properties.Pages.ShowPage("editfield")
+	r.app.SetFocus(r.properties.EditField)
 }
 
 // finishPropertyEdit handles Enter, Tab, and Backtab (commit) and
@@ -1321,9 +1343,9 @@ func (r *Root) activateInlineTextField(span propertySpan, prefill string, minWid
 // staged edits along with it. Leaving the field's own text on screen
 // with no other feedback isn't great, but it beats that.
 func (r *Root) finishPropertyEdit(key tcell.Key) {
-	text := r.propertiesEditField.GetText()
-	target := r.propertiesEditTarget
-	r.properties.HidePage("editfield")
+	text := r.properties.EditField.GetText()
+	target := r.properties.EditTarget
+	r.properties.Pages.HidePage("editfield")
 
 	if key == tcell.KeyEnter || key == tcell.KeyTab || key == tcell.KeyBacktab {
 		r.applyPropertyEditText(target, text)
@@ -1340,7 +1362,7 @@ func (r *Root) finishPropertyEdit(key tcell.Key) {
 }
 
 // refocusPropertiesField re-renders and returns real keyboard focus to
-// propertiesText for whatever propertiesFocusIndex currently is, without
+// properties.Text for whatever properties.FocusIndex currently is, without
 // re-triggering isAutoEditField's auto-open the way setPropertiesFocus
 // would — finishPropertyEdit's own Enter/Escape case (see above) needs
 // exactly this: the field just edited stays focused/highlighted, but
@@ -1350,7 +1372,7 @@ func (r *Root) finishPropertyEdit(key tcell.Key) {
 // on the same keystroke, would be another.
 func (r *Root) refocusPropertiesField() {
 	r.rerenderProperties()
-	r.app.SetFocus(r.propertiesText)
+	r.app.SetFocus(r.properties.Text)
 }
 
 // applyPropertyEditText stages text as target's new value — the commit
@@ -1536,7 +1558,7 @@ func hashProgressSuffix(read, total int64) string {
 // on why), or a computation is already running (see hashInProgress) —
 // pressing h or clicking again mid-computation doesn't restart it.
 func (r *Root) computeHashes() {
-	if r.activePage != propertiesPage || isDirish(r.propertiesStat) || r.hashInProgress {
+	if r.activePage != propertiesPage || isDirish(r.properties.Stat) || r.hashInProgress {
 		return
 	}
 
@@ -1547,7 +1569,7 @@ func (r *Root) computeHashes() {
 	r.hashBytesRead.Store(0)
 	r.rerenderProperties()
 
-	target := r.propertiesTarget
+	target := r.properties.Target
 	r.hashOpID = r.operations.Start(hashOperationType, target, "")
 	// Both wrapped in safeGo (see its own doc comment): a panic in
 	// either one used to take the whole process down without even
@@ -1602,7 +1624,7 @@ func (r *Root) finishHashComputation(target string, hashes fsops.Hashes, err err
 		return
 	}
 	r.operations.Finish(r.hashOpID, operations.OutcomeSucceeded, 1, 0, 0, nil)
-	// Updates propertiesHashes/re-renders itself, then mirrors into
+	// Updates properties.Hashes/re-renders itself, then mirrors into
 	// Details too if that's showing the same target — see
 	// propagateHashResult's own doc comment (detailssidebar.go).
 	r.propagateHashResult(target, hashes)
@@ -1673,15 +1695,15 @@ func (r *Root) cancelHashComputationOperation() {
 // hashesMouseCapture makes a click on the hash section compute hashes
 // (see computeHashes) unconditionally, regardless of which of
 // Properties' several sub-widgets currently has real mouse focus —
-// installed directly on r.properties (see newPropertiesView), the
-// shared ancestor of propertiesText/propertiesEditField/
-// propertiesButtons, so it runs before whichever of those three would
+// installed directly on r.properties.Pages (see newPropertiesView), the
+// shared ancestor of properties.Text/properties.EditField/
+// properties.Buttons, so it runs before whichever of those three would
 // otherwise claim the event on its own (a Box-based primitive's own
 // SetMouseCapture always runs before it delegates to whatever currently
 // has focus underneath it — see Box.WrapMouseHandler). Without this,
 // landing keyboard focus on an auto-editing field (see isAutoEditField —
 // Name, the octal permission value, either half of Modified) via Tab
-// hands real focus to propertiesEditField instead of propertiesText, and
+// hands real focus to properties.EditField instead of properties.Text, and
 // a hash-section click (previously handled in capturePropertiesMouse)
 // would never run — per the user's own explicit report and request that
 // it work "jederzeit", not just before the first field is touched.
@@ -1700,7 +1722,7 @@ func (r *Root) cancelHashComputationOperation() {
 // renderPropertiesTitleBar) that behaves exactly like Cancel, also per
 // the user's own explicit request. Split out on its own since it's
 // about the window's own chrome, not about anything inside
-// propertiesText the rest of hashesMouseCapture deals with.
+// properties.Text the rest of hashesMouseCapture deals with.
 //
 // Mirrors toolWindow's own dragging/dragOffsetX/Y (see toolwindow.go's
 // MouseHandler): the offset between the click and the window's own
@@ -1708,7 +1730,7 @@ func (r *Root) cancelHashComputationOperation() {
 // subsequent move so the same point under the cursor stays there.
 // Unlike toolWindow, a dragged Properties window does NOT have to stay
 // under the cursor for this capture to keep receiving events: it's
-// reached via captureOutsideClick's own propertiesDragging check
+// reached via captureOutsideClick's own properties.Dragging check
 // (root.go), invoked directly — bypassing tview's own Pages.MouseHandler
 // position-based dispatch (see pages.go) entirely — rather than relying
 // on that dispatch to keep routing here on its own. A real, user-
@@ -1725,7 +1747,7 @@ func (r *Root) cancelHashComputationOperation() {
 func (r *Root) dragPropertiesMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (out tview.MouseAction, outEvent *tcell.EventMouse, handled bool) {
 	x, y := event.Position()
 
-	if r.propertiesDragging {
+	if r.properties.Dragging {
 		switch action {
 		case tview.MouseMove:
 			if event.Buttons()&tcell.ButtonPrimary == 0 {
@@ -1734,20 +1756,20 @@ func (r *Root) dragPropertiesMouseCapture(action tview.MouseAction, event *tcell
 				// the terminal) — stop rather than follow the cursor
 				// forever, the same guard toolWindow's own MouseMove case
 				// already has.
-				r.propertiesDragging = false
+				r.properties.Dragging = false
 				return tview.MouseConsumed, nil, true
 			}
-			r.moveProperties(x-r.propertiesDragOffsetX, y-r.propertiesDragOffsetY)
+			r.moveProperties(x-r.properties.DragOffsetX, y-r.properties.DragOffsetY)
 			return tview.MouseConsumed, nil, true
 		case tview.MouseLeftUp:
-			r.propertiesDragging = false
+			r.properties.Dragging = false
 			return tview.MouseConsumed, nil, true
 		}
 		return tview.MouseConsumed, nil, true // swallow everything else for the duration of the drag
 	}
 
-	if action == tview.MouseLeftDown && r.propertiesTitleBar.InRect(x, y) {
-		wx, wy, width, _ := r.properties.GetRect()
+	if action == tview.MouseLeftDown && r.properties.TitleBar.InRect(x, y) {
+		wx, wy, width, _ := r.properties.Pages.GetRect()
 		if y == wy && x == wx+toolWindowCloseButtonCol(0, width) {
 			// The close glyph itself (see renderPropertiesTitleBar) — per
 			// the user's own explicit request, behaves exactly like
@@ -1758,8 +1780,8 @@ func (r *Root) dragPropertiesMouseCapture(action tview.MouseAction, event *tcell
 			r.cancelPropertiesEdit()
 			return tview.MouseConsumed, nil, true
 		}
-		r.propertiesDragging = true
-		r.propertiesDragOffsetX, r.propertiesDragOffsetY = x-wx, y-wy
+		r.properties.Dragging = true
+		r.properties.DragOffsetX, r.properties.DragOffsetY = x-wx, y-wy
 		return tview.MouseConsumed, nil, true
 	}
 
@@ -1771,29 +1793,29 @@ func (r *Root) hashesMouseCapture(action tview.MouseAction, event *tcell.EventMo
 		return captured, consumedEvent
 	}
 
-	if action != tview.MouseLeftClick || isDirish(r.propertiesStat) {
+	if action != tview.MouseLeftClick || isDirish(r.properties.Stat) {
 		return action, event
 	}
 	x, y := event.Position()
 
 	// Checked first, and independently of the row math below: tview.Pages
 	// gives every visible page the SAME rect as the Pages itself (see
-	// newPropertiesView's own doc comment on why propertiesText,
-	// propertiesEditField, and propertiesButtons all share r.properties'
-	// rect) — so propertiesText.InRect is true for the Cancel/Save row
+	// newPropertiesView's own doc comment on why properties.Text,
+	// properties.EditField, and properties.Buttons all share r.properties.Pages'
+	// rect) — so properties.Text.InRect is true for the Cancel/Save row
 	// too, not just its own content lines. Without this check, a real
 	// regression: hashSectionRow can, once the overlay is short enough,
 	// numerically coincide with the button row's own screen row, and a
 	// click meant for Cancel or Save gets swallowed into computeHashes
 	// instead of ever reaching the button underneath it.
-	if primitiveContains(r.propertiesButtons, x, y) {
+	if primitiveContains(r.properties.Buttons, x, y) {
 		return action, event
 	}
-	if !r.propertiesText.InRect(x, y) {
+	if !r.properties.Text.InRect(x, y) {
 		return action, event
 	}
 
-	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	rectX, rectY, _, _ := r.properties.Text.GetInnerRect()
 	// A real button (see renderProperties/singleKeyHint), not "click
 	// anywhere on this line or below it" the way this used to work —
 	// per the user's own explicit request. hashButtonWidth is 0 whenever
@@ -1809,16 +1831,16 @@ func (r *Root) hashesMouseCapture(action tview.MouseAction, event *tcell.EventMo
 }
 
 // capturePropertiesKey is Properties' own keyboard-navigation dispatch,
-// installed on propertiesText (see newPropertiesView) — only relevant
-// while propertiesText itself has real keyboard focus, i.e. while a
+// installed on properties.Text (see newPropertiesView) — only relevant
+// while properties.Text itself has real keyboard focus, i.e. while a
 // field stop (or nothing, idx < 0) currently has focus; once Tab/Backtab
 // hands focus to a button, that button's own InputHandler and
 // SetExitFunc (see newPropertiesButtons) take over instead, and once
 // focus lands on a text field it opens immediately (see
 // isAutoEditField/setPropertiesFocus), handing focus to
-// propertiesEditField and its own SetDoneFunc instead.
+// properties.EditField and its own SetDoneFunc instead.
 //
-// Tab/Backtab move propertiesFocusIndex (movePropertiesFocus); Enter
+// Tab/Backtab move properties.FocusIndex (movePropertiesFocus); Enter
 // activates whatever's currently focused (activateFocusedPropertyStop);
 // Escape always cancels, matching what it already means everywhere else
 // in this app. All four are fully consumed here rather than left to
@@ -1879,18 +1901,18 @@ func (r *Root) capturePropertiesKey(event *tcell.EventKey) *tcell.EventKey {
 // read-only text: a propertySpan (Name, a permission bit, or half of
 // Modified) activates that field (see activatePropertyField). A hash-
 // section click is handled a level up now (see hashesMouseCapture on
-// r.properties itself, for the same reason capturePropertiesKey no
+// r.properties.Pages itself, for the same reason capturePropertiesKey no
 // longer handles 'h' — see its own doc comment), so by the time a click
 // reaches here it's already past that check. A click that misses
 // everything just does nothing — unlike Panel's header, there's no
 // default TextView behavior here worth pre-empting.
 func (r *Root) capturePropertiesMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action != tview.MouseLeftClick || !r.propertiesText.InRect(event.Position()) {
+	if action != tview.MouseLeftClick || !r.properties.Text.InRect(event.Position()) {
 		return action, event
 	}
 
 	x, y := event.Position()
-	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	rectX, rectY, _, _ := r.properties.Text.GetInnerRect()
 	row, col := y-rectY, x-rectX
 
 	if span, ok := r.propertySpanAt(row, col); ok {

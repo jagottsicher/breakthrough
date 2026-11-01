@@ -338,7 +338,7 @@ func (r *Root) captureConsigliereTitleBarMouse(action tview.MouseAction, event *
 // own consigliereDragging check — not tview's own position-based
 // dispatch — is what keeps a drag that moves up/left receiving its
 // own subsequent events once the cursor is no longer over the
-// not-yet-updated title bar rect: the identical bug propertiesDragging's
+// not-yet-updated title bar rect: the identical bug properties.Dragging's
 // own check already exists to prevent, for the identical reason.
 //
 // handled reports whether this call was about dragging (or the close

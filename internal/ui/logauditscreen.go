@@ -1201,7 +1201,7 @@ func (r *Root) moveLogAuditDetail(x, y int) {
 // own, considerably longer doc comment for the full reasoning,
 // including why captureOutsideClick needs its own
 // logAuditDetailDragging check the same way it already has one for
-// searchDragging/propertiesDragging). Deliberately no close glyph,
+// searchDragging/properties.Dragging). Deliberately no close glyph,
 // unlike Search/Properties — see logAuditDetailDragging's own doc
 // comment in root.go.
 func (r *Root) dragLogAuditDetailMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {

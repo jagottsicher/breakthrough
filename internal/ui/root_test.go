@@ -314,8 +314,8 @@ func TestUpdateOverlayTitleBarColorsTracksActiveOverlay(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
-		t.Errorf("propertiesTitleBar with nothing open = %v, want EditableBackground %v", got, want)
+	if got, want := r.properties.TitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("properties.TitleBar with nothing open = %v, want EditableBackground %v", got, want)
 	}
 	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
 		t.Errorf("menuTitleBar with nothing open = %v, want EditableBackground %v", got, want)
@@ -323,8 +323,8 @@ func TestUpdateOverlayTitleBarColorsTracksActiveOverlay(t *testing.T) {
 
 	r.target = filepath.Join(dir, "apple.txt")
 	r.openProperties()
-	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
-		t.Errorf("propertiesTitleBar while Properties is open = %v, want FocusedBackground %v", got, want)
+	if got, want := r.properties.TitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
+		t.Errorf("properties.TitleBar while Properties is open = %v, want FocusedBackground %v", got, want)
 	}
 	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
 		t.Errorf("menuTitleBar while Properties (not the menu) is open = %v, want EditableBackground %v", got, want)
@@ -337,8 +337,8 @@ func TestUpdateOverlayTitleBarColorsTracksActiveOverlay(t *testing.T) {
 	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
 		t.Errorf("menuTitleBar while the menu is open = %v, want FocusedBackground %v", got, want)
 	}
-	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
-		t.Errorf("propertiesTitleBar after Properties was closed = %v, want EditableBackground %v", got, want)
+	if got, want := r.properties.TitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("properties.TitleBar after Properties was closed = %v, want EditableBackground %v", got, want)
 	}
 
 	r.hideOverlay()
@@ -1226,7 +1226,7 @@ func TestHandleBeforeDrawRerendersPropertiesOnResize(t *testing.T) {
 	r.target = path
 	r.openProperties()
 
-	_, _, wideWidth, _ := r.properties.GetRect()
+	_, _, wideWidth, _ := r.properties.Pages.GetRect()
 
 	r.SetRect(0, 0, 40, 50)
 	r.panel.SetRect(0, 0, 40, 46) // as if a real draw had already cascaded the resize down to it
@@ -1234,7 +1234,7 @@ func TestHandleBeforeDrawRerendersPropertiesOnResize(t *testing.T) {
 
 	r.handleBeforeDraw(screen)
 
-	_, _, narrowWidth, _ := r.properties.GetRect()
+	_, _, narrowWidth, _ := r.properties.Pages.GetRect()
 	if narrowWidth >= wideWidth {
 		t.Errorf("properties width after shrinking the panel = %d, want less than the original %d (clamped to the now-narrower panel)", narrowWidth, wideWidth)
 	}
