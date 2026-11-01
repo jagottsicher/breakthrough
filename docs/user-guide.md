@@ -1908,14 +1908,20 @@ an actual log line's or diff's own text, the ruleset itself, an
 entry's own message, or an operation's own source/target — only
 filter/commit metadata, a rule count, or a type/category breakdown.
 Turning this on lets Log Holepunch forward the lines currently
-matching the Filter/Time/Level fields, verbatim; Git Breach forward
-whatever diff is currently shown in Main; Firewall forward its full
-ruleset; Action Log forward the entries currently matching its own
-Keyword/Time fields; and Undertow forward every operation's own
-source/target path. Real log lines, diffs, firewall rules, action log
-messages, and transfer paths can carry credentials, IP addresses,
-internal network layout, real filesystem paths, or other data that
-would otherwise never leave this machine.
+matching the Filter/Time/Level fields, verbatim (the same on Log
+Holepunch's own Detail page, forwarding that one full entry instead);
+Git Breach forward whatever diff is currently shown in Main; Firewall
+forward its full ruleset; Action Log forward the entries currently
+matching its own Keyword/Time fields; and Undertow forward every
+operation's own source/target path. Real log lines, diffs, firewall
+rules, action log messages, and transfer paths can carry credentials,
+IP addresses, internal network layout, real filesystem paths, or
+other data that would otherwise never leave this machine. Log
+Holepunch's own Statistics page is the one exception that's never
+gated at all: its counts by level and by source are already a pure
+aggregate, never a line's own content, the same risk tier a rule count
+or a category breakdown already get elsewhere without Machiavelli
+Mode.
 
 How much of that gets forwarded per question is "Context size" above
 — one of five named tiers, chosen per provider (a small local model
