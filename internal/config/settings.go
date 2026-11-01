@@ -674,6 +674,26 @@ type Settings struct {
 	ConsigliereOllamaEffort    string
 	ConsigliereCustomEffort    string
 
+	// ConsigliereAnthropicContextTier through ConsigliereCustomContextTier
+	// each pick one provider's own named size tier for Machiavelli
+	// Mode's per-screen context caps ("tiny"/"small"/"medium"/"large"/
+	// "max" — see consigliereContextTierLineCaps/
+	// consigliereContextTierDiffCaps in internal/ui/consigliere.go for
+	// the actual numbers each tier resolves to). "" (the default)
+	// behaves exactly like "max" — the previous unconditional 50/300
+	// line caps — so an existing config needs no migration. One field
+	// per provider, not a single shared one, for the same reason
+	// ConsigliereAnthropicModel's own doc comment gives: a local model
+	// with a small context window needs a smaller tier than, say,
+	// Claude, and switching Provider must never carry one provider's
+	// own choice over to another's.
+	ConsigliereAnthropicContextTier string
+	ConsigliereOpenAIContextTier    string
+	ConsigliereDeepSeekContextTier  string
+	ConsigliereGeminiContextTier    string
+	ConsigliereOllamaContextTier    string
+	ConsigliereCustomContextTier    string
+
 	// ConsigliereHardcoreMode ("Machiavelli Mode" in the Options
 	// screen's own label — see optioncatalog.go) lets a per-view
 	// context snapshot forward actual log line content — not just
@@ -1098,6 +1118,18 @@ func (s *Settings) apply(key, value string) error {
 		s.ConsigliereOllamaEffort = value
 	case "consigliere_custom_effort":
 		s.ConsigliereCustomEffort = value
+	case "consigliere_anthropic_context_tier":
+		s.ConsigliereAnthropicContextTier = value
+	case "consigliere_openai_context_tier":
+		s.ConsigliereOpenAIContextTier = value
+	case "consigliere_deepseek_context_tier":
+		s.ConsigliereDeepSeekContextTier = value
+	case "consigliere_gemini_context_tier":
+		s.ConsigliereGeminiContextTier = value
+	case "consigliere_ollama_context_tier":
+		s.ConsigliereOllamaContextTier = value
+	case "consigliere_custom_context_tier":
+		s.ConsigliereCustomContextTier = value
 	case "consigliere_hardcore_mode":
 		return parseBool(&s.ConsigliereHardcoreMode)
 	default:
@@ -1222,6 +1254,48 @@ func (s *Settings) SetConsigliereAPIKeyFileFor(provider, value string) {
 		s.ConsigliereGeminiAPIKeyFile = value
 	case "custom":
 		s.ConsigliereCustomAPIKeyFile = value
+	}
+}
+
+// ConsigliereContextTierFor and SetConsigliereContextTierFor are
+// ConsigliereModelFor/SetConsigliereModelFor's own counterpart for the
+// Machiavelli Mode context-size tier — "" for a provider name none of
+// these recognize, same as the raw stored value for any provider that
+// has never had a tier chosen (meaning "max", see
+// ConsigliereAnthropicContextTier's own doc comment).
+func (s Settings) ConsigliereContextTierFor(provider string) string {
+	switch provider {
+	case "anthropic":
+		return s.ConsigliereAnthropicContextTier
+	case "openai":
+		return s.ConsigliereOpenAIContextTier
+	case "deepseek":
+		return s.ConsigliereDeepSeekContextTier
+	case "gemini":
+		return s.ConsigliereGeminiContextTier
+	case "ollama":
+		return s.ConsigliereOllamaContextTier
+	case "custom":
+		return s.ConsigliereCustomContextTier
+	default:
+		return ""
+	}
+}
+
+func (s *Settings) SetConsigliereContextTierFor(provider, value string) {
+	switch provider {
+	case "anthropic":
+		s.ConsigliereAnthropicContextTier = value
+	case "openai":
+		s.ConsigliereOpenAIContextTier = value
+	case "deepseek":
+		s.ConsigliereDeepSeekContextTier = value
+	case "gemini":
+		s.ConsigliereGeminiContextTier = value
+	case "ollama":
+		s.ConsigliereOllamaContextTier = value
+	case "custom":
+		s.ConsigliereCustomContextTier = value
 	}
 }
 
