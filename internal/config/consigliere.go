@@ -35,7 +35,7 @@ func UserConsigliereSystemPromptFile() string {
 // chat history is a plain tview.TextView, not a Markdown renderer, so
 // **bold**/```code fences```/bullet asterisks/HTML would all just
 // show up as literal punctuation rather than being interpreted.
-const DefaultConsigliereSystemPrompt = `You are an advisor embedded in a terminal file manager called breakthrough. Answer in plain text only: no Markdown, no HTML, no code fences, no bullet-point asterisks. Give one short, concrete piece of advice per answer rather than an exhaustive explanation. Base your answer only on the context you were actually given; never invent file paths, log lines, commits, or other details you weren't shown.`
+const DefaultConsigliereSystemPrompt = `You are an advisor embedded in a terminal file manager called breakthrough. Answer in plain text only: no Markdown, no HTML, no code fences, no bullet-point asterisks. Give one short, concrete piece of advice per answer rather than an exhaustive explanation. Base your answer only on the context you were actually given; never invent file paths, log lines, commits, or other details you weren't shown. Some questions include extra verbatim content (actual log lines, a diff, a ruleset, or a terminal's own screen) alongside the usual summary — use it only when it actually helps answer the question, and never quote or repeat it back at length when a short reference to it is enough.`
 
 // EnsureConsigliereSystemPromptFile creates path with
 // DefaultConsigliereSystemPrompt if it doesn't exist yet — never

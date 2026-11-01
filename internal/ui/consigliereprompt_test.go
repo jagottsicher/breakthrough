@@ -275,6 +275,32 @@ func TestTerminalContextSnapshotIncludesScreenUnderMachiavelliMode(t *testing.T)
 	}
 }
 
+// TestTerminalContextSnapshotExplainsVisibilityWhenScreenIsBlankUnderMachiavelliMode
+// pins a real, reported gap: a blank screen made
+// consigliereMachiavelliTerminalScreen return "" and left the
+// snapshot saying nothing at all about visibility — turning
+// Machiavelli Mode ON produced a LESS explanatory answer than leaving
+// it off. The command here (sleep, no echo) never writes anything to
+// its own stdout, so the screen stays deterministically blank for the
+// whole test, not just a transient race at startup.
+func TestTerminalContextSnapshotExplainsVisibilityWhenScreenIsBlankUnderMachiavelliMode(t *testing.T) {
+	r := newTestRootForShells(t)
+	r.settings.ConsigliereHardcoreMode = true
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+	r.openNewShellEmbedded(testShellConn("example.com"))
+	defer func() {
+		for _, tab := range r.shells {
+			_ = tab.session.Close()
+		}
+	}()
+
+	got := r.terminalContextSnapshot()
+
+	if !strings.Contains(got, "blank") {
+		t.Errorf("snapshot = %q, want it to explain the screen is currently blank rather than saying nothing at all", got)
+	}
+}
+
 // TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage pins the
 // advisor-flagged regression risk: dispatch must key off the *current*
 // r.activePage, not consigliereExitPage (the page captured when the
@@ -376,6 +402,73 @@ func TestLogAuditContextSnapshotIncludesMatchedLinesUnderMachiavelliMode(t *test
 
 	if !strings.Contains(got, "topsecret123") {
 		t.Errorf("snapshot = %q, want the matched log line forwarded under Machiavelli Mode", got)
+	}
+}
+
+// TestLogAuditContextSnapshotIncludesDetailEntryUnderMachiavelliMode
+// pins the Detail page's own exception: looking at one full entry is
+// exactly the case Machiavelli Mode's own forwarding exists for, and
+// the entry is resolved the real way (the Viewer table's own current
+// selection), not a separately-tracked field.
+func TestLogAuditContextSnapshotIncludesDetailEntryUnderMachiavelliMode(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0) // app.log group, sorted before syslog
+	r.openLogAuditViewer()
+	r.logAuditViewerTable.Select(1, 0)
+	r.openLogAuditDetail(1)
+	r.settings.ConsigliereHardcoreMode = true
+
+	got := r.logAuditContextSnapshot()
+
+	if !strings.Contains(got, "connection established") {
+		t.Errorf("snapshot = %q, want the detail entry's own Raw text forwarded under Machiavelli Mode", got)
+	}
+}
+
+// TestLogAuditContextSnapshotOmitsDetailEntryWithoutMachiavelliMode
+// pins the default-off case for the same page: the entry's own text
+// must not leak just because the Detail page happens to be open.
+func TestLogAuditContextSnapshotOmitsDetailEntryWithoutMachiavelliMode(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	r.logAuditViewerTable.Select(1, 0)
+	r.openLogAuditDetail(1)
+
+	got := r.logAuditContextSnapshot()
+
+	if strings.Contains(got, "connection established") {
+		t.Errorf("snapshot = %q, must not include the detail entry's own text without Machiavelli Mode", got)
+	}
+}
+
+// TestLogAuditContextSnapshotIncludesStatisticsRegardlessOfMachiavelliMode
+// pins that the Statistics page's own aggregate (counts by level/
+// source, never a line's own content) is always included — the same
+// risk tier Firewall's rule count or Action Log's category breakdown
+// already get without needing Machiavelli Mode at all.
+func TestLogAuditContextSnapshotIncludesStatisticsRegardlessOfMachiavelliMode(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	r.openLogAuditStats()
+
+	got := r.logAuditContextSnapshot()
+
+	if !strings.Contains(got, "By level:") || !strings.Contains(got, "By source") {
+		t.Errorf("snapshot = %q, want the Statistics aggregate included even with Machiavelli Mode off", got)
+	}
+
+	r.settings.ConsigliereHardcoreMode = true
+	gotHardcore := r.logAuditContextSnapshot()
+	if !strings.Contains(gotHardcore, "By level:") {
+		t.Errorf("snapshot = %q, want the Statistics aggregate still included with Machiavelli Mode on", gotHardcore)
 	}
 }
 

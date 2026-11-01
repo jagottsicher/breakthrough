@@ -1032,7 +1032,19 @@ func (r *Root) terminalContextSnapshot() string {
 		b.WriteString("This terminal's own process has already exited.\n")
 	}
 	if r.settings.ConsigliereHardcoreMode {
-		b.WriteString(r.consigliereMachiavelliTerminalScreen(tab))
+		if forwarded := r.consigliereMachiavelliTerminalScreen(tab); forwarded != "" {
+			b.WriteString(forwarded)
+		} else {
+			// A real, reported gap: a blank screen (e.g. a shell that
+			// was just opened, before anything has rendered yet) made
+			// consigliereMachiavelliTerminalScreen return "" and left
+			// this snapshot saying nothing at all about visibility —
+			// turning Machiavelli Mode ON produced a less explanatory
+			// answer than leaving it off. Say explicitly that nothing is
+			// visible right now, same as the off case below, rather than
+			// silently omitting the explanation.
+			b.WriteString("Its own screen is currently blank — nothing to forward right now.\n")
+		}
 	} else {
 		b.WriteString("Its own input and output are not visible here at all — only which connection it's open to.\n")
 	}
@@ -1076,10 +1088,16 @@ func (r *Root) consigliereMachiavelliTerminalScreen(tab *shellTab) string {
 // matched entries themselves, and a real credential or secret sitting
 // in a log line is exactly the kind of thing this must never forward
 // to a third-party provider without the user explicitly having
-// opted in. The one deliberate exception is Machiavelli Mode (see
-// consigliereMachiavelliLogLines), which the Options screen only lets
-// the user turn on after confirming a dedicated warning naming this
-// exact risk.
+// opted in. Machiavelli Mode's own exception now covers all three
+// pages that can actually show a real entry's own text: the Viewer
+// (see consigliereMachiavelliLogLines), and the Detail page (see
+// consigliereMachiavelliLogDetailEntry) — asking "what does this mean"
+// while looking at one full entry is exactly the case this exists
+// for. The Statistics page is deliberately not gated at all: its own
+// text (logAuditStatsText) is already a pure aggregate — counts by
+// level and by source, never a line's own content — the same risk
+// tier Firewall's rule count or Action Log's category breakdown
+// already get without Machiavelli Mode, so it's always included.
 func (r *Root) logAuditContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Log Holepunch.\n")
@@ -1099,8 +1117,17 @@ func (r *Root) logAuditContextSnapshot() string {
 		fmt.Fprintf(&b, "Current time filter: %s\n", tf)
 	}
 	b.WriteString(logAuditViewerAvailableActions)
-	if r.activePage == logAuditViewerPage && r.settings.ConsigliereHardcoreMode {
-		b.WriteString(r.consigliereMachiavelliLogLines())
+	switch r.activePage {
+	case logAuditViewerPage:
+		if r.settings.ConsigliereHardcoreMode {
+			b.WriteString(r.consigliereMachiavelliLogLines())
+		}
+	case logAuditDetailPage:
+		if r.settings.ConsigliereHardcoreMode {
+			b.WriteString(r.consigliereMachiavelliLogDetailEntry())
+		}
+	case logAuditStatsPage:
+		fmt.Fprintf(&b, "\nStatistics for the currently matching entries:\n%s", logAuditStatsText(r.logAuditViewerVisibleEntries()))
 	}
 	return strings.TrimSpace(b.String())
 }
@@ -1192,6 +1219,22 @@ func (r *Root) consigliereMachiavelliLogLines() string {
 		fmt.Fprintf(&b, "(%d further matching lines not shown)\n", len(shown)-n)
 	}
 	return b.String()
+}
+
+// consigliereMachiavelliLogDetailEntry renders the single log entry
+// currently shown on the Detail page, verbatim (Entry.Raw), once
+// Machiavelli Mode is on — resolved the same way openLogAuditDetail
+// itself resolves which entry to show (the Viewer table's own current
+// selection, stashed via SetReference — see logAuditEntryAt's own doc
+// comment), rather than needing a separate field to track it. No cap
+// needed: this is always exactly one entry, never an open-ended list.
+func (r *Root) consigliereMachiavelliLogDetailEntry() string {
+	row, _ := r.logAuditViewerTable.GetSelection()
+	e, ok := r.logAuditEntryAt(row)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("\nMachiavelli Mode is on — the log entry currently shown is forwarded verbatim:\n%s\n", e.Raw)
 }
 
 // logAuditViewerAvailableActions is Log Holepunch's own fields and
