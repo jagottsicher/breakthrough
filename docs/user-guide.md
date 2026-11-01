@@ -1908,8 +1908,13 @@ an actual log line's or diff's own text, the ruleset itself, an
 entry's own message, or an operation's own source/target — only
 filter/commit metadata, a rule count, or a type/category breakdown.
 Turning this on lets Log Holepunch forward the lines currently
-matching the Filter/Time/Level fields, verbatim (the same on Log
-Holepunch's own Detail page, forwarding that one full entry instead);
+matching the Filter/Time/Level fields, verbatim, in the same order the
+Time column is currently sorted — the table's own newest-first/
+oldest-first arrow decides which end of a long, filtered result the
+forwarded lines actually come from, so asking about "these lines"
+means the ones actually at the top of the table, not always the
+oldest ones regardless (the same on Log Holepunch's own Detail page,
+forwarding that one full entry instead);
 Git Breach forward whatever diff is currently shown in Main; Firewall
 forward its full ruleset; Action Log forward the entries currently
 matching its own Keyword/Time fields; and Undertow forward every
@@ -2832,6 +2837,7 @@ the only sign anything was actually wrong.
 | Time field | Filter by when the entry happened — `before <moment>`, `after <moment>`, or `between <moment> and <moment>`, where a moment is an absolute date/time or a relative one such as `7 days`, `2 hours ago`, or `30 minutes`; a relative moment on its own (`last 7 days`) is shorthand for "within that span". Exact same syntax as the Action Log's own Time field (and the panel's own Modified-time filter — see [Filtering](#filtering)). |
 | Level field (`>=`) | A *minimum* severity ("warn" shows WARN and everything worse — ERROR, FATAL — not just exact matches); an entry with no recognized level never passes this filter, even "trace" |
 | `Tab` / `Shift+Tab` | Move between Filter, Time, Level, the timeline, and the list |
+| Click the Time column header | Toggle the list between oldest-first (the default, matching the file itself) and newest-first |
 | `e` | Jump to the next error (wraps around) |
 | `w` | Jump to the next warning (wraps around) |
 | `Enter` | Show this entry's full text, with the current filter still highlighted, plus a Raw section with the original, unparsed line — shown only when it actually differs from the extracted message |

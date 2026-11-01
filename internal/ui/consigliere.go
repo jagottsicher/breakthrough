@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -1206,8 +1207,29 @@ func (r *Root) consigliereMachiavelliLogLines() string {
 	if len(shown) == 0 {
 		return ""
 	}
+	// A real, reported gap: logAuditVisibleEntries always returns
+	// oldest-first (the same order renderLogAuditViewer starts from),
+	// but logAuditNewestFirst can reverse the table's own display —
+	// without this, flipping that arrow left this function still
+	// taking the first N of the UNreversed list, so a user looking at
+	// today's entries at the top of their screen got lines from the
+	// very start of a months-old log file instead. Matching
+	// renderLogAuditViewer's own reverse step here keeps "the first N"
+	// meaning the same N rows actually at the top of the table.
+	if r.logAuditNewestFirst {
+		shown = slices.Clone(shown)
+		slices.Reverse(shown)
+	}
 	var b strings.Builder
-	b.WriteString("\nMachiavelli Mode is on — the following currently-matching log lines are forwarded verbatim:\n")
+	order := "oldest first"
+	if r.logAuditNewestFirst {
+		order = "newest first"
+	}
+	// States the order explicitly: without this, there's no way for
+	// the model itself to know which end of a long, filtered result
+	// these lines come from — needed to reason about "what happened
+	// right before/after this", not just the truncation notice below.
+	fmt.Fprintf(&b, "\nMachiavelli Mode is on — the following currently-matching log lines (%s) are forwarded verbatim:\n", order)
 	n := len(shown)
 	if lineCap := r.consigliereContextLineCap(); n > lineCap {
 		n = lineCap
@@ -1216,7 +1238,16 @@ func (r *Root) consigliereMachiavelliLogLines() string {
 		fmt.Fprintf(&b, "- %s\n", e.Raw)
 	}
 	if len(shown) > n {
-		fmt.Fprintf(&b, "(%d further matching lines not shown)\n", len(shown)-n)
+		// Says which direction was kept, not just how many were left
+		// out — without this, there's no way to tell from the text
+		// alone whether the omitted lines are older or newer than what
+		// was actually sent, which is exactly the ambiguity that misled
+		// a real question about "what's in these lines" before this fix.
+		if r.logAuditNewestFirst {
+			fmt.Fprintf(&b, "(%d further matching lines, older than these, not shown)\n", len(shown)-n)
+		} else {
+			fmt.Fprintf(&b, "(%d further matching lines, newer than these, not shown)\n", len(shown)-n)
+		}
 	}
 	return b.String()
 }
@@ -1251,6 +1282,7 @@ const logAuditViewerAvailableActions = `Available fields and keys on this screen
 - Filter field: case-insensitive substring over Source and Message, narrows the list live.
 - Time field: "before <moment>", "after <moment>", or "between <moment> and <moment>"; a moment is an absolute date/time or a relative one ("7 days", "2 hours ago", "30 minutes"); a bare relative moment on its own ("last 7 days") means "within that span".
 - Level field (>=): a minimum severity — "warn" shows WARN and everything worse.
+- Click the Time column header: toggles the list between oldest-first and newest-first.
 - Tab / Shift+Tab: move between Filter, Time, Level, the timeline, and the list.
 - e: jump to the next error. w: jump to the next warning.
 - Enter (on the list): show the current entry's full text.
