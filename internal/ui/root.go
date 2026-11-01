@@ -126,31 +126,6 @@ type overlayFrame struct {
 // Modified can be edited in place — Owner/Group are still read-only,
 // pending a cross-platform way to list system users/groups (macOS
 // doesn't expose them via /etc/passwd the way Linux does).
-// consigliereState holds the AI Consigliere chat sidebar's widgets,
-// session state, and model-list cache (see consigliere.go,
-// consiglieremodels.go).
-type consigliereState struct {
-	History            *tview.TextView
-	Scrollbar          *verticalScrollbar
-	TitleBar           *tview.TextView
-	Input              *tview.InputField
-	Layout             *tview.Flex
-	Visible            bool // mirrors detailsSidebarVisible — see showConsigliere/hideConsigliere
-	Messages           []consigliere.Message
-	Cancel             context.CancelFunc
-	AwaitingPassphrase bool
-	ReturnFocus        tview.Primitive
-	ExitPage           string
-	ForwardExit        tview.Primitive
-	ManuallyPositioned bool
-	Dragging           bool
-	DragOffsetX        int
-	DragOffsetY        int
-	ModelCache         map[string][]consigliere.ModelInfo
-	ModelFetchInFlight map[string]bool
-	ModelFetchErr      map[string]error
-}
-
 type Root struct {
 	*tview.Pages
 

@@ -42,6 +42,30 @@ import (
 
 const consiglierePage = "consigliere"
 
+// consigliereState holds the AI Consigliere chat sidebar's widgets,
+// session state, and model-list cache (see consiglieremodels.go).
+type consigliereState struct {
+	History            *tview.TextView
+	Scrollbar          *verticalScrollbar
+	TitleBar           *tview.TextView
+	Input              *tview.InputField
+	Layout             *tview.Flex
+	Visible            bool // mirrors detailsSidebarVisible — see showConsigliere/hideConsigliere
+	Messages           []consigliere.Message
+	Cancel             context.CancelFunc
+	AwaitingPassphrase bool
+	ReturnFocus        tview.Primitive
+	ExitPage           string
+	ForwardExit        tview.Primitive
+	ManuallyPositioned bool
+	Dragging           bool
+	DragOffsetX        int
+	DragOffsetY        int
+	ModelCache         map[string][]consigliere.ModelInfo
+	ModelFetchInFlight map[string]bool
+	ModelFetchErr      map[string]error
+}
+
 // consigliereInputPlaceholder is consigliere.Input's own normal,
 // ask-a-question placeholder — a named const rather than a literal
 // repeated at both newConsigliereSidebar (initial) and
