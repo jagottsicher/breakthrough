@@ -929,11 +929,11 @@ func (r *Root) confirmApplyBatchRename() {
 			applied, err := batchrename.Apply(result.Changes)
 			r.batchRenameUndo = applied
 			if err != nil {
-				r.activityLog.Error(activitylog.CategoryTextOps, fmt.Sprintf("batch rename: %d of %d files renamed, then: %v", len(applied), len(result.Changes), err))
+				r.activity.Logger.Error(activitylog.CategoryTextOps, fmt.Sprintf("batch rename: %d of %d files renamed, then: %v", len(applied), len(result.Changes), err))
 				r.showError(fmt.Errorf("batch rename: %d of %d files renamed, then: %w", len(applied), len(result.Changes), err))
 				return
 			}
-			r.activityLog.Action(activitylog.CategoryTextOps, fmt.Sprintf("batch renamed %d file(s)", len(applied)))
+			r.activity.Logger.Action(activitylog.CategoryTextOps, fmt.Sprintf("batch renamed %d file(s)", len(applied)))
 			r.reloadPanel(nil)
 		},
 	)
@@ -955,9 +955,9 @@ func (r *Root) undoLastBatchRename() {
 	r.batchRenameUndo = nil
 	undone, err := batchrename.Undo(changes)
 	if err != nil {
-		r.activityLog.Error(activitylog.CategoryTextOps, fmt.Sprintf("undo batch rename: %d of %d files reverted, then: %v", len(undone), len(changes), err))
+		r.activity.Logger.Error(activitylog.CategoryTextOps, fmt.Sprintf("undo batch rename: %d of %d files reverted, then: %v", len(undone), len(changes), err))
 	} else {
-		r.activityLog.Action(activitylog.CategoryTextOps, fmt.Sprintf("undid batch rename of %d file(s)", len(undone)))
+		r.activity.Logger.Action(activitylog.CategoryTextOps, fmt.Sprintf("undid batch rename of %d file(s)", len(undone)))
 	}
 	r.reloadPanel(err)
 }

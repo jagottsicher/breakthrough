@@ -949,7 +949,7 @@ func (r *Root) deleteExtractedArchive(archivePath string) {
 		target, err = fsops.MoveToTrash(archivePath, dir)
 		if err == nil {
 			_ = r.labels.Rehome(archivePath, target) // best-effort — see reallyMoveToTrash's own doc comment
-			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("moved extracted archive %q to trash", archivePath))
+			r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("moved extracted archive %q to trash", archivePath))
 			reloadSource()
 			return
 		}
@@ -958,12 +958,12 @@ func (r *Root) deleteExtractedArchive(archivePath string) {
 		fmt.Sprintf("Moving %q to Trash failed (%v) — delete it completely instead?", filepath.Base(archivePath), err),
 		func() {
 			if err := fsops.PurgeCompletely(archivePath); err != nil {
-				r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("delete extracted archive %q: %v", archivePath, err))
+				r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("delete extracted archive %q: %v", archivePath, err))
 				r.showError(err)
 				return
 			}
 			_ = r.labels.Delete(archivePath)
-			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("permanently deleted extracted archive %q", archivePath))
+			r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("permanently deleted extracted archive %q", archivePath))
 			reloadSource()
 		},
 	)

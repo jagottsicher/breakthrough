@@ -651,11 +651,11 @@ func (r *Root) runShellCommandFullScreen(command string, category activitylog.Ca
 	r.bashLine.SetText("", true)
 	r.app.SetFocus(r.panel.table)
 	if runErr != nil {
-		r.activityLog.Error(category, fmt.Sprintf("%s: %v", command, runErr))
+		r.activity.Logger.Error(category, fmt.Sprintf("%s: %v", command, runErr))
 		r.showError(fmt.Errorf("%s: %w", command, runErr))
 		return
 	}
-	r.activityLog.Action(category, fmt.Sprintf("ran: %s", command))
+	r.activity.Logger.Action(category, fmt.Sprintf("ran: %s", command))
 	r.reloadAllTabs()
 }
 

@@ -225,9 +225,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.confirmDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.confirmDialogTitleBar.SetTextColor(theme.TextColor)
 
-	styleList(r.activityLogNoticeList, theme)
-	r.activityLogNoticeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.activityLogNoticeTitleBar.SetTextColor(theme.TextColor)
+	styleList(r.activity.NoticeList, theme)
+	r.activity.NoticeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.activity.NoticeTitleBar.SetTextColor(theme.TextColor)
 
 	// scrollAcknowledgeNotice (see scrollacknowledge.go) — same
 	// "single-layer, always-modal, fixed FocusedBackground" reasoning
@@ -245,10 +245,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// explicit request that this notice's message read "in rot (wie die
 	// ja sonst auch aussehen)", i.e. exactly like any other error text in
 	// this app rather than a one-off color.
-	r.activityLogNoticeMessageView.SetTextColor(theme.Text)
-	r.activityLogNoticeMessageView.SetBackgroundColor(theme.ErrorBackground)
-	styleButton(r.activityLogNoticeCancelButton, theme)
-	styleButton(r.activityLogNoticeOKButton, theme)
+	r.activity.NoticeMessageView.SetTextColor(theme.Text)
+	r.activity.NoticeMessageView.SetBackgroundColor(theme.ErrorBackground)
+	styleButton(r.activity.NoticeCancelButton, theme)
+	styleButton(r.activity.NoticeOKButton, theme)
 	// SurfaceBackground, matching styleList's own call just above — a
 	// plain tview.NewBox() defaults to tview's own built-in
 	// PrimitiveBackgroundColor otherwise, the same mismatch
@@ -808,7 +808,7 @@ func styleList(l *tview.List, theme config.ResolvedTheme) {
 	// literally for every item that isn't the current selection —
 	// visible as a plain black row on any List with more than one row
 	// visible, or, on a single-item List with SetSelectedFocusOnly
-	// (see this file's own activityLogNoticeList wiring), on that one
+	// (see this file's own activity.NoticeList wiring), on that one
 	// item the moment it loses focus. Per the user's own explicit
 	// report that the checkbox row's background was wrong once focus
 	// moved on to Cancel/OK.

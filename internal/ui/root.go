@@ -214,7 +214,7 @@ type Root struct {
 	settings     config.Settings
 	colorSchemes []config.NamedTheme
 
-	// activityLog is the optional activity log's own live sink (see
+	// activity.Logger is the optional activity log's own live sink (see
 	// internal/activitylog's own doc comment) — built once at startup
 	// from settings, and rebuilt (see reopenActivityLog) whenever
 	// Options changes LogLevel or a log_category_* toggle, since the
@@ -224,14 +224,13 @@ type Root struct {
 	// all nil-receiver-safe regardless, the same convention every call
 	// site relies on to log unconditionally without asking "is logging
 	// even on" first.
-	activityLog *activitylog.Logger
-	// activityLogFallbackWarned tracks whether this run has already
+	// activity.FallbackWarned tracks whether this run has already
 	// told the user once that /var/log/breakthrough isn't writable and
 	// logging fell back to a per-user directory instead (see
 	// newActivityLogger) — shown once per run, not repeated every time
 	// Options reopens the log (a category toggle, say) with the same
 	// unchanged fallback still in effect.
-	activityLogFallbackWarned bool
+	activity activityLogState
 
 	// notify is the in-process notification service's own live Store
 	// (see internal/notify's own doc comment) — a short, curated list
@@ -239,7 +238,7 @@ type Root struct {
 	// queue, the firewall screen's own self-lockout rollback) pushes
 	// here at their own completion, so the outcome survives past the
 	// moment their status-bar line disappears. Never nil (see NewRoot):
-	// internal/notify's own Store, unlike activityLog, has no "off"
+	// internal/notify's own Store, unlike activity.Logger, has no "off"
 	// setting to honor, so every call site reaches for it
 	// unconditionally. Built via NewWithPersistence, not New — see
 	// internal/notify's own persist.go — so a Message also survives
@@ -254,7 +253,7 @@ type Root struct {
 	// (Start/SetState/Finish), not live progress: each job type still
 	// owns its own progress state exactly as it already did, this just
 	// additionally reports its own start/pause-resume/end alongside the
-	// activityLog/notify calls already sitting at the same call sites.
+	// activity.Logger/notify calls already sitting at the same call sites.
 	// Never nil (see NewRoot), the same "no off switch to honor, always
 	// call it" shape notify itself already has. Built via
 	// NewTrackerWithPersistence, not NewTracker — finished Operations
@@ -653,20 +652,10 @@ type Root struct {
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
 	// internal/activitylog) rather than a second, parallel recording of
-	// it. activityLogAllEntries holds the last real read (newest first),
+	// it. activity.AllEntries holds the last real read (newest first),
 	// refreshed by reloadActivityLog (on open, and on "r"); the keyword/
 	// time fields filter it live, the same "narrows as you type" feel
 	// the panel's own filter dropdown already has.
-	activityLogLayout       *tview.Flex
-	activityLogTitleBar     *tview.TextView
-	activityLogKeywordField *tview.InputField
-	activityLogTimeField    *tview.InputField
-	activityLogTable        *tview.Table
-	activityLogScrollbar    *verticalScrollbar
-	activityLogHint         *tview.TextView
-	activityLogHintSpans    []listHintSpan
-	activityLogAllEntries   []activitylog.Entry
-	activityLogReadErr      error
 
 	// The Log Audit screen (see logaudit.go/logauditscreen.go) — "jL",
 	// opened on whichever directory the active panel currently shows
@@ -1168,7 +1157,7 @@ type Root struct {
 	scrollAcknowledgeList        *tview.List
 	scrollAcknowledgeOnConfirm   func()
 
-	// activityLogNotice*/activityLogNoticeDontShowAgain back the
+	// activityLogNotice*/activity.NoticeDontShowAgain back the
 	// startup notice shown when the activity log falls back to a
 	// per-user directory (see newActivityLogger's own doc comment) —
 	// its own small dialog rather than the generic confirmDialog
@@ -1191,13 +1180,6 @@ type Root struct {
 	// every ordinary dialog already uses, unlike the dialog's own first
 	// cut, before the user's explicit follow-up request for a real
 	// Cancel distinct from OK.
-	activityLogNoticeLayout        *tview.Flex
-	activityLogNoticeTitleBar      *tview.TextView
-	activityLogNoticeMessageView   *tview.TextView
-	activityLogNoticeList          *tview.List
-	activityLogNoticeCancelButton  *tview.Button
-	activityLogNoticeOKButton      *tview.Button
-	activityLogNoticeDontShowAgain bool
 	// activityLogNoticeSpacer1/2 are the blank rows between header/
 	// message/checkbox/buttons — named and styled the same way
 	// duplicateSpacer/compressSpacer/rsyncSpacer already are (see their
@@ -2984,37 +2966,37 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// SetDrawFunc-free path (this dialog's width never changes after
 	// opening, unlike Git breach's own panes, so a one-time computation
 	// at open time is enough).
-	r.activityLogNoticeTitleBar = newPlainTitleBar("")
-	r.activityLogNoticeTitleBar.SetMouseCapture(r.activityLogNoticeTitleBarMouseCapture)
+	r.activity.NoticeTitleBar = newPlainTitleBar("")
+	r.activity.NoticeTitleBar.SetMouseCapture(r.activityLogNoticeTitleBarMouseCapture)
 
-	r.activityLogNoticeMessageView = tview.NewTextView()
-	r.activityLogNoticeMessageView.SetWrap(true)
-	r.activityLogNoticeMessageView.SetBorderPadding(0, 0, 1, 1)
+	r.activity.NoticeMessageView = tview.NewTextView()
+	r.activity.NoticeMessageView.SetWrap(true)
+	r.activity.NoticeMessageView.SetBorderPadding(0, 0, 1, 1)
 
-	r.activityLogNoticeList = tview.NewList().ShowSecondaryText(false)
-	r.activityLogNoticeList.SetHighlightFullLine(true)
-	r.activityLogNoticeList.SetBorderPadding(0, 0, 1, 1)
+	r.activity.NoticeList = tview.NewList().ShowSecondaryText(false)
+	r.activity.NoticeList.SetHighlightFullLine(true)
+	r.activity.NoticeList.SetBorderPadding(0, 0, 1, 1)
 	// Only highlight the checkbox while the List itself actually holds
 	// focus — the default (always-on) highlight is right for
 	// quitConfirm/confirmDialog, where the List is the dialog's only
 	// focus target, but wrong here: with Cancel/OK as two further Tab
 	// stops, an always-on highlight kept painting this row as if it
 	// still had focus even after Tab moved on to a button.
-	r.activityLogNoticeList.SetSelectedFocusOnly(true)
-	r.activityLogNoticeList.AddItem(activityLogNoticeCheckboxText(false), "", 0, r.toggleActivityLogNoticeDontShowAgain)
+	r.activity.NoticeList.SetSelectedFocusOnly(true)
+	r.activity.NoticeList.AddItem(activityLogNoticeCheckboxText(false), "", 0, r.toggleActivityLogNoticeDontShowAgain)
 
-	r.activityLogNoticeCancelButton = tview.NewButton("Cancel")
-	r.activityLogNoticeCancelButton.SetSelectedFunc(r.cancelActivityLogNotice)
-	r.activityLogNoticeOKButton = tview.NewButton("OK")
-	r.activityLogNoticeOKButton.SetSelectedFunc(r.acceptActivityLogNotice)
+	r.activity.NoticeCancelButton = tview.NewButton("Cancel")
+	r.activity.NoticeCancelButton.SetSelectedFunc(r.cancelActivityLogNotice)
+	r.activity.NoticeOKButton = tview.NewButton("OK")
+	r.activity.NoticeOKButton.SetSelectedFunc(r.acceptActivityLogNotice)
 
 	// Tab/Backtab cycle the three real focus targets (the checkbox
 	// List, Cancel, OK) in a fixed three-way ring — small and fixed
 	// enough that a Git-breach-style data-driven focusables list would
 	// be more machinery than this dialog ever needs.
-	r.activityLogNoticeList.SetInputCapture(r.captureActivityLogNoticeListKey)
-	r.activityLogNoticeCancelButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeOKButton, r.activityLogNoticeList))
-	r.activityLogNoticeOKButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeList, r.activityLogNoticeCancelButton))
+	r.activity.NoticeList.SetInputCapture(r.captureActivityLogNoticeListKey)
+	r.activity.NoticeCancelButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activity.NoticeOKButton, r.activity.NoticeList))
+	r.activity.NoticeOKButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activity.NoticeList, r.activity.NoticeCancelButton))
 
 	// Equal proportion (0, 1) each, filling the row edge to edge — the
 	// exact shape newSearchButtons' own Cancel/Find row already uses
@@ -3025,16 +3007,16 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// it's given, so two equal halves read as two evenly matched
 	// buttons.
 	buttonRow := tview.NewFlex().
-		AddItem(r.activityLogNoticeCancelButton, 0, 1, true).
-		AddItem(r.activityLogNoticeOKButton, 0, 1, false)
+		AddItem(r.activity.NoticeCancelButton, 0, 1, true).
+		AddItem(r.activity.NoticeOKButton, 0, 1, false)
 
 	r.activityLogNoticeSpacer1 = tview.NewBox()
 	r.activityLogNoticeSpacer2 = tview.NewBox()
-	r.activityLogNoticeLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.activityLogNoticeTitleBar, 1, 0, false).
-		AddItem(r.activityLogNoticeMessageView, 0, 1, false).
+	r.activity.NoticeLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.activity.NoticeTitleBar, 1, 0, false).
+		AddItem(r.activity.NoticeMessageView, 0, 1, false).
 		AddItem(r.activityLogNoticeSpacer1, 1, 0, false).
-		AddItem(r.activityLogNoticeList, 1, 0, true).
+		AddItem(r.activity.NoticeList, 1, 0, true).
 		AddItem(r.activityLogNoticeSpacer2, 1, 0, false).
 		AddItem(buttonRow, 1, 0, false)
 
@@ -3404,7 +3386,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(quitConfirmPage, r.quitConfirmLayout, false, false)
 	r.AddPage(confirmPage, r.confirmDialogLayout, false, false)
 	r.AddPage(scrollAcknowledgePage, r.scrollAcknowledgeLayout, false, false)
-	r.AddPage(activityLogNoticePage, r.activityLogNoticeLayout, false, false)
+	r.AddPage(activityLogNoticePage, r.activity.NoticeLayout, false, false)
 	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
 	r.AddPage(pastePausePage, r.pastePauseDialogLayout, false, false)
 	r.AddPage(bgJobCancelPage, r.bgJobCancelDialogLayout, false, false)
@@ -3471,7 +3453,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
-	r.AddPage(activityLogPage, r.activityLogLayout, true, false)
+	r.AddPage(activityLogPage, r.activity.Layout, true, false)
 	// resize=true: the Log Audit screen's own selection and viewer
 	// layers both deliberately fill the whole terminal too, the same
 	// reasoning the Options/Toolbox/Mounts/Firewall/Sessions/SSH Keys/
@@ -3541,7 +3523,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// immediate attention the way a config warning does.
 	r.pruneTrashAtStartup()
 	logger, activityLogNotice, activityLogIsFallback := r.newActivityLogger()
-	r.activityLog = logger
+	r.activity.Logger = logger
 
 	// The activity-log fallback notice gets its own dialog (see
 	// openActivityLogFallbackNotice's own doc comment) only when it's
@@ -4586,7 +4568,7 @@ func (r *Root) setMouseEnabled(enabled bool) {
 func (r *Root) confirmQuit() {
 	r.saveTabs()
 	r.closeAllShells()
-	_ = r.activityLog.Close()
+	_ = r.activity.Logger.Close()
 	r.app.Stop()
 }
 
@@ -5215,14 +5197,14 @@ func (r *Root) finishRename(key tcell.Key) {
 		newPath, err = fsops.Rename(r.target, newName)
 	}
 	if err != nil {
-		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", r.target, newName, err))
+		r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", r.target, newName, err))
 		r.showError(err)
 		return
 	}
 	if r.panel.remote == nil {
 		_ = r.labels.Rehome(r.target, newPath) // see internal/filelabels.Store.Rehome's own doc comment
 	}
-	r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", r.target, newName))
+	r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", r.target, newName))
 	r.refreshDetailsIfShowing(r.target, newPath)
 	r.showError(r.panel.load(r.panel.path))
 }
@@ -5700,11 +5682,11 @@ func (r *Root) openChown() {
 // failure — the common tail of every path through openChown.
 func (r *Root) applyChown(target string, uid, gid int) {
 	if err := fsops.Chown(target, uid, gid); err != nil {
-		r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q to %d:%d: %v", target, uid, gid, err))
+		r.activity.Logger.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q to %d:%d: %v", target, uid, gid, err))
 		r.showError(err)
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed owner/group of %q to %d:%d", target, uid, gid))
+	r.activity.Logger.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed owner/group of %q to %d:%d", target, uid, gid))
 	r.refreshDetailsIfShowing(target, target)
 	r.showError(r.panel.load(r.panel.path))
 }
