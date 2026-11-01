@@ -27,7 +27,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/logview"
-	"github.com/jagottsicher/breakthrough/internal/mounts"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/operations"
@@ -126,19 +125,6 @@ type overlayFrame struct {
 // Modified can be edited in place — Owner/Group are still read-only,
 // pending a cross-platform way to list system users/groups (macOS
 // doesn't expose them via /etc/passwd the way Linux does).
-// mountsState holds the Mounts screen's widgets and last read result
-// (see mounts.go).
-type mountsState struct {
-	Layout    *tview.Flex
-	TitleBar  *tview.TextView
-	Hint      *tview.TextView
-	HintSpans []listHintSpan
-	Table     *tview.Table
-	Scrollbar *verticalScrollbar
-	Entries   []mounts.Entry
-	Err       error
-}
-
 type Root struct {
 	*tview.Pages
 

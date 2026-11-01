@@ -21,6 +21,18 @@ import (
 
 const mountsPage = "mounts"
 
+// mountsState holds the Mounts screen's widgets and last read result.
+type mountsState struct {
+	Layout    *tview.Flex
+	TitleBar  *tview.TextView
+	Hint      *tview.TextView
+	HintSpans []listHintSpan
+	Table     *tview.Table
+	Scrollbar *verticalScrollbar
+	Entries   []mounts.Entry
+	Err       error
+}
+
 // Column indices within mounts.Table. Bind/Persistent/Type — this
 // screen's own short, fixed-width, at-a-glance columns — deliberately
 // come right after Target, before Source and Options: a live check
