@@ -522,14 +522,20 @@ var helpText = strings.TrimLeft(`
   "Custom base URL" (the address of an OpenAI-compatible endpoint
   this app has no built-in default for at all, e.g. a self-hosted
   gateway or a hosted aggregator — only shown while Provider is
-  "Custom"), an editable/resettable system prompt, and "Machiavelli Mode"
-  — off by default, gated behind a warning you have to scroll to the
-  end of before it does anything — which lets Log Holepunch forward
-  the lines currently matching its own filters, Git Breach forward
-  whatever diff is currently shown in Main, Firewall forward its full
-  ruleset, Action Log forward the matching entries' own messages, and
-  Undertow forward every operation's own source/target path, all
-  verbatim rather than just their usual metadata.
+  "Custom"), an editable/resettable system prompt, "Context size"
+  (also stored per provider: Tiny/Small/Medium/Large/Max, how much
+  content Machiavelli Mode below is allowed to forward per question —
+  Max, the default, keeps the original 50 lines/rules/entries/
+  operations and 250 diff lines; Tiny drops to 3 of each; see the
+  online guide's own table for Small/Medium/Large), and "Machiavelli
+  Mode" — off by default, gated behind a warning you have to scroll to
+  the end of before it does anything — which lets Log Holepunch
+  forward the lines currently matching its own filters, Git Breach
+  forward whatever diff is currently shown in Main, Firewall forward
+  its full ruleset, Action Log forward the matching entries' own
+  messages, and Undertow forward every operation's own source/target
+  path, all verbatim rather than just their usual metadata, up to
+  "Context size"'s own cap.
 
 [::b]Status bar (the bottom line, purely informational)[::-]
 

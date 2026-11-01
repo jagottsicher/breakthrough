@@ -1862,6 +1862,7 @@ Along with the question itself, every request includes:
 | Ollama base URL | Overrides Ollama's own built-in default server address (`http://localhost:11434/v1`) — only shown while Provider above is `ollama`. For an Ollama server running on a different machine, not the one breakthrough itself is on (e.g. `http://192.168.1.50:11434/v1` — keep the trailing `/v1`). `""` (the default) means use the built-in default |
 | Custom base URL | The address of an OpenAI-compatible endpoint this app has no built-in default for at all (a self-hosted gateway, a hosted aggregator such as `https://api.publicai.co/v1`, ...) — only shown while Provider above is `custom`. `""` (the default) means no server is configured yet |
 | API key (encrypted) | Stores the key encrypted under a passphrase you choose, asked for once per run and kept in memory only — never written to disk. Hidden while Provider is `ollama`, which needs no key at all |
+| Context size | How much actual content Machiavelli Mode forwards for the selected provider — stored per provider, see below |
 | Machiavelli Mode | See below |
 
 Resolution order for the key actually used: a well-known environment
@@ -1907,22 +1908,45 @@ an actual log line's or diff's own text, the ruleset itself, an
 entry's own message, or an operation's own source/target — only
 filter/commit metadata, a rule count, or a type/category breakdown.
 Turning this on lets Log Holepunch forward the lines currently
-matching the Filter/Time/Level fields, verbatim, capped at 50 lines
-per question; Git Breach forward whatever diff is currently shown in
-Main, capped at 300 lines; Firewall forward its full ruleset, capped
-at 50 rules; Action Log forward the entries currently matching its
-own Keyword/Time fields, capped at 50 entries; and Undertow forward
-every operation's own source/target path, capped at 50 operations.
-Real log lines, diffs, firewall rules, action log messages, and
-transfer paths can carry credentials, IP addresses, internal network
-layout, real filesystem paths, or other data that would otherwise
-never leave this machine.
+matching the Filter/Time/Level fields, verbatim; Git Breach forward
+whatever diff is currently shown in Main; Firewall forward its full
+ruleset; Action Log forward the entries currently matching its own
+Keyword/Time fields; and Undertow forward every operation's own
+source/target path. Real log lines, diffs, firewall rules, action log
+messages, and transfer paths can carry credentials, IP addresses,
+internal network layout, real filesystem paths, or other data that
+would otherwise never leave this machine.
 
-Turning it on requires scrolling a full warning to its own end before
-the confirming choice does anything — a question short enough to
-reflexively dismiss isn't the point here. Turning it back off is
-immediate, no ceremony; while it's on, the sidebar's own title bar
-stays in a warning color as a standing reminder.
+How much of that gets forwarded per question is "Context size" above
+— one of five named tiers, chosen per provider (a small local model
+behind Ollama most likely needs a smaller tier than Claude ever
+would):
+
+| Tier | Log lines / firewall rules / Action Log entries / Undertow operations | Git Breach diff lines |
+|---|---|---|
+| Tiny | 3 | 3 |
+| Small | 10 | 20 |
+| Medium | 25 | 75 |
+| Large | 40 | 160 |
+| Max (the default) | 50 | 250 |
+
+Whenever the real count exceeds the active tier's own cap, a trailing
+line says exactly how many further lines/rules/entries/operations were
+left out — the cut is never silent. Terminal's own forwarding (the
+shell's current visible screen content) and Toolbox's own catalog are
+unaffected by this setting: Terminal has no cap of its own at all,
+only the terminal's own visible width/height already bounds it, and
+Toolbox is never gated behind Machiavelli Mode in the first place
+(it's a fixed, built-in list of tool names and descriptions, never a
+live read of this host's own state). This is a line/entry *count*, not
+a byte or token count — a handful of unusually long lines can still
+exceed a small model's own context window even at Tiny.
+
+Turning Machiavelli Mode on requires scrolling a full warning to its
+own end before the confirming choice does anything — a question short
+enough to reflexively dismiss isn't the point here. Turning it back
+off is immediate, no ceremony; while it's on, the sidebar's own title
+bar stays in a warning color as a standing reminder.
 
 ## Remote connections (SFTP)
 

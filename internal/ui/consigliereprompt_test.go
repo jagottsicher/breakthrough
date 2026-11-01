@@ -21,6 +21,112 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/sshkeys"
 )
 
+// TestConsigliereEffectiveContextTierDefaultsToMax pins "" (no tier
+// ever chosen for the current provider) resolving to "max" — the
+// previous unconditional 50/300 behavior, so an existing config
+// doesn't change until a smaller tier is actually chosen.
+func TestConsigliereEffectiveContextTierDefaultsToMax(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "anthropic"
+	root.settings.ConsigliereAnthropicContextTier = ""
+
+	if got := root.consigliereEffectiveContextTier(); got != "max" {
+		t.Errorf("effective tier = %q, want \"max\"", got)
+	}
+	if got := root.consigliereContextLineCap(); got != 50 {
+		t.Errorf("line cap = %d, want 50", got)
+	}
+	if got := root.consigliereContextDiffLineCap(); got != 250 {
+		t.Errorf("diff line cap = %d, want 250", got)
+	}
+}
+
+// TestConsigliereEffectiveContextTierFallsBackToMaxForAnUnknownValue
+// covers a hand-edited config file with a typo'd tier name — falls
+// back to "max" rather than resolving to a zero cap that would
+// silently forward nothing at all.
+func TestConsigliereEffectiveContextTierFallsBackToMaxForAnUnknownValue(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "anthropic"
+	root.settings.ConsigliereAnthropicContextTier = "huge"
+
+	if got := root.consigliereEffectiveContextTier(); got != "max" {
+		t.Errorf("effective tier = %q, want the \"max\" fallback", got)
+	}
+}
+
+// TestConsigliereContextTierCapsEveryNamedTier pins every tier's own
+// documented line/entry and diff caps exactly.
+func TestConsigliereContextTierCapsEveryNamedTier(t *testing.T) {
+	cases := []struct {
+		tier        string
+		lineCap     int
+		diffLineCap int
+	}{
+		{"tiny", 3, 3},
+		{"small", 10, 20},
+		{"medium", 25, 75},
+		{"large", 40, 160},
+		{"max", 50, 250},
+	}
+	for _, c := range cases {
+		root := newPlainKeyRoot(t)
+		root.settings.ConsigliereProvider = "anthropic"
+		root.settings.ConsigliereAnthropicContextTier = c.tier
+		if got := root.consigliereContextLineCap(); got != c.lineCap {
+			t.Errorf("tier %q: line cap = %d, want %d", c.tier, got, c.lineCap)
+		}
+		if got := root.consigliereContextDiffLineCap(); got != c.diffLineCap {
+			t.Errorf("tier %q: diff line cap = %d, want %d", c.tier, got, c.diffLineCap)
+		}
+	}
+}
+
+// TestConsigliereContextTierIsStoredPerProviderNotShared pins the same
+// per-provider isolation Model/Effort/APIKeyFile already have:
+// choosing a tier for one provider must never apply it to another —
+// switching Provider back and forth must never leak one provider's own
+// choice into another's.
+func TestConsigliereContextTierIsStoredPerProviderNotShared(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereAnthropicContextTier = "tiny"
+	root.settings.ConsigliereOllamaContextTier = ""
+
+	root.settings.ConsigliereProvider = "anthropic"
+	if got := root.consigliereEffectiveContextTier(); got != "tiny" {
+		t.Errorf("anthropic tier = %q, want \"tiny\"", got)
+	}
+
+	root.settings.ConsigliereProvider = "ollama"
+	if got := root.consigliereEffectiveContextTier(); got != "max" {
+		t.Errorf("ollama tier = %q, want \"max\" (unaffected by anthropic's own tiny tier)", got)
+	}
+}
+
+// TestConsigliereMachiavelliLogLinesRespectsALoweredTier proves the
+// resolver is actually wired into the real forwarding path, not just
+// correct in isolation.
+func TestConsigliereMachiavelliLogLinesRespectsALoweredTier(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "anthropic"
+	root.settings.ConsigliereAnthropicContextTier = "tiny"
+	root.activePage = logAuditViewerPage
+	var entries []logview.Entry
+	for i := 0; i < 10; i++ {
+		entries = append(entries, logview.Entry{Raw: fmt.Sprintf("distinct-log-line-%d", i)})
+	}
+	root.logAuditAllEntries = entries
+
+	got := root.consigliereMachiavelliLogLines()
+
+	if n := strings.Count(got, "distinct-log-line-"); n != 3 {
+		t.Errorf("snapshot mentions %d lines, want exactly the tiny tier's cap of 3", n)
+	}
+	if !strings.Contains(got, "7 further matching lines not shown") {
+		t.Errorf("snapshot = %q, want it to mention the 7 truncated lines", got)
+	}
+}
+
 func TestPanelContextSnapshotIncludesDirectoryAndMarkedFiles(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.panel.selected = map[string]bool{
@@ -463,16 +569,17 @@ func TestFirewallContextSnapshotReportsReadError(t *testing.T) {
 func TestFirewallContextSnapshotCapsRuleList(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereHardcoreMode = true
+	cap := root.consigliereContextLineCap()
 	var rules []firewall.Rule
-	for i := 0; i < consigliereMaxFirewallRules+5; i++ {
+	for i := 0; i < cap+5; i++ {
 		rules = append(rules, firewall.Rule{Order: i + 1, Action: firewall.ActionAllow, Source: "distinct-source"})
 	}
 	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendUFW, Rules: rules}
 
 	got := root.firewallContextSnapshot()
 
-	if got := strings.Count(got, "distinct-source"); got != consigliereMaxFirewallRules {
-		t.Errorf("snapshot mentions %d rules, want exactly the cap of %d", got, consigliereMaxFirewallRules)
+	if got := strings.Count(got, "distinct-source"); got != cap {
+		t.Errorf("snapshot mentions %d rules, want exactly the cap of %d", got, cap)
 	}
 }
 
@@ -769,7 +876,7 @@ func TestTransferCenterContextSnapshotIncludesPathsUnderMachiavelliMode(t *testi
 func TestTransferCenterContextSnapshotCapsOperationList(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereHardcoreMode = true
-	for i := 0; i < consigliereMaxTransferCenterOps+5; i++ {
+	for i := 0; i < root.consigliereContextLineCap()+5; i++ {
 		root.transferCenterOps = append(root.transferCenterOps, operations.Operation{
 			Type:   "paste",
 			Source: fmt.Sprintf("/src/%d", i),
