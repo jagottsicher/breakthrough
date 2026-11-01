@@ -325,6 +325,62 @@ func consigliereEffortOptionFor(provider, providerLabel string) optionSpec {
 	}, consigliereProviderIs(provider))
 }
 
+// consigliereContextTierChoices is "" (meaning the Max tier — see
+// emptyMeansDefault's own doc comment on this file's identical
+// Model/Effort rows) plus the four smaller named Machiavelli Mode
+// context-size tiers, offered in every provider's own "Context size"
+// row — see consigliereContextTierLineCaps/consigliereContextTierDiffCaps
+// in consigliere.go for what each one actually resolves to. "max" is
+// deliberately not its own separate choice: "" already means exactly
+// that, and a second, redundant way to select the identical behavior
+// would only invite the Model/Effort rows' own since-fixed confusion
+// over which of two values is actually "selected".
+func consigliereContextTierChoices() []optionChoice {
+	return []optionChoice{
+		{value: "", label: "(default: Max)"},
+		{value: "tiny", label: "Tiny"},
+		{value: "small", label: "Small"},
+		{value: "medium", label: "Medium"},
+		{value: "large", label: "Large"},
+	}
+}
+
+// consigliereContextTierOptionFor builds one provider's own "Context
+// size" row — six of them, one per provider, every one visible only
+// while Provider is actually set to it (see consigliereModelOptionFor's
+// own identical reasoning on why this is per-provider, not a single
+// shared field): a small local model behind Ollama most likely needs a
+// smaller tier than Claude ever would, and switching Provider must
+// never carry one provider's own choice over to another's.
+func consigliereContextTierOptionFor(provider, providerLabel string) optionSpec {
+	return withVisible(optionSpec{
+		key:   consigliereModelEffortKeyFor(provider, "context_tier"),
+		label: "Context size",
+		help: fmt.Sprintf("How much actual content Machiavelli Mode forwards from "+
+			"Log Holepunch, Git Breach, Firewall, Action Log, and Undertow while "+
+			"talking to the %s provider — Terminal and Toolbox are unaffected "+
+			"(see Machiavelli Mode's own help). Five named tiers, smallest to "+
+			"largest: Tiny (3 lines/rules/entries, 3 diff lines), Small (10, 20), "+
+			"Medium (25, 75), Large (40, 160), Max (50, 250 — the default, "+
+			"unchanged from before this setting existed). Lower it if the model "+
+			"behind %s has a small context window; a line/entry count, not a "+
+			"byte or token count, so a handful of unusually long lines can still "+
+			"exceed a small model's own window even at Tiny.", providerLabel, providerLabel),
+		value: func(r *Root) string { return r.settings.ConsigliereContextTierFor(provider) },
+		apply: func(r *Root, v string) {
+			key := consigliereModelEffortKeyFor(provider, "context_tier")
+			if v == "" {
+				v = r.resetSetting(key)
+			} else {
+				r.persistSetting(key, v)
+			}
+			r.settings.SetConsigliereContextTierFor(provider, v)
+		},
+		choices:           func(r *Root) []optionChoice { return consigliereContextTierChoices() },
+		emptyMeansDefault: true,
+	}, consigliereProviderIs(provider))
+}
+
 // consigliereModelEffortKeyFor mirrors config's own identically named
 // helper exactly — see its doc comment — kept in sync by
 // TestConsigliereModelEffortKeyForMatchesConfigPackage rather than
@@ -1648,16 +1704,22 @@ func optionCategories() []optionCategory {
 				},
 				consigliereModelOptionFor("anthropic", "Anthropic", false),
 				consigliereEffortOptionFor("anthropic", "Anthropic"),
+				consigliereContextTierOptionFor("anthropic", "Anthropic"),
 				consigliereModelOptionFor("openai", "OpenAI", false),
 				consigliereEffortOptionFor("openai", "OpenAI"),
+				consigliereContextTierOptionFor("openai", "OpenAI"),
 				consigliereModelOptionFor("deepseek", "DeepSeek", false),
 				consigliereEffortOptionFor("deepseek", "DeepSeek"),
+				consigliereContextTierOptionFor("deepseek", "DeepSeek"),
 				consigliereModelOptionFor("gemini", "Gemini", false),
 				consigliereEffortOptionFor("gemini", "Gemini"),
+				consigliereContextTierOptionFor("gemini", "Gemini"),
 				consigliereModelOptionFor("ollama", "Ollama", false),
 				consigliereEffortOptionFor("ollama", "Ollama"),
+				consigliereContextTierOptionFor("ollama", "Ollama"),
 				consigliereModelOptionFor("custom", "Custom", true),
 				consigliereEffortOptionFor("custom", "Custom"),
+				consigliereContextTierOptionFor("custom", "Custom"),
 				consigliereAPIKeyFileOptionFor("anthropic", "Anthropic"),
 				consigliereAPIKeyFileOptionFor("openai", "OpenAI"),
 				consigliereAPIKeyFileOptionFor("deepseek", "DeepSeek"),
@@ -2170,6 +2232,18 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.ConsigliereCustomModel, true
 	case "consigliere_custom_effort":
 		return s.ConsigliereCustomEffort, true
+	case "consigliere_anthropic_context_tier":
+		return s.ConsigliereAnthropicContextTier, true
+	case "consigliere_openai_context_tier":
+		return s.ConsigliereOpenAIContextTier, true
+	case "consigliere_deepseek_context_tier":
+		return s.ConsigliereDeepSeekContextTier, true
+	case "consigliere_gemini_context_tier":
+		return s.ConsigliereGeminiContextTier, true
+	case "consigliere_ollama_context_tier":
+		return s.ConsigliereOllamaContextTier, true
+	case "consigliere_custom_context_tier":
+		return s.ConsigliereCustomContextTier, true
 	case "consigliere_hardcore_mode":
 		return strconv.FormatBool(s.ConsigliereHardcoreMode), true
 	}
