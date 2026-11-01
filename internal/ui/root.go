@@ -28,7 +28,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/mounts"
-	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/operations"
 	"github.com/jagottsicher/breakthrough/internal/rclone"
@@ -126,19 +125,6 @@ type overlayFrame struct {
 // Modified can be edited in place — Owner/Group are still read-only,
 // pending a cross-platform way to list system users/groups (macOS
 // doesn't expose them via /etc/passwd the way Linux does).
-// sessionsState holds the Sessions screen's widgets and last read
-// result (see sessions.go).
-type sessionsState struct {
-	Layout    *tview.Flex
-	TitleBar  *tview.TextView
-	Hint      *tview.TextView
-	HintSpans []listHintSpan
-	Table     *tview.Table
-	Scrollbar *verticalScrollbar
-	List      []multiplex.Session
-	Err       error
-}
-
 type Root struct {
 	*tview.Pages
 

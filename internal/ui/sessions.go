@@ -35,6 +35,18 @@ import (
 
 const sessionsPage = "sessions"
 
+// sessionsState holds the Sessions screen's widgets and last read result.
+type sessionsState struct {
+	Layout    *tview.Flex
+	TitleBar  *tview.TextView
+	Hint      *tview.TextView
+	HintSpans []listHintSpan
+	Table     *tview.Table
+	Scrollbar *verticalScrollbar
+	List      []multiplex.Session
+	Err       error
+}
+
 // listMultiplexSessions is a package-level swappable var — the same
 // mockable idiom readFirewallSnapshot already establishes — so this
 // screen's own render logic can be exercised without ever touching a
