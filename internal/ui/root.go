@@ -964,11 +964,13 @@ type Root struct {
 	gitBreachDiffRawText         string
 	gitBreachDiffFiles           []compare.FileDiff
 	// logAuditNewestFirst toggles the viewer table's own sort order —
-	// Up/Down arrow (see captureLogAuditViewerTableKey), per the user's
-	// own explicit request to be able to read either direction without
-	// reopening the group. false (oldest-first, Merge's own natural
-	// chronological order) is the default — the same order "tail -f"
-	// itself reads in, which matters most while Follow is on.
+	// a click on the Time column header (see renderLogAuditViewer),
+	// per the user's own explicit request to be able to read either
+	// direction without reopening the group. Deliberately not bound to
+	// Up/Down, which would collide with the list's own row navigation.
+	// false (oldest-first, Merge's own natural chronological order) is
+	// the default — the same order "tail -f" itself reads in, which
+	// matters most while Follow is on.
 	logAuditNewestFirst bool
 	// logAuditFollowing/logAuditFollowCancel — "f" toggles a live
 	// re-read of logAuditGroupOpen every logAuditFollowInterval (see

@@ -160,6 +160,9 @@ func TestConsigliereMachiavelliLogLinesMatchesTheTableSOrderWhenReversed(t *test
 	if strings.Contains(got, "entry-3") || strings.Contains(got, "entry-4") {
 		t.Errorf("oldest-first snapshot = %q, must not include entries scrolled further down the table", got)
 	}
+	if !strings.Contains(got, "oldest first") {
+		t.Errorf("oldest-first snapshot = %q, want it to state its own order explicitly", got)
+	}
 
 	// Reversed (newest-first, the Time column's own "↓" arrow): the
 	// table's own top 3 rows are now entry-4..entry-2 — the forwarded
@@ -174,6 +177,9 @@ func TestConsigliereMachiavelliLogLinesMatchesTheTableSOrderWhenReversed(t *test
 	}
 	if strings.Contains(gotReversed, "entry-0") || strings.Contains(gotReversed, "entry-1") {
 		t.Errorf("newest-first snapshot = %q, must not include entries scrolled off the bottom once reversed", gotReversed)
+	}
+	if !strings.Contains(gotReversed, "newest first") {
+		t.Errorf("newest-first snapshot = %q, want it to state its own order explicitly", gotReversed)
 	}
 }
 
