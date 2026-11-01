@@ -1442,11 +1442,11 @@ const consigliereMaxMountEntries = 50
 func (r *Root) mountsContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Mounts.\n")
-	if r.mountsErr != nil {
-		fmt.Fprintf(&b, "Could not read the current mount table: %v\n", r.mountsErr)
+	if r.mounts.Err != nil {
+		fmt.Fprintf(&b, "Could not read the current mount table: %v\n", r.mounts.Err)
 		return strings.TrimSpace(b.String())
 	}
-	entries := r.mountsEntries
+	entries := r.mounts.Entries
 	fmt.Fprintf(&b, "%d mounts:\n", len(entries))
 	n := len(entries)
 	if n > consigliereMaxMountEntries {

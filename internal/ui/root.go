@@ -126,6 +126,19 @@ type overlayFrame struct {
 // Modified can be edited in place — Owner/Group are still read-only,
 // pending a cross-platform way to list system users/groups (macOS
 // doesn't expose them via /etc/passwd the way Linux does).
+// mountsState holds the Mounts screen's widgets and last read result
+// (see mounts.go).
+type mountsState struct {
+	Layout    *tview.Flex
+	TitleBar  *tview.TextView
+	Hint      *tview.TextView
+	HintSpans []listHintSpan
+	Table     *tview.Table
+	Scrollbar *verticalScrollbar
+	Entries   []mounts.Entry
+	Err       error
+}
+
 type Root struct {
 	*tview.Pages
 
@@ -424,16 +437,9 @@ type Root struct {
 	// as one more entry there, per the user's own explicit request:
 	// this one shows live, structured data (with a computed "would this
 	// survive a reboot" column) rather than a list of commands to run.
-	// mountsEntries/mountsErr hold the last read result, refreshed by
+	// mounts.Entries/mounts.Err hold the last read result, refreshed by
 	// reloadMounts (on open, and on "r").
-	mountsLayout    *tview.Flex
-	mountsTitleBar  *tview.TextView
-	mountsHint      *tview.TextView
-	mountsHintSpans []listHintSpan
-	mountsTable     *tview.Table
-	mountsScrollbar *verticalScrollbar
-	mountsEntries   []mounts.Entry
-	mountsErr       error
+	mounts mountsState
 
 	// The Firewall screen (see firewall.go) — a fourth full-screen
 	// catalog, showing this host's own actual firewall rules (whichever
@@ -3441,7 +3447,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Mounts screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox screens' own
 	// comments above give.
-	r.AddPage(mountsPage, r.mountsLayout, true, false)
+	r.AddPage(mountsPage, r.mounts.Layout, true, false)
 	// resize=true: the Firewall screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts
 	// screens' own comments above give.
