@@ -1105,13 +1105,65 @@ func (r *Root) logAuditContextSnapshot() string {
 	return strings.TrimSpace(b.String())
 }
 
-// consigliereMachiavelliMaxLogLines caps how many actual log lines
-// consigliereMachiavelliLogLines forwards — this is already an
-// explicit, confirmed opt-in (see optioncatalog.go's own
-// withConfirmEnable wiring), but an unbounded dump of a large,
-// loosely-filtered log would still blow past any provider's own
-// context budget and cost real money per question for no benefit.
-const consigliereMachiavelliMaxLogLines = 50
+// consigliereContextTierLineCaps maps each named Machiavelli Mode
+// context-size tier (see optioncatalog.go's own
+// consigliereContextTierOptionFor) to how many log lines, firewall
+// rules, Action Log entries, or Undertow operations get forwarded
+// verbatim at that tier — Git Breach diff lines use
+// consigliereContextTierDiffCaps instead, a different scale (a diff is
+// naturally longer than any one of these per-row lists). "" (the
+// provider's own unset default) resolves to "max" via
+// consigliereEffectiveContextTier below — the same 50 every one of
+// these caps used unconditionally before this setting existed, so an
+// existing config's behavior doesn't change until a smaller tier is
+// chosen. This is a line/entry COUNT, not a byte or token count: a
+// handful of unusually long lines can still exceed a small model's own
+// context window even at the smallest tier.
+var consigliereContextTierLineCaps = map[string]int{
+	"tiny":   3,
+	"small":  10,
+	"medium": 25,
+	"large":  40,
+	"max":    50,
+}
+
+// consigliereContextTierDiffCaps is consigliereContextTierLineCaps' own
+// counterpart for Git Breach diff lines specifically — "max" (250)
+// deliberately differs from the unconditional 300 every tier-less diff
+// cap used before this setting existed, a one-time, intentional
+// change accepted when this tier feature was introduced, not a bug.
+var consigliereContextTierDiffCaps = map[string]int{
+	"tiny":   3,
+	"small":  20,
+	"medium": 75,
+	"large":  160,
+	"max":    250,
+}
+
+// consigliereEffectiveContextTier returns the Machiavelli Mode
+// context-size tier actually in force for the currently selected
+// provider — "max" for "" (no tier chosen yet) or any value neither
+// map above recognizes (e.g. a hand-edited config file with a typo),
+// never a zero cap that would silently forward nothing at all.
+func (r *Root) consigliereEffectiveContextTier() string {
+	tier := r.settings.ConsigliereContextTierFor(r.settings.ConsigliereProvider)
+	if _, ok := consigliereContextTierLineCaps[tier]; !ok {
+		return "max"
+	}
+	return tier
+}
+
+// consigliereContextLineCap and consigliereContextDiffLineCap resolve
+// the currently selected provider's own tier (see
+// consigliereEffectiveContextTier) against consigliereContextTierLineCaps/
+// consigliereContextTierDiffCaps.
+func (r *Root) consigliereContextLineCap() int {
+	return consigliereContextTierLineCaps[r.consigliereEffectiveContextTier()]
+}
+
+func (r *Root) consigliereContextDiffLineCap() int {
+	return consigliereContextTierDiffCaps[r.consigliereEffectiveContextTier()]
+}
 
 // consigliereMachiavelliLogLines renders up to
 // consigliereMachiavelliMaxLogLines of the entries currently matching
@@ -1130,8 +1182,8 @@ func (r *Root) consigliereMachiavelliLogLines() string {
 	var b strings.Builder
 	b.WriteString("\nMachiavelli Mode is on — the following currently-matching log lines are forwarded verbatim:\n")
 	n := len(shown)
-	if n > consigliereMachiavelliMaxLogLines {
-		n = consigliereMachiavelliMaxLogLines
+	if lineCap := r.consigliereContextLineCap(); n > lineCap {
+		n = lineCap
 	}
 	for _, e := range shown[:n] {
 		fmt.Fprintf(&b, "- %s\n", e.Raw)
@@ -1200,14 +1252,6 @@ func (r *Root) gitBreachContextSnapshot() string {
 	return strings.TrimSpace(b.String())
 }
 
-// consigliereMachiavelliMaxDiffLines caps how many lines of the
-// currently shown diff consigliereMachiavelliGitBreachDiff forwards —
-// same reasoning as consigliereMachiavelliMaxLogLines: this is
-// already an explicit, confirmed opt-in, but an unbounded multi-file
-// commit diff would still blow past any provider's own context
-// budget for no benefit.
-const consigliereMachiavelliMaxDiffLines = 300
-
 // consigliereMachiavelliGitBreachDiff renders Main's own currently
 // shown diff, verbatim, once Machiavelli Mode is on — "" whenever
 // nothing real is actually shown there (no selection, a conflict row,
@@ -1226,8 +1270,8 @@ func (r *Root) consigliereMachiavelliGitBreachDiff() string {
 	var b strings.Builder
 	b.WriteString("\nMachiavelli Mode is on — the diff currently shown in Main is forwarded verbatim:\n")
 	n := len(lines)
-	if n > consigliereMachiavelliMaxDiffLines {
-		n = consigliereMachiavelliMaxDiffLines
+	if diffCap := r.consigliereContextDiffLineCap(); n > diffCap {
+		n = diffCap
 	}
 	b.WriteString(strings.Join(lines[:n], "\n"))
 	b.WriteString("\n")
@@ -1236,12 +1280,6 @@ func (r *Root) consigliereMachiavelliGitBreachDiff() string {
 	}
 	return b.String()
 }
-
-// consigliereMaxFirewallRules caps how many rules
-// firewallContextSnapshot lists individually — the same
-// anthropicMaxTokens-style reasoning every other capped list here
-// already follows.
-const consigliereMaxFirewallRules = 50
 
 // firewallContextSnapshot describes the Firewall screen: which real
 // backend currently governs traffic, and how many rules it has —
@@ -1289,8 +1327,8 @@ func (r *Root) consigliereMachiavelliFirewallRules() string {
 	var b strings.Builder
 	b.WriteString("\nMachiavelli Mode is on — the full ruleset is forwarded verbatim:\n")
 	n := len(rules)
-	if n > consigliereMaxFirewallRules {
-		n = consigliereMaxFirewallRules
+	if lineCap := r.consigliereContextLineCap(); n > lineCap {
+		n = lineCap
 	}
 	for _, rule := range rules[:n] {
 		shadowed := ""
@@ -1477,12 +1515,6 @@ func (r *Root) activityLogContextSnapshot() string {
 	return strings.TrimSpace(b.String())
 }
 
-// consigliereMaxActionLogEntries caps how many entries
-// consigliereMachiavelliActionLogEntries forwards — the same
-// anthropicMaxTokens-style reasoning every other capped list here
-// already follows.
-const consigliereMaxActionLogEntries = 50
-
 // consigliereMachiavelliActionLogEntries renders the entries
 // currently matching the Keyword/Time filters, verbatim (including
 // each one's own Message, real file paths and all), once Machiavelli
@@ -1497,8 +1529,8 @@ func (r *Root) consigliereMachiavelliActionLogEntries() string {
 	var b strings.Builder
 	b.WriteString("\nMachiavelli Mode is on — the following currently-matching entries are forwarded verbatim:\n")
 	n := len(matching)
-	if n > consigliereMaxActionLogEntries {
-		n = consigliereMaxActionLogEntries
+	if lineCap := r.consigliereContextLineCap(); n > lineCap {
+		n = lineCap
 	}
 	for _, e := range matching[:n] {
 		fmt.Fprintf(&b, "- [%s] %s: %s\n", e.Level, e.Category, e.Message)
@@ -1538,12 +1570,6 @@ func (r *Root) transferCenterContextSnapshot() string {
 	return strings.TrimSpace(b.String())
 }
 
-// consigliereMaxTransferCenterOps caps how many operations
-// consigliereMachiavelliTransferCenterOperations forwards — the same
-// anthropicMaxTokens-style reasoning every other capped list here
-// already follows.
-const consigliereMaxTransferCenterOps = 50
-
 // consigliereMachiavelliTransferCenterOperations renders every
 // current operation's own Source/Target, verbatim, once Machiavelli
 // Mode is on.
@@ -1555,8 +1581,8 @@ func (r *Root) consigliereMachiavelliTransferCenterOperations() string {
 	var b strings.Builder
 	b.WriteString("\nMachiavelli Mode is on — every operation's own source/target is forwarded verbatim:\n")
 	n := len(ops)
-	if n > consigliereMaxTransferCenterOps {
-		n = consigliereMaxTransferCenterOps
+	if lineCap := r.consigliereContextLineCap(); n > lineCap {
+		n = lineCap
 	}
 	for _, op := range ops[:n] {
 		fmt.Fprintf(&b, "- %s: %s -> %s (%s, %s)\n", op.Type, op.Source, op.Target, op.State, op.Outcome)
