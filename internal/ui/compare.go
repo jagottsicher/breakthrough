@@ -35,6 +35,63 @@ import (
 
 const comparePage = "compare"
 
+// compareState holds the Compare feature's own widgets and state
+// across all three of its overlays: the file-vs-file hash overlay
+// (see compare.go), the directory-vs-directory full screen (see
+// comparetree.go), and the unified-diff pager (see comparediff.go).
+type compareState struct {
+	Layout              *tview.Flex
+	TitleBar            *tview.TextView
+	Header              *tview.TextView
+	Verdict             *tview.TextView
+	Buttons             *tview.Flex
+	HashBtn             *tview.Button
+	DiffBtn             *tview.Button
+	CloseBtn            *tview.Button
+	A, B                string
+	Hashes              map[string]string // path -> SHA-256, the one digest Compare ever needs for a verdict
+	HashCancel          context.CancelFunc
+	HashRunning         bool
+	HashAnim            int
+	TreeLayout          *tview.Flex
+	TreeTitleBar        *tview.TextView
+	TreeHint            *tview.TextView
+	TreeHintSpans       []listHintSpan
+	TreeTable           *tview.Table
+	TreeScrollbar       *verticalScrollbar
+	TreeStatus          *tview.TextView
+	TreeButtons         *tview.Flex
+	TreeModeBtn         *tview.Button
+	TreeShowSameBtn     *tview.Button
+	TreeCloseBtn        *tview.Button
+	TreeA               string
+	TreeB               string
+	TreeMode            compare.Mode
+	TreeShowIdentical   bool
+	TreeEntries         []compare.Entry
+	TreeStats           compare.Stats
+	TreeCancel          context.CancelFunc
+	TreeRunning         bool
+	TreeAnim            int
+	DiffLayout          *tview.Flex
+	DiffTitleBar        *tview.TextView
+	DiffBody            *tview.Flex
+	DiffLeft            *tview.TextView
+	DiffLeftScrollbar   *verticalScrollbar
+	DiffLeftHScrollbar  *horizontalScrollbar
+	DiffLeftSpacer      *tview.Box
+	DiffRight           *tview.TextView
+	DiffRightScrollbar  *verticalScrollbar
+	DiffRightHScrollbar *horizontalScrollbar
+	DiffRightSpacer     *tview.Box
+	DiffSeparator       *tview.Box
+	DiffHint            *tview.TextView
+	DiffHintSpans       []listHintSpan
+	DiffPairs           []compare.LinePair
+	DiffLinked          bool
+	DiffLeftFocused     bool
+}
+
 // comparePathTruncateWidth is how wide a path is allowed to get in
 // the file-vs-file overlay's header before truncateMiddle ellipsizes
 // its middle -- chosen to fit comfortably inside the overlay's own
@@ -68,25 +125,25 @@ func (r *Root) newCompareScreens() {
 // (paths/size/modified side by side), a verdict line, and a button row
 // (Compute hash / Show diff / Close).
 func (r *Root) newCompareFileScreen() {
-	r.compareHeader = tview.NewTextView().SetDynamicColors(true)
-	r.compareHeader.SetWrap(true)
-	r.compareHeader.SetBorderPadding(1, 0, 2, 1)
+	r.compare.Header = tview.NewTextView().SetDynamicColors(true)
+	r.compare.Header.SetWrap(true)
+	r.compare.Header.SetBorderPadding(1, 0, 2, 1)
 
-	r.compareVerdict = tview.NewTextView().SetDynamicColors(true)
-	r.compareVerdict.SetWrap(true)
-	r.compareVerdict.SetBorderPadding(0, 0, 2, 1)
+	r.compare.Verdict = tview.NewTextView().SetDynamicColors(true)
+	r.compare.Verdict.SetWrap(true)
+	r.compare.Verdict.SetBorderPadding(0, 0, 2, 1)
 
-	r.compareButtons = r.newCompareButtons()
+	r.compare.Buttons = r.newCompareButtons()
 
-	r.compareTitleBar = newPlainTitleBar("Compare Faultline")
+	r.compare.TitleBar = newPlainTitleBar("Compare Faultline")
 
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.compareHeader, compareHeaderHeight, 0, false).
-		AddItem(r.compareVerdict, 3, 0, false).
-		AddItem(r.compareButtons, 1, 0, false)
+		AddItem(r.compare.Header, compareHeaderHeight, 0, false).
+		AddItem(r.compare.Verdict, 3, 0, false).
+		AddItem(r.compare.Buttons, 1, 0, false)
 
-	r.compareLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.compareTitleBar, 1, 0, false).
+	r.compare.Layout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.compare.TitleBar, 1, 0, false).
 		AddItem(body, 0, 1, true)
 }
 
@@ -100,18 +157,18 @@ func (r *Root) newCompareFileScreen() {
 // floating over the main panel" convention batchRenameLayout and
 // mountsLayout's own doc comments already establish.
 func (r *Root) applyCompareFileTheme(theme config.ResolvedTheme) {
-	if r.compareLayout == nil {
+	if r.compare.Layout == nil {
 		return
 	}
-	r.compareLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.compareHeader.SetBackgroundColor(theme.SurfaceBackground)
-	r.compareVerdict.SetBackgroundColor(theme.SurfaceBackground)
-	r.compareButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.compareHashBtn, theme)
-	styleButton(r.compareDiffBtn, theme)
-	styleButton(r.compareCloseBtn, theme)
-	r.compareTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.compareTitleBar.SetTextColor(theme.TextColor)
+	r.compare.Layout.SetBackgroundColor(theme.SurfaceBackground)
+	r.compare.Header.SetBackgroundColor(theme.SurfaceBackground)
+	r.compare.Verdict.SetBackgroundColor(theme.SurfaceBackground)
+	r.compare.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.compare.HashBtn, theme)
+	styleButton(r.compare.DiffBtn, theme)
+	styleButton(r.compare.CloseBtn, theme)
+	r.compare.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.compare.TitleBar.SetTextColor(theme.TextColor)
 }
 
 // newCompareButtons builds the file-vs-file overlay's own button row:
@@ -126,9 +183,9 @@ func (r *Root) newCompareButtons() *tview.Flex {
 		action func()
 	}
 	specs := []buttonSpec{
-		{&r.compareHashBtn, "Compute hash", r.computeCompareHash},
-		{&r.compareDiffBtn, "Show diff", r.openCompareDiff},
-		{&r.compareCloseBtn, "Close", r.closeCompare},
+		{&r.compare.HashBtn, "Compute hash", r.computeCompareHash},
+		{&r.compare.DiffBtn, "Show diff", r.openCompareDiff},
+		{&r.compare.CloseBtn, "Close", r.closeCompare},
 	}
 	row := tview.NewFlex().SetDirection(tview.FlexColumn)
 	for _, spec := range specs {
@@ -142,7 +199,7 @@ func (r *Root) newCompareButtons() *tview.Flex {
 }
 
 func (r *Root) compareButtonList() []*tview.Button {
-	return []*tview.Button{r.compareHashBtn, r.compareDiffBtn, r.compareCloseBtn}
+	return []*tview.Button{r.compare.HashBtn, r.compare.DiffBtn, r.compare.CloseBtn}
 }
 
 // captureCompareKey is the file-vs-file overlay's own shared key
@@ -264,8 +321,8 @@ func pickDir(path string, info os.FileInfo, other string) string {
 // row): metadata alone is instant, either of those isn't.
 func (r *Root) openCompareFile(a, b string) {
 	r.cancelCompareHashComputation()
-	r.compareA, r.compareB = a, b
-	r.compareHashes = nil
+	r.compare.A, r.compare.B = a, b
+	r.compare.Hashes = nil
 	r.renderCompareFile()
 
 	// height covers title bar (1) + the header's own fixed 6 rows (see
@@ -283,8 +340,8 @@ func (r *Root) openCompareFile(a, b string) {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.compareLayout.SetRect(x, y, width, height)
-	r.showOverlayWithRestore(comparePage, r.compareLayout, func() { r.app.SetFocus(r.compareHashBtn) })
+	r.compare.Layout.SetRect(x, y, width, height)
+	r.showOverlayWithRestore(comparePage, r.compare.Layout, func() { r.app.SetFocus(r.compare.HashBtn) })
 }
 
 // closeCompare hides the overlay and stops any hash computation still
@@ -296,12 +353,12 @@ func (r *Root) closeCompare() {
 }
 
 // renderCompareFile fills the header and verdict line from
-// compare.CompareFiles, plus whatever's in compareHashes if a hash was
+// compare.CompareFiles, plus whatever's in compare.Hashes if a hash was
 // already computed this open (see computeCompareHash) — called after
 // every state change (open, hash result, hash progress tick) the same
 // way renderBatchRenameFields is.
 func (r *Root) renderCompareFile() {
-	fc, err := compare.CompareFiles(r.compareA, r.compareB)
+	fc, err := compare.CompareFiles(r.compare.A, r.compare.B)
 	if err != nil {
 		r.showError(err)
 		r.closeCompare()
@@ -310,18 +367,18 @@ func (r *Root) renderCompareFile() {
 
 	label := colorTag(r.theme.MutedTextColor)
 	text := fmt.Sprintf("[%s]A:[-] %s\n[%s]B:[-] %s\n\n", label,
-		tview.Escape(truncateMiddle(r.compareA, comparePathTruncateWidth)), label,
-		tview.Escape(truncateMiddle(r.compareB, comparePathTruncateWidth)))
+		tview.Escape(truncateMiddle(r.compare.A, comparePathTruncateWidth)), label,
+		tview.Escape(truncateMiddle(r.compare.B, comparePathTruncateWidth)))
 	text += fmt.Sprintf("%-10s %-28s %-28s\n", "", "A", "B")
 	text += fmt.Sprintf("%-10s %-28s %-28s\n", "Size", sizeWithBytes(fc.A.Size), sizeWithBytes(fc.B.Size))
 	text += fmt.Sprintf("%-10s %-28s %-28s\n", "Modified", formatModTimeCell(fc.A.ModTime, r.settings.MtimeUnix), formatModTimeCell(fc.B.ModTime, r.settings.MtimeUnix))
-	r.compareHeader.SetText(text)
+	r.compare.Header.SetText(text)
 
-	r.compareVerdict.SetText(compareVerdictText(r.theme, fc, r.compareHashes, r.compareA, r.compareB, r.compareHashRunning, r.compareHashAnim))
+	r.compare.Verdict.SetText(compareVerdictText(r.theme, fc, r.compare.Hashes, r.compare.A, r.compare.B, r.compare.HashRunning, r.compare.HashAnim))
 
-	binaryA, _ := replace.LooksBinaryFile(r.compareA)
-	binaryB, _ := replace.LooksBinaryFile(r.compareB)
-	r.compareDiffBtn.SetDisabled(binaryA || binaryB || fc.A.IsDir || fc.B.IsDir)
+	binaryA, _ := replace.LooksBinaryFile(r.compare.A)
+	binaryB, _ := replace.LooksBinaryFile(r.compare.B)
+	r.compare.DiffBtn.SetDisabled(binaryA || binaryB || fc.A.IsDir || fc.B.IsDir)
 }
 
 // compareVerdictText is the one-line summary shown under the header:
@@ -355,22 +412,22 @@ func compareVerdictText(theme config.ResolvedTheme, fc compare.FileCompare, hash
 	}
 }
 
-// computeCompareHash hashes both compareA and compareB on a background
+// computeCompareHash hashes both compare.A and compare.B on a background
 // goroutine — the same context.WithCancel + safeGo + QueueUpdateDraw
 // shape computeHashes (properties.go) already establishes, just for two
 // files instead of one. A no-op if a computation is already running, or
 // if the overlay isn't even open.
 func (r *Root) computeCompareHash() {
-	if r.activePage != comparePage || r.compareHashRunning {
+	if r.activePage != comparePage || r.compare.HashRunning {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r.compareHashCancel = cancel
-	r.compareHashRunning = true
-	r.compareHashAnim = 0
+	r.compare.HashCancel = cancel
+	r.compare.HashRunning = true
+	r.compare.HashAnim = 0
 	r.renderCompareFile()
 
-	a, b := r.compareA, r.compareB
+	a, b := r.compare.A, r.compare.B
 	onPanic := func() {
 		r.cancelCompareHashComputation()
 		r.renderCompareFile()
@@ -401,13 +458,13 @@ func (r *Root) computeCompareHash() {
 				r.showError(errB)
 				return
 			}
-			r.compareHashes = map[string]string{a: hashA.SHA256, b: hashB.SHA256}
+			r.compare.Hashes = map[string]string{a: hashA.SHA256, b: hashB.SHA256}
 			r.renderCompareFile()
 		})
 	})
 }
 
-// animateCompareHash advances compareHashAnim until ctx is done —
+// animateCompareHash advances compare.HashAnim until ctx is done —
 // mirrors animateHashProgress (properties.go) exactly, for the same
 // reason: a moving glyph beats a frozen "Computing…" for however long
 // two files actually take to hash.
@@ -424,7 +481,7 @@ func (r *Root) animateCompareHash(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				r.compareHashAnim++
+				r.compare.HashAnim++
 				r.renderCompareFile()
 			})
 		case <-ctx.Done():
@@ -436,11 +493,11 @@ func (r *Root) animateCompareHash(ctx context.Context) {
 // cancelCompareHashComputation stops whatever computeCompareHash call
 // is in flight, if any — mirrors cancelHashComputation.
 func (r *Root) cancelCompareHashComputation() {
-	if r.compareHashCancel != nil {
-		r.compareHashCancel()
-		r.compareHashCancel = nil
+	if r.compare.HashCancel != nil {
+		r.compare.HashCancel()
+		r.compare.HashCancel = nil
 	}
-	r.compareHashRunning = false
+	r.compare.HashRunning = false
 }
 
 // openCompareDiff is "Show diff" — see comparediff.go for its actual

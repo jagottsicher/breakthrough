@@ -373,37 +373,37 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// The Git breach dashboard (see gitbreachscreen.go/applyGitBreachTheme).
 	r.applyGitBreachTheme(theme)
 
-	if r.compareTreeTable != nil {
+	if r.compare.TreeTable != nil {
 		// A real, previously-unnoticed gap: unlike every other full-screen
 		// catalog here, this whole block was missing except for the hint
 		// text itself — Compare Tree's own layout/table/status/buttons sat
 		// at tview's plain, unthemed default instead of this app's theme.
-		r.compareTreeLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.compareTreeTable.SetBackgroundColor(theme.SurfaceBackground)
+		r.compare.TreeLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.compare.TreeTable.SetBackgroundColor(theme.SurfaceBackground)
 		// Without this, tview's own default selected-cell style just
 		// reverses each cell's own foreground into a background instead
 		// of using one consistent selection bar — the same fix already
 		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
 		// tabSwitcher/gitBreach's tables, for the identical reason.
-		r.compareTreeTable.SetSelectedStyle(tcell.StyleDefault.
+		r.compare.TreeTable.SetSelectedStyle(tcell.StyleDefault.
 			Background(theme.SelectionBackground).
 			Foreground(theme.TextColor))
-		r.compareTreeStatus.SetBackgroundColor(theme.SurfaceBackground)
-		r.compareTreeStatus.SetTextColor(theme.TextColor)
-		r.compareTreeButtons.SetBackgroundColor(theme.SurfaceBackground)
-		styleButton(r.compareTreeModeBtn, theme)
-		styleButton(r.compareTreeShowSameBtn, theme)
-		styleButton(r.compareTreeCloseBtn, theme)
+		r.compare.TreeStatus.SetBackgroundColor(theme.SurfaceBackground)
+		r.compare.TreeStatus.SetTextColor(theme.TextColor)
+		r.compare.TreeButtons.SetBackgroundColor(theme.SurfaceBackground)
+		styleButton(r.compare.TreeModeBtn, theme)
+		styleButton(r.compare.TreeShowSameBtn, theme)
+		styleButton(r.compare.TreeCloseBtn, theme)
 
 		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
 		// fixed FocusedBackground follows.
-		r.compareTreeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.compareTreeTitleBar.SetTextColor(theme.TextColor)
-		r.compareTreeHint.SetBackgroundColor(theme.InputBackground)
-		r.compareTreeHint.SetTextColor(theme.MutedTextColor)
-		compareTreeHintText, compareTreeHintSpans := buildListHint(theme, compareTreeHintEntries())
-		r.compareTreeHint.SetText(compareTreeHintText)
-		r.compareTreeHintSpans = compareTreeHintSpans
+		r.compare.TreeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.compare.TreeTitleBar.SetTextColor(theme.TextColor)
+		r.compare.TreeHint.SetBackgroundColor(theme.InputBackground)
+		r.compare.TreeHint.SetTextColor(theme.MutedTextColor)
+		compareTreeHintText, hintSpans := buildListHint(theme, compareTreeHintEntries())
+		r.compare.TreeHint.SetText(compareTreeHintText)
+		r.compare.TreeHintSpans = hintSpans
 	}
 
 	// The file-vs-file Compare overlay (see compare.go/

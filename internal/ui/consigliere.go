@@ -1735,11 +1735,11 @@ const consigliereMaxCompareTreeEntries = 50
 func (r *Root) compareTreeContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Compare Faultline.\n")
-	fmt.Fprintf(&b, "Comparing %s against %s.\n", r.compareTreeA, r.compareTreeB)
-	fmt.Fprintf(&b, "%s\n", strings.TrimSpace(compareTreeStatusText(r.compareTreeStats)))
+	fmt.Fprintf(&b, "Comparing %s against %s.\n", r.compare.TreeA, r.compare.TreeB)
+	fmt.Fprintf(&b, "%s\n", strings.TrimSpace(compareTreeStatusText(r.compare.TreeStats)))
 
 	var diffs []string
-	for _, e := range r.compareTreeEntries {
+	for _, e := range r.compare.TreeEntries {
 		if e.Verdict == compare.Identical {
 			continue
 		}

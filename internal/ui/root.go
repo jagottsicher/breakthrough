@@ -1746,80 +1746,27 @@ type Root struct {
 	// is a full screen (compareTreePage), a Table plus a status line and
 	// buttons underneath — the same list-plus-status-plus-buttons shape
 	// Batch Rename's own preview already establishes. Both share one
-	// unified-diff pager overlay (compareDiffPage) for a text pair's
-	// actual line-by-line content, rather than each keeping its own.
+	// unified-diff pager overlay (compareDiffPage) for a text pair's own
+	// actual line-by-line content, keeping its own state.
 	//
-	// compareA/compareB are the file-vs-file overlay's own two targets;
-	// compareHashCancel/compareHashRunning back its on-demand hash
+	// compare.A/compare.B are the file-vs-file overlay's own two targets;
+	// compare.HashCancel/compare.HashRunning back its on-demand hash
 	// computation, the same context.WithCancel + bool pair Properties'
 	// own hashCancel/hashInProgress already establish (see
-	// computeHashes) — deliberately not shared with Properties' fields
-	// themselves, since the two can legitimately be open, and hashing
-	// different targets, at the same time (Compare is not modal).
+	// computeHashes) — deliberately not shared with Properties' own
+	// fields themselves, since the two can legitimately be open, and
+	// hashing different targets, at the same time (Compare is not modal).
 	//
-	// compareTreeEntries is Walk's own last full result, kept so the
+	// compare.TreeEntries is Walk's own last full result, kept so the
 	// table can be re-rendered (e.g. toggling "show identical") without
-	// re-walking the filesystem; compareTreeCancel/compareTreeRunning
-	// mirror compareHashCancel/compareHashRunning for the walk itself.
-	compareLayout      *tview.Flex
-	compareTitleBar    *tview.TextView
-	compareHeader      *tview.TextView
-	compareVerdict     *tview.TextView
-	compareButtons     *tview.Flex
-	compareHashBtn     *tview.Button
-	compareDiffBtn     *tview.Button
-	compareCloseBtn    *tview.Button
-	compareA, compareB string
-	compareHashes      map[string]string // path -> SHA-256, the one digest Compare ever needs for a verdict
-	compareHashCancel  context.CancelFunc
-	compareHashRunning bool
-	compareHashAnim    int
-
-	compareTreeLayout        *tview.Flex
-	compareTreeTitleBar      *tview.TextView
-	compareTreeHint          *tview.TextView
-	compareTreeHintSpans     []listHintSpan
-	compareTreeTable         *tview.Table
-	compareTreeScrollbar     *verticalScrollbar
-	compareTreeStatus        *tview.TextView
-	compareTreeButtons       *tview.Flex
-	compareTreeModeBtn       *tview.Button
-	compareTreeShowSameBtn   *tview.Button
-	compareTreeCloseBtn      *tview.Button
-	compareTreeA             string
-	compareTreeB             string
-	compareTreeMode          compare.Mode
-	compareTreeShowIdentical bool
-	compareTreeEntries       []compare.Entry
-	compareTreeStats         compare.Stats
-	compareTreeCancel        context.CancelFunc
-	compareTreeRunning       bool
-	compareTreeAnim          int
-
-	// The side-by-side diff view (see comparediff.go) — compareDiffPairs
-	// is compare.SideBySide's own last result, kept so Tab/link-toggle
-	// re-renders (no scroll offset change) never need to recompute the
-	// diff. compareDiffLinked mirrors the title bar's own toggle glyph
-	// state; compareDiffLeftFocused tracks which of the two panes
-	// currently has focus, read by captureCompareDiffPaneKey to decide
-	// which pane an Up/Down/PgUp/PgDn keypress scrolls when unlinked.
-	compareDiffLayout          *tview.Flex
-	compareDiffTitleBar        *tview.TextView
-	compareDiffBody            *tview.Flex
-	compareDiffLeft            *tview.TextView
-	compareDiffLeftScrollbar   *verticalScrollbar
-	compareDiffLeftHScrollbar  *horizontalScrollbar
-	compareDiffLeftSpacer      *tview.Box
-	compareDiffRight           *tview.TextView
-	compareDiffRightScrollbar  *verticalScrollbar
-	compareDiffRightHScrollbar *horizontalScrollbar
-	compareDiffRightSpacer     *tview.Box
-	compareDiffSeparator       *tview.Box
-	compareDiffHint            *tview.TextView
-	compareDiffHintSpans       []listHintSpan
-	compareDiffPairs           []compare.LinePair
-	compareDiffLinked          bool
-	compareDiffLeftFocused     bool
+	// re-walking the filesystem; compare.TreeCancel/compare.TreeRunning
+	// mirror compare.HashCancel/compare.HashRunning for the walk itself.
+	//
+	// compare.DiffLeft/compare.DiffRight are the Diff pager's own two
+	// side-by-side panes (see comparediff.go); compare.DiffLinked is
+	// compare.SideBySide's Tab/link-toggle scroll state, so a linked
+	// re-renders never drift apart on Up/Down/PgUp/PgDn.
+	compare compareState
 
 	helpView      *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	helpScrollbar *verticalScrollbar
@@ -3419,13 +3366,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(batchRenamePage, r.batchRenameLayout, true, false)
 	r.AddPage(batchRenameInputPage, r.batchRenameInput, false, false)
 	r.AddPage(batchRenamePresetPage, r.batchRenamePresetLayout, false, false)
-	r.AddPage(comparePage, r.compareLayout, false, false)
-	r.AddPage(compareTreePage, r.compareTreeLayout, true, false)
+	r.AddPage(comparePage, r.compare.Layout, false, false)
+	r.AddPage(compareTreePage, r.compare.TreeLayout, true, false)
 	// resize=true: the diff view deliberately fills the whole terminal,
 	// the same reasoning compareTreePage's own comment just above gives
 	// — two side-by-side panes want all the width and height they can
 	// get, not a fixed-size overlay.
-	r.AddPage(compareDiffPage, r.compareDiffLayout, true, false)
+	r.AddPage(compareDiffPage, r.compare.DiffLayout, true, false)
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.
