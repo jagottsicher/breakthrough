@@ -552,7 +552,7 @@ func (r *Root) newRsyncPickButtons() *tview.Flex {
 // newRsyncButtons builds rsyncForm's own action row once, from
 // NewRoot — a real Cancel/Run button pair, the same established shape
 // newDuplicateButtons/newChmodButtons/newSearchButtons already use for
-// theirs (see duplicateButtons' own doc comment on root.go for why
+// theirs (see duplicate.Buttons' own doc comment on root.go for why
 // this, not a vertical List).
 func (r *Root) newRsyncButtons() *tview.Flex {
 	r.rsyncCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
