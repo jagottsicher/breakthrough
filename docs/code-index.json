@@ -48,8 +48,8 @@
     },
     {
       "path": ".gitignore",
-      "size": 1217,
-      "sha256": "9cf420ad2fe6bdaec1eb5e6a3ed53563f39e0fac5d411e0f9c4604eb6ce42533"
+      "size": 1428,
+      "sha256": "04193425f4ffd3028704810ec99bbb517339b69b515a97cbe9fc63498dac8917"
     },
     {
       "path": ".golangci.yml",
@@ -63046,5 +63046,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "e95fa3902b5f3d9087c64cae1a7689a6c6a260cce5997cd1526d5ef60a24f991"
+  "merkle_root": "51fe3f066af20784cc48de54713a85f7dd0c22d852b78a35ae5e25c765fda528"
 }
