@@ -32,7 +32,7 @@ const transferCenterPage = "transfer-center"
 // running `go test`.
 var operationsPersistPath = operations.DefaultPath
 
-// Column indices within transferCenterTable. Source/Target come last —
+// Column indices within transfer.Table. Source/Target come last —
 // both unbounded (a long path, a remote connection label) and the two
 // least essential for a quick scan — the same "wide, least essential
 // field goes last so it's what needs horizontal scrolling instead of
@@ -84,34 +84,34 @@ func transferCenterHintEntries() []listHintEntry {
 // the same build-once/repopulate-on-open shape newMountsScreen already
 // establishes.
 func (r *Root) newTransferCenterScreen() {
-	r.transferCenterTable = tview.NewTable()
-	r.transferCenterTable.SetBorders(false)
-	r.transferCenterTable.SetBorderPadding(1, 0, 2, 1)
-	r.transferCenterTable.SetSelectable(true, false)
-	r.transferCenterTable.SetFixed(1, 0)
-	r.transferCenterTable.SetInputCapture(r.captureTransferCenterKey)
+	r.transfer.Table = tview.NewTable()
+	r.transfer.Table.SetBorders(false)
+	r.transfer.Table.SetBorderPadding(1, 0, 2, 1)
+	r.transfer.Table.SetSelectable(true, false)
+	r.transfer.Table.SetFixed(1, 0)
+	r.transfer.Table.SetInputCapture(r.captureTransferCenterKey)
 
-	r.transferCenterTitleBar = newPlainTitleBar("Undertow")
-	r.transferCenterTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.transferCenterTitleBar, r.reloadTransferCenter, r.closeTransferCenter))
+	r.transfer.TitleBar = newPlainTitleBar("Undertow")
+	r.transfer.TitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.transfer.TitleBar, r.reloadTransferCenter, r.closeTransferCenter))
 
-	r.transferCenterHint = tview.NewTextView()
-	r.transferCenterHint.SetWrap(false)
-	r.transferCenterHint.SetDynamicColors(true)
+	r.transfer.Hint = tview.NewTextView()
+	r.transfer.Hint.SetWrap(false)
+	r.transfer.Hint.SetDynamicColors(true)
 	hintText, hintSpans := buildListHint(r.theme, transferCenterHintEntries())
-	r.transferCenterHint.SetText(hintText)
-	r.transferCenterHintSpans = hintSpans
-	r.transferCenterHint.SetMouseCapture(r.captureListHintMouse(r.transferCenterHint, &r.transferCenterHintSpans))
+	r.transfer.Hint.SetText(hintText)
+	r.transfer.HintSpans = hintSpans
+	r.transfer.Hint.SetMouseCapture(r.captureListHintMouse(r.transfer.Hint, &r.transfer.HintSpans))
 
-	r.transferCenterScrollbar = newVerticalScrollbarForTable(r, r.transferCenterTable)
+	r.transfer.Scrollbar = newVerticalScrollbarForTable(r, r.transfer.Table)
 	tableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.transferCenterTable, 0, 1, true).
-		AddItem(r.transferCenterScrollbar, 1, 0, false)
-	tableRow.SetMouseCapture(r.transferCenterScrollbar.captureMouse)
+		AddItem(r.transfer.Table, 0, 1, true).
+		AddItem(r.transfer.Scrollbar, 1, 0, false)
+	tableRow.SetMouseCapture(r.transfer.Scrollbar.captureMouse)
 
-	r.transferCenterLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.transferCenterTitleBar, 1, 0, false).
+	r.transfer.Layout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.transfer.TitleBar, 1, 0, false).
 		AddItem(tableRow, 0, 1, true).
-		AddItem(r.transferCenterHint, 1, 0, false)
+		AddItem(r.transfer.Hint, 1, 0, false)
 
 	// Subscribe once, here, not in openTransferCenter: Start/SetState/
 	// Finish can fire while this screen isn't even open (a Paste started
@@ -136,7 +136,7 @@ func (r *Root) newTransferCenterScreen() {
 // openMounts does.
 func (r *Root) openTransferCenter() {
 	r.reloadTransferCenter()
-	r.showOverlay(transferCenterPage, r.transferCenterLayout)
+	r.showOverlay(transferCenterPage, r.transfer.Layout)
 }
 
 // closeTransferCenter hides the Transfer-Zentrale screen. Nothing to
@@ -151,9 +151,9 @@ func (r *Root) closeTransferCenter() {
 // Log's own newest-first convention — and re-renders.
 func (r *Root) reloadTransferCenter() {
 	ops := r.operations.List()
-	r.transferCenterOps = make([]operations.Operation, len(ops))
+	r.transfer.Ops = make([]operations.Operation, len(ops))
 	for i, op := range ops {
-		r.transferCenterOps[len(ops)-1-i] = op
+		r.transfer.Ops[len(ops)-1-i] = op
 	}
 	r.renderTransferCenter()
 }
@@ -208,16 +208,16 @@ func transferCenterStatusColor(op operations.Operation, theme config.ResolvedThe
 	}
 }
 
-// renderTransferCenter fills the table from r.transferCenterOps — a
+// renderTransferCenter fills the table from r.transfer.Ops — a
 // bold header row, then one row per Operation, oldest-at-bottom (see
 // reloadTransferCenter's own doc comment).
 func (r *Root) renderTransferCenter() {
-	r.transferCenterTable.Clear()
+	r.transfer.Table.Clear()
 
-	renderReloadCloseTitleBar(r.transferCenterTitleBar, " Undertow ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.transfer.TitleBar, " Undertow ", r.lastScreenWidth)
 
 	header := func(col int, text string) {
-		r.transferCenterTable.SetCell(0, col,
+		r.transfer.Table.SetCell(0, col,
 			tview.NewTableCell(padRight(text, transferCenterColumnWidth(col))).
 				SetTextColor(r.theme.Text).
 				SetAttributes(tcell.AttrBold).
@@ -230,38 +230,38 @@ func (r *Root) renderTransferCenter() {
 	header(transferCenterColSource, "Source")
 	header(transferCenterColTarget, "Target")
 
-	if len(r.transferCenterOps) == 0 {
-		showTablePlaceholder(r.transferCenterTable, "Nothing running or recently finished.", r.theme.PlaceholderText)
+	if len(r.transfer.Ops) == 0 {
+		showTablePlaceholder(r.transfer.Table, "Nothing running or recently finished.", r.theme.PlaceholderText)
 		return
 	}
-	enableTableSelection(r.transferCenterTable)
+	enableTableSelection(r.transfer.Table)
 
-	for i, op := range r.transferCenterOps {
+	for i, op := range r.transfer.Ops {
 		row := i + 1
 		statusColor := transferCenterStatusColor(op, r.theme)
 
-		r.transferCenterTable.SetCell(row, transferCenterColStatus,
+		r.transfer.Table.SetCell(row, transferCenterColStatus,
 			tview.NewTableCell(padRight(transferCenterStatusText(op), transferCenterColumnWidth(transferCenterColStatus))).
 				SetTextColor(statusColor).SetSelectable(true))
-		r.transferCenterTable.SetCell(row, transferCenterColType,
+		r.transfer.Table.SetCell(row, transferCenterColType,
 			tview.NewTableCell(padRight(op.Type, transferCenterColumnWidth(transferCenterColType))).
 				SetTextColor(r.theme.Text).SetSelectable(true))
-		r.transferCenterTable.SetCell(row, transferCenterColStarted,
+		r.transfer.Table.SetCell(row, transferCenterColStarted,
 			tview.NewTableCell(padRight(op.StartTime.Format("15:04:05"), transferCenterColumnWidth(transferCenterColStarted))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
-		r.transferCenterTable.SetCell(row, transferCenterColResult,
+		r.transfer.Table.SetCell(row, transferCenterColResult,
 			tview.NewTableCell(padRight(transferCenterResultText(op), transferCenterColumnWidth(transferCenterColResult))).
 				SetTextColor(statusColor).SetSelectable(true))
-		r.transferCenterTable.SetCell(row, transferCenterColSource,
+		r.transfer.Table.SetCell(row, transferCenterColSource,
 			tview.NewTableCell(padRight(op.Source, transferCenterColumnWidth(transferCenterColSource))).
 				SetTextColor(r.theme.Text).SetSelectable(true))
-		r.transferCenterTable.SetCell(row, transferCenterColTarget,
+		r.transfer.Table.SetCell(row, transferCenterColTarget,
 			tview.NewTableCell(op.Target).
 				SetTextColor(r.theme.Text).SetSelectable(true))
 	}
 
-	if row, _ := r.transferCenterTable.GetSelection(); row < 1 || row > len(r.transferCenterOps) {
-		r.transferCenterTable.Select(1, 0)
+	if row, _ := r.transfer.Table.GetSelection(); row < 1 || row > len(r.transfer.Ops) {
+		r.transfer.Table.Select(1, 0)
 	}
 }
 
@@ -270,11 +270,11 @@ func (r *Root) renderTransferCenter() {
 // the empty placeholder, the same guard captureMountsKey's own row
 // actions would need if it had any.
 func (r *Root) selectedTransferCenterOperation() (operations.Operation, bool) {
-	row, _ := r.transferCenterTable.GetSelection()
-	if row < 1 || row > len(r.transferCenterOps) {
+	row, _ := r.transfer.Table.GetSelection()
+	if row < 1 || row > len(r.transfer.Ops) {
 		return operations.Operation{}, false
 	}
-	return r.transferCenterOps[row-1], true
+	return r.transfer.Ops[row-1], true
 }
 
 // cancelSelectedTransferCenterOperation is "c"'s own action — maps the
@@ -329,7 +329,7 @@ func (r *Root) captureTransferCenterKey(event *tcell.EventKey) *tcell.EventKey {
 	// Tab/Backtab reach the AI Consigliere sidebar — see
 	// startConsigliereChord's own doc comment in consigliere.go and
 	// captureLogAuditSelectionTableKey's own identical shape.
-	// transferCenterTable is this screen's only real focus target.
+	// transfer.Table is this screen's only real focus target.
 	if r.consigliereVisible {
 		if event.Key() == tcell.KeyTab {
 			r.app.SetFocus(r.consigliereInput)
@@ -370,22 +370,22 @@ func (r *Root) captureTransferCenterKey(event *tcell.EventKey) *tcell.EventKey {
 // out of applyTheme (see its own doc comment). Guarded the same way
 // applyMountsTheme is.
 func (r *Root) applyTransferCenterTheme(theme config.ResolvedTheme) {
-	if r.transferCenterTable == nil {
+	if r.transfer.Table == nil {
 		return
 	}
-	r.transferCenterLayout.SetBackgroundColor(theme.PanelBackground)
-	r.transferCenterTable.SetBackgroundColor(theme.PanelBackground)
-	r.transferCenterTable.SetSelectedStyle(tcell.StyleDefault.
+	r.transfer.Layout.SetBackgroundColor(theme.PanelBackground)
+	r.transfer.Table.SetBackgroundColor(theme.PanelBackground)
+	r.transfer.Table.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
 
-	r.transferCenterTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.transferCenterTitleBar.SetTextColor(theme.TextColor)
-	r.transferCenterHint.SetBackgroundColor(theme.SurfaceBackground)
-	r.transferCenterHint.SetTextColor(theme.TextColor)
+	r.transfer.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.transfer.TitleBar.SetTextColor(theme.TextColor)
+	r.transfer.Hint.SetBackgroundColor(theme.SurfaceBackground)
+	r.transfer.Hint.SetTextColor(theme.TextColor)
 	hintText, hintSpans := buildListHint(theme, transferCenterHintEntries())
-	r.transferCenterHint.SetText(hintText)
-	r.transferCenterHintSpans = hintSpans
+	r.transfer.Hint.SetText(hintText)
+	r.transfer.HintSpans = hintSpans
 
 	r.renderTransferCenter()
 }

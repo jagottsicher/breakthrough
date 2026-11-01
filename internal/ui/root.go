@@ -126,6 +126,18 @@ type overlayFrame struct {
 // Modified can be edited in place — Owner/Group are still read-only,
 // pending a cross-platform way to list system users/groups (macOS
 // doesn't expose them via /etc/passwd the way Linux does).
+// transferCenterState holds the Transfer-Zentrale screen's widgets and
+// last-rendered operations snapshot (see transfercenter.go).
+type transferCenterState struct {
+	Layout    *tview.Flex
+	TitleBar  *tview.TextView
+	Hint      *tview.TextView
+	HintSpans []listHintSpan
+	Table     *tview.Table
+	Scrollbar *verticalScrollbar
+	Ops       []operations.Operation
+}
+
 type Root struct {
 	*tview.Pages
 
@@ -2754,16 +2766,10 @@ type Root struct {
 	// r.operations (internal/operations), the Aufgaben-/Transferzentrale
 	// feature_ideas.txt's own "3." describes, same build-once/
 	// repopulate-on-open shape every other full-screen catalog here
-	// already uses. transferCenterOps holds the last rendered snapshot
+	// already uses. transfer.Ops holds the last rendered snapshot
 	// (newest first), refreshed by reloadTransferCenter on open, on "r",
 	// and live via r.operations.Subscribe while the screen is open.
-	transferCenterLayout    *tview.Flex
-	transferCenterTitleBar  *tview.TextView
-	transferCenterHint      *tview.TextView
-	transferCenterHintSpans []listHintSpan
-	transferCenterTable     *tview.Table
-	transferCenterScrollbar *verticalScrollbar
-	transferCenterOps       []operations.Operation
+	transfer transferCenterState
 
 	// easterEggView/easterEggCancel back the hidden "follow the white
 	// rabbit" overlay (see easteregg.go) — built once like every other
@@ -3452,7 +3458,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Transfer-Zentrale screen deliberately fills the
 	// whole terminal too, the same reasoning every other full-screen
 	// catalog above gives.
-	r.AddPage(transferCenterPage, r.transferCenterLayout, true, false)
+	r.AddPage(transferCenterPage, r.transfer.Layout, true, false)
 	// resize=true: the Sessions screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
