@@ -139,7 +139,7 @@ func TestOpenCompressCancelDialogIsANoOpWhenNothingRunning(t *testing.T) {
 func TestOpenCompressCancelDialogOpensWhenAJobIsRunning(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	r.compressJob = &compressJob{ctx: ctx, cancel: cancel}
+	r.compress.Job = &compressJob{ctx: ctx, cancel: cancel}
 
 	r.openCompressCancelDialog()
 

@@ -252,7 +252,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// SurfaceBackground, matching styleList's own call just above — a
 	// plain tview.NewBox() defaults to tview's own built-in
 	// PrimitiveBackgroundColor otherwise, the same mismatch
-	// duplicateSpacer/compressSpacer/rsyncSpacer's own doc comments
+	// duplicateSpacer/compress.Spacer/rsyncSpacer's own doc comments
 	// already warn about.
 	r.activityLogNoticeSpacer1.SetBackgroundColor(theme.SurfaceBackground)
 	r.activityLogNoticeSpacer2.SetBackgroundColor(theme.SurfaceBackground)
@@ -692,24 +692,24 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// Duplicate/Multiply (see duplicate.go/applyDuplicateTheme).
 	r.applyDuplicateTheme(theme)
 
-	if r.compressForm != nil {
-		r.compressForm.SetBackgroundColor(theme.SurfaceBackground)
-		r.compressForm.SetLabelColor(theme.TextColor)
-		r.compressForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-		r.compressForm.SetFieldTextColor(theme.TextColor)
-		if r.compressFormatField != nil {
-			r.themeDuplicateDropDown(r.compressFormatField)
+	if r.compress.Form != nil {
+		r.compress.Form.SetBackgroundColor(theme.SurfaceBackground)
+		r.compress.Form.SetLabelColor(theme.TextColor)
+		r.compress.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
+		r.compress.Form.SetFieldTextColor(theme.TextColor)
+		if r.compress.FormatField != nil {
+			r.themeDuplicateDropDown(r.compress.FormatField)
 		}
-		r.compressPreviewView.SetBackgroundColor(theme.SurfaceBackground)
-		r.compressPreviewView.SetTextColor(theme.TextColor)
-		r.compressSpacer.SetBackgroundColor(theme.SurfaceBackground)
-		r.compressButtons.SetBackgroundColor(theme.SurfaceBackground)
-		styleButton(r.compressCancelBtn, theme)
-		styleButton(r.compressApplyBtn, theme)
+		r.compress.PreviewView.SetBackgroundColor(theme.SurfaceBackground)
+		r.compress.PreviewView.SetTextColor(theme.TextColor)
+		r.compress.Spacer.SetBackgroundColor(theme.SurfaceBackground)
+		r.compress.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+		styleButton(r.compress.CancelBtn, theme)
+		styleButton(r.compress.ApplyBtn, theme)
 		// FocusedBackground, fixed — the same reasoning
 		// duplicateTitleBar's own identical choice just above follows.
-		r.compressTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.compressTitleBar.SetTextColor(theme.TextColor)
+		r.compress.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.compress.TitleBar.SetTextColor(theme.TextColor)
 	}
 
 	r.rsyncForm.SetBackgroundColor(theme.SurfaceBackground)
