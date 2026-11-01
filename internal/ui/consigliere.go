@@ -1478,11 +1478,11 @@ const consigliereMaxSessions = 50
 func (r *Root) sessionsContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Sessions.\n")
-	if r.sessionsErr != nil {
-		fmt.Fprintf(&b, "Could not read the current session list: %v\n", r.sessionsErr)
+	if r.sessions.Err != nil {
+		fmt.Fprintf(&b, "Could not read the current session list: %v\n", r.sessions.Err)
 		return strings.TrimSpace(b.String())
 	}
-	sessions := r.sessionsList
+	sessions := r.sessions.List
 	fmt.Fprintf(&b, "%d sessions:\n", len(sessions))
 	n := len(sessions)
 	if n > consigliereMaxSessions {

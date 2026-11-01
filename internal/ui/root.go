@@ -126,6 +126,19 @@ type overlayFrame struct {
 // Modified can be edited in place — Owner/Group are still read-only,
 // pending a cross-platform way to list system users/groups (macOS
 // doesn't expose them via /etc/passwd the way Linux does).
+// sessionsState holds the Sessions screen's widgets and last read
+// result (see sessions.go).
+type sessionsState struct {
+	Layout    *tview.Flex
+	TitleBar  *tview.TextView
+	Hint      *tview.TextView
+	HintSpans []listHintSpan
+	Table     *tview.Table
+	Scrollbar *verticalScrollbar
+	List      []multiplex.Session
+	Err       error
+}
+
 type Root struct {
 	*tview.Pages
 
@@ -528,16 +541,9 @@ type Root struct {
 	// after the Tab switcher/Connection menu's own per-row action-cell
 	// table rather than Mounts/Firewall's own plain read-only rows: each
 	// session carries three independent actions (Attach, Attach in new
-	// window, Close). sessionsList/sessionsErr hold the last read
+	// window, Close). sessions.List/sessions.Err hold the last read
 	// result, refreshed by reloadSessions (on open, and on "r").
-	sessionsLayout    *tview.Flex
-	sessionsTitleBar  *tview.TextView
-	sessionsHint      *tview.TextView
-	sessionsHintSpans []listHintSpan
-	sessionsTable     *tview.Table
-	sessionsScrollbar *verticalScrollbar
-	sessionsList      []multiplex.Session
-	sessionsErr       error
+	sessions sessionsState
 
 	// The Messages screen ("gm", see messages.go and feature_ideas.txt's
 	// own "3a. Benachrichtigungen", Stufen 3-5) — a full-screen catalog
@@ -3456,7 +3462,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Sessions screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
-	r.AddPage(sessionsPage, r.sessionsLayout, true, false)
+	r.AddPage(sessionsPage, r.sessions.Layout, true, false)
 	// resize=true: the SSH Keys screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall/Sessions screens' own comments above give.
