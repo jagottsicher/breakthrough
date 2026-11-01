@@ -13,6 +13,11 @@ github-token.txt
 .claude/settings.local.json
 .claude/worktrees/
 
+# References website-credentials.txt's own local path, WP nonce/cookie
+# conventions, and the wiki clone's own local checkout path — a local
+# workflow aid, not a repository artifact.
+.claude/skills/publish/
+
 # Go build artifacts
 /bin/
 *.test
