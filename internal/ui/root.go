@@ -24,7 +24,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/filelabels"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
-	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/mounts"
@@ -789,83 +788,48 @@ type Root struct {
 	// Branches/Commits/Stash are stub boxes in this first Ausbaustufe;
 	// Status and Files are the only two with real content, Files being
 	// the one interactive list (Status is a read-only summary).
-	gitBreachLayout   *tview.Flex
-	gitBreachTitleBar *tview.TextView
+	gitBreach gitBreachState
 	// Each box below is a header/body pair (see newGitBreachBoxHeader/
 	// styleGitBreachFocus) — no border, a colored header line instead,
 	// per the user's own explicit request.
-	gitBreachStatusHeader      *tview.TextView
-	gitBreachStatusView        *tview.TextView
-	gitBreachFilesHeader       *tview.TextView
-	gitBreachFilesTable        *tview.Table
-	gitBreachFilesScrollbar    *verticalScrollbar
-	gitBreachBranchesHeader    *tview.TextView
-	gitBreachBranchesTable     *tview.Table
-	gitBreachBranchesScrollbar *verticalScrollbar
-	gitBreachCommitsHeader     *tview.TextView
-	gitBreachCommitsTable      *tview.Table
-	gitBreachCommitsScrollbar  *verticalScrollbar
-	gitBreachStashHeader       *tview.TextView
-	gitBreachStashTable        *tview.Table
-	gitBreachStashScrollbar    *verticalScrollbar
-	gitBreachDiffHeader        *tview.TextView
-	gitBreachDiffView          *tview.TextView
-	gitBreachDiffScrollbar     *verticalScrollbar
-	gitBreachDiffHScrollbar    *horizontalScrollbar
-	gitBreachDiffSpacer        *tview.Box
-	gitBreachHint              *tview.TextView
-	gitBreachHintSpans         []listHintSpan
 
-	gitBreachDir    string // the directory "jg" was invoked from
-	gitBreachRoot   string // resolved repository root, see git.Root
-	gitBreachStatus git.Status
-	// gitBreachRows flattens gitBreachStatus into gitBreachFilesTable's
+	// gitBreach.Rows flattens gitBreach.Status into gitBreach.FilesTable's
 	// own rows (see buildGitBreachRows) — one row per Staged/Unstaged/
 	// Untracked/Conflict entry, in that section order, matching the
 	// mockup's own "Staged (n)" / "Unstaged (n)" grouping.
-	gitBreachRows []gitBreachRow
-	// gitBreachRowIndex maps a Files table row to its own index into
-	// gitBreachRows — built fresh by renderGitBreachFiles on every
+	// gitBreach.RowIndex maps a Files table row to its own index into
+	// gitBreach.Rows — built fresh by renderGitBreachFiles on every
 	// render, since the table also contains non-selectable section
-	// header rows ("Staged (n)", ...) that gitBreachRows itself has no
+	// header rows ("Staged (n)", ...) that gitBreach.Rows itself has no
 	// entry for at all.
-	gitBreachRowIndex map[int]int
-	gitBreachFetchErr error
-	// gitBreachFilesReady is false until renderGitBreachFiles has shown
+	// gitBreach.FilesReady is false until renderGitBreachFiles has shown
 	// real, selectable file rows at least once. newGitBreachScreen bakes
 	// in cell colors by calling renderGitBreach before reloadGitBreach
-	// has ever run, with gitBreachRows still empty — that construction-
+	// has ever run, with gitBreach.Rows still empty — that construction-
 	// time render hits the "Working tree clean" placeholder, and
 	// showTablePlaceholder's own Select(1, 0) leaves tview's internal
 	// selectedRow at 1 (Table.Clear() never resets it). Without this
 	// flag, the first real render would mistake that leftover 1 for a
 	// deliberate cursor position whenever it happens to still address a
-	// real file row — see gitBreachBranchesReady below for the case
+	// real file row — see gitBreach.BranchesReady below for the case
 	// where that coincidence doesn't hold and the bug is visible.
-	gitBreachFilesReady bool
-	// gitBreachBranches/gitBreachBranchesErr are the Branches box's own
-	// equivalent of gitBreachRows/gitBreachFetchErr above — a separate
+	// gitBreach.Branches/gitBreach.BranchesErr are the Branches box's own
+	// equivalent of gitBreach.Rows/gitBreach.FetchErr above — a separate
 	// git invocation (git.Branches, for-each-ref) from the one that
 	// fills Status/Files, so its own failure is tracked and shown
-	// independently rather than conflated with gitBreachFetchErr.
-	gitBreachBranches    []git.Branch
-	gitBreachBranchesErr error
-	// gitBreachBranchesReady mirrors gitBreachFilesReady exactly, for
+	// independently rather than conflated with gitBreach.FetchErr.
+	// gitBreach.BranchesReady mirrors gitBreach.FilesReady exactly, for
 	// the exact same construction-time-placeholder reason — except here
 	// the leftover selectedRow of 1 lands on the second branch instead
 	// of the first (Branches has no non-selectable header row at index
 	// 0 to absorb it the way Files' section headers do), which is what
 	// made this bug user-visible instead of merely latent.
-	gitBreachBranchesReady bool
-	// gitBreachCommits/gitBreachCommitsErr/gitBreachCommitsReady are the
-	// Commits box's own equivalent of gitBreachBranches/
-	// gitBreachBranchesErr/gitBreachBranchesReady above — same shape,
+	// gitBreach.Commits/gitBreach.CommitsErr/gitBreach.CommitsReady are the
+	// Commits box's own equivalent of gitBreach.Branches/
+	// gitBreach.BranchesErr/gitBreach.BranchesReady above — same shape,
 	// same construction-time-placeholder reason for the Ready flag, a
 	// third instance of the identical fix (see renderGitBreachCommits).
-	gitBreachCommits      []git.LogEntry
-	gitBreachCommitsErr   error
-	gitBreachCommitsReady bool
-	// gitBreachCommitsLimit is how many commits reloadGitBreach's own
+	// gitBreach.CommitsLimit is how many commits reloadGitBreach's own
 	// git.Log call asks for — starts at git.CommitLogLimit on every
 	// fresh "jg" open (see openGitBreach), grows by another
 	// git.CommitLogLimit each time the cursor reaches the last loaded
@@ -873,22 +837,17 @@ type Root struct {
 	// maybeLoadMoreGitBreachCommits), and deliberately survives an "r"
 	// reload rather than resetting, so a user who scrolled to 600
 	// commits doesn't lose that expansion just for re-reading current
-	// status. gitBreachCommitsTotal is the repository's own real total
+	// status. gitBreach.CommitsTotal is the repository's own real total
 	// commit count (git.CommitCount) — the Commits header shows
-	// "loaded/total" only while gitBreachCommits is shorter than this,
+	// "loaded/total" only while gitBreach.Commits is shorter than this,
 	// so the user knows there's more to scroll to rather than wondering
 	// why the list stops where it does.
-	gitBreachCommitsLimit int
-	gitBreachCommitsTotal int
-	// gitBreachStash/gitBreachStashErr/gitBreachStashReady mirror
-	// gitBreachCommits/gitBreachCommitsErr/gitBreachCommitsReady exactly
+	// gitBreach.Stash/gitBreach.StashErr/gitBreach.StashReady mirror
+	// gitBreach.Commits/gitBreach.CommitsErr/gitBreach.CommitsReady exactly
 	// — same shape, same construction-time-placeholder reason for the
 	// Ready flag, a fourth instance of the identical fix (see
 	// renderGitBreachStash).
-	gitBreachStash      []git.Stash
-	gitBreachStashErr   error
-	gitBreachStashReady bool
-	// gitBreachMainOwner tracks which box's own selection the Main —
+	// gitBreach.MainOwner tracks which box's own selection the Main —
 	// Diff box is currently showing: Files' own staged/unstaged/
 	// untracked diff, a Commits row's own CommitDiff, or a Stash row's
 	// own StashDiff. Per feature_ideas.txt's own documented layout
@@ -904,13 +863,11 @@ type Root struct {
 	// value (gitBreachMainOwnerFiles == 0) so a fresh Root needs no
 	// explicit initialization to start in the correct, default-focus
 	// state.
-	gitBreachMainOwner gitBreachMainOwnerKind
-	// gitBreachDiffCancel cancels whichever diff fetch is in flight for
+	// gitBreach.DiffCancel cancels whichever diff fetch is in flight for
 	// the row the cursor was on before it moved again — see
 	// startGitBreachDiff/cancelGitBreachDiff, the same shape
 	// cancelDetailsGitStatus already establishes.
-	gitBreachDiffCancel context.CancelFunc
-	// gitBreachDiffScroll remembers Main's own last scroll row per
+	// gitBreach.DiffScroll remembers Main's own last scroll row per
 	// file/commit/stash entry (see gitBreachFileDiffScrollKey and the
 	// "C:"/"S:" key prefixes startGitBreachCommitDiff/
 	// startGitBreachStashDiff build directly) — the user's own explicit
@@ -922,8 +879,7 @@ type Root struct {
 	// session, outliving any single "jg" open/close per the user's own
 	// explicit preference for the longer-lived option) — never
 	// persisted to disk.
-	gitBreachDiffScroll map[string]int
-	// gitBreachDiffScrollKey is whichever key Main's own text was last
+	// gitBreach.DiffScrollKey is whichever key Main's own text was last
 	// actually set under (see gitBreachSetDiffText) — not the row the
 	// cursor currently sits on, which can already have moved on again
 	// before a slow fetch for the previous row even lands. This is
@@ -932,37 +888,26 @@ type Root struct {
 	// touched, always attributes Main's current scroll position to
 	// whatever content is genuinely still on screen. Empty whenever
 	// nothing with real content is shown (no selection, cancelled).
-	gitBreachDiffScrollKey string
 	// The Main diff box's own second, side-by-side view (see
 	// gitbreachdiffsplit.go's own gitBreachRenderDiffSplit) — "v" while
-	// Main has focus toggles gitBreachDiffSplit and switches
-	// gitBreachDiffPages between "unified" (r.gitBreachDiffView, the
-	// original pager) and "split" (gitBreachDiffSplitLeft/Right,
-	// separated by gitBreachDiffSplitSeparator — the same two-pane
+	// Main has focus toggles gitBreach.DiffSplit and switches
+	// gitBreach.DiffPages between "unified" (r.gitBreach.DiffView, the
+	// original pager) and "split" (gitBreach.DiffSplitLeft/Right,
+	// separated by gitBreach.DiffSplitSeparator — the same two-pane
 	// shape comparediff.go's own Compare diff view already
-	// establishes, reused rather than reinvented). gitBreachDiffRawText
+	// establishes, reused rather than reinvented). gitBreach.DiffRawText
 	// is the real diff text behind whatever gitBreachColorizeDiff
 	// already turned into Main's own colored display — kept so a
 	// toggle re-renders the split view from it directly, with no
-	// second git fetch; gitBreachDiffFiles is compare.ParseUnifiedDiff's
+	// second git fetch; gitBreach.DiffFiles is compare.ParseUnifiedDiff's
 	// own last result for that same text, cached so a theme switch can
 	// re-render without re-parsing.
 	//
-	// Only gitBreachDiffSplitLeft ever holds real keyboard focus in
-	// split mode — gitBreachDiffSplitRight is a pure mirror (see
+	// Only gitBreach.DiffSplitLeft ever holds real keyboard focus in
+	// split mode — gitBreach.DiffSplitRight is a pure mirror (see
 	// gitBreachFocusDiffSplitLeftOnClick), since scrolling here is
 	// always linked, by explicit design choice, unlike Compare's own
 	// optional link/unlink toggle.
-	gitBreachDiffSplit           bool
-	gitBreachDiffPages           *tview.Pages
-	gitBreachDiffSplitLeft       *tview.TextView
-	gitBreachDiffSplitRight      *tview.TextView
-	gitBreachDiffSplitSeparator  *tview.Box
-	gitBreachDiffSplitScrollbar  *verticalScrollbar
-	gitBreachDiffSplitHScrollbar *horizontalScrollbar
-	gitBreachDiffSplitSpacer     *tview.Box
-	gitBreachDiffRawText         string
-	gitBreachDiffFiles           []compare.FileDiff
 	// logAuditNewestFirst toggles the viewer table's own sort order —
 	// a click on the Time column header (see renderLogAuditViewer),
 	// per the user's own explicit request to be able to read either
@@ -3485,7 +3430,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Git breach dashboard deliberately fills the whole
 	// terminal too, the same reasoning every other full-screen catalog's
 	// own comment above gives.
-	r.AddPage(gitBreachPage, r.gitBreachLayout, true, false)
+	r.AddPage(gitBreachPage, r.gitBreach.Layout, true, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)

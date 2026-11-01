@@ -78,7 +78,7 @@ func newTestRootForGitBreachDir(t *testing.T, dir string) *Root {
 // the very first open, no matter which row the cursor later moved to.
 // The very first render — before any real git status has been fetched
 // — takes the "Working tree clean" placeholder path, whose own
-// showTablePlaceholder calls Select(1, 0) while gitBreachRowIndex is
+// showTablePlaceholder calls Select(1, 0) while gitBreach.RowIndex is
 // still empty, so the one diff fetch that call triggers finds no row
 // and clears the view. Once real status lands and row 1 happens to
 // already be a real file (as it is here), tview's own
@@ -102,8 +102,8 @@ func TestOpenGitBreachOnACleanRepoThenDirtyingItStillRefreshesTheDiff(t *testing
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach() // clean repo — takes the "Working tree clean" path
-	if len(r.gitBreachRows) != 0 {
-		t.Fatalf("setup: gitBreachRows = %v, want none on a clean repo", r.gitBreachRows)
+	if len(r.gitBreach.Rows) != 0 {
+		t.Fatalf("setup: gitBreach.Rows = %v, want none on a clean repo", r.gitBreach.Rows)
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
@@ -112,11 +112,11 @@ func TestOpenGitBreachOnACleanRepoThenDirtyingItStillRefreshesTheDiff(t *testing
 	runGitBreach(t, dir, "add", "a.txt")
 	r.reloadGitBreach()
 
-	if len(r.gitBreachRows) != 1 || r.gitBreachRows[0].path != "a.txt" {
-		t.Fatalf("setup: gitBreachRows = %v, want just a.txt staged", r.gitBreachRows)
+	if len(r.gitBreach.Rows) != 1 || r.gitBreach.Rows[0].path != "a.txt" {
+		t.Fatalf("setup: gitBreach.Rows = %v, want just a.txt staged", r.gitBreach.Rows)
 	}
-	if r.gitBreachDiffCancel == nil {
-		t.Error("gitBreachDiffCancel is nil — reloadGitBreach never started fetching a diff for the now-real row")
+	if r.gitBreach.DiffCancel == nil {
+		t.Error("gitBreach.DiffCancel is nil — reloadGitBreach never started fetching a diff for the now-real row")
 	}
 }
 
@@ -147,14 +147,14 @@ func TestOpenGitBreachOnARealRepositoryShowsStagedUnstagedAndUntracked(t *testin
 	if r.activePage != gitBreachPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, gitBreachPage)
 	}
-	if r.gitBreachRoot == "" {
-		t.Fatal("gitBreachRoot is empty after a successful open")
+	if r.gitBreach.Root == "" {
+		t.Fatal("gitBreach.Root is empty after a successful open")
 	}
-	if len(r.gitBreachStatus.Staged) != 1 || r.gitBreachStatus.Staged[0].Path != "a.txt" {
-		t.Errorf("Staged = %v, want just a.txt", r.gitBreachStatus.Staged)
+	if len(r.gitBreach.Status.Staged) != 1 || r.gitBreach.Status.Staged[0].Path != "a.txt" {
+		t.Errorf("Staged = %v, want just a.txt", r.gitBreach.Status.Staged)
 	}
-	if len(r.gitBreachStatus.Untracked) != 1 || r.gitBreachStatus.Untracked[0] != "c.txt" {
-		t.Errorf("Untracked = %v, want just c.txt", r.gitBreachStatus.Untracked)
+	if len(r.gitBreach.Status.Untracked) != 1 || r.gitBreach.Status.Untracked[0] != "c.txt" {
+		t.Errorf("Untracked = %v, want just c.txt", r.gitBreach.Status.Untracked)
 	}
 }
 
@@ -224,31 +224,31 @@ func TestToggleGitBreachStageStagesAndUnstagesTheRowUnderTheCursor(t *testing.T)
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if len(r.gitBreachStatus.Untracked) != 1 {
-		t.Fatalf("Untracked = %v, want a.txt untracked before staging", r.gitBreachStatus.Untracked)
+	if len(r.gitBreach.Status.Untracked) != 1 {
+		t.Fatalf("Untracked = %v, want a.txt untracked before staging", r.gitBreach.Status.Untracked)
 	}
 	row := gitBreachTableRowForPath(r, "a.txt")
 	if row == 0 {
 		t.Fatal("a.txt row not found in the Files table")
 	}
-	r.gitBreachFilesTable.Select(row, 0)
+	r.gitBreach.FilesTable.Select(row, 0)
 
 	r.toggleGitBreachStage()
-	if len(r.gitBreachStatus.Staged) != 1 || r.gitBreachStatus.Staged[0].Path != "a.txt" {
-		t.Fatalf("Staged = %v, want a.txt staged after toggling an untracked row", r.gitBreachStatus.Staged)
+	if len(r.gitBreach.Status.Staged) != 1 || r.gitBreach.Status.Staged[0].Path != "a.txt" {
+		t.Fatalf("Staged = %v, want a.txt staged after toggling an untracked row", r.gitBreach.Status.Staged)
 	}
 
 	row = gitBreachTableRowForPath(r, "a.txt")
 	if row == 0 {
 		t.Fatal("a.txt row not found after staging")
 	}
-	r.gitBreachFilesTable.Select(row, 0)
+	r.gitBreach.FilesTable.Select(row, 0)
 	r.toggleGitBreachStage()
-	if len(r.gitBreachStatus.Staged) != 0 {
-		t.Errorf("Staged = %v, want empty after toggling a staged row back", r.gitBreachStatus.Staged)
+	if len(r.gitBreach.Status.Staged) != 0 {
+		t.Errorf("Staged = %v, want empty after toggling a staged row back", r.gitBreach.Status.Staged)
 	}
-	if len(r.gitBreachStatus.Untracked) != 1 {
-		t.Errorf("Untracked = %v, want a.txt untracked again after unstaging", r.gitBreachStatus.Untracked)
+	if len(r.gitBreach.Status.Untracked) != 1 {
+		t.Errorf("Untracked = %v, want a.txt untracked again after unstaging", r.gitBreach.Status.Untracked)
 	}
 }
 
@@ -262,8 +262,8 @@ func TestCommitGitBreachCreatesARealCommitAndReloads(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	if len(r.gitBreachStatus.Staged) != 1 {
-		t.Fatalf("setup: Staged = %v, want a.txt staged", r.gitBreachStatus.Staged)
+	if len(r.gitBreach.Status.Staged) != 1 {
+		t.Fatalf("setup: Staged = %v, want a.txt staged", r.gitBreach.Status.Staged)
 	}
 
 	r.commitGitBreach("add a.txt")
@@ -271,8 +271,8 @@ func TestCommitGitBreachCreatesARealCommitAndReloads(t *testing.T) {
 	if r.activePage == errorPage {
 		t.Fatal("activePage = errorPage after a commit that should have succeeded")
 	}
-	if len(r.gitBreachStatus.Staged) != 0 || len(r.gitBreachStatus.Unstaged) != 0 {
-		t.Errorf("working tree not clean after commit: staged=%v unstaged=%v", r.gitBreachStatus.Staged, r.gitBreachStatus.Unstaged)
+	if len(r.gitBreach.Status.Staged) != 0 || len(r.gitBreach.Status.Unstaged) != 0 {
+		t.Errorf("working tree not clean after commit: staged=%v unstaged=%v", r.gitBreach.Status.Staged, r.gitBreach.Status.Unstaged)
 	}
 }
 
@@ -287,8 +287,8 @@ func TestOpenGitBreachCommitPromptDoesNothingWithNothingStaged(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	if len(r.gitBreachStatus.Staged) != 0 {
-		t.Fatalf("setup: Staged = %v, want a clean working tree", r.gitBreachStatus.Staged)
+	if len(r.gitBreach.Status.Staged) != 0 {
+		t.Fatalf("setup: Staged = %v, want a clean working tree", r.gitBreach.Status.Staged)
 	}
 
 	r.openGitBreachCommitPrompt()
@@ -341,14 +341,14 @@ func TestGitBreachFocusFilesOnClickFocusesTheTable(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	r.app.SetFocus(r.gitBreachStatusView) // simulate focus having landed somewhere else
-	if r.gitBreachFilesTable.HasFocus() {
+	r.app.SetFocus(r.gitBreach.StatusView) // simulate focus having landed somewhere else
+	if r.gitBreach.FilesTable.HasFocus() {
 		t.Fatal("setup: Files should not have focus yet")
 	}
 
 	action, event := r.gitBreachFocusFilesOnClick(tview.MouseLeftDown, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
 
-	if !r.gitBreachFilesTable.HasFocus() {
+	if !r.gitBreach.FilesTable.HasFocus() {
 		t.Error("clicking the Files header should focus the Files table")
 	}
 	if event != nil || action != tview.MouseConsumed {
@@ -360,10 +360,10 @@ func TestGitBreachFocusFilesOnClickFocusesTheTable(t *testing.T) {
 // the row currently showing path — tests drive toggleGitBreachStage
 // through the cursor the same way a real keypress would, rather than
 // reaching past it to call git.Stage/Unstage directly, so a real
-// regression in gitBreachRowIndex/renderGitBreachFiles's own row
+// regression in gitBreach.RowIndex/renderGitBreachFiles's own row
 // bookkeeping would actually be caught here too.
 func gitBreachTableRowForPath(r *Root, path string) int {
-	for row := range r.gitBreachRowIndex {
+	for row := range r.gitBreach.RowIndex {
 		if gr, ok := r.gitBreachRowAt(row); ok && gr.path == path {
 			return row
 		}
@@ -371,13 +371,13 @@ func gitBreachTableRowForPath(r *Root, path string) int {
 	return 0
 }
 
-// gitBreachBranchRow scans r.gitBreachBranches for name and returns its
+// gitBreachBranchRow scans r.gitBreach.Branches for name and returns its
 // own table row — the mirror image of gitBreachTableRowForPath, going
 // through gitBreachBranchAt's own detached-HEAD row-offset logic (see
 // its own doc comment) rather than assuming row == index, so a
 // regression there would be caught here too.
 func gitBreachBranchRow(r *Root, name string) (int, bool) {
-	for row := 0; row < r.gitBreachBranchesTable.GetRowCount(); row++ {
+	for row := 0; row < r.gitBreach.BranchesTable.GetRowCount(); row++ {
 		if b, ok := r.gitBreachBranchAt(row); ok && b.Name == name {
 			return row, true
 		}
@@ -398,8 +398,8 @@ func TestRenderGitBreachBranchesListsLocalBranchesWithCurrentMarked(t *testing.T
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if len(r.gitBreachBranches) != 2 {
-		t.Fatalf("gitBreachBranches = %+v, want 2 (main, feature-x)", r.gitBreachBranches)
+	if len(r.gitBreach.Branches) != 2 {
+		t.Fatalf("gitBreach.Branches = %+v, want 2 (main, feature-x)", r.gitBreach.Branches)
 	}
 	row, ok := gitBreachBranchRow(r, "main")
 	if !ok {
@@ -414,7 +414,7 @@ func TestRenderGitBreachBranchesListsLocalBranchesWithCurrentMarked(t *testing.T
 // reported bug: the cursor landed on the second branch instead of the
 // first the moment the Branches box had any real content at all.
 // newGitBreachScreen's own construction-time render (baking in cell
-// colors before reloadGitBreach has ever run, with gitBreachBranches
+// colors before reloadGitBreach has ever run, with gitBreach.Branches
 // still empty) takes the "No local branches found" placeholder path,
 // whose showTablePlaceholder calls Select(1, 0) — tview's Table.Clear()
 // never resets that selectedRow afterward. Files' own section headers
@@ -444,7 +444,7 @@ func TestOpenGitBreachSelectsTheFirstBranchNotTheSecond(t *testing.T) {
 	if !ok {
 		t.Fatal("main not found in the Branches table")
 	}
-	gotRow, _ := r.gitBreachBranchesTable.GetSelection()
+	gotRow, _ := r.gitBreach.BranchesTable.GetSelection()
 	if gotRow != wantRow {
 		b, _ := r.gitBreachBranchAt(gotRow)
 		t.Errorf("selected row %d (%q), want row %d (main, the alphabetically-first branch)", gotRow, b.Name, wantRow)
@@ -466,13 +466,13 @@ func TestOpenGitBreachCheckoutSwitchesImmediatelyOnACleanTree(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachBranchesTable)
+	r.app.SetFocus(r.gitBreach.BranchesTable)
 
 	row, ok := gitBreachBranchRow(r, "feature-x")
 	if !ok {
 		t.Fatal("feature-x not found in the Branches table")
 	}
-	r.gitBreachBranchesTable.Select(row, 0)
+	r.gitBreach.BranchesTable.Select(row, 0)
 
 	r.openGitBreachCheckout()
 
@@ -504,13 +504,13 @@ func TestOpenGitBreachCheckoutConfirmsOnADirtyTree(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachBranchesTable)
+	r.app.SetFocus(r.gitBreach.BranchesTable)
 
 	row, ok := gitBreachBranchRow(r, "feature-x")
 	if !ok {
 		t.Fatal("feature-x not found in the Branches table")
 	}
-	r.gitBreachBranchesTable.Select(row, 0)
+	r.gitBreach.BranchesTable.Select(row, 0)
 
 	r.openGitBreachCheckout()
 
@@ -542,13 +542,13 @@ func TestOpenGitBreachCheckoutDoesNothingOnTheCurrentBranch(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachBranchesTable)
+	r.app.SetFocus(r.gitBreach.BranchesTable)
 
 	row, ok := gitBreachBranchRow(r, "main")
 	if !ok {
 		t.Fatal("main not found in the Branches table")
 	}
-	r.gitBreachBranchesTable.Select(row, 0)
+	r.gitBreach.BranchesTable.Select(row, 0)
 
 	r.openGitBreachCheckout()
 
@@ -572,13 +572,13 @@ func TestOpenGitBreachDeleteBranchConfirmsThenDeletes(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachBranchesTable)
+	r.app.SetFocus(r.gitBreach.BranchesTable)
 
 	row, ok := gitBreachBranchRow(r, "feature-x")
 	if !ok {
 		t.Fatal("feature-x not found in the Branches table")
 	}
-	r.gitBreachBranchesTable.Select(row, 0)
+	r.gitBreach.BranchesTable.Select(row, 0)
 
 	r.openGitBreachDeleteBranch()
 
@@ -612,13 +612,13 @@ func TestOpenGitBreachDeleteBranchDoesNothingOnTheCurrentBranch(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachBranchesTable)
+	r.app.SetFocus(r.gitBreach.BranchesTable)
 
 	row, ok := gitBreachBranchRow(r, "main")
 	if !ok {
 		t.Fatal("main not found in the Branches table")
 	}
-	r.gitBreachBranchesTable.Select(row, 0)
+	r.gitBreach.BranchesTable.Select(row, 0)
 
 	r.openGitBreachDeleteBranch()
 
@@ -649,13 +649,13 @@ func TestOpenGitBreachDeleteBranchSurfacesGitsOwnRefusal(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachBranchesTable)
+	r.app.SetFocus(r.gitBreach.BranchesTable)
 
 	row, ok := gitBreachBranchRow(r, "feature-x")
 	if !ok {
 		t.Fatal("feature-x not found in the Branches table")
 	}
-	r.gitBreachBranchesTable.Select(row, 0)
+	r.gitBreach.BranchesTable.Select(row, 0)
 
 	r.openGitBreachDeleteBranch()
 	r.pendingConfirm()
@@ -677,27 +677,27 @@ func TestToggleGitBreachFocusCyclesThroughFilesBranchesCommitsAndStash(t *testin
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if !r.gitBreachFilesTable.HasFocus() {
+	if !r.gitBreach.FilesTable.HasFocus() {
 		t.Fatal("setup: Files should have focus right after opening")
 	}
 
 	r.toggleGitBreachFocus()
-	if !r.gitBreachBranchesTable.HasFocus() {
+	if !r.gitBreach.BranchesTable.HasFocus() {
 		t.Error("after one Tab: Branches should have focus")
 	}
 
 	r.toggleGitBreachFocus()
-	if !r.gitBreachCommitsTable.HasFocus() {
+	if !r.gitBreach.CommitsTable.HasFocus() {
 		t.Error("after a second Tab: Commits should have focus")
 	}
 
 	r.toggleGitBreachFocus()
-	if !r.gitBreachStashTable.HasFocus() {
+	if !r.gitBreach.StashTable.HasFocus() {
 		t.Error("after a third Tab: Stash should have focus")
 	}
 
 	r.toggleGitBreachFocus()
-	if !r.gitBreachFilesTable.HasFocus() {
+	if !r.gitBreach.FilesTable.HasFocus() {
 		t.Error("after a fourth Tab: focus should be back on Files")
 	}
 }
@@ -712,27 +712,27 @@ func TestReverseToggleGitBreachFocusCyclesBackwards(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if !r.gitBreachFilesTable.HasFocus() {
+	if !r.gitBreach.FilesTable.HasFocus() {
 		t.Fatal("setup: Files should have focus right after opening")
 	}
 
 	r.reverseToggleGitBreachFocus()
-	if !r.gitBreachStashTable.HasFocus() {
+	if !r.gitBreach.StashTable.HasFocus() {
 		t.Error("after one Shift-Tab from Files: Stash should have focus")
 	}
 
 	r.reverseToggleGitBreachFocus()
-	if !r.gitBreachCommitsTable.HasFocus() {
+	if !r.gitBreach.CommitsTable.HasFocus() {
 		t.Error("after a second Shift-Tab: Commits should have focus")
 	}
 
 	r.reverseToggleGitBreachFocus()
-	if !r.gitBreachBranchesTable.HasFocus() {
+	if !r.gitBreach.BranchesTable.HasFocus() {
 		t.Error("after a third Shift-Tab: Branches should have focus")
 	}
 
 	r.reverseToggleGitBreachFocus()
-	if !r.gitBreachFilesTable.HasFocus() {
+	if !r.gitBreach.FilesTable.HasFocus() {
 		t.Error("after a fourth Shift-Tab: focus should be back on Files")
 	}
 }
@@ -750,22 +750,22 @@ func TestCaptureGitBreachKeyBacktabReversesFocusFromEveryBox(t *testing.T) {
 	backtab := tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
 
 	r.captureGitBreachFilesTableKey(backtab)
-	if !r.gitBreachStashTable.HasFocus() {
+	if !r.gitBreach.StashTable.HasFocus() {
 		t.Error("Shift-Tab from Files should move focus to Stash")
 	}
 
 	r.captureGitBreachStashTableKey(backtab)
-	if !r.gitBreachCommitsTable.HasFocus() {
+	if !r.gitBreach.CommitsTable.HasFocus() {
 		t.Error("Shift-Tab from Stash should move focus to Commits")
 	}
 
 	r.captureGitBreachCommitsTableKey(backtab)
-	if !r.gitBreachBranchesTable.HasFocus() {
+	if !r.gitBreach.BranchesTable.HasFocus() {
 		t.Error("Shift-Tab from Commits should move focus to Branches")
 	}
 
 	r.captureGitBreachBranchesTableKey(backtab)
-	if !r.gitBreachFilesTable.HasFocus() {
+	if !r.gitBreach.FilesTable.HasFocus() {
 		t.Error("Shift-Tab from Branches should move focus to Files")
 	}
 }
@@ -787,12 +787,12 @@ func TestRenderGitBreachCommitsListsCommitsNewestFirst(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if len(r.gitBreachCommits) != 2 {
-		t.Fatalf("gitBreachCommits = %+v, want 2", r.gitBreachCommits)
+	if len(r.gitBreach.Commits) != 2 {
+		t.Fatalf("gitBreach.Commits = %+v, want 2", r.gitBreach.Commits)
 	}
-	if r.gitBreachCommits[0].Subject != "second" || r.gitBreachCommits[1].Subject != "first" {
-		t.Errorf("gitBreachCommits order = %q, %q, want [second, first] (newest first)",
-			r.gitBreachCommits[0].Subject, r.gitBreachCommits[1].Subject)
+	if r.gitBreach.Commits[0].Subject != "second" || r.gitBreach.Commits[1].Subject != "first" {
+		t.Errorf("gitBreach.Commits order = %q, %q, want [second, first] (newest first)",
+			r.gitBreach.Commits[0].Subject, r.gitBreach.Commits[1].Subject)
 	}
 }
 
@@ -843,11 +843,11 @@ func TestRenderGitBreachCommitsColorsByAuthor(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if len(r.gitBreachCommits) != 1 {
-		t.Fatalf("gitBreachCommits = %+v, want 1", r.gitBreachCommits)
+	if len(r.gitBreach.Commits) != 1 {
+		t.Fatalf("gitBreach.Commits = %+v, want 1", r.gitBreach.Commits)
 	}
-	wantColor := gitBreachAuthorColor(r.gitBreachCommits[0].AuthorEmail)
-	cell := r.gitBreachCommitsTable.GetCell(0, 0)
+	wantColor := gitBreachAuthorColor(r.gitBreach.Commits[0].AuthorEmail)
+	cell := r.gitBreach.CommitsTable.GetCell(0, 0)
 	// tview.NewTableCell's own Style already carries a non-default
 	// Foreground/Background pair, so SetTextColor (see its own tview
 	// source) stores the color in Style rather than the legacy Color
@@ -855,10 +855,10 @@ func TestRenderGitBreachCommitsColorsByAuthor(t *testing.T) {
 	// read back, not the Color field directly.
 	gotColor, _, _ := cell.Style.Decompose()
 	if gotColor != wantColor {
-		t.Errorf("row color = %v, want %v (gitBreachAuthorColor for %q)", gotColor, wantColor, r.gitBreachCommits[0].AuthorEmail)
+		t.Errorf("row color = %v, want %v (gitBreachAuthorColor for %q)", gotColor, wantColor, r.gitBreach.Commits[0].AuthorEmail)
 	}
-	if !strings.Contains(cell.Text, r.gitBreachCommits[0].AuthorName) {
-		t.Errorf("row text = %q, want it to contain the author's name %q", cell.Text, r.gitBreachCommits[0].AuthorName)
+	if !strings.Contains(cell.Text, r.gitBreach.Commits[0].AuthorName) {
+		t.Errorf("row text = %q, want it to contain the author's name %q", cell.Text, r.gitBreach.Commits[0].AuthorName)
 	}
 }
 
@@ -937,10 +937,10 @@ func TestRenderGitBreachCommitsDrawsAMergeWithTwoLanes(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if len(r.gitBreachCommits) != 3 {
-		t.Fatalf("gitBreachCommits = %+v, want 3 (merge, feature work, base)", r.gitBreachCommits)
+	if len(r.gitBreach.Commits) != 3 {
+		t.Fatalf("gitBreach.Commits = %+v, want 3 (merge, feature work, base)", r.gitBreach.Commits)
 	}
-	cell := r.gitBreachCommitsTable.GetCell(0, 0)
+	cell := r.gitBreach.CommitsTable.GetCell(0, 0)
 	if !strings.Contains(cell.Text, "●") {
 		t.Errorf("merge row text = %q, want a node glyph", cell.Text)
 	}
@@ -964,7 +964,7 @@ func TestRenderGitBreachCommitsEscapesBracketsInSubjectsAndNames(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	cell := r.gitBreachCommitsTable.GetCell(0, 0)
+	cell := r.gitBreach.CommitsTable.GetCell(0, 0)
 	if !strings.Contains(cell.Text, "[brackets[] from input") {
 		t.Errorf("row text = %q, want tview.Escape's own escaped form of \"[brackets] from input\"", cell.Text)
 	}
@@ -973,7 +973,7 @@ func TestRenderGitBreachCommitsEscapesBracketsInSubjectsAndNames(t *testing.T) {
 // TestOpenGitBreachSelectsTheFirstCommitNotTheSecond is the Commits
 // box's own version of TestOpenGitBreachSelectsTheFirstBranchNotTheSecond
 // — the identical construction-time-placeholder bug (see
-// gitBreachCommitsReady's own doc comment on Root), a third instance of
+// gitBreach.CommitsReady's own doc comment on Root), a third instance of
 // the same fix.
 func TestOpenGitBreachSelectsTheFirstCommitNotTheSecond(t *testing.T) {
 	requireGitForBreach(t)
@@ -992,7 +992,7 @@ func TestOpenGitBreachSelectsTheFirstCommitNotTheSecond(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	gotRow, _ := r.gitBreachCommitsTable.GetSelection()
+	gotRow, _ := r.gitBreach.CommitsTable.GetSelection()
 	if gotRow != 0 {
 		c, _ := r.gitBreachCommitAt(gotRow)
 		t.Errorf("selected row %d (%q), want row 0 (the newest commit)", gotRow, c.Subject)
@@ -1005,7 +1005,7 @@ func TestOpenGitBreachSelectsTheFirstCommitNotTheSecond(t *testing.T) {
 // otherwise clobber a commit's own diff with a file diff on every
 // reload while Commits has focus, simply because Files re-asserts its
 // own cursor position on every render regardless of which box the user
-// is actually looking at. gitBreachMainOwner exists specifically so
+// is actually looking at. gitBreach.MainOwner exists specifically so
 // that doesn't happen — this test exercises the owner switch itself
 // (Tab to Commits), not the diff fetch's own async result, the same
 // restraint TestOpenGitBreachOnACleanRepoThenDirtyingItStillRefreshesTheDiff's
@@ -1024,27 +1024,27 @@ func TestGitBreachMainOwnerFollowsKeyboardFocus(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if r.gitBreachMainOwner != gitBreachMainOwnerFiles {
-		t.Fatalf("setup: gitBreachMainOwner = %v, want gitBreachMainOwnerFiles right after opening", r.gitBreachMainOwner)
+	if r.gitBreach.MainOwner != gitBreachMainOwnerFiles {
+		t.Fatalf("setup: gitBreach.MainOwner = %v, want gitBreachMainOwnerFiles right after opening", r.gitBreach.MainOwner)
 	}
 
 	r.toggleGitBreachFocus() // -> Branches
 	r.toggleGitBreachFocus() // -> Commits
-	if !r.gitBreachCommitsTable.HasFocus() {
+	if !r.gitBreach.CommitsTable.HasFocus() {
 		t.Fatal("setup: Commits should have focus after two Tabs")
 	}
-	if r.gitBreachMainOwner != gitBreachMainOwnerCommits {
-		t.Error("gitBreachMainOwner did not switch to Commits when it gained keyboard focus")
+	if r.gitBreach.MainOwner != gitBreachMainOwnerCommits {
+		t.Error("gitBreach.MainOwner did not switch to Commits when it gained keyboard focus")
 	}
 
 	r.toggleGitBreachFocus() // -> Stash
-	if r.gitBreachMainOwner != gitBreachMainOwnerStash {
-		t.Error("gitBreachMainOwner did not switch to Stash when it gained keyboard focus")
+	if r.gitBreach.MainOwner != gitBreachMainOwnerStash {
+		t.Error("gitBreach.MainOwner did not switch to Stash when it gained keyboard focus")
 	}
 
 	r.toggleGitBreachFocus() // -> Files
-	if r.gitBreachMainOwner != gitBreachMainOwnerFiles {
-		t.Error("gitBreachMainOwner did not switch back to Files when it regained keyboard focus")
+	if r.gitBreach.MainOwner != gitBreachMainOwnerFiles {
+		t.Error("gitBreach.MainOwner did not switch back to Files when it regained keyboard focus")
 	}
 }
 
@@ -1067,11 +1067,11 @@ func TestStartGitBreachCommitsDiffIfOwnerDoesNothingWhenFilesOwnsMain(t *testing
 	r.openGitBreach()
 	r.cancelGitBreachDiff() // openGitBreach's own Files-owned fetch already started one
 
-	if r.gitBreachMainOwner != gitBreachMainOwnerFiles {
-		t.Fatal("setup: gitBreachMainOwner should still be Files")
+	if r.gitBreach.MainOwner != gitBreachMainOwnerFiles {
+		t.Fatal("setup: gitBreach.MainOwner should still be Files")
 	}
 	r.startGitBreachCommitsDiffIfOwner()
-	if r.gitBreachDiffCancel != nil {
+	if r.gitBreach.DiffCancel != nil {
 		t.Error("startGitBreachCommitsDiffIfOwner started a fetch while Files owns Main, want a no-op")
 	}
 }
@@ -1097,18 +1097,18 @@ func TestRenderGitBreachStashListsStashedChangesNewestFirst(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if len(r.gitBreachStash) != 2 {
-		t.Fatalf("gitBreachStash = %+v, want 2", r.gitBreachStash)
+	if len(r.gitBreach.Stash) != 2 {
+		t.Fatalf("gitBreach.Stash = %+v, want 2", r.gitBreach.Stash)
 	}
-	if !strings.Contains(r.gitBreachStash[0].Message, "second stash") {
-		t.Errorf("gitBreachStash[0] = %+v, want the newest stash first", r.gitBreachStash[0])
+	if !strings.Contains(r.gitBreach.Stash[0].Message, "second stash") {
+		t.Errorf("gitBreach.Stash[0] = %+v, want the newest stash first", r.gitBreach.Stash[0])
 	}
 }
 
 // TestOpenGitBreachSelectsTheFirstStashNotTheSecond is the Stash box's
 // own version of TestOpenGitBreachSelectsTheFirstCommitNotTheSecond —
 // the identical construction-time-placeholder bug (see
-// gitBreachStashReady's own doc comment on Root), a fourth instance of
+// gitBreach.StashReady's own doc comment on Root), a fourth instance of
 // the same fix.
 func TestOpenGitBreachSelectsTheFirstStashNotTheSecond(t *testing.T) {
 	requireGitForBreach(t)
@@ -1131,7 +1131,7 @@ func TestOpenGitBreachSelectsTheFirstStashNotTheSecond(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	gotRow, _ := r.gitBreachStashTable.GetSelection()
+	gotRow, _ := r.gitBreach.StashTable.GetSelection()
 	if gotRow != 0 {
 		s, _ := r.gitBreachStashAt(gotRow)
 		t.Errorf("selected row %d (%q), want row 0 (the newest stash)", gotRow, s.Message)
@@ -1151,11 +1151,11 @@ func TestGitBreachMainOwnerStashDoesNothingWhenFilesOwnsMain(t *testing.T) {
 	r.openGitBreach()
 	r.cancelGitBreachDiff() // openGitBreach's own Files-owned fetch already started one
 
-	if r.gitBreachMainOwner != gitBreachMainOwnerFiles {
-		t.Fatal("setup: gitBreachMainOwner should still be Files")
+	if r.gitBreach.MainOwner != gitBreachMainOwnerFiles {
+		t.Fatal("setup: gitBreach.MainOwner should still be Files")
 	}
 	r.startGitBreachStashDiffIfOwner()
-	if r.gitBreachDiffCancel != nil {
+	if r.gitBreach.DiffCancel != nil {
 		t.Error("startGitBreachStashDiffIfOwner started a fetch while Files owns Main, want a no-op")
 	}
 }
@@ -1320,7 +1320,7 @@ func TestGitBreachTableKeysPassThroughPageKeys(t *testing.T) {
 
 // gitBreachRepoWithCommits commits n trivial, individually distinct
 // changes to a.txt, oldest first — a repo with a real, known commit
-// count to test gitBreachCommitsLimit/maybeLoadMoreGitBreachCommits
+// count to test gitBreach.CommitsLimit/maybeLoadMoreGitBreachCommits
 // against without needing anywhere near git.CommitLogLimit's own real
 // 200.
 func gitBreachRepoWithCommits(t *testing.T, n int) string {
@@ -1339,7 +1339,7 @@ func gitBreachRepoWithCommits(t *testing.T, n int) string {
 // TestMaybeLoadMoreGitBreachCommitsExpandsLimitAtTheLastRow pins the
 // user's own explicit request: reaching the bottom of what's currently
 // loaded fetches another git.CommitLogLimit worth rather than the list
-// just stopping. gitBreachCommitsLimit is set directly to an
+// just stopping. gitBreach.CommitsLimit is set directly to an
 // artificially small value and reloadGitBreach re-run (reloadGitBreach
 // itself never resets the limit — only openGitBreach does, see its own
 // doc comment) rather than creating git.CommitLogLimit-plus real
@@ -1351,19 +1351,19 @@ func TestMaybeLoadMoreGitBreachCommitsExpandsLimitAtTheLastRow(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.gitBreachCommitsLimit = 3
+	r.gitBreach.CommitsLimit = 3
 	r.reloadGitBreach()
-	if len(r.gitBreachCommits) != 3 {
-		t.Fatalf("setup: gitBreachCommits = %+v, want exactly 3 (the artificially small limit)", r.gitBreachCommits)
+	if len(r.gitBreach.Commits) != 3 {
+		t.Fatalf("setup: gitBreach.Commits = %+v, want exactly 3 (the artificially small limit)", r.gitBreach.Commits)
 	}
 
 	r.maybeLoadMoreGitBreachCommits(2) // the last loaded row (index 2 of 3)
 
-	if want := 3 + git.CommitLogLimit; r.gitBreachCommitsLimit != want {
-		t.Errorf("gitBreachCommitsLimit = %d, want %d after reaching the last loaded row", r.gitBreachCommitsLimit, want)
+	if want := 3 + git.CommitLogLimit; r.gitBreach.CommitsLimit != want {
+		t.Errorf("gitBreach.CommitsLimit = %d, want %d after reaching the last loaded row", r.gitBreach.CommitsLimit, want)
 	}
-	if len(r.gitBreachCommits) != 5 {
-		t.Errorf("gitBreachCommits = %+v, want all 5 commits after loading more", r.gitBreachCommits)
+	if len(r.gitBreach.Commits) != 5 {
+		t.Errorf("gitBreach.Commits = %+v, want all 5 commits after loading more", r.gitBreach.Commits)
 	}
 }
 
@@ -1376,16 +1376,16 @@ func TestMaybeLoadMoreGitBreachCommitsDoesNothingWhenNotAtTheLastRow(t *testing.
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.gitBreachCommitsLimit = 3
+	r.gitBreach.CommitsLimit = 3
 	r.reloadGitBreach()
 
 	r.maybeLoadMoreGitBreachCommits(0) // not the last row
 
-	if r.gitBreachCommitsLimit != 3 {
-		t.Errorf("gitBreachCommitsLimit = %d, want unchanged 3", r.gitBreachCommitsLimit)
+	if r.gitBreach.CommitsLimit != 3 {
+		t.Errorf("gitBreach.CommitsLimit = %d, want unchanged 3", r.gitBreach.CommitsLimit)
 	}
-	if len(r.gitBreachCommits) != 3 {
-		t.Errorf("gitBreachCommits = %+v, want unchanged (still 3)", r.gitBreachCommits)
+	if len(r.gitBreach.Commits) != 3 {
+		t.Errorf("gitBreach.Commits = %+v, want unchanged (still 3)", r.gitBreach.Commits)
 	}
 }
 
@@ -1402,13 +1402,13 @@ func TestMaybeLoadMoreGitBreachCommitsDoesNothingPastTheTrueEnd(t *testing.T) {
 
 	r.maybeLoadMoreGitBreachCommits(1) // the last (and only) real row
 
-	if r.gitBreachCommitsLimit != git.CommitLogLimit {
-		t.Errorf("gitBreachCommitsLimit = %d, want unchanged %d", r.gitBreachCommitsLimit, git.CommitLogLimit)
+	if r.gitBreach.CommitsLimit != git.CommitLogLimit {
+		t.Errorf("gitBreach.CommitsLimit = %d, want unchanged %d", r.gitBreach.CommitsLimit, git.CommitLogLimit)
 	}
 }
 
 // TestGitBreachCommitsLimitPersistsAcrossReloadButResetsOnFreshOpen
-// pins both halves of gitBreachCommitsLimit's own documented contract
+// pins both halves of gitBreach.CommitsLimit's own documented contract
 // on Root: "r" (reloadGitBreach) must never lose an already-expanded
 // limit, but a fresh "jg" (openGitBreach) must always start over at
 // git.CommitLogLimit.
@@ -1418,15 +1418,15 @@ func TestGitBreachCommitsLimitPersistsAcrossReloadButResetsOnFreshOpen(t *testin
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.gitBreachCommitsLimit = 3 + git.CommitLogLimit // simulate having loaded more already
+	r.gitBreach.CommitsLimit = 3 + git.CommitLogLimit // simulate having loaded more already
 	r.reloadGitBreach()
-	if want := 3 + git.CommitLogLimit; r.gitBreachCommitsLimit != want {
-		t.Errorf("reloadGitBreach changed gitBreachCommitsLimit to %d, want it to stay %d", r.gitBreachCommitsLimit, want)
+	if want := 3 + git.CommitLogLimit; r.gitBreach.CommitsLimit != want {
+		t.Errorf("reloadGitBreach changed gitBreach.CommitsLimit to %d, want it to stay %d", r.gitBreach.CommitsLimit, want)
 	}
 
 	r.openGitBreach()
-	if r.gitBreachCommitsLimit != git.CommitLogLimit {
-		t.Errorf("a fresh openGitBreach left gitBreachCommitsLimit at %d, want it reset to %d", r.gitBreachCommitsLimit, git.CommitLogLimit)
+	if r.gitBreach.CommitsLimit != git.CommitLogLimit {
+		t.Errorf("a fresh openGitBreach left gitBreach.CommitsLimit at %d, want it reset to %d", r.gitBreach.CommitsLimit, git.CommitLogLimit)
 	}
 }
 
@@ -1441,19 +1441,19 @@ func TestRenderGitBreachCommitsHeaderShowsHintOnlyWhileTruncated(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.gitBreachCommitsLimit = 3
+	r.gitBreach.CommitsLimit = 3
 	r.reloadGitBreach()
 
 	r.renderGitBreachCommitsHeader(40)
-	text := r.gitBreachCommitsHeader.GetText(true)
+	text := r.gitBreach.CommitsHeader.GetText(true)
 	if !strings.Contains(text, "3/5") {
 		t.Errorf("header text = %q, want it to contain the 3/5 hint while truncated", text)
 	}
 
-	r.gitBreachCommitsLimit = 5
+	r.gitBreach.CommitsLimit = 5
 	r.reloadGitBreach()
 	r.renderGitBreachCommitsHeader(40)
-	text = r.gitBreachCommitsHeader.GetText(true)
+	text = r.gitBreach.CommitsHeader.GetText(true)
 	if strings.Contains(text, "/") {
 		t.Errorf("header text = %q, want no hint once every commit is loaded", text)
 	}
@@ -1480,8 +1480,8 @@ func TestOpenGitBreachStashApplyRestoresOnACleanTree(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachStashTable)
-	r.gitBreachStashTable.Select(0, 0)
+	r.app.SetFocus(r.gitBreach.StashTable)
+	r.gitBreach.StashTable.Select(0, 0)
 
 	r.openGitBreachStashApply()
 
@@ -1495,8 +1495,8 @@ func TestOpenGitBreachStashApplyRestoresOnACleanTree(t *testing.T) {
 	if string(content) != "a changed" {
 		t.Errorf("a.txt = %q, want the stashed change restored", content)
 	}
-	if len(r.gitBreachStash) != 1 {
-		t.Errorf("gitBreachStash = %+v, want the stash to still exist after apply", r.gitBreachStash)
+	if len(r.gitBreach.Stash) != 1 {
+		t.Errorf("gitBreach.Stash = %+v, want the stash to still exist after apply", r.gitBreach.Stash)
 	}
 }
 
@@ -1523,8 +1523,8 @@ func TestOpenGitBreachStashApplyConfirmsOnADirtyTree(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachStashTable)
-	r.gitBreachStashTable.Select(0, 0)
+	r.app.SetFocus(r.gitBreach.StashTable)
+	r.gitBreach.StashTable.Select(0, 0)
 
 	r.openGitBreachStashApply()
 
@@ -1565,22 +1565,22 @@ func TestOpenGitBreachStashDropConfirmsThenDrops(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachStashTable)
-	r.gitBreachStashTable.Select(0, 0)
+	r.app.SetFocus(r.gitBreach.StashTable)
+	r.gitBreach.StashTable.Select(0, 0)
 
 	r.openGitBreachStashDrop()
 
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want the confirm dialog before dropping a stash", r.activePage)
 	}
-	if len(r.gitBreachStash) != 1 {
+	if len(r.gitBreach.Stash) != 1 {
 		t.Error("stash already gone before confirming, want the drop to not have run yet")
 	}
 
 	r.pendingConfirm()
 
-	if len(r.gitBreachStash) != 0 {
-		t.Errorf("gitBreachStash = %+v, want none after confirming the drop", r.gitBreachStash)
+	if len(r.gitBreach.Stash) != 0 {
+		t.Errorf("gitBreach.Stash = %+v, want none after confirming the drop", r.gitBreach.Stash)
 	}
 }
 
@@ -1599,7 +1599,7 @@ func TestOpenGitBreachStashApplyDoesNothingWithNoStash(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachStashTable)
+	r.app.SetFocus(r.gitBreach.StashTable)
 
 	r.openGitBreachStashApply()
 
@@ -1628,9 +1628,9 @@ func TestActivateGitBreachMainFromFilesCommitsStashGivesMainFocus(t *testing.T) 
 		focus   func(r *Root) tview.Primitive
 		capture func(r *Root) func(*tcell.EventKey) *tcell.EventKey
 	}{
-		{"Files", func(r *Root) tview.Primitive { return r.gitBreachFilesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachFilesTableKey }},
-		{"Commits", func(r *Root) tview.Primitive { return r.gitBreachCommitsTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachCommitsTableKey }},
-		{"Stash", func(r *Root) tview.Primitive { return r.gitBreachStashTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachStashTableKey }},
+		{"Files", func(r *Root) tview.Primitive { return r.gitBreach.FilesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachFilesTableKey }},
+		{"Commits", func(r *Root) tview.Primitive { return r.gitBreach.CommitsTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachCommitsTableKey }},
+		{"Stash", func(r *Root) tview.Primitive { return r.gitBreach.StashTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachStashTableKey }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newTestRootForGitBreachDir(t, dir)
@@ -1640,7 +1640,7 @@ func TestActivateGitBreachMainFromFilesCommitsStashGivesMainFocus(t *testing.T) 
 			if got := tc.capture(r)(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)); got != nil {
 				t.Errorf("capture(KeyRight) = %v, want nil (consumed)", got)
 			}
-			if !r.gitBreachDiffView.HasFocus() {
+			if !r.gitBreach.DiffView.HasFocus() {
 				t.Error("Right did not move keyboard focus to Main")
 			}
 		})
@@ -1658,14 +1658,14 @@ func TestGitBreachRightArrowFromBranchesDoesNothingSpecial(t *testing.T) {
 	dir := initGitBreachRepo(t)
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachBranchesTable)
+	r.app.SetFocus(r.gitBreach.BranchesTable)
 
 	r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
 
-	if r.gitBreachDiffView.HasFocus() {
+	if r.gitBreach.DiffView.HasFocus() {
 		t.Error("Right from Branches moved focus to Main, but Branches never owns a diff")
 	}
-	if !r.gitBreachBranchesTable.HasFocus() {
+	if !r.gitBreach.BranchesTable.HasFocus() {
 		t.Error("Right from Branches should leave focus on Branches")
 	}
 }
@@ -1694,11 +1694,11 @@ func TestGitBreachEnterAndSpaceActivateMainOnlyFromCommits(t *testing.T) {
 
 		r := newTestRootForGitBreachDir(t, dir)
 		r.openGitBreach()
-		r.app.SetFocus(r.gitBreachCommitsTable)
+		r.app.SetFocus(r.gitBreach.CommitsTable)
 
 		r.captureGitBreachCommitsTableKey(event)
 
-		if !r.gitBreachDiffView.HasFocus() {
+		if !r.gitBreach.DiffView.HasFocus() {
 			t.Errorf("key %v from Commits did not activate Main", key)
 		}
 	}
@@ -1718,11 +1718,11 @@ func TestGitBreachSpaceStillStagesInFilesNotActivateMain(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachFilesTable)
+	r.app.SetFocus(r.gitBreach.FilesTable)
 
 	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
 
-	if r.gitBreachDiffView.HasFocus() {
+	if r.gitBreach.DiffView.HasFocus() {
 		t.Error("Space in Files activated Main instead of staging — collides with its own existing meaning")
 	}
 }
@@ -1735,19 +1735,19 @@ func TestGitBreachEnterStillChecksOutInBranchesNotActivateMain(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachBranchesTable)
-	r.gitBreachBranchesTable.Select(1, 0) // row 0 is the current branch; pick a different one
+	r.app.SetFocus(r.gitBreach.BranchesTable)
+	r.gitBreach.BranchesTable.Select(1, 0) // row 0 is the current branch; pick a different one
 
 	r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 
-	if r.gitBreachDiffView.HasFocus() {
+	if r.gitBreach.DiffView.HasFocus() {
 		t.Error("Enter in Branches activated Main instead of checking out — collides with its own existing meaning")
 	}
 }
 
 // TestCaptureGitBreachMainKeyReturnsFocusToTheOwner pins the uniform
 // "way back" from Main — Left, Enter and Space all return focus to
-// whichever box activated it (gitBreachMainOwner), regardless of which
+// whichever box activated it (gitBreach.MainOwner), regardless of which
 // key was used to get in.
 func TestCaptureGitBreachMainKeyReturnsFocusToTheOwner(t *testing.T) {
 	requireGitForBreach(t)
@@ -1762,16 +1762,16 @@ func TestCaptureGitBreachMainKeyReturnsFocusToTheOwner(t *testing.T) {
 
 		r := newTestRootForGitBreachDir(t, dir)
 		r.openGitBreach()
-		r.app.SetFocus(r.gitBreachCommitsTable)
+		r.app.SetFocus(r.gitBreach.CommitsTable)
 		r.activateGitBreachMain()
-		if !r.gitBreachDiffView.HasFocus() {
+		if !r.gitBreach.DiffView.HasFocus() {
 			t.Fatalf("setup: activateGitBreachMain didn't give Main focus for key %v", key)
 		}
 
 		if got := r.captureGitBreachMainKey(event); got != nil {
 			t.Errorf("captureGitBreachMainKey(%v) = %v, want nil (consumed)", key, got)
 		}
-		if !r.gitBreachCommitsTable.HasFocus() {
+		if !r.gitBreach.CommitsTable.HasFocus() {
 			t.Errorf("key %v from Main didn't return focus to Commits (the owner)", key)
 		}
 	}
@@ -1791,13 +1791,13 @@ func TestCaptureGitBreachMainKeyEscReturnsToOwnerWithoutClosing(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachCommitsTable)
+	r.app.SetFocus(r.gitBreach.CommitsTable)
 	r.activateGitBreachMain()
 
 	if got := r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone)); got != nil {
 		t.Errorf("captureGitBreachMainKey(Esc) = %v, want nil (consumed)", got)
 	}
-	if !r.gitBreachCommitsTable.HasFocus() {
+	if !r.gitBreach.CommitsTable.HasFocus() {
 		t.Error("Esc from Main didn't return focus to Commits")
 	}
 	if r.activePage != gitBreachPage {
@@ -1814,7 +1814,7 @@ func TestCaptureGitBreachMainKeyEscDifferentFromListBoxEsc(t *testing.T) {
 	dir := initGitBreachRepo(t)
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachCommitsTable)
+	r.app.SetFocus(r.gitBreach.CommitsTable)
 
 	r.captureGitBreachCommitsTableKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 
@@ -1835,12 +1835,12 @@ func TestCaptureGitBreachMainKeyTabAdvancesFromTheOwnersPosition(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachCommitsTable) // gitBreachFocusables index 2
+	r.app.SetFocus(r.gitBreach.CommitsTable) // gitBreachFocusables index 2
 	r.activateGitBreachMain()
 
 	r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 
-	if !r.gitBreachStashTable.HasFocus() {
+	if !r.gitBreach.StashTable.HasFocus() {
 		t.Error("Tab from Main (owned by Commits) should land on Stash, the next box after Commits")
 	}
 }
@@ -1852,12 +1852,12 @@ func TestCaptureGitBreachMainKeyBacktabRetreatsFromTheOwnersPosition(t *testing.
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachCommitsTable) // gitBreachFocusables index 2
+	r.app.SetFocus(r.gitBreach.CommitsTable) // gitBreachFocusables index 2
 	r.activateGitBreachMain()
 
 	r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
 
-	if !r.gitBreachBranchesTable.HasFocus() {
+	if !r.gitBreach.BranchesTable.HasFocus() {
 		t.Error("Shift-Tab from Main (owned by Commits) should land on Branches, the box before Commits")
 	}
 }
@@ -1874,12 +1874,12 @@ func TestToggleGitBreachFocusFromMainUsesTheOwnersPosition(t *testing.T) {
 	dir := initGitBreachRepo(t)
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachStashTable) // gitBreachFocusables index 3
+	r.app.SetFocus(r.gitBreach.StashTable) // gitBreachFocusables index 3
 	r.activateGitBreachMain()
 
 	r.toggleGitBreachFocus()
 
-	if !r.gitBreachFilesTable.HasFocus() {
+	if !r.gitBreach.FilesTable.HasFocus() {
 		t.Error("Tab from Main (owned by Stash) should wrap to Files, the box after Stash")
 	}
 }
@@ -1889,12 +1889,12 @@ func TestReverseToggleGitBreachFocusFromMainUsesTheOwnersPosition(t *testing.T) 
 	dir := initGitBreachRepo(t)
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachStashTable) // gitBreachFocusables index 3
+	r.app.SetFocus(r.gitBreach.StashTable) // gitBreachFocusables index 3
 	r.activateGitBreachMain()
 
 	r.reverseToggleGitBreachFocus()
 
-	if !r.gitBreachCommitsTable.HasFocus() {
+	if !r.gitBreach.CommitsTable.HasFocus() {
 		t.Error("Shift-Tab from Main (owned by Stash) should land on Commits, the box before Stash")
 	}
 }
@@ -1915,7 +1915,7 @@ func TestCaptureGitBreachMainKeyCommitAndReloadWorkFromMainToo(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachCommitsTable)
+	r.app.SetFocus(r.gitBreach.CommitsTable)
 	r.activateGitBreachMain()
 
 	r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
@@ -1925,12 +1925,12 @@ func TestCaptureGitBreachMainKeyCommitAndReloadWorkFromMainToo(t *testing.T) {
 
 	r2 := newTestRootForGitBreachDir(t, dir)
 	r2.openGitBreach()
-	r2.app.SetFocus(r2.gitBreachCommitsTable)
+	r2.app.SetFocus(r2.gitBreach.CommitsTable)
 	r2.activateGitBreachMain()
 
-	before := len(r2.gitBreachCommits)
+	before := len(r2.gitBreach.Commits)
 	r2.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyRune, 'r', tcell.ModNone))
-	if len(r2.gitBreachCommits) != before {
+	if len(r2.gitBreach.Commits) != before {
 		t.Error(`"r" from Main should still reload without erroring`)
 	}
 }
@@ -1970,11 +1970,11 @@ func TestRenderGitBreachDiffHeaderShowsPageHint(t *testing.T) {
 	for i := range lines {
 		lines[i] = fmt.Sprintf("line %d", i)
 	}
-	r.gitBreachDiffView.SetText(strings.Join(lines, "\n"))
+	r.gitBreach.DiffView.SetText(strings.Join(lines, "\n"))
 
 	r.renderGitBreachDiffHeader(40, 50)
 
-	got := r.gitBreachDiffHeader.GetText(true)
+	got := r.gitBreach.DiffHeader.GetText(true)
 	if !strings.Contains(got, "Page 1/10") {
 		t.Errorf("header = %q, want it to contain %q", got, "Page 1/10")
 	}
@@ -1994,12 +1994,12 @@ func TestRenderGitBreachDiffHeaderUpdatesWithScrollOffset(t *testing.T) {
 	for i := range lines {
 		lines[i] = fmt.Sprintf("line %d", i)
 	}
-	r.gitBreachDiffView.SetText(strings.Join(lines, "\n"))
-	r.gitBreachDiffView.ScrollTo(100, 0)
+	r.gitBreach.DiffView.SetText(strings.Join(lines, "\n"))
+	r.gitBreach.DiffView.ScrollTo(100, 0)
 
 	r.renderGitBreachDiffHeader(40, 50)
 
-	got := r.gitBreachDiffHeader.GetText(true)
+	got := r.gitBreach.DiffHeader.GetText(true)
 	if !strings.Contains(got, "Page 3/10") {
 		t.Errorf("header = %q, want it to contain %q", got, "Page 3/10")
 	}
@@ -2020,12 +2020,12 @@ func TestRenderGitBreachDiffHeaderClampsAtTheLastPage(t *testing.T) {
 	for i := range lines {
 		lines[i] = fmt.Sprintf("line %d", i)
 	}
-	r.gitBreachDiffView.SetText(strings.Join(lines, "\n"))
-	r.gitBreachDiffView.ScrollTo(10000, 0) // far past the real end
+	r.gitBreach.DiffView.SetText(strings.Join(lines, "\n"))
+	r.gitBreach.DiffView.ScrollTo(10000, 0) // far past the real end
 
 	r.renderGitBreachDiffHeader(40, 50)
 
-	got := r.gitBreachDiffHeader.GetText(true)
+	got := r.gitBreach.DiffHeader.GetText(true)
 	if !strings.Contains(got, "Page 10/10") {
 		t.Errorf("header = %q, want it clamped to %q", got, "Page 10/10")
 	}
@@ -2042,15 +2042,15 @@ func TestRenderGitBreachDiffHeaderHidesHintWithoutRealHeightOrText(t *testing.T)
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	r.gitBreachDiffView.SetText("some text")
+	r.gitBreach.DiffView.SetText("some text")
 	r.renderGitBreachDiffHeader(40, 0)
-	if got := r.gitBreachDiffHeader.GetText(true); strings.Contains(got, "Page") {
+	if got := r.gitBreach.DiffHeader.GetText(true); strings.Contains(got, "Page") {
 		t.Errorf("header = %q, want no page hint with zero height", got)
 	}
 
-	r.gitBreachDiffView.SetText("")
+	r.gitBreach.DiffView.SetText("")
 	r.renderGitBreachDiffHeader(40, 50)
-	if got := r.gitBreachDiffHeader.GetText(true); strings.Contains(got, "Page") {
+	if got := r.gitBreach.DiffHeader.GetText(true); strings.Contains(got, "Page") {
 		t.Errorf("header = %q, want no page hint with no diff text", got)
 	}
 }
@@ -2114,29 +2114,29 @@ func TestGitBreachSelectingADifferentCommitStartsItFreshThenRemembersIt(t *testi
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachCommitsTable)
+	r.app.SetFocus(r.gitBreach.CommitsTable)
 
-	r.gitBreachDiffView.ScrollTo(50, 0)
-	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 50 {
+	r.gitBreach.DiffView.ScrollTo(50, 0)
+	if row, _ := r.gitBreach.DiffView.GetScrollOffset(); row != 50 {
 		t.Fatalf("setup: ScrollTo(50, 0) left scroll offset at row %d, want 50", row)
 	}
 
-	r.gitBreachCommitsTable.Select(1, 0) // a different commit, never visited before
+	r.gitBreach.CommitsTable.Select(1, 0) // a different commit, never visited before
 
-	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 0 {
+	if row, _ := r.gitBreach.DiffView.GetScrollOffset(); row != 0 {
 		t.Errorf("scroll offset = %d on a commit visited for the first time, want 0", row)
 	}
 
-	r.gitBreachDiffView.ScrollTo(7, 0)
-	r.gitBreachCommitsTable.Select(0, 0) // back to the first commit
+	r.gitBreach.DiffView.ScrollTo(7, 0)
+	r.gitBreach.CommitsTable.Select(0, 0) // back to the first commit
 
-	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 50 {
+	if row, _ := r.gitBreach.DiffView.GetScrollOffset(); row != 50 {
 		t.Errorf("scroll offset = %d after returning to the first commit, want its own remembered 50", row)
 	}
 
-	r.gitBreachCommitsTable.Select(1, 0) // and back to the second
+	r.gitBreach.CommitsTable.Select(1, 0) // and back to the second
 
-	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 7 {
+	if row, _ := r.gitBreach.DiffView.GetScrollOffset(); row != 7 {
 		t.Errorf("scroll offset = %d after returning to the second commit, want its own remembered 7", row)
 	}
 }
@@ -2153,14 +2153,14 @@ func TestGitBreachRefocusingTheSameRowKeepsMainScroll(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachCommitsTable)
+	r.app.SetFocus(r.gitBreach.CommitsTable)
 	r.activateGitBreachMain()
-	r.gitBreachDiffView.ScrollTo(5, 0)
+	r.gitBreach.DiffView.ScrollTo(5, 0)
 
 	r.deactivateGitBreachMain()
 	r.activateGitBreachMain()
 
-	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 5 {
+	if row, _ := r.gitBreach.DiffView.GetScrollOffset(); row != 5 {
 		t.Errorf("scroll offset = %d after refocusing the same row, want 5 (unchanged)", row)
 	}
 }
@@ -2196,18 +2196,18 @@ func TestGitBreachStashScrollIsRememberedPerEntry(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachStashTable)
+	r.app.SetFocus(r.gitBreach.StashTable)
 
-	r.gitBreachDiffView.ScrollTo(3, 0)
-	r.gitBreachStashTable.Select(1, 0) // the other stash entry
+	r.gitBreach.DiffView.ScrollTo(3, 0)
+	r.gitBreach.StashTable.Select(1, 0) // the other stash entry
 
-	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 0 {
+	if row, _ := r.gitBreach.DiffView.GetScrollOffset(); row != 0 {
 		t.Errorf("scroll offset = %d on a stash entry visited for the first time, want 0", row)
 	}
 
-	r.gitBreachStashTable.Select(0, 0) // back to the first
+	r.gitBreach.StashTable.Select(0, 0) // back to the first
 
-	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 3 {
+	if row, _ := r.gitBreach.DiffView.GetScrollOffset(); row != 3 {
 		t.Errorf("scroll offset = %d after returning to the first stash entry, want its own remembered 3", row)
 	}
 }
@@ -2226,13 +2226,13 @@ func TestGitBreachMainGetsFocusStyleWhenActivated(t *testing.T) {
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachCommitsTable)
+	r.app.SetFocus(r.gitBreach.CommitsTable)
 
-	unfocused := r.gitBreachDiffHeader.GetBackgroundColor()
+	unfocused := r.gitBreach.DiffHeader.GetBackgroundColor()
 
 	r.activateGitBreachMain()
 
-	if r.gitBreachDiffHeader.GetBackgroundColor() == unfocused {
+	if r.gitBreach.DiffHeader.GetBackgroundColor() == unfocused {
 		t.Error("Main's own header background didn't change when it gained keyboard focus")
 	}
 }
@@ -2397,11 +2397,11 @@ func TestGCReachesAIConsigliereFromEveryGitBreachPane(t *testing.T) {
 		focus   func(r *Root) tview.Primitive
 		capture func(r *Root) func(*tcell.EventKey) *tcell.EventKey
 	}{
-		{"Files", func(r *Root) tview.Primitive { return r.gitBreachFilesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachFilesTableKey }},
-		{"Branches", func(r *Root) tview.Primitive { return r.gitBreachBranchesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachBranchesTableKey }},
-		{"Commits", func(r *Root) tview.Primitive { return r.gitBreachCommitsTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachCommitsTableKey }},
-		{"Stash", func(r *Root) tview.Primitive { return r.gitBreachStashTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachStashTableKey }},
-		{"Main", func(r *Root) tview.Primitive { return r.gitBreachDiffView }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachMainKey }},
+		{"Files", func(r *Root) tview.Primitive { return r.gitBreach.FilesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachFilesTableKey }},
+		{"Branches", func(r *Root) tview.Primitive { return r.gitBreach.BranchesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachBranchesTableKey }},
+		{"Commits", func(r *Root) tview.Primitive { return r.gitBreach.CommitsTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachCommitsTableKey }},
+		{"Stash", func(r *Root) tview.Primitive { return r.gitBreach.StashTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachStashTableKey }},
+		{"Main", func(r *Root) tview.Primitive { return r.gitBreach.DiffView }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachMainKey }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newTestRootForGitBreachDir(t, dir)
@@ -2437,7 +2437,7 @@ func TestTabFromLastGitBreachTableReachesConsigliere(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 	r.showConsigliere()
-	r.app.SetFocus(r.gitBreachStashTable) // the last entry in gitBreachFocusables
+	r.app.SetFocus(r.gitBreach.StashTable) // the last entry in gitBreachFocusables
 
 	if got := r.captureGitBreachStashTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
 		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
@@ -2453,7 +2453,7 @@ func TestBacktabFromFirstGitBreachTableReachesConsigliere(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 	r.showConsigliere()
-	r.app.SetFocus(r.gitBreachFilesTable) // the first entry in gitBreachFocusables
+	r.app.SetFocus(r.gitBreach.FilesTable) // the first entry in gitBreachFocusables
 
 	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
 
@@ -2478,7 +2478,7 @@ func TestTabFromGitBreachMainReachesConsigliereWhenOwnerIsLast(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 	r.showConsigliere()
-	r.app.SetFocus(r.gitBreachStashTable)
+	r.app.SetFocus(r.gitBreach.StashTable)
 	r.activateGitBreachMain() // Main now owned by Stash, the last table
 
 	if got := r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
@@ -2500,7 +2500,7 @@ func TestFullTabLapFromGitBreachVisitsEveryTableAndConsigliere(t *testing.T) {
 	dir := initGitBreachRepo(t)
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachFilesTable)
+	r.app.SetFocus(r.gitBreach.FilesTable)
 	// The real "gC" entry path (sets consigliereForwardExit), not a
 	// direct showConsigliere() call.
 	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
@@ -2508,13 +2508,13 @@ func TestFullTabLapFromGitBreachVisitsEveryTableAndConsigliere(t *testing.T) {
 
 	tabFrom := func(current tview.Primitive) tview.Primitive {
 		switch current {
-		case r.gitBreachFilesTable:
+		case r.gitBreach.FilesTable:
 			r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
-		case r.gitBreachBranchesTable:
+		case r.gitBreach.BranchesTable:
 			r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
-		case r.gitBreachCommitsTable:
+		case r.gitBreach.CommitsTable:
 			r.captureGitBreachCommitsTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
-		case r.gitBreachStashTable:
+		case r.gitBreach.StashTable:
 			r.captureGitBreachStashTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		case r.consigliereInput:
 			r.handleConsigliereInputDone(tcell.KeyTab)
@@ -2537,10 +2537,10 @@ func TestFullTabLapFromGitBreachVisitsEveryTableAndConsigliere(t *testing.T) {
 	}
 
 	want := map[string]tview.Primitive{
-		"Files":    r.gitBreachFilesTable,
-		"Branches": r.gitBreachBranchesTable,
-		"Commits":  r.gitBreachCommitsTable,
-		"Stash":    r.gitBreachStashTable,
+		"Files":    r.gitBreach.FilesTable,
+		"Branches": r.gitBreach.BranchesTable,
+		"Commits":  r.gitBreach.CommitsTable,
+		"Stash":    r.gitBreach.StashTable,
 	}
 	for name, stop := range want {
 		found := false

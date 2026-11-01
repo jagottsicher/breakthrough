@@ -75,7 +75,7 @@ func (r *Root) newCompareDiffScreen() {
 	// decorative widget.
 	// Not the shared gitBreachBlockFocusSteal directly — same real bug
 	// as gitBreachFocus*OnClick's own fix (gitbreachscreen.go) and
-	// gitBreachDiffHeader's own (gitbreachdiffsplit.go): SetMouseCapture's
+	// gitBreach.DiffHeader's own (gitbreachdiffsplit.go): SetMouseCapture's
 	// callback runs for every event compareDiffBody's own Flex loop
 	// hands to this separator — including ones actually landing on
 	// compareDiffRight, item[2] of the same Flex, reached only after

@@ -1299,24 +1299,24 @@ const logAuditViewerAvailableActions = `Available fields and keys on this screen
 func (r *Root) gitBreachContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Git Breach.\n")
-	if r.gitBreachRoot != "" {
-		fmt.Fprintf(&b, "Repository: %s\n", r.gitBreachRoot)
+	if r.gitBreach.Root != "" {
+		fmt.Fprintf(&b, "Repository: %s\n", r.gitBreach.Root)
 	}
-	fmt.Fprintf(&b, "Branch: %s", r.gitBreachStatus.Branch)
-	if r.gitBreachStatus.Ahead > 0 || r.gitBreachStatus.Behind > 0 {
-		fmt.Fprintf(&b, " (ahead %d, behind %d)", r.gitBreachStatus.Ahead, r.gitBreachStatus.Behind)
+	fmt.Fprintf(&b, "Branch: %s", r.gitBreach.Status.Branch)
+	if r.gitBreach.Status.Ahead > 0 || r.gitBreach.Status.Behind > 0 {
+		fmt.Fprintf(&b, " (ahead %d, behind %d)", r.gitBreach.Status.Ahead, r.gitBreach.Status.Behind)
 	}
 	b.WriteString("\n")
 	fmt.Fprintf(&b, "Staged: %d, Unstaged: %d, Untracked: %d, Conflicts: %d\n",
-		len(r.gitBreachStatus.Staged), len(r.gitBreachStatus.Unstaged),
-		len(r.gitBreachStatus.Untracked), len(r.gitBreachStatus.Conflicts))
-	if len(r.gitBreachCommits) > 0 {
-		n := len(r.gitBreachCommits)
+		len(r.gitBreach.Status.Staged), len(r.gitBreach.Status.Unstaged),
+		len(r.gitBreach.Status.Untracked), len(r.gitBreach.Status.Conflicts))
+	if len(r.gitBreach.Commits) > 0 {
+		n := len(r.gitBreach.Commits)
 		if n > consigliereMaxRecentCommits {
 			n = consigliereMaxRecentCommits
 		}
 		subjects := make([]string, 0, n)
-		for _, c := range r.gitBreachCommits[:n] {
+		for _, c := range r.gitBreach.Commits[:n] {
 			subjects = append(subjects, c.Subject)
 		}
 		fmt.Fprintf(&b, "Recent commits: %s\n", strings.Join(subjects, "; "))
@@ -1338,10 +1338,10 @@ func (r *Root) gitBreachContextSnapshot() string {
 // .env file, a hardcoded credential being added or removed) that
 // would otherwise never leave this machine.
 func (r *Root) consigliereMachiavelliGitBreachDiff() string {
-	if r.gitBreachDiffRawText == "" {
+	if r.gitBreach.DiffRawText == "" {
 		return ""
 	}
-	lines := strings.Split(r.gitBreachDiffRawText, "\n")
+	lines := strings.Split(r.gitBreach.DiffRawText, "\n")
 	var b strings.Builder
 	b.WriteString("\nMachiavelli Mode is on — the diff currently shown in Main is forwarded verbatim:\n")
 	n := len(lines)
