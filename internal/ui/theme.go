@@ -548,45 +548,45 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// never added here at all, so every one of them still showed
 	// tview's own unthemed black background/default colors regardless
 	// of the active color scheme.
-	r.cloudMountDialogForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.cloudMountDialogForm.SetLabelColor(theme.TextColor)
-	r.cloudMountDialogForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.cloudMountDialogForm.SetFieldTextColor(theme.TextColor)
+	r.cloud.MountDialogForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.cloud.MountDialogForm.SetLabelColor(theme.TextColor)
+	r.cloud.MountDialogForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.cloud.MountDialogForm.SetFieldTextColor(theme.TextColor)
 	// Per-field styleInput/styleDropDown on top of the Form-level
 	// colors just above — see styleCloudMountDialogFields' own doc
 	// comment for why the Form-level ones alone aren't enough (every
 	// field here has a placeholder, which ignores them).
 	r.styleCloudMountDialogFields()
-	styleButton(r.cloudMountDialogCancelBtn, theme)
-	styleButton(r.cloudMountDialogOKBtn, theme)
-	styleButton(r.cloudMountDialogMountBtn, theme)
-	styleButton(r.cloudMountDialogDeleteBtn, theme)
-	r.cloudMountDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.cloudMountDialogTitleBar.SetTextColor(theme.TextColor)
+	styleButton(r.cloud.MountDialogCancelBtn, theme)
+	styleButton(r.cloud.MountDialogOKBtn, theme)
+	styleButton(r.cloud.MountDialogMountBtn, theme)
+	styleButton(r.cloud.MountDialogDeleteBtn, theme)
+	r.cloud.MountDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.cloud.MountDialogTitleBar.SetTextColor(theme.TextColor)
 
 	// The "New cloud remote" dialog (see cloudremotedialog.go) — same
-	// gap, same fix. cloudRemoteDialogForm is rebuilt from scratch on
+	// gap, same fix. cloud.RemoteDialogForm is rebuilt from scratch on
 	// every backend-type change (see rebuildCloudRemoteDialogFields),
 	// so this also has to run again there, not just here on a live
 	// theme switch — see that function's own call to styleCloudRemoteDialogForm.
 	r.styleCloudRemoteDialogForm()
-	// Guarded: unlike cloudMountDialogForm's own fields (created
+	// Guarded: unlike cloud.MountDialogForm's own fields (created
 	// unconditionally in newCloudMountDialogForm, during NewRoot),
-	// cloudRemoteDialogBackendField and the rest only exist once
+	// cloud.RemoteDialogBackendField and the rest only exist once
 	// rebuildCloudRemoteDialogFields has actually run at least once
 	// (openCloudRemoteDialog, on first open) — applyTheme itself runs
 	// during NewRoot's own startup, before that, so calling this
 	// unconditionally would dereference a nil DropDown.
-	if r.cloudRemoteDialogBackendField != nil {
+	if r.cloud.RemoteDialogBackendField != nil {
 		r.styleCloudRemoteDialogFields()
 	}
-	styleButton(r.cloudRemoteDialogCancelBtn, theme)
-	styleButton(r.cloudRemoteDialogTestBtn, theme)
-	styleButton(r.cloudRemoteDialogOKBtn, theme)
-	styleButton(r.cloudRemoteDialogCreateBtn, theme)
-	r.cloudRemoteDialogStatus.SetBackgroundColor(theme.SurfaceBackground)
-	r.cloudRemoteDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.cloudRemoteDialogTitleBar.SetTextColor(theme.TextColor)
+	styleButton(r.cloud.RemoteDialogCancelBtn, theme)
+	styleButton(r.cloud.RemoteDialogTestBtn, theme)
+	styleButton(r.cloud.RemoteDialogOKBtn, theme)
+	styleButton(r.cloud.RemoteDialogCreateBtn, theme)
+	r.cloud.RemoteDialogStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.cloud.RemoteDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.cloud.RemoteDialogTitleBar.SetTextColor(theme.TextColor)
 
 	styleList(r.hostKeyConfirmDialog, theme)
 	r.hostKeyConfirmTitleBar.SetBackgroundColor(theme.InputFocusedBackground)

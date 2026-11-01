@@ -153,16 +153,16 @@ func TestEditCloudMountRowOpensDialogPrefilledForEditing(t *testing.T) {
 	if r.activePage != cloudMountDialogPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, cloudMountDialogPage)
 	}
-	if got := r.cloudMountDialogTargetField.GetText(); got != target {
+	if got := r.cloud.MountDialogTargetField.GetText(); got != target {
 		t.Errorf("Target = %q, want %q", got, target)
 	}
-	if got := r.cloudMountDialogIdentifierField.GetText(); got != "my-id" {
+	if got := r.cloud.MountDialogIdentifierField.GetText(); got != "my-id" {
 		t.Errorf("Identifier = %q, want %q", got, "my-id")
 	}
-	if got := r.cloudMountDialogTagsField.GetText(); got != "a, b" {
+	if got := r.cloud.MountDialogTagsField.GetText(); got != "a, b" {
 		t.Errorf("Tags = %q, want %q", got, "a, b")
 	}
-	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != "myremote" {
+	if _, text := r.cloud.MountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != "myremote" {
 		t.Errorf("selected Remote = %q, want %q", strings.TrimRight(text, " "), "myremote")
 	}
 }
@@ -185,7 +185,7 @@ func TestEditCloudMountRowThenOKReplacesTheOldEntry(t *testing.T) {
 	}
 
 	r.editCloudMountRow(entry)
-	r.cloudMountDialogIdentifierField.SetText("new-id")
+	r.cloud.MountDialogIdentifierField.SetText("new-id")
 	r.runSaveCloudMount()
 
 	entries, err := rclone.LoadMountEntries()
@@ -215,13 +215,13 @@ func TestEditCloudMountRowThenOKReplacesAPlaceholderEntry(t *testing.T) {
 	}
 
 	r.editCloudMountRow(entry)
-	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != cloudMountDialogCreateNewOption {
+	if _, text := r.cloud.MountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != cloudMountDialogCreateNewOption {
 		t.Errorf("selected option = %q, want the sentinel %q (no real remote named %q exists)", strings.TrimRight(text, " "), cloudMountDialogCreateNewOption, cloudMountDialogUnconfiguredRemoteName)
 	}
-	if got := r.cloudMountDialogTargetField.GetText(); got != target {
+	if got := r.cloud.MountDialogTargetField.GetText(); got != target {
 		t.Errorf("Target = %q, want %q", got, target)
 	}
-	r.cloudMountDialogIdentifierField.SetText("new-id")
+	r.cloud.MountDialogIdentifierField.SetText("new-id")
 	r.runSaveCloudMount()
 
 	if r.activePage == cloudMountDialogPage {

@@ -612,7 +612,7 @@ func (r *Root) renderConnectionMenu() {
 		entry := entry
 		thisRow := row
 		mounted, mountErr := rclone.IsMounted(entry.Target)
-		_, pending := r.cloudMountPending[entry.Target]
+		_, pending := r.cloud.MountPending[entry.Target]
 		color := cloudMountRowColor(r.theme, mounted, mountErr != nil)
 
 		// RemoteName alone, never "RemoteName (Identifier)" — a real,
@@ -674,7 +674,7 @@ func (r *Root) renderConnectionMenu() {
 			actionText = connectionHistoryEjectGlyph
 		}
 		if pending {
-			actionText = r.cloudMountPending[entry.Target]
+			actionText = r.cloud.MountPending[entry.Target]
 		}
 		table.SetCell(thisRow, ejectCol,
 			tview.NewTableCell("   "+actionText+" ").
