@@ -23,6 +23,18 @@ import (
 
 const transferCenterPage = "transfer-center"
 
+// transferCenterState holds the Transfer-Zentrale screen's widgets and
+// last-rendered operations snapshot.
+type transferCenterState struct {
+	Layout    *tview.Flex
+	TitleBar  *tview.TextView
+	Hint      *tview.TextView
+	HintSpans []listHintSpan
+	Table     *tview.Table
+	Scrollbar *verticalScrollbar
+	Ops       []operations.Operation
+}
+
 // operationsPersistPath is operations.DefaultPath, indirected through
 // a package-level var the same way notifyPersistPath (notifybar.go) and
 // labelsPersistPath already are — so a test can point NewRoot's own

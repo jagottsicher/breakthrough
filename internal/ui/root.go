@@ -126,18 +126,6 @@ type overlayFrame struct {
 // Modified can be edited in place — Owner/Group are still read-only,
 // pending a cross-platform way to list system users/groups (macOS
 // doesn't expose them via /etc/passwd the way Linux does).
-// transferCenterState holds the Transfer-Zentrale screen's widgets and
-// last-rendered operations snapshot (see transfercenter.go).
-type transferCenterState struct {
-	Layout    *tview.Flex
-	TitleBar  *tview.TextView
-	Hint      *tview.TextView
-	HintSpans []listHintSpan
-	Table     *tview.Table
-	Scrollbar *verticalScrollbar
-	Ops       []operations.Operation
-}
-
 type Root struct {
 	*tview.Pages
 
