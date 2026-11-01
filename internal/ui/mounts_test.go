@@ -66,7 +66,7 @@ func TestGCReachesAIConsigliereFromMounts(t *testing.T) {
 	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
 		t.Fatal("the resolving 'C' should have been consumed")
 	}
-	if !r.consigliereVisible {
+	if !r.consigliere.Visible {
 		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
 	}
 }

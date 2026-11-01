@@ -126,6 +126,31 @@ type overlayFrame struct {
 // Modified can be edited in place — Owner/Group are still read-only,
 // pending a cross-platform way to list system users/groups (macOS
 // doesn't expose them via /etc/passwd the way Linux does).
+// consigliereState holds the AI Consigliere chat sidebar's widgets,
+// session state, and model-list cache (see consigliere.go,
+// consiglieremodels.go).
+type consigliereState struct {
+	History            *tview.TextView
+	Scrollbar          *verticalScrollbar
+	TitleBar           *tview.TextView
+	Input              *tview.InputField
+	Layout             *tview.Flex
+	Visible            bool // mirrors detailsSidebarVisible — see showConsigliere/hideConsigliere
+	Messages           []consigliere.Message
+	Cancel             context.CancelFunc
+	AwaitingPassphrase bool
+	ReturnFocus        tview.Primitive
+	ExitPage           string
+	ForwardExit        tview.Primitive
+	ManuallyPositioned bool
+	Dragging           bool
+	DragOffsetX        int
+	DragOffsetY        int
+	ModelCache         map[string][]consigliere.ModelInfo
+	ModelFetchInFlight map[string]bool
+	ModelFetchErr      map[string]error
+}
+
 type Root struct {
 	*tview.Pages
 
@@ -307,15 +332,12 @@ type Root struct {
 	// failing the question.
 	docSearchIndex *docsearch.Index
 
-	// consigliereModelCache/consigliereModelFetchInFlight/
-	// consigliereModelFetchErr back the Options screen's own "Model"/
+	// consigliere.ModelCache/consigliere.ModelFetchInFlight/
+	// consigliere.ModelFetchErr back the Options screen's own "Model"/
 	// "Effort" rows (see consiglieremodels.go) — keyed by provider
 	// name, populated only by refreshConsigliereModelCache, never by
 	// the rows' own choices functions (see that function's own doc
 	// comment on why a render-path network call would be wrong).
-	consigliereModelCache         map[string][]consigliere.ModelInfo
-	consigliereModelFetchInFlight map[string]bool
-	consigliereModelFetchErr      map[string]error
 
 	// apiKeyDialog* is the "API key (encrypted)" row's own dialog (see
 	// apikeydialog.go) — a fixed widget set, built once, whose actual
@@ -1843,52 +1865,45 @@ type Root struct {
 	helpTitleBar *tview.TextView
 	helpLayout   *tview.Flex
 
-	// consigliereHistory/consigliereScrollbar/consigliereTitleBar/
-	// consigliereInput/consigliereLayout are the AI Consigliere's own
+	// consigliere.History/consigliere.Scrollbar/consigliere.TitleBar/
+	// consigliere.Input/consigliere.Layout are the AI Consigliere's own
 	// chat sidebar ("gC", see keymap.go and internal/consigliere) —
 	// docked against the right edge, the same non-modal shape Details
 	// (detailsSidebar/detailsSidebarLayout above) uses, plus
-	// consigliereInput as a second, fixed-height row beneath the
-	// history for the next question. consigliereMessages/
-	// consigliereCancel are this session's own chat state — see
+	// consigliere.Input as a second, fixed-height row beneath the
+	// history for the next question. consigliere.Messages/
+	// consigliere.Cancel are this session's own chat state — see
 	// consigliere.go. The Provider itself is never cached on Root —
 	// buildConsigliereProvider constructs one fresh per question (see
 	// its own doc comment).
-	consigliereHistory   *tview.TextView
-	consigliereScrollbar *verticalScrollbar
-	consigliereTitleBar  *tview.TextView
-	consigliereInput     *tview.InputField
-	consigliereLayout    *tview.Flex
-	consigliereVisible   bool // mirrors detailsSidebarVisible — see showConsigliere/hideConsigliere
-	consigliereMessages  []consigliere.Message
-	consigliereCancel    context.CancelFunc
-	// consigliereAwaitingPassphrase is whether consigliereInput is
+	//
+	// consigliere.AwaitingPassphrase is whether consigliere.Input is
 	// currently in passphrase-entry mode (masked, Enter tries
 	// Session.Unlock instead of asking a question) — see
 	// showConsigliere's own doc comment on when that starts, and
 	// submitConsigliereUnlock on what ends it.
-	consigliereAwaitingPassphrase bool
-	// consigliereReturnFocus is captured once, in showConsigliere,
+	//
+	// consigliere.ReturnFocus is captured once, in showConsigliere,
 	// before anything changes focus — see hideConsigliere's own doc
 	// comment.
-	consigliereReturnFocus tview.Primitive
-	// consigliereExitPage is r.activePage at that exact same moment —
+	//
+	// consigliere.ExitPage is r.activePage at that exact same moment —
 	// NOT for the auto-close behavior removed in the previous commit
 	// (that used a similarly-named consigliereHostPage field; this is
 	// a different purpose, not a revival), but so
 	// consigliereBackwardExit/consigliereForwardExitTarget can tell
-	// whether consigliereReturnFocus/consigliereForwardExit are still
-	// valid at all: both name a specific widget on whatever page was
-	// active when the sidebar opened, which the user can now navigate
-	// away from (pushing further pages) while leaving the sidebar
-	// open — per the user's own explicit request in the previous
-	// commit. A widget on a page that is no longer active is still a
-	// perfectly real tview.Primitive (nothing frees it), so without
-	// this check, Tab/Backtab out of the sidebar would keep landing on
-	// it anyway — covered, unreachable, and indistinguishable from a
-	// dead end (a real, reported bug).
-	consigliereExitPage string
-	// consigliereForwardExit is where Tab leaving consigliere's own
+	// whether consigliere.ReturnFocus/consigliere.ForwardExit are
+	// still valid at all: both name a specific widget on whatever page
+	// was active when the sidebar opened, which the user can now
+	// navigate away from (pushing further pages) while leaving the
+	// sidebar open — per the user's own explicit request in the
+	// previous commit. A widget on a page that is no longer active is
+	// still a perfectly real tview.Primitive (nothing frees it), so
+	// without this check, Tab/Backtab out of the sidebar would keep
+	// landing on it anyway — covered, unreachable, and
+	// indistinguishable from a dead end (a real, reported bug).
+	//
+	// consigliere.ForwardExit is where Tab leaving consigliere's own
 	// input/history pair lands — the fixed stop that follows wherever
 	// the host screen that opened it (see startConsigliereChord's own
 	// doc comment in consigliere.go) splices it into its own ring.
@@ -1896,28 +1911,24 @@ type Root struct {
 	// selection/detail screens, or consigliere opened from the bare
 	// panel, where the global focus cycle handles it instead — see
 	// focusCycleStops' own doc comment) falls back to
-	// consigliereReturnFocus in consigliereExitFocus, since Backtab
+	// consigliere.ReturnFocus in consigliereExitFocus, since Backtab
 	// and Tab then both lead to the same, single other node either
 	// way.
-	consigliereForwardExit tview.Primitive
-
-	// consigliereManuallyPositioned/consigliereDragging/
-	// consigliereDragOffsetX/Y make the sidebar's own title bar
+	//
+	// consigliere.ManuallyPositioned/consigliere.Dragging/
+	// consigliere.DragOffsetX/Y make the sidebar's own title bar
 	// draggable, per the user's own explicit request that it become
 	// movable the way a Toolbox tool window already is — no resizing,
 	// just position. Mirrors dragPropertiesMouseCapture's own
 	// dragging/dragOffsetX/Y exactly (see its own doc comment in
 	// properties.go) for the drag mechanics themselves;
-	// consigliereManuallyPositioned is this sidebar's own addition —
+	// consigliere.ManuallyPositioned is this sidebar's own addition —
 	// once a drag has actually happened, repositionConsigliereSidebar
 	// stops re-docking it flush right on every resize/reshow and just
 	// re-clamps the position the user chose. Reset to false every
 	// time showConsigliere opens a fresh session, so a drag never
 	// outlives the sidebar being closed and reopened.
-	consigliereManuallyPositioned bool
-	consigliereDragging           bool
-	consigliereDragOffsetX        int
-	consigliereDragOffsetY        int
+	consigliere consigliereState
 
 	// detailsSidebar is the right-hand Details layer toggled by "I"
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
@@ -2844,23 +2855,25 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	}
 
 	r := &Root{
-		Pages:                         tview.NewPages(),
-		app:                           app,
-		startDir:                      path,
-		mouseEnabled:                  settings.MouseEnabled,
-		panel:                         panel,
-		settings:                      settings,
-		colorSchemes:                  colorSchemes,
-		settingOrigins:                settingOrigins,
-		theme:                         theme,
-		apiKeySession:                 apiKeySession,
-		docSearchIndex:                docSearchIndex,
-		consigliereModelCache:         map[string][]consigliere.ModelInfo{},
-		consigliereModelFetchInFlight: map[string]bool{},
-		consigliereModelFetchErr:      map[string]error{},
-		notify:                        notify.NewWithPersistence(notifyPersistPath()),
-		operations:                    operations.NewTrackerWithPersistence(operationsPersistPath()),
-		labels:                        filelabels.NewWithPersistence(labelsPersistPath()),
+		Pages:          tview.NewPages(),
+		app:            app,
+		startDir:       path,
+		mouseEnabled:   settings.MouseEnabled,
+		panel:          panel,
+		settings:       settings,
+		colorSchemes:   colorSchemes,
+		settingOrigins: settingOrigins,
+		theme:          theme,
+		apiKeySession:  apiKeySession,
+		docSearchIndex: docSearchIndex,
+		consigliere: consigliereState{
+			ModelCache:         map[string][]consigliere.ModelInfo{},
+			ModelFetchInFlight: map[string]bool{},
+			ModelFetchErr:      map[string]error{},
+		},
+		notify:     notify.NewWithPersistence(notifyPersistPath()),
+		operations: operations.NewTrackerWithPersistence(operationsPersistPath()),
+		labels:     filelabels.NewWithPersistence(labelsPersistPath()),
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
 		// doc comment and the struct field comment above.
@@ -3490,7 +3503,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpLayout, false, false)
-	r.AddPage(consiglierePage, r.consigliereLayout, false, false)
+	r.AddPage(consiglierePage, r.consigliere.Layout, false, false)
 	r.AddPage(viewerPage, r.viewerLayout, false, false)
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
@@ -3913,13 +3926,13 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 	// Z-index, so without this, navigating from one full-screen page
 	// to another (e.g. Log Audit's own selection screen into a
 	// specific file's viewer) while the sidebar is open would redraw
-	// it on top of consigliereLayout, completely covering it — even
+	// it on top of consigliere.Layout, completely covering it — even
 	// though the sidebar itself is still fully open (per the user's
 	// own explicit request that it survive exactly this kind of
 	// ordinary within-task navigation). Keyboard focus is deliberately
 	// left on whatever this call already focused below, not pulled
 	// back onto the sidebar — only its own draw order needs fixing.
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		r.SendToFront(consiglierePage)
 	}
 	r.updateOverlayTitleBarColors()
@@ -4155,8 +4168,8 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// An AI Consigliere title-bar drag in progress — same reasoning as
 	// every guard above: dragging the sidebar up or left would
 	// otherwise fall through to ordinary position-based dispatch
-	// mid-drag, leaving consigliereDragging stuck true forever.
-	if r.consigliereDragging {
+	// mid-drag, leaving consigliere.Dragging stuck true forever.
+	if r.consigliere.Dragging {
 		out, outEvent, _ := r.dragConsigliereMouseCapture(action, event)
 		return out, outEvent
 	}
@@ -4169,7 +4182,7 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// real bug: a click landing on the sidebar itself, while some other
 	// modal (Log Audit, Git Breach, ...) is the active overlay, used to
 	// read as "outside that overlay" and close *it* — never
-	// consigliereLayout's own rect, which this now checks first, same
+	// consigliere.Layout's own rect, which this now checks first, same
 	// priority the drag guards above already get.
 	//
 	// Deliberately does *not* close the sidebar on a click outside it,
@@ -4180,7 +4193,7 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// to see in context), so only the title bar's own close glyph
 	// (dragConsigliereMouseCapture) or Escape (handleConsigliereInputDone)
 	// closes it.
-	if r.consigliereVisible && primitiveContains(r.consigliereLayout, x, y) {
+	if r.consigliere.Visible && primitiveContains(r.consigliere.Layout, x, y) {
 		return action, event // landed on the sidebar itself
 	}
 
@@ -4362,7 +4375,7 @@ func (r *Root) handleBeforeDraw(screen tcell.Screen) bool {
 	if r.detailsSidebarVisible {
 		r.repositionDetailsSidebar()
 	}
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		r.repositionConsigliereSidebar()
 	}
 	if r.activePage == propertiesPage {

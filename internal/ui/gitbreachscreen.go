@@ -743,7 +743,7 @@ func (r *Root) toggleGitBreachFocus() {
 // ("gC", see startConsigliereChord in consigliere.go) instead of
 // wrapping back around to the opposite end of gitBreachFocusables,
 // whenever it's actually open. Without this, Tab/Backtab could never
-// reach consigliereInput/consigliereHistory from here at all: the
+// reach consigliere.Input/consigliere.History from here at all: the
 // global focus cycle excludes them while any full-screen modal is
 // active (see focusCycleStops' own doc comment in detailssidebar.go),
 // so each host screen that can open the sidebar is responsible for
@@ -753,18 +753,18 @@ func (r *Root) toggleGitBreachFocus() {
 // i again, the same documented, accepted imprecision every other host
 // screen's own entry point already has.
 func (r *Root) gitBreachFocusNext(focusables []gitBreachFocusEntry, i int) tview.Primitive {
-	if i == len(focusables)-1 && r.consigliereVisible {
-		return r.consigliereInput
+	if i == len(focusables)-1 && r.consigliere.Visible {
+		return r.consigliere.Input
 	}
 	return focusables[(i+1)%len(focusables)].body
 }
 
 func (r *Root) gitBreachFocusPrev(focusables []gitBreachFocusEntry, i int) tview.Primitive {
-	if i == 0 && r.consigliereVisible {
-		if r.consigliereScrollbar.maxOffset() > 0 {
-			return r.consigliereHistory
+	if i == 0 && r.consigliere.Visible {
+		if r.consigliere.Scrollbar.maxOffset() > 0 {
+			return r.consigliere.History
 		}
-		return r.consigliereInput
+		return r.consigliere.Input
 	}
 	return focusables[(i-1+len(focusables))%len(focusables)].body
 }

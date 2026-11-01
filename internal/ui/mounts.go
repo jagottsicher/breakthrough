@@ -244,16 +244,16 @@ func (r *Root) captureMountsKey(event *tcell.EventKey) *tcell.EventKey {
 	// startConsigliereChord's own doc comment in consigliere.go and
 	// captureLogAuditSelectionTableKey's own identical shape.
 	// mountsTable is this screen's only real focus target.
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.consigliereInput)
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		if event.Key() == tcell.KeyBacktab {
-			if r.consigliereScrollbar.maxOffset() > 0 {
-				r.app.SetFocus(r.consigliereHistory)
+			if r.consigliere.Scrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliere.History)
 			} else {
-				r.app.SetFocus(r.consigliereInput)
+				r.app.SetFocus(r.consigliere.Input)
 			}
 			return nil
 		}

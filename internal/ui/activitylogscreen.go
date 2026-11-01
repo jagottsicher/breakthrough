@@ -369,8 +369,8 @@ func (r *Root) captureActivityLogTableKey(event *tcell.EventKey) *tcell.EventKey
 		// Table), so wrapping back to Keyword (the ordinary case) is
 		// what gives way to it instead, the same shape
 		// captureLogAuditViewerTableKey already establishes.
-		if r.consigliereVisible {
-			r.app.SetFocus(r.consigliereInput)
+		if r.consigliere.Visible {
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		r.app.SetFocus(r.activityLogKeywordField)
