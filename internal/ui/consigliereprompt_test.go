@@ -122,8 +122,64 @@ func TestConsigliereMachiavelliLogLinesRespectsALoweredTier(t *testing.T) {
 	if n := strings.Count(got, "distinct-log-line-"); n != 3 {
 		t.Errorf("snapshot mentions %d lines, want exactly the tiny tier's cap of 3", n)
 	}
-	if !strings.Contains(got, "7 further matching lines not shown") {
-		t.Errorf("snapshot = %q, want it to mention the 7 truncated lines", got)
+	if !strings.Contains(got, "7 further matching lines, newer than these, not shown") {
+		t.Errorf("snapshot = %q, want it to mention the 7 truncated, newer lines", got)
+	}
+}
+
+// TestConsigliereMachiavelliLogLinesMatchesTheTableSOrderWhenReversed
+// pins a real, reported gap: logAuditVisibleEntries always returns
+// oldest-first, but flipping the Time column (logAuditNewestFirst)
+// reverses what the table itself shows — the forwarded block used to
+// still take the oldest entries regardless, so a user looking at this
+// month's events at the top of their screen got lines from the start
+// of a months-old log file instead, with no way to tell from the
+// reply that the mismatch had even happened.
+func TestConsigliereMachiavelliLogLinesMatchesTheTableSOrderWhenReversed(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ConsigliereProvider = "anthropic"
+	root.settings.ConsigliereAnthropicContextTier = "tiny" // caps at 3, so truncation actually happens
+	root.activePage = logAuditViewerPage
+	// In file order (chronological, oldest first) — entry-0 is oldest,
+	// entry-4 is newest.
+	var entries []logview.Entry
+	for i := 0; i < 5; i++ {
+		entries = append(entries, logview.Entry{Raw: fmt.Sprintf("entry-%d", i)})
+	}
+	root.logAuditAllEntries = entries
+
+	// Default order (oldest-first, logAuditNewestFirst's own false
+	// zero value): the table's own top 3 rows are entry-0..entry-2 —
+	// the forwarded block must be exactly those, not some other slice.
+	got := root.consigliereMachiavelliLogLines()
+	for _, want := range []string{"entry-0", "entry-1", "entry-2"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("oldest-first snapshot = %q, want it to contain %q (the table's own top rows)", got, want)
+		}
+	}
+	if strings.Contains(got, "entry-3") || strings.Contains(got, "entry-4") {
+		t.Errorf("oldest-first snapshot = %q, must not include entries scrolled further down the table", got)
+	}
+	if !strings.Contains(got, "oldest first") {
+		t.Errorf("oldest-first snapshot = %q, want it to state its own order explicitly", got)
+	}
+
+	// Reversed (newest-first, the Time column's own "↓" arrow): the
+	// table's own top 3 rows are now entry-4..entry-2 — the forwarded
+	// block must follow, not keep reading from the front of the
+	// unreversed list.
+	root.logAuditNewestFirst = true
+	gotReversed := root.consigliereMachiavelliLogLines()
+	for _, want := range []string{"entry-4", "entry-3", "entry-2"} {
+		if !strings.Contains(gotReversed, want) {
+			t.Errorf("newest-first snapshot = %q, want it to contain %q (the table's own top rows once reversed)", gotReversed, want)
+		}
+	}
+	if strings.Contains(gotReversed, "entry-0") || strings.Contains(gotReversed, "entry-1") {
+		t.Errorf("newest-first snapshot = %q, must not include entries scrolled off the bottom once reversed", gotReversed)
+	}
+	if !strings.Contains(gotReversed, "newest first") {
+		t.Errorf("newest-first snapshot = %q, want it to state its own order explicitly", gotReversed)
 	}
 }
 
@@ -275,6 +331,32 @@ func TestTerminalContextSnapshotIncludesScreenUnderMachiavelliMode(t *testing.T)
 	}
 }
 
+// TestTerminalContextSnapshotExplainsVisibilityWhenScreenIsBlankUnderMachiavelliMode
+// pins a real, reported gap: a blank screen made
+// consigliereMachiavelliTerminalScreen return "" and left the
+// snapshot saying nothing at all about visibility — turning
+// Machiavelli Mode ON produced a LESS explanatory answer than leaving
+// it off. The command here (sleep, no echo) never writes anything to
+// its own stdout, so the screen stays deterministically blank for the
+// whole test, not just a transient race at startup.
+func TestTerminalContextSnapshotExplainsVisibilityWhenScreenIsBlankUnderMachiavelliMode(t *testing.T) {
+	r := newTestRootForShells(t)
+	r.settings.ConsigliereHardcoreMode = true
+	stubShellSession(t, func() *exec.Cmd { return exec.Command("sh", "-c", "sleep 5") })
+	r.openNewShellEmbedded(testShellConn("example.com"))
+	defer func() {
+		for _, tab := range r.shells {
+			_ = tab.session.Close()
+		}
+	}()
+
+	got := r.terminalContextSnapshot()
+
+	if !strings.Contains(got, "blank") {
+		t.Errorf("snapshot = %q, want it to explain the screen is currently blank rather than saying nothing at all", got)
+	}
+}
+
 // TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage pins the
 // advisor-flagged regression risk: dispatch must key off the *current*
 // r.activePage, not consigliereExitPage (the page captured when the
@@ -376,6 +458,73 @@ func TestLogAuditContextSnapshotIncludesMatchedLinesUnderMachiavelliMode(t *test
 
 	if !strings.Contains(got, "topsecret123") {
 		t.Errorf("snapshot = %q, want the matched log line forwarded under Machiavelli Mode", got)
+	}
+}
+
+// TestLogAuditContextSnapshotIncludesDetailEntryUnderMachiavelliMode
+// pins the Detail page's own exception: looking at one full entry is
+// exactly the case Machiavelli Mode's own forwarding exists for, and
+// the entry is resolved the real way (the Viewer table's own current
+// selection), not a separately-tracked field.
+func TestLogAuditContextSnapshotIncludesDetailEntryUnderMachiavelliMode(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0) // app.log group, sorted before syslog
+	r.openLogAuditViewer()
+	r.logAuditViewerTable.Select(1, 0)
+	r.openLogAuditDetail(1)
+	r.settings.ConsigliereHardcoreMode = true
+
+	got := r.logAuditContextSnapshot()
+
+	if !strings.Contains(got, "connection established") {
+		t.Errorf("snapshot = %q, want the detail entry's own Raw text forwarded under Machiavelli Mode", got)
+	}
+}
+
+// TestLogAuditContextSnapshotOmitsDetailEntryWithoutMachiavelliMode
+// pins the default-off case for the same page: the entry's own text
+// must not leak just because the Detail page happens to be open.
+func TestLogAuditContextSnapshotOmitsDetailEntryWithoutMachiavelliMode(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	r.logAuditViewerTable.Select(1, 0)
+	r.openLogAuditDetail(1)
+
+	got := r.logAuditContextSnapshot()
+
+	if strings.Contains(got, "connection established") {
+		t.Errorf("snapshot = %q, must not include the detail entry's own text without Machiavelli Mode", got)
+	}
+}
+
+// TestLogAuditContextSnapshotIncludesStatisticsRegardlessOfMachiavelliMode
+// pins that the Statistics page's own aggregate (counts by level/
+// source, never a line's own content) is always included — the same
+// risk tier Firewall's rule count or Action Log's category breakdown
+// already get without needing Machiavelli Mode at all.
+func TestLogAuditContextSnapshotIncludesStatisticsRegardlessOfMachiavelliMode(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+	r.openLogAuditStats()
+
+	got := r.logAuditContextSnapshot()
+
+	if !strings.Contains(got, "By level:") || !strings.Contains(got, "By source") {
+		t.Errorf("snapshot = %q, want the Statistics aggregate included even with Machiavelli Mode off", got)
+	}
+
+	r.settings.ConsigliereHardcoreMode = true
+	gotHardcore := r.logAuditContextSnapshot()
+	if !strings.Contains(gotHardcore, "By level:") {
+		t.Errorf("snapshot = %q, want the Statistics aggregate still included with Machiavelli Mode on", gotHardcore)
 	}
 }
 

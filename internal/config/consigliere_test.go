@@ -3,8 +3,20 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// TestDefaultConsigliereSystemPromptMentionsUsingExtraContextOnlyWhenNeeded
+// pins the user's own explicit request: the Consigliere should know,
+// from its own system prompt, to use Machiavelli Mode's extra verbatim
+// content only when actually relevant, not quote or dump it back by
+// default.
+func TestDefaultConsigliereSystemPromptMentionsUsingExtraContextOnlyWhenNeeded(t *testing.T) {
+	if !strings.Contains(DefaultConsigliereSystemPrompt, "only when it actually helps") {
+		t.Errorf("DefaultConsigliereSystemPrompt = %q, want guidance to use the extra verbatim content only when it helps", DefaultConsigliereSystemPrompt)
+	}
+}
 
 func TestEnsureConsigliereSystemPromptFileCreatesDefault(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "consigliere-system-prompt.txt")
