@@ -666,7 +666,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.sshShellMenuTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	// TextColor, not Text — see this block's own doc comment just above:
 	// every close-glyph title bar in this app (propertiesTitleBar,
-	// searchTitleBar, ...) paints with TextColor, not connectionMenu-
+	// search.TitleBar, ...) paints with TextColor, not connectionMenu-
 	// TitleBar's own Text.
 	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)
 
