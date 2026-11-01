@@ -297,7 +297,7 @@ func (r *Root) applyMountsTheme(theme config.ResolvedTheme) {
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
 
-	// FocusedBackground, fixed — same reasoning toolboxTitleBar's own
+	// FocusedBackground, fixed — same reasoning toolbox.TitleBar's own
 	// fixed FocusedBackground just above follows.
 	r.mountsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.mountsTitleBar.SetTextColor(theme.TextColor)

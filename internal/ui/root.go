@@ -368,56 +368,30 @@ type Root struct {
 	// The Toolbox screen (see toolbox.go) — a full-screen catalog of
 	// real external networking/hardware tools, each one either run
 	// immediately (toolboxFixedEntry) or after asking for one further
-	// argument through toolboxInput, the same "small floating field over
-	// a full-screen list" shape optionsInput already establishes for
+	// argument through toolbox.Input, the same "small floating field over
+	// a full-screen list" shape options.Input already establishes for
 	// Options. Every entry ends up in openToolCommand (toolwindow.go),
 	// the same draggable, non-modal window Ping already used before this
 	// screen gave it (and everything else here) a real home.
-	toolboxLayout    *tview.Flex
-	toolboxTitleBar  *tview.TextView
-	toolboxHint      *tview.TextView
-	toolboxHintSpans []listHintSpan
-	toolboxTable     *tview.Table
-	toolboxScrollbar *verticalScrollbar
-	toolboxInput     *tview.InputField
-
-	// toolboxForm and friends are toolboxFormEntry's own overlay — a
+	//
+	// toolbox.Form and friends are toolboxFormEntry's own overlay — a
 	// second way into Toolbox's own openToolCommand, next to
-	// toolboxInput's single free-text field, for an entry whose
+	// toolbox.Input's single free-text field, for an entry whose
 	// command genuinely needs more than one piece of input (curl's
 	// own Method/Header/Follow redirects/Output, say). See
 	// toolboxFormEntry's own doc comment in toolbox.go for the full
-	// design. toolboxFormToggles holds whichever of the entry's own
+	// design. toolbox.FormToggles holds whichever of the entry's own
 	// fields are boolean — a real tview.List, not a Form checkbox, the
 	// same "Form re-applies one uniform FocusedBackground to every
 	// item it owns, a checkbox can never keep its own distinct look"
 	// reasoning newSedForm's own doc comment already establishes for
 	// Sed Replace's five flags — empty (and given zero rect height)
-	// for an entry with no boolean fields at all. toolboxFormFields/
+	// for an entry with no boolean fields at all. toolbox.FormFields/
 	// Build/Name/Widgets are the current open's own state, rebuilt
 	// fresh by renderToolboxForm on every openToolboxForm call, the
 	// same "independent widgets, state kept on Root, not the widgets
 	// themselves" shape resetSedForm already establishes.
-	toolboxFormLayout      *tview.Flex
-	toolboxFormTitleBar    *tview.TextView
-	toolboxForm            *tview.Form
-	toolboxFormToggles     *tview.List
-	toolboxFormPreview     *tview.TextView
-	toolboxFormCancelBtn   *tview.Button
-	toolboxFormRunBtn      *tview.Button
-	toolboxFormButtons     *tview.Flex
-	toolboxFormFields      []toolboxFormField
-	toolboxFormBuild       func(toolboxFormValues) []string
-	toolboxFormName        string
-	toolboxFormWidgets     map[string]tview.Primitive
-	toolboxFormToggleState map[string]bool
-
-	// toolboxRows is the currently open screen's own row list — one
-	// single category, for "jn" (openNetworkTools) or "jh"
-	// (openHardwareTools). One table/rendering implementation
-	// (renderToolbox et al.) driven by whichever rows this holds, rather
-	// than a separate near-identical screen per category.
-	toolboxRows []toolboxDisplayRow
+	toolbox toolboxState
 
 	// The Mounts screen (see mounts.go) — a third full-screen catalog,
 	// kept deliberately separate from the Toolbox rather than folded in
@@ -3435,9 +3409,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Toolbox screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just above gives.
-	r.AddPage(toolboxPage, r.toolboxLayout, true, false)
-	r.AddPage(toolboxInputPage, r.toolboxInput, false, false)
-	r.AddPage(toolboxFormPage, r.toolboxFormLayout, false, false)
+	r.AddPage(toolboxPage, r.toolbox.Layout, true, false)
+	r.AddPage(toolboxInputPage, r.toolbox.Input, false, false)
+	r.AddPage(toolboxFormPage, r.toolbox.FormLayout, false, false)
 	// resize=true: the Mounts screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox screens' own
 	// comments above give.
