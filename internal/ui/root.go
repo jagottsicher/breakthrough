@@ -22,7 +22,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/docsearch"
 	"github.com/jagottsicher/breakthrough/internal/easteregg"
 	"github.com/jagottsicher/breakthrough/internal/filelabels"
-	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
@@ -438,90 +437,46 @@ type Root struct {
 	// The Firewall screen (see firewall.go) — a fourth full-screen
 	// catalog, showing this host's own actual firewall rules (whichever
 	// single backend actually governs traffic right now; see
-	// internal/firewall). firewallSnapshot/firewallErr/firewallServices
+	// internal/firewall). firewall.Snapshot/firewall.Err/firewall.Services
 	// hold the last read result, refreshed by reloadFirewall (on open,
 	// and on "r").
-	firewallLayout    *tview.Flex
-	firewallTitleBar  *tview.TextView
-	firewallHint      *tview.TextView
-	firewallHintSpans []listHintSpan
-	firewallTable     *tview.Table
-	firewallScrollbar *verticalScrollbar
-	firewallSnapshot  firewall.Snapshot
-	firewallErr       error
-	firewallServices  firewall.ServiceLookup
-
-	// firewallAddRule* make up the Firewall screen's own "Add rule" form
+	//
+	// firewall.AddRule* make up the Firewall screen's own "Add rule" form
 	// ("a", see firewalladdrule.go and feature_ideas.txt's own Firewall-
 	// Regel-Baukasten Stufe 2b) — Direction/Action/Protocol are
 	// dropdowns, so the form is rebuilt fresh on every open via
 	// renderFirewallAddRuleForm, the same "Clear(true) then
 	// AddFormItem" shape newCompressForm's own doc comment establishes,
-	// rather than kept in sync in place the way connectForm's own fixed
-	// set of plain input fields is. The plain firewallAddRuleXxx fields
+	// rather than kept in sync in place the way connect.Form's own fixed
+	// set of plain input fields is. The plain firewall.AddRuleXxx fields
 	// below mirror the form's own current values, the same "value
-	// mirror" shape duplicateStrategy and friends already establish.
-	firewallAddRuleLayout     *tview.Flex
-	firewallAddRuleTitleBar   *tview.TextView
-	firewallAddRuleForm       *tview.Form
-	firewallAddRuleStatus     *tview.TextView
-	firewallAddRuleButtons    *tview.Flex
-	firewallAddRuleCancelBtn  *tview.Button
-	firewallAddRuleAddBtn     *tview.Button
-	firewallAddRuleDirection  firewall.Direction
-	firewallAddRuleAction     firewall.Action
-	firewallAddRuleProtocol   string
-	firewallAddRulePortText   string
-	firewallAddRuleSourceText string
-	firewallAddRuleDestText   string
-	firewallAddRuleIfaceText  string
-
-	// firewallRollback* is the self-lockout rollback prompt armed by
+	// mirror" shape duplicate.Strategy and friends already establish.
+	//
+	// firewall.Rollback* is the self-lockout rollback prompt armed by
 	// applyFirewallAddRule whenever the rule it just applied is SSH-
 	// relevant (see firewall.NewRuleSpec.IsSSHRelevant) and this
 	// breakthrough process is itself running over an active SSH session
 	// (see firewall.RunningOverSSH) — feature_ideas.txt's own
-	// "Selbstaussperr-Schutz". firewallRollbackTimer fires
-	// rollbackFirewallRule automatically once firewallRollbackDeadline
+	// "Selbstaussperr-Schutz". firewall.RollbackTimer fires
+	// rollbackFirewallRule automatically once firewall.RollbackDeadline
 	// passes unless "Keep this rule" (keepFirewallRule) stops it first;
 	// nil whenever no rollback is currently armed. The timer itself runs
-	// regardless of whether firewallRollbackLayout is actually on screen
+	// regardless of whether firewall.RollbackLayout is actually on screen
 	// — closing that overlay early (Escape) only hides the countdown,
 	// it never cancels the rollback itself, so a rule that turns out to
 	// have cut off the very session that applied it is reverted either
 	// way.
-	firewallRollbackLayout   *tview.Flex
-	firewallRollbackTitleBar *tview.TextView
-	firewallRollbackText     *tview.TextView
-	firewallRollbackKeepBtn  *tview.Button
-	firewallRollbackTimer    *time.Timer
-	firewallRollbackCancel   context.CancelFunc
-	firewallRollbackDeadline time.Time
-	firewallRollbackBackend  firewall.Backend
-	firewallRollbackSpec     firewall.NewRuleSpec
-
-	// firewallSimulate* make up the Firewall screen's own "Simulate" form
+	//
+	// firewall.Simulate* make up the Firewall screen's own "Simulate" form
 	// ("t", see firewallsimulate.go and feature_ideas.txt's own
 	// Firewall-Regel-Baukasten Stufe 3) — the same "dropdowns rebuilt
 	// fresh on every open, plain fields kept as value mirrors" shape
-	// firewallAddRule* above already establishes, minus Action (a
+	// firewall.AddRule* above already establishes, minus Action (a
 	// hypothetical request has no action of its own, only the rule that
 	// ends up deciding it does — see firewall.Simulate's own doc
-	// comment). firewallSimulateResult holds the last run's own outcome
+	// comment). firewall.SimulateResult holds the last run's own outcome
 	// text, blank until "Run" has been pressed at least once.
-	firewallSimulateLayout     *tview.Flex
-	firewallSimulateTitleBar   *tview.TextView
-	firewallSimulateForm       *tview.Form
-	firewallSimulateResult     *tview.TextView
-	firewallSimulateButtons    *tview.Flex
-	firewallSimulateCloseBtn   *tview.Button
-	firewallSimulateRunBtn     *tview.Button
-	firewallSimulateDirection  firewall.Direction
-	firewallSimulateProtocol   string
-	firewallSimulatePortText   string
-	firewallSimulateSourceText string
-	firewallSimulateDestText   string
-	firewallSimulateIfaceText  string
+	firewall firewallState
 
 	// The Sessions screen ("js", see sessions.go) — local GNU screen/
 	// tmux terminal-multiplexer sessions (internal/multiplex), styled
@@ -3220,17 +3175,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The Firewall screen's own "Add rule" form and self-lockout
 	// rollback prompt (see firewalladdrule.go).
-	r.firewallAddRuleForm = r.newFirewallAddRuleForm()
-	r.firewallAddRuleButtons = r.newFirewallAddRuleButtons()
-	r.firewallAddRuleLayout = r.newFirewallAddRuleLayout()
-	r.firewallRollbackKeepBtn = tview.NewButton("Keep this rule").SetSelectedFunc(r.keepFirewallRule)
-	r.firewallRollbackKeepBtn.SetInputCapture(spaceAlsoActivates(r.keepFirewallRule))
-	r.firewallRollbackLayout = r.newFirewallRollbackLayout()
+	r.firewall.AddRuleForm = r.newFirewallAddRuleForm()
+	r.firewall.AddRuleButtons = r.newFirewallAddRuleButtons()
+	r.firewall.AddRuleLayout = r.newFirewallAddRuleLayout()
+	r.firewall.RollbackKeepBtn = tview.NewButton("Keep this rule").SetSelectedFunc(r.keepFirewallRule)
+	r.firewall.RollbackKeepBtn.SetInputCapture(spaceAlsoActivates(r.keepFirewallRule))
+	r.firewall.RollbackLayout = r.newFirewallRollbackLayout()
 
 	// The Firewall screen's own "Simulate" form (see firewallsimulate.go).
-	r.firewallSimulateForm = r.newFirewallSimulateForm()
-	r.firewallSimulateButtons = r.newFirewallSimulateButtons()
-	r.firewallSimulateLayout = r.newFirewallSimulateLayout()
+	r.firewall.SimulateForm = r.newFirewallSimulateForm()
+	r.firewall.SimulateButtons = r.newFirewallSimulateButtons()
+	r.firewall.SimulateLayout = r.newFirewallSimulateLayout()
 
 	// The Sessions screen (see sessions.go/openSessions) — a sixth
 	// full-screen catalog, same build-once/repopulate-on-open shape.
@@ -3445,10 +3400,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Firewall screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts
 	// screens' own comments above give.
-	r.AddPage(firewallPage, r.firewallLayout, true, false)
-	r.AddPage(firewallAddRulePage, r.firewallAddRuleLayout, false, false)
-	r.AddPage(firewallRollbackPage, r.firewallRollbackLayout, false, false)
-	r.AddPage(firewallSimulatePage, r.firewallSimulateLayout, false, false)
+	r.AddPage(firewallPage, r.firewall.Layout, true, false)
+	r.AddPage(firewallAddRulePage, r.firewall.AddRuleLayout, false, false)
+	r.AddPage(firewallRollbackPage, r.firewall.RollbackLayout, false, false)
+	r.AddPage(firewallSimulatePage, r.firewall.SimulateLayout, false, false)
 	// resize=true: the Transfer-Zentrale screen deliberately fills the
 	// whole terminal too, the same reasoning every other full-screen
 	// catalog above gives.

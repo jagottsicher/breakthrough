@@ -384,7 +384,7 @@ func TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToFirewall(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = firewallPage
-	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendUFW}
+	root.firewall.Snapshot = firewall.Snapshot{Backend: firewall.BackendUFW}
 
 	got := root.consigliereContextSnapshot()
 
@@ -639,7 +639,7 @@ func TestGitBreachContextSnapshotCapsRecentCommits(t *testing.T) {
 // follow.
 func TestFirewallContextSnapshotOmitsRuleContentByDefault(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.firewallSnapshot = firewall.Snapshot{
+	root.firewall.Snapshot = firewall.Snapshot{
 		Backend: firewall.BackendUFW,
 		Rules: []firewall.Rule{
 			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow, Protocol: "tcp", PortFrom: 22, PortTo: 22, Source: "10.0.0.0/8"},
@@ -664,7 +664,7 @@ func TestFirewallContextSnapshotOmitsRuleContentByDefault(t *testing.T) {
 func TestFirewallContextSnapshotIncludesRulesUnderMachiavelliMode(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereHardcoreMode = true
-	root.firewallSnapshot = firewall.Snapshot{
+	root.firewall.Snapshot = firewall.Snapshot{
 		Backend: firewall.BackendUFW,
 		Rules: []firewall.Rule{
 			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow, Protocol: "tcp", PortFrom: 22, PortTo: 22, Source: "10.0.0.0/8"},
@@ -688,7 +688,7 @@ func TestFirewallContextSnapshotIncludesRulesUnderMachiavelliMode(t *testing.T) 
 // confusing snapshot.
 func TestFirewallContextSnapshotReportsNoBackendActive(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendNone}
+	root.firewall.Snapshot = firewall.Snapshot{Backend: firewall.BackendNone}
 
 	got := root.firewallContextSnapshot()
 
@@ -703,7 +703,7 @@ func TestFirewallContextSnapshotReportsNoBackendActive(t *testing.T) {
 // silently empty or misleading snapshot.
 func TestFirewallContextSnapshotReportsReadError(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.firewallErr = errors.New("permission denied (you must be root)")
+	root.firewall.Err = errors.New("permission denied (you must be root)")
 
 	got := root.firewallContextSnapshot()
 
@@ -723,7 +723,7 @@ func TestFirewallContextSnapshotCapsRuleList(t *testing.T) {
 	for i := 0; i < cap+5; i++ {
 		rules = append(rules, firewall.Rule{Order: i + 1, Action: firewall.ActionAllow, Source: "distinct-source"})
 	}
-	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendUFW, Rules: rules}
+	root.firewall.Snapshot = firewall.Snapshot{Backend: firewall.BackendUFW, Rules: rules}
 
 	got := root.firewallContextSnapshot()
 
