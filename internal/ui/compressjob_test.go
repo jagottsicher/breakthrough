@@ -27,7 +27,7 @@ func TestFinishCompressJobReloadsTheDestinationTab(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path}
-	r.compressJob = job
+	r.compress.Job = job
 
 	if err := os.WriteFile(filepath.Join(r.panel.path, "archived.zip"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestFinishCompressJobReloadsTheDestinationTab(t *testing.T) {
 	if !found {
 		t.Error("panel was not reloaded after the compress job finished — archived.zip is missing")
 	}
-	if r.compressJob != nil {
+	if r.compress.Job != nil {
 		t.Error("compressJob should be cleared once finished")
 	}
 }
@@ -55,7 +55,7 @@ func TestFinishCompressJobReportsARealError(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path}
-	r.compressJob = job
+	r.compress.Job = job
 
 	r.finishCompressJob(job, errors.New("compress: boom"))
 
@@ -73,7 +73,7 @@ func TestFinishCompressJobLogsAnAction(t *testing.T) {
 	readLog := attachTestActivityLog(t, r)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path, verb: "Compressing", label: "archive.zip"}
-	r.compressJob = job
+	r.compress.Job = job
 
 	r.finishCompressJob(job, nil)
 
@@ -90,7 +90,7 @@ func TestFinishCompressJobLogsAnError(t *testing.T) {
 	readLog := attachTestActivityLog(t, r)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path, verb: "Extracting", label: "archive.zip"}
-	r.compressJob = job
+	r.compress.Job = job
 
 	r.finishCompressJob(job, errors.New("boom"))
 
@@ -108,7 +108,7 @@ func TestFinishCompressJobDoesNotLogWhenCancelled(t *testing.T) {
 	readLog := attachTestActivityLog(t, r)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path, verb: "Compressing", label: "archive.zip"}
-	r.compressJob = job
+	r.compress.Job = job
 
 	cancel() // simulate cancelCompressJob already having run
 	r.finishCompressJob(job, errors.New("signal: killed"))
@@ -126,7 +126,7 @@ func TestFinishCompressJobSuppressesErrorWhenCancelled(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path}
-	r.compressJob = job
+	r.compress.Job = job
 
 	cancel() // simulate cancelCompressJob already having run
 	r.finishCompressJob(job, errors.New("signal: killed"))
@@ -150,7 +150,7 @@ func TestFinishCompressJobRunsDeleteOriginalOnSuccess(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path, deleteOriginal: archivePath}
-	r.compressJob = job
+	r.compress.Job = job
 
 	r.finishCompressJob(job, nil)
 
@@ -168,8 +168,8 @@ func TestFinishCompressJobStartsTheNextQueuedRun(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path}
-	r.compressJob = job
-	r.compressQueue = []compressRequest{{
+	r.compress.Job = job
+	r.compress.Queue = []compressRequest{{
 		command:    "true",
 		errContext: "compress",
 		verb:       "Compressing",
@@ -179,11 +179,11 @@ func TestFinishCompressJobStartsTheNextQueuedRun(t *testing.T) {
 
 	r.finishCompressJob(job, nil)
 
-	if r.compressJob == nil {
+	if r.compress.Job == nil {
 		t.Fatal("expected the queued run to have started")
 	}
-	if r.compressJob.label != "queued.zip" {
-		t.Errorf("started job label = %q, want %q", r.compressJob.label, "queued.zip")
+	if r.compress.Job.label != "queued.zip" {
+		t.Errorf("started job label = %q, want %q", r.compress.Job.label, "queued.zip")
 	}
 	r.cancelCompressJob() // don't leave a real process running past this test
 }
@@ -194,16 +194,16 @@ func TestCancelCompressJobStopsTheProcessAndClearsTheQueue(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &compressJob{ctx: ctx, cancel: cancel}
-	r.compressJob = job
-	r.compressQueue = []compressRequest{{label: "queued"}}
+	r.compress.Job = job
+	r.compress.Queue = []compressRequest{{label: "queued"}}
 
 	r.cancelCompressJob()
 
 	if job.ctx.Err() == nil {
 		t.Error("job's own context should be cancelled")
 	}
-	if len(r.compressQueue) != 0 {
-		t.Error("compressQueue should be cleared by a deliberate cancel")
+	if len(r.compress.Queue) != 0 {
+		t.Error("compress.Queue should be cleared by a deliberate cancel")
 	}
 }
 
@@ -213,8 +213,8 @@ func TestCancelCompressKeepQueueStopsOnlyCurrentAndStartsNext(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &compressJob{ctx: ctx, cancel: cancel}
-	r.compressJob = job
-	r.compressQueue = []compressRequest{{
+	r.compress.Job = job
+	r.compress.Queue = []compressRequest{{
 		command:    "true",
 		errContext: "compress",
 		verb:       "Compressing",
@@ -227,11 +227,11 @@ func TestCancelCompressKeepQueueStopsOnlyCurrentAndStartsNext(t *testing.T) {
 	if job.ctx.Err() == nil {
 		t.Error("the cancelled job's own context should report an error")
 	}
-	if len(r.compressQueue) != 0 {
+	if len(r.compress.Queue) != 0 {
 		t.Error("the queued entry should have started, not stayed queued")
 	}
-	if r.compressJob == nil || r.compressJob.label != "queued.zip" {
-		t.Errorf("r.compressJob = %+v, want the queued run started", r.compressJob)
+	if r.compress.Job == nil || r.compress.Job.label != "queued.zip" {
+		t.Errorf("r.compress.Job = %+v, want the queued run started", r.compress.Job)
 	}
 	r.cancelCompressJob() // don't leave a real process running past this test
 }
@@ -241,28 +241,28 @@ func TestCancelCompressKeepQueueStopsOnlyCurrentAndStartsNext(t *testing.T) {
 func TestCancelCompressKeepQueueIsANoOpWhenNothingRunning(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	r.cancelCompressKeepQueue() // must not panic
-	if r.compressJob != nil {
-		t.Error("r.compressJob should still be nil")
+	if r.compress.Job != nil {
+		t.Error("r.compress.Job should still be nil")
 	}
 }
 
 // TestStartCompressJobQueuesBehindARunningJob pins startCompressJob's
 // own dispatch: a second request while one is already running is
-// appended to compressQueue rather than started immediately, or racing
+// appended to compress.Queue rather than started immediately, or racing
 // the one already in flight.
 func TestStartCompressJobQueuesBehindARunningJob(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	running := &compressJob{ctx: ctx, cancel: cancel, label: "first.zip"}
-	r.compressJob = running
+	r.compress.Job = running
 
 	r.startCompressJob(compressRequest{label: "second.zip"})
 
-	if r.compressJob != running {
+	if r.compress.Job != running {
 		t.Error("the already-running job should not have been replaced")
 	}
-	if len(r.compressQueue) != 1 || r.compressQueue[0].label != "second.zip" {
-		t.Errorf("compressQueue = %+v, want one entry for %q", r.compressQueue, "second.zip")
+	if len(r.compress.Queue) != 1 || r.compress.Queue[0].label != "second.zip" {
+		t.Errorf("compress.Queue = %+v, want one entry for %q", r.compress.Queue, "second.zip")
 	}
 }
 
@@ -281,10 +281,10 @@ func TestReallyStartCompressJobRunsInThePanelsOwnDirectory(t *testing.T) {
 		label:      "test.zip",
 		destDir:    r.panel.path,
 	})
-	if r.compressJob == nil {
+	if r.compress.Job == nil {
 		t.Fatal("reallyStartCompressJob did not start a job")
 	}
-	if got := r.compressJob.cmd.Dir; got != r.panel.path {
+	if got := r.compress.Job.cmd.Dir; got != r.panel.path {
 		t.Errorf("cmd.Dir = %q, want %q", got, r.panel.path)
 	}
 	r.cancelCompressJob() // don't leave a real process running past this test
@@ -310,10 +310,10 @@ func TestReallyStartCompressJobSetsSid(t *testing.T) {
 		label:      "test.zip",
 		destDir:    r.panel.path,
 	})
-	if r.compressJob == nil {
+	if r.compress.Job == nil {
 		t.Fatal("reallyStartCompressJob did not start a job")
 	}
-	if r.compressJob.cmd.SysProcAttr == nil || !r.compressJob.cmd.SysProcAttr.Setsid {
+	if r.compress.Job.cmd.SysProcAttr == nil || !r.compress.Job.cmd.SysProcAttr.Setsid {
 		t.Error("cmd.SysProcAttr.Setsid = false, want true")
 	}
 	r.cancelCompressJob() // don't leave a real process running past this test

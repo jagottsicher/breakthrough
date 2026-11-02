@@ -332,39 +332,23 @@ type Root struct {
 	apiKeyDialogLayout          *tview.Flex
 
 	// The Options screen (see optionsscreen.go) — a full-screen editor
-	// with the categories down the left (optionsCategories) and the
-	// selected one's settings on the right (optionsTable), the action
-	// buttons beneath them, and optionsLayout stacking the lot.
-	// optionsCategory is the currently selected category's index, kept
+	// with the categories down the left (options.Categories) and the
+	// selected one's settings on the right (options.Table), the action
+	// buttons beneath them, and options.Layout stacking the lot.
+	// options.Category is the currently selected category's index, kept
 	// across opens so reopening returns to where you were.
 	//
-	// optionsInfo/optionsInput are the two small windows it layers on
+	// options.Info/options.Input are the two small windows it layers on
 	// top of itself: a setting's explanation, and a one-line editor for
 	// a typed value. Enum settings need no window of their own —
 	// activating the row cycles them in place (see cycleOptionChoice).
-	optionsLayout                *tview.Flex
-	optionsTitleBar              *tview.TextView
-	optionsHint                  *tview.TextView
-	optionsHintSpans             []listHintSpan
-	optionsCategories            *tview.List
-	optionsTable                 *tview.Table
-	optionsButtons               *tview.Flex
-	optionsResetCategoryBtn      *tview.Button
-	optionsResetAllBtn           *tview.Button
-	optionsEditFileBtn           *tview.Button
-	optionsNewSchemeBtn          *tview.Button
-	optionsRemoveOrphanLabelsBtn *tview.Button
-	optionsEditSystemPromptBtn   *tview.Button
-	optionsResetSystemPromptBtn  *tview.Button
-	optionsCategory              int
-	optionsInfo                  *tview.TextView
-	optionsInput                 *tview.InputField
+	options optionsState
 
 	// The Toolbox screen (see toolbox.go) — a full-screen catalog of
 	// real external networking/hardware tools, each one either run
 	// immediately (toolboxFixedEntry) or after asking for one further
 	// argument through toolboxInput, the same "small floating field over
-	// a full-screen list" shape optionsInput already establishes for
+	// a full-screen list" shape options.Input already establishes for
 	// Options. Every entry ends up in openToolCommand (toolwindow.go),
 	// the same draggable, non-modal window Ping already used before this
 	// screen gave it (and everything else here) a real home.
@@ -1181,7 +1165,7 @@ type Root struct {
 	activityLogNoticeDontShowAgain bool
 	// activityLogNoticeSpacer1/2 are the blank rows between header/
 	// message/checkbox/buttons — named and styled the same way
-	// duplicateSpacer/compressSpacer/rsyncSpacer already are (see their
+	// duplicateSpacer/compress.Spacer/rsyncSpacer already are (see their
 	// own doc comments) rather than left as anonymous tview.NewBox()
 	// calls, since a plain Box defaults to tview's own built-in
 	// PrimitiveBackgroundColor, not this dialog's SurfaceBackground —
@@ -1568,29 +1552,30 @@ type Root struct {
 	duplicateLayout                      *tview.Flex
 	duplicateTargets                     []string
 
-	// compressForm/compressButtons/compressLayout together make up the
+	// compress.Form/compress.Buttons/compress.Layout together make up the
 	// "Compress" dialog (compress.go) — the same Target/live-preview/
 	// Cancel-Action shape newDuplicateLayout's own doc comment already
 	// establishes, just with a fixed Format dropdown and an Output name
 	// field instead of Multiply's own strategy-dependent ones.
-	// compressTargets is the file(s) this open is for; compressFormatIndex
-	// indexes archiveFormats(); compressOutputName mirrors the Output
+	// compress.Targets is the file(s) this open is for; compress.FormatIndex
+	// indexes archiveFormats(); compress.OutputName mirrors the Output
 	// name field's own current text (needed across renderCompressForm's
 	// own rebuilds the same reason every duplicateXxxValue mirror is).
-	compressForm            *tview.Form
-	compressFormatField     *tview.DropDown
-	compressOutputNameField *tview.InputField
-	compressPreviewView     *tview.TextView
-	compressSpacer          *tview.Box
-	compressCancelBtn       *tview.Button
-	compressApplyBtn        *tview.Button
-	compressButtons         *tview.Flex
-	compressTitleBar        *tview.TextView
-	compressContentLayout   *tview.Flex
-	compressLayout          *tview.Flex
-	compressTargets         []string
-	compressFormatIndex     int
-	compressOutputName      string
+	//
+	// compress.CancelSpan asks to stop just the currently running job,
+	// never its queue (see bgjobcancel.go's own
+	// confirmCancelCurrentCompress) — zero-value (an empty, never-
+	// matching range) whenever the Compress segment isn't shown at all.
+	//
+	// compressJob is the currently-running backgrounded Compress or
+	// Extract, if any (see startCompressJob's own doc comment in
+	// compressjob.go) — entirely independent of pasteJob/rsyncJob for
+	// the same reason those two are independent of each other: a
+	// separate process tree with nothing to serialize against either.
+	// nil whenever no background Compress/Extract is currently running.
+	// compress.Queue mirrors rsyncQueue for a further Compress/Extract
+	// asked for while one is already running — see advanceCompressQueue.
+	compress compressState
 
 	// The "Rsync" dialog (see rsync.go) — source/destination and the
 	// free-text Excludes/Extra flags fields live in rsyncForm; the five
@@ -1659,8 +1644,8 @@ type Root struct {
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
 	// Options screen already establishes (batchRenameStepsList plays
-	// optionsCategories' own role, batchRenameFieldsTable plays
-	// optionsTable's), plus a live preview table and status line
+	// options.Categories' own role, batchRenameFieldsTable plays
+	// options.Table's), plus a live preview table and status line
 	// underneath, which Options has no equivalent of.
 	//
 	// batchRenameRules/batchRenameTargets/batchRenameStep are this
@@ -2271,7 +2256,7 @@ type Root struct {
 	// — launches the configured mail client, the same action "ge"
 	// already reaches — and each of the three background-job progress
 	// segments' own "✕" (pasteCancelSpan/rsyncCancelSpan/
-	// compressCancelSpan) — asks to stop just the currently running
+	// compress.CancelSpan) — asks to stop just the currently running
 	// job, never its queue (see bgjobcancel.go's own
 	// confirmCancelCurrentPaste/Rsync/Compress). Each is zero-value (an
 	// empty, never-matching range) whenever its own segment isn't
@@ -2300,7 +2285,6 @@ type Root struct {
 	mailBadgeSpan       buttonBarSpan
 	pasteCancelSpan     buttonBarSpan
 	rsyncCancelSpan     buttonBarSpan
-	compressCancelSpan  buttonBarSpan
 	labelScanCancelSpan buttonBarSpan
 	gitStatusSpan       buttonBarSpan
 
@@ -2469,17 +2453,6 @@ type Root struct {
 	// rsyncQueue mirrors pasteQueue for a background rsync asked for
 	// while one is already running — see advanceRsyncQueue.
 	rsyncQueue []queuedRsync
-
-	// compressJob is the currently-running backgrounded Compress or
-	// Extract, if any (see startCompressJob's own doc comment in
-	// compressjob.go) — entirely independent of pasteJob/rsyncJob above
-	// for the same reason those two are independent of each other: a
-	// separate process tree with nothing to serialize against either.
-	// nil whenever no background Compress/Extract is currently running.
-	compressJob *compressJob
-	// compressQueue mirrors rsyncQueue for a further Compress/Extract
-	// asked for while one is already running — see advanceCompressQueue.
-	compressQueue []compressRequest
 
 	// labelScanCancel is set for as long as the Options screen's own
 	// "Remove orphaned labels" background scan is running (see
@@ -3019,11 +2992,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The Compress dialog (see compress.go/openCompress) — same
 	// build-once/repopulate-on-open shape as Duplicate just above.
-	r.compressForm = r.newCompressForm()
-	r.compressPreviewView = r.newCompressPreviewView()
-	r.compressSpacer = tview.NewBox()
-	r.compressButtons = r.newCompressButtons()
-	r.compressLayout = r.newCompressLayout()
+	r.compress.Form = r.newCompressForm()
+	r.compress.PreviewView = r.newCompressPreviewView()
+	r.compress.Spacer = tview.NewBox()
+	r.compress.Buttons = r.newCompressButtons()
+	r.compress.Layout = r.newCompressLayout()
 
 	// The "Rsync" dialog (see rsync.go) — same "built once here,
 	// contents rebuilt fresh per open" shape as Multiply just above.
@@ -3337,7 +3310,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
-	r.AddPage(compressPage, r.compressLayout, false, false)
+	r.AddPage(compressPage, r.compress.Layout, false, false)
 	r.AddPage(rsyncPage, r.rsyncLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
@@ -3355,9 +3328,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.
-	r.AddPage(optionsPage, r.optionsLayout, true, false)
-	r.AddPage(optionsInfoPage, r.optionsInfo, false, false)
-	r.AddPage(optionsInputPage, r.optionsInput, false, false)
+	r.AddPage(optionsPage, r.options.Layout, true, false)
+	r.AddPage(optionsInfoPage, r.options.Info, false, false)
+	r.AddPage(optionsInputPage, r.options.Input, false, false)
 	// resize=true: the Toolbox screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just above gives.
@@ -4452,7 +4425,7 @@ func (r *Root) RequestCancel() {
 	// Ctrl+C path deliberately stays coarse. Unaffected by, and unaware
 	// of, Paste's own pause dialog above — see pastepause.go's own
 	// package doc comment.
-	if r.rsyncJob != nil || r.compressJob != nil {
+	if r.rsyncJob != nil || r.compress.Job != nil {
 		r.openConfirm("Cancel the running Rsync and/or Compress/Extract job(s)? Their own queued jobs are dropped too.", "Yes, cancel them", func() {
 			r.cancelRsyncJob()
 			r.cancelCompressJob()
