@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -191,31 +192,91 @@ func (r *Root) openDecompressedLook(path string) {
 // Look paths is configured — external pager or the builtin viewer —
 // exactly as if it had always been a real local file.
 //
-// The temp file is removed immediately once Look is done with it,
-// with one exception: a PDF viewed through the builtin path keeps
-// paging on demand (showPDFPage/turnPDFPage — see their own doc
-// comments), so its own temp file has to outlive this function,
-// surviving until the Look overlay actually closes instead
-// (r.viewerLookTempFile, cleaned up via hideOverlay's own per-page
-// hook and showBuiltinLook's own reset — see the struct field's own
-// doc comment). showBuiltinLook's bool return is what tells this
-// apart from every other case (Load failed, unsupported content,
-// ...), where nothing ever reached the overlay at all and the temp
-// file is just as immediately disposable as it would be for plain
-// text or an image.
+// The download itself runs in the background (see safeGo) — before
+// this, it ran synchronously right here, on the UI goroutine, blocking
+// the whole app for however long the transfer took, with nothing shown
+// until it finished. showRemoteLookPlaceholder opens the Look overlay
+// immediately instead, with a "Downloading…" notice standing in for
+// real content, the same "paint what you have, fill in behind" shape
+// Log Holepunch's own progressive load established — here there's
+// nothing real to paint yet, so the placeholder is the whole of what
+// "what you have" means. applyRemoteLookDownload (its own apply half,
+// called from the background goroutine's QueueUpdateDraw callback)
+// fills the overlay in once the real content lands, exactly the way
+// showBuiltinLook already would have for a local file.
 func (r *Root) openRemoteLook(remote remotefs.Client, remotePath string) {
-	localPath, cleanup, err := downloadRemoteToTemp(remote, remotePath)
+	r.viewerLookDownloadPath = remotePath
+	r.showRemoteLookPlaceholder(remotePath)
+	r.safeGo("remote look download", nil, func() {
+		localPath, cleanup, err := downloadRemoteToTemp(remote, remotePath)
+		r.app.QueueUpdateDraw(func() {
+			r.applyRemoteLookDownload(remotePath, localPath, cleanup, err)
+		})
+	})
+}
+
+// showRemoteLookPlaceholder opens the Look overlay with a transient
+// "Downloading…" notice instead of real content — openRemoteLook's own
+// immediate half (see its own doc comment), mirroring just enough of
+// showBuiltinLook's own end (reset, centeredOnScreen/clampToScreen,
+// pushOverlay) to make a real, on-screen overlay rather than leaving
+// the app looking like nothing happened at all while the download
+// runs. pushOverlay itself is a no-op if the viewer is already the
+// topmost overlay (see its own doc comment) — harmless if Look was
+// already open on a previous file when this one was requested.
+func (r *Root) showRemoteLookPlaceholder(remotePath string) {
+	r.viewerPDFPath = ""
+	r.viewerPDFMode = viewer.PDFViewAuto
+	r.cleanupViewerLookTempFile()
+
+	r.viewerView.SetText(fmt.Sprintf(" Downloading %s…", path.Base(remotePath)))
+	r.viewerView.ScrollToBeginning()
+
+	width, height := r.viewerSize()
+	x, y := r.centeredOnScreen(width, height)
+	x, y, width, height = r.clampToScreen(x, y, width, height)
+	r.viewerLayout.SetRect(x, y, width, height)
+	r.pushOverlay(viewerPage, r.viewerLayout, nil)
+}
+
+// applyRemoteLookDownload is openRemoteLook's own apply half, split out
+// so a test can call it directly with an already-known result instead
+// of draining QueueUpdateDraw (which blocks forever without a running
+// Application.Run — see this package's own established convention,
+// e.g. applyLogAuditRotatedFile in logaudit.go). Discards a stale
+// result exactly like that same function does: Look may have been
+// opened again, on this file or a different one, while this download
+// was still in flight (see viewerLookDownloadPath's own doc comment).
+//
+// Once past that check, this is exactly openRemoteLook's own former
+// body once the download itself had landed: video/external pager never
+// touch the overlay at all (the placeholder closes first), otherwise
+// showBuiltinLook fills the still-open placeholder in with the real
+// content — same temp-file lifetime rules as before (immediate cleanup
+// except for a builtin PDF Look, kept until the overlay actually
+// closes).
+func (r *Root) applyRemoteLookDownload(remotePath, localPath string, cleanup func(), err error) {
+	if remotePath != r.viewerLookDownloadPath {
+		if cleanup != nil {
+			cleanup()
+		}
+		return
+	}
+
 	if err != nil {
+		r.hideOverlay()
 		r.showError(fmt.Errorf("look %s: %w", remotePath, err))
 		return
 	}
 
 	if viewer.LooksLikeVideoPath(remotePath) {
+		r.hideOverlay()
 		defer cleanup()
 		r.playVideoFullscreen(localPath)
 		return
 	}
 	if r.settings.Pager == "external" {
+		r.hideOverlay()
 		defer cleanup()
 		r.runExternalPager(localPath)
 		return

@@ -10,6 +10,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 // createSpyClient wraps fakeRemoteClient to record whether Create was
@@ -82,6 +83,20 @@ func TestDownloadRemoteToTempOnAMissingFileReturnsAnError(t *testing.T) {
 	}
 }
 
+// simulateRemoteLookDownload runs openRemoteLook's own background
+// download synchronously, right here, and applies its result directly
+// — tests never drain QueueUpdateDraw (see this package's own
+// established convention), so every test below calls this right after
+// openRemoteLook instead of waiting on the real background goroutine
+// openRemoteLook itself already started, which stays leaked, blocked
+// on its own QueueUpdateDraw call forever (harmless — the same
+// accepted shape this package's other progressive/background features
+// already leave behind in tests, e.g. startLogAuditProgressiveLoad).
+func (r *Root) simulateRemoteLookDownload(remote remotefs.Client, remotePath string) {
+	localPath, cleanup, err := downloadRemoteToTemp(remote, remotePath)
+	r.applyRemoteLookDownload(remotePath, localPath, cleanup, err)
+}
+
 // TestOpenRemoteLookOpensTheBuiltinViewerAndRemovesTheTempFile pins the
 // plain text/image case: Look's whole content is already rendered into
 // r.viewerView by the time openRemoteLook returns, so the staged temp
@@ -93,6 +108,7 @@ func TestOpenRemoteLookOpensTheBuiltinViewerAndRemovesTheTempFile(t *testing.T) 
 	client.content = map[string][]byte{"/remote/b.txt": []byte("remote file content")}
 
 	r.openRemoteLook(client, "/remote/b.txt")
+	r.simulateRemoteLookDownload(client, "/remote/b.txt")
 
 	if r.activePage != viewerPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, viewerPage)
@@ -115,6 +131,7 @@ func TestOpenRemoteLookOnAPDFKeepsTheTempFileForPageTurns(t *testing.T) {
 	client.content = map[string][]byte{"/remote/doc.pdf": buildMinimalPDF("Hello remote PDF")}
 
 	r.openRemoteLook(client, "/remote/doc.pdf")
+	r.simulateRemoteLookDownload(client, "/remote/doc.pdf")
 
 	if r.activePage != viewerPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, viewerPage)
@@ -138,6 +155,7 @@ func TestClosingLookRemovesARemotePDFsOwnTempFile(t *testing.T) {
 	client := r.panel.remote.(*fakeRemoteClient)
 	client.content = map[string][]byte{"/remote/doc.pdf": buildMinimalPDF("Hello remote PDF")}
 	r.openRemoteLook(client, "/remote/doc.pdf")
+	r.simulateRemoteLookDownload(client, "/remote/doc.pdf")
 	tempFile := r.viewerLookTempFile
 	if tempFile == "" {
 		t.Fatal("setup: expected a staged PDF temp file")
@@ -166,12 +184,14 @@ func TestOpeningANewLookRemovesThePreviousRemotePDFsOwnTempFile(t *testing.T) {
 		"/remote/b.txt":   []byte("plain text"),
 	}
 	r.openRemoteLook(client, "/remote/doc.pdf")
+	r.simulateRemoteLookDownload(client, "/remote/doc.pdf")
 	firstTempFile := r.viewerLookTempFile
 	if firstTempFile == "" {
 		t.Fatal("setup: expected a staged PDF temp file")
 	}
 
 	r.openRemoteLook(client, "/remote/b.txt")
+	r.simulateRemoteLookDownload(client, "/remote/b.txt")
 
 	if _, err := os.Stat(firstTempFile); !os.IsNotExist(err) {
 		t.Errorf("Stat(%s) after opening a new Look: err = %v, want a not-exist error", firstTempFile, err)
@@ -188,12 +208,78 @@ func TestOpenLookOnARemotePanelDispatchesToOpenRemoteLook(t *testing.T) {
 	client.content = map[string][]byte{"/remote/b.txt": []byte("remote content")}
 
 	r.openLook()
+	r.simulateRemoteLookDownload(client, "/remote/b.txt")
 
 	if r.activePage != viewerPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, viewerPage)
 	}
 	if got := r.viewerView.GetText(true); got != "remote content" {
 		t.Errorf("viewerView text = %q, want the remote file's own content", got)
+	}
+}
+
+// TestOpenRemoteLookShowsAPlaceholderBeforeTheDownloadLands pins
+// openRemoteLook's own immediate half: the overlay opens right away,
+// with a "Downloading…" notice standing in for real content, rather
+// than leaving the app looking like nothing happened while the
+// background download is still in flight — the same "paint what you
+// have, fill in behind" shape Log Holepunch's own progressive load
+// established; here there's nothing real yet, so the placeholder is
+// all of "what you have".
+func TestOpenRemoteLookShowsAPlaceholderBeforeTheDownloadLands(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	client.content = map[string][]byte{"/remote/b.txt": []byte("remote file content")}
+
+	r.openRemoteLook(client, "/remote/b.txt")
+
+	if r.activePage != viewerPage {
+		t.Fatalf("activePage = %q, want %q (opened immediately, before the download lands)", r.activePage, viewerPage)
+	}
+	if got := r.viewerView.GetText(true); !strings.Contains(got, "Downloading") {
+		t.Errorf("viewerView text = %q, want a Downloading placeholder before the real content lands", got)
+	}
+}
+
+// TestApplyRemoteLookDownloadDiscardsAStaleResult pins the same
+// "a background answer for a target that's no longer current gets
+// thrown away" rule applyLogAuditRotatedFile/applyPanelDiskUsage's own
+// stale-result guards already establish: Look opened again, on a
+// different file, while an earlier download was still in flight must
+// never have that earlier download's own result overwrite what the
+// newer request already shows or is still waiting for.
+func TestApplyRemoteLookDownloadDiscardsAStaleResult(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	client.content = map[string][]byte{
+		"/remote/first.txt":  []byte("first file content"),
+		"/remote/second.txt": []byte("second file content"),
+	}
+
+	r.openRemoteLook(client, "/remote/first.txt")
+	r.openRemoteLook(client, "/remote/second.txt") // a newer request before the first one's own download landed
+
+	r.simulateRemoteLookDownload(client, "/remote/first.txt") // the stale, now-superseded one
+
+	if got := r.viewerView.GetText(true); strings.Contains(got, "first file content") {
+		t.Errorf("viewerView text = %q, a stale download result for the first file must not have been applied", got)
+	}
+}
+
+// TestApplyRemoteLookDownloadOnAnErrorClosesThePlaceholderAndReportsIt
+// pins the error path: a failed download must not leave the
+// "Downloading…" placeholder open forever — the overlay closes and the
+// error reaches the user through the ordinary error overlay, the same
+// as openLook's own local-file failure already does.
+func TestApplyRemoteLookDownloadOnAnErrorClosesThePlaceholderAndReportsIt(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient) // "/remote/missing.txt" was never populated into client.content
+
+	r.openRemoteLook(client, "/remote/missing.txt")
+	r.simulateRemoteLookDownload(client, "/remote/missing.txt")
+
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want %q after a failed download", r.activePage, errorPage)
 	}
 }
 
