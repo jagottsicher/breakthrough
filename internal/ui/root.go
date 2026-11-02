@@ -1600,6 +1600,17 @@ type Root struct {
 	// without closing the previous one's overlay first).
 	viewerLookTempFile string
 
+	// viewerLookDownloadPath is openRemoteLook's own "this is the
+	// request currently in flight" marker — set fresh on every call,
+	// checked by applyRemoteLookDownload before doing anything with its
+	// own result, so Look opened again (a different file, or the same
+	// one re-opened) while an earlier download is still running never
+	// has that now-stale result clobber whatever the newer request
+	// already showed or is still waiting for — the same stale-result
+	// discard rule applyLogAuditRotatedFile/applyPanelDiskUsage already
+	// establish for the identical reason.
+	viewerLookDownloadPath string
+
 	// The directory picker (see dirpicker.go/openDirPicker) — the
 	// "Tree" browse action shared by the search dialog's Start-at field
 	// and, later, the planned Copy-to/Move-to target navigation.
