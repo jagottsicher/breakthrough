@@ -546,14 +546,14 @@ func TestLogAuditContextSnapshotMachiavelliModeOnlyAppliesToTheViewerPage(t *tes
 
 func TestGitBreachContextSnapshotIncludesStatusAndCommits(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.gitBreachRoot = "/home/jens/project"
-	root.gitBreachStatus = git.Status{
+	root.gitBreach.Root = "/home/jens/project"
+	root.gitBreach.Status = git.Status{
 		Branch:    "feature/x",
 		Ahead:     2,
 		Staged:    []git.FileChange{{Path: "a.go"}},
 		Untracked: []string{"b.go", "c.go"},
 	}
-	root.gitBreachCommits = []git.LogEntry{
+	root.gitBreach.Commits = []git.LogEntry{
 		{Subject: "fix the thing"},
 		{Subject: "add the feature"},
 	}
@@ -573,8 +573,8 @@ func TestGitBreachContextSnapshotIncludesStatusAndCommits(t *testing.T) {
 // Machiavelli Mode has been explicitly turned on.
 func TestGitBreachContextSnapshotOmitsDiffContentByDefault(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.gitBreachStatus = git.Status{Branch: "main"}
-	root.gitBreachDiffRawText = "-	topsecret123\n+	newsecret456"
+	root.gitBreach.Status = git.Status{Branch: "main"}
+	root.gitBreach.DiffRawText = "-	topsecret123\n+	newsecret456"
 
 	got := root.gitBreachContextSnapshot()
 
@@ -588,9 +588,9 @@ func TestGitBreachContextSnapshotOmitsDiffContentByDefault(t *testing.T) {
 // on, whatever diff is currently shown in Main is forwarded verbatim.
 func TestGitBreachContextSnapshotIncludesDiffUnderMachiavelliMode(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.gitBreachStatus = git.Status{Branch: "main"}
+	root.gitBreach.Status = git.Status{Branch: "main"}
 	root.settings.ConsigliereHardcoreMode = true
-	root.gitBreachDiffRawText = "-	topsecret123\n+	newsecret456"
+	root.gitBreach.DiffRawText = "-	topsecret123\n+	newsecret456"
 
 	got := root.gitBreachContextSnapshot()
 
@@ -605,9 +605,9 @@ func TestGitBreachContextSnapshotIncludesDiffUnderMachiavelliMode(t *testing.T) 
 // selection, a conflict row, a cancelled fetch).
 func TestGitBreachContextSnapshotOmitsDiffWhenNothingShown(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.gitBreachStatus = git.Status{Branch: "main"}
+	root.gitBreach.Status = git.Status{Branch: "main"}
 	root.settings.ConsigliereHardcoreMode = true
-	root.gitBreachDiffRawText = ""
+	root.gitBreach.DiffRawText = ""
 
 	got := root.gitBreachContextSnapshot()
 
@@ -618,9 +618,9 @@ func TestGitBreachContextSnapshotOmitsDiffWhenNothingShown(t *testing.T) {
 
 func TestGitBreachContextSnapshotCapsRecentCommits(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.gitBreachStatus = git.Status{Branch: "main"}
+	root.gitBreach.Status = git.Status{Branch: "main"}
 	for i := 0; i < consigliereMaxRecentCommits+5; i++ {
-		root.gitBreachCommits = append(root.gitBreachCommits, git.LogEntry{Subject: "distinct-subject"})
+		root.gitBreach.Commits = append(root.gitBreach.Commits, git.LogEntry{Subject: "distinct-subject"})
 	}
 
 	got := root.gitBreachContextSnapshot()

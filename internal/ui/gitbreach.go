@@ -1,7 +1,7 @@
 // gitbreach.go is the Git breach dashboard's own glue between
 // internal/git (Root/Fetch/Stage/Unstage/Commit/Diff — the real,
 // UI-free business logic) and the multi-pane layout gitbreachscreen.go
-// builds. See gitBreachLayout's own doc comment on Root for the
+// builds. See gitBreach.Layout's own doc comment on Root for the
 // overall shape and why it's planned as several boxes from the start.
 package ui
 
@@ -12,11 +12,74 @@ import (
 
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
 const gitBreachPage = "gitBreach"
+
+// gitBreachState holds the Git Breach dashboard's own widgets (per
+// pane: Status/Files/Branches/Commits/Stash/Diff), the last read
+// result for each pane, and the Diff pane's own split-view state (see
+// gitbreach.go/gitbreachscreen.go/gitbreachdiffsplit.go).
+type gitBreachState struct {
+	Layout              *tview.Flex
+	TitleBar            *tview.TextView
+	StatusHeader        *tview.TextView
+	StatusView          *tview.TextView
+	FilesHeader         *tview.TextView
+	FilesTable          *tview.Table
+	FilesScrollbar      *verticalScrollbar
+	BranchesHeader      *tview.TextView
+	BranchesTable       *tview.Table
+	BranchesScrollbar   *verticalScrollbar
+	CommitsHeader       *tview.TextView
+	CommitsTable        *tview.Table
+	CommitsScrollbar    *verticalScrollbar
+	StashHeader         *tview.TextView
+	StashTable          *tview.Table
+	StashScrollbar      *verticalScrollbar
+	DiffHeader          *tview.TextView
+	DiffView            *tview.TextView
+	DiffScrollbar       *verticalScrollbar
+	DiffHScrollbar      *horizontalScrollbar
+	DiffSpacer          *tview.Box
+	Hint                *tview.TextView
+	HintSpans           []listHintSpan
+	Dir                 string // the directory "jg" was invoked from
+	Root                string // resolved repository root, see git.Root
+	Status              git.Status
+	Rows                []gitBreachRow
+	RowIndex            map[int]int
+	FetchErr            error
+	FilesReady          bool
+	Branches            []git.Branch
+	BranchesErr         error
+	BranchesReady       bool
+	Commits             []git.LogEntry
+	CommitsErr          error
+	CommitsReady        bool
+	CommitsLimit        int
+	CommitsTotal        int
+	Stash               []git.Stash
+	StashErr            error
+	StashReady          bool
+	MainOwner           gitBreachMainOwnerKind
+	DiffCancel          context.CancelFunc
+	DiffScroll          map[string]int
+	DiffScrollKey       string
+	DiffSplit           bool
+	DiffPages           *tview.Pages
+	DiffSplitLeft       *tview.TextView
+	DiffSplitRight      *tview.TextView
+	DiffSplitSeparator  *tview.Box
+	DiffSplitScrollbar  *verticalScrollbar
+	DiffSplitHScrollbar *horizontalScrollbar
+	DiffSplitSpacer     *tview.Box
+	DiffRawText         string
+	DiffFiles           []compare.FileDiff
+}
 
 // gitBreachFetchTimeout bounds how long "jg" itself, and every
 // subsequent reload (see reloadGitBreach), waits on git before giving
@@ -64,15 +127,15 @@ func (r *Root) openGitBreach() {
 		return
 	}
 
-	r.gitBreachDir = r.panel.path
-	r.gitBreachRoot = root
+	r.gitBreach.Dir = r.panel.path
+	r.gitBreach.Root = root
 	// Reset to the starting limit on every fresh "jg" open — unlike "r"
 	// (reloadGitBreach on its own, see its own doc comment), which
 	// deliberately leaves an already-expanded limit alone so a user who
 	// scrolled to 600 commits and reloads doesn't lose that expansion.
-	r.gitBreachCommitsLimit = git.CommitLogLimit
+	r.gitBreach.CommitsLimit = git.CommitLogLimit
 	r.reloadGitBreach()
-	r.showOverlayWithRestore(gitBreachPage, r.gitBreachLayout, r.restoreGitBreachFocus)
+	r.showOverlayWithRestore(gitBreachPage, r.gitBreach.Layout, r.restoreGitBreachFocus)
 }
 
 // restoreGitBreachFocus sends real keyboard focus to the Files table —
@@ -85,10 +148,10 @@ func (r *Root) openGitBreach() {
 // land somewhere predictable rather than wherever Tab (see
 // toggleGitBreachFocus) happened to leave it last time.
 func (r *Root) restoreGitBreachFocus() {
-	r.app.SetFocus(r.gitBreachFilesTable)
+	r.app.SetFocus(r.gitBreach.FilesTable)
 }
 
-// reloadGitBreach re-fetches gitBreachRoot's own status and branch
+// reloadGitBreach re-fetches gitBreach.Root's own status and branch
 // list, rebuilding every box's own content — "r" re-runs this
 // directly, and every stage/unstage/commit/checkout does too
 // afterward, the same "re-run the real read, don't just redraw"
@@ -109,30 +172,30 @@ func (r *Root) reloadGitBreach() {
 	// call already keeps Main in sync regardless), but cheap enough to
 	// keep as a guard against a future change in that call order.
 	r.gitBreachSaveDiffScroll()
-	r.gitBreachDiffScrollKey = ""
+	r.gitBreach.DiffScrollKey = ""
 
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
-	status, err := git.Fetch(ctx, r.gitBreachRoot)
-	r.gitBreachStatus = status
-	r.gitBreachFetchErr = err
-	r.gitBreachRows = buildGitBreachRows(status)
+	status, err := git.Fetch(ctx, r.gitBreach.Root)
+	r.gitBreach.Status = status
+	r.gitBreach.FetchErr = err
+	r.gitBreach.Rows = buildGitBreachRows(status)
 
-	branches, branchesErr := git.Branches(ctx, r.gitBreachRoot)
-	r.gitBreachBranches = branches
-	r.gitBreachBranchesErr = branchesErr
+	branches, branchesErr := git.Branches(ctx, r.gitBreach.Root)
+	r.gitBreach.Branches = branches
+	r.gitBreach.BranchesErr = branchesErr
 
-	commits, commitsErr := git.Log(ctx, r.gitBreachRoot, r.gitBreachCommitsLimit)
-	r.gitBreachCommits = commits
-	r.gitBreachCommitsErr = commitsErr
-	total, totalErr := git.CommitCount(ctx, r.gitBreachRoot)
+	commits, commitsErr := git.Log(ctx, r.gitBreach.Root, r.gitBreach.CommitsLimit)
+	r.gitBreach.Commits = commits
+	r.gitBreach.CommitsErr = commitsErr
+	total, totalErr := git.CommitCount(ctx, r.gitBreach.Root)
 	if totalErr == nil {
-		r.gitBreachCommitsTotal = total
+		r.gitBreach.CommitsTotal = total
 	}
 
-	stash, stashErr := git.StashList(ctx, r.gitBreachRoot)
-	r.gitBreachStash = stash
-	r.gitBreachStashErr = stashErr
+	stash, stashErr := git.StashList(ctx, r.gitBreach.Root)
+	r.gitBreach.Stash = stash
+	r.gitBreach.StashErr = stashErr
 
 	r.renderGitBreach()
 }
@@ -200,7 +263,7 @@ func buildGitBreachRows(st git.Status) []gitBreachRow {
 // it; conflict resolution is explicitly out of scope for this first
 // Ausbaustufe (see feature_ideas.txt's own #21).
 func (r *Root) toggleGitBreachStage() {
-	row, _ := r.gitBreachFilesTable.GetSelection()
+	row, _ := r.gitBreach.FilesTable.GetSelection()
 	gr, ok := r.gitBreachRowAt(row)
 	if !ok || gr.kind == gitBreachRowConflict {
 		return
@@ -211,9 +274,9 @@ func (r *Root) toggleGitBreachStage() {
 
 	var err error
 	if gr.kind == gitBreachRowStaged {
-		err = git.Unstage(ctx, r.gitBreachRoot, []string{gr.path})
+		err = git.Unstage(ctx, r.gitBreach.Root, []string{gr.path})
 	} else {
-		err = git.Stage(ctx, r.gitBreachRoot, []string{gr.path})
+		err = git.Stage(ctx, r.gitBreach.Root, []string{gr.path})
 	}
 	if err != nil {
 		r.showError(fmt.Errorf("git breach: %w", err))
@@ -225,16 +288,16 @@ func (r *Root) toggleGitBreachStage() {
 // gitBreachRowAt returns the gitBreachRow the Files table's own row
 // currently shows — unlike most of this app's own table-row-to-data
 // mappings (a fixed header offset, see e.g. logAuditGroupAt), this one
-// goes through gitBreachRowIndex (see renderGitBreachFiles) because the
+// goes through gitBreach.RowIndex (see renderGitBreachFiles) because the
 // table also contains non-selectable section header rows interspersed
 // with real file rows; row lands on one of those (or past the end)
 // reports false, same as any other out-of-range row would.
 func (r *Root) gitBreachRowAt(row int) (gitBreachRow, bool) {
-	idx, ok := r.gitBreachRowIndex[row]
-	if !ok || idx < 0 || idx >= len(r.gitBreachRows) {
+	idx, ok := r.gitBreach.RowIndex[row]
+	if !ok || idx < 0 || idx >= len(r.gitBreach.Rows) {
 		return gitBreachRow{}, false
 	}
-	return r.gitBreachRows[idx], true
+	return r.gitBreach.Rows[idx], true
 }
 
 // openGitBreachCommitPrompt is "c" — a commit-message input pushed on
@@ -247,7 +310,7 @@ func (r *Root) gitBreachRowAt(row int) (gitBreachRow, bool) {
 // index would just surface git's own "nothing to commit" error for no
 // reason the user didn't already know about from the Files box itself.
 func (r *Root) openGitBreachCommitPrompt() {
-	if len(r.gitBreachStatus.Staged) == 0 {
+	if len(r.gitBreach.Status.Staged) == 0 {
 		r.showError(fmt.Errorf("git breach: nothing staged to commit"))
 		return
 	}
@@ -276,7 +339,7 @@ func (r *Root) openGitBreachCommitPrompt() {
 func (r *Root) commitGitBreach(message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
-	if err := git.Commit(ctx, r.gitBreachRoot, message); err != nil {
+	if err := git.Commit(ctx, r.gitBreach.Root, message); err != nil {
 		r.showError(fmt.Errorf("git breach: %w", err))
 		return
 	}
@@ -297,7 +360,7 @@ func (r *Root) commitGitBreach(message string) {
 // something to Trash, a clean-tree checkout has no irreversible side
 // effect to weigh at all.
 func (r *Root) openGitBreachCheckout() {
-	row, _ := r.gitBreachBranchesTable.GetSelection()
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
 	branch, ok := r.gitBreachBranchAt(row)
 	if !ok || branch.Current {
 		return
@@ -309,7 +372,7 @@ func (r *Root) openGitBreachCheckout() {
 	// itself still refuses loudly (surfaced via checkoutGitBreachBranch's
 	// own showError) in the one case an untracked file actually would be
 	// overwritten.
-	st := r.gitBreachStatus
+	st := r.gitBreach.Status
 	if len(st.Staged) > 0 || len(st.Unstaged) > 0 || len(st.Conflicts) > 0 {
 		r.openConfirm(
 			fmt.Sprintf("Check out %q with uncommitted changes in the working tree?", branch.Name),
@@ -331,7 +394,7 @@ func (r *Root) openGitBreachCheckout() {
 func (r *Root) checkoutGitBreachBranch(branch string) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
-	if err := git.Checkout(ctx, r.gitBreachRoot, branch); err != nil {
+	if err := git.Checkout(ctx, r.gitBreach.Root, branch); err != nil {
 		r.showError(fmt.Errorf("git breach: %w", err))
 		return
 	}
@@ -352,7 +415,7 @@ func (r *Root) checkoutGitBreachBranch(branch string) {
 // rather than letting git's own real but differently-worded refusal
 // ("used by worktree") surface instead.
 func (r *Root) openGitBreachDeleteBranch() {
-	row, _ := r.gitBreachBranchesTable.GetSelection()
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
 	branch, ok := r.gitBreachBranchAt(row)
 	if !ok || branch.Current {
 		return
@@ -369,7 +432,7 @@ func (r *Root) openGitBreachDeleteBranch() {
 // nothing on disk in the active panel's own directory can change from
 // deleting a ref that wasn't checked out to begin with), but
 // reloadGitBreach is still the right call rather than hand-patching
-// gitBreachBranches: the same "re-run the real read, don't just
+// gitBreach.Branches: the same "re-run the real read, don't just
 // redraw" contract every other git breach action already follows.
 // git branch -d's own refusal on an unmerged branch (see
 // git.DeleteBranch's own doc comment) surfaces as-is via showError,
@@ -378,30 +441,30 @@ func (r *Root) openGitBreachDeleteBranch() {
 func (r *Root) deleteGitBreachBranch(branch string) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
-	if err := git.DeleteBranch(ctx, r.gitBreachRoot, branch); err != nil {
+	if err := git.DeleteBranch(ctx, r.gitBreach.Root, branch); err != nil {
 		r.showError(fmt.Errorf("git breach: %w", err))
 		return
 	}
 	r.reloadGitBreach()
 }
 
-// gitBreachBranchAt returns gitBreachBranches[row] — unlike Files'
+// gitBreachBranchAt returns gitBreach.Branches[row] — unlike Files'
 // own gitBreachRowAt, the Branches table has no section-header rows
 // interspersed (see renderGitBreachBranches), so the table row index
-// maps directly onto gitBreachBranches without an indirection map.
+// maps directly onto gitBreach.Branches without an indirection map.
 func (r *Root) gitBreachBranchAt(row int) (git.Branch, bool) {
 	// renderGitBreachBranches puts a non-selectable "(detached at ...)"
-	// row at row 0 first whenever gitBreachStatus.Detached is true,
+	// row at row 0 first whenever gitBreach.Status.Detached is true,
 	// shifting every real branch down by one — accounted for here so
 	// gitBreachAt's own caller never has to know this box's own
 	// row-0 special case exists at all.
-	if r.gitBreachStatus.Detached {
+	if r.gitBreach.Status.Detached {
 		row--
 	}
-	if row < 0 || row >= len(r.gitBreachBranches) {
+	if row < 0 || row >= len(r.gitBreach.Branches) {
 		return git.Branch{}, false
 	}
-	return r.gitBreachBranches[row], true
+	return r.gitBreach.Branches[row], true
 }
 
 // gitBreachDiffDebounce/gitBreachDiffTimeout mirror
@@ -417,9 +480,9 @@ const (
 // cancelGitBreachDiff stops whichever diff fetch is in flight for a row
 // the cursor has since moved off — mirrors cancelDetailsGitStatus.
 func (r *Root) cancelGitBreachDiff() {
-	if r.gitBreachDiffCancel != nil {
-		r.gitBreachDiffCancel()
-		r.gitBreachDiffCancel = nil
+	if r.gitBreach.DiffCancel != nil {
+		r.gitBreach.DiffCancel()
+		r.gitBreach.DiffCancel = nil
 	}
 }
 
@@ -433,25 +496,25 @@ func (r *Root) cancelGitBreachDiff() {
 // not a deliberate keypress, and git diff can occasionally be slow
 // against a huge changeset.
 // gitBreachSaveDiffScroll remembers Main's own current scroll row
-// under whatever key is currently active (gitBreachDiffScrollKey) —
+// under whatever key is currently active (gitBreach.DiffScrollKey) —
 // called at the very start of every startGitBreach*Diff, before
 // anything about the row being left behind changes, so it always
 // captures the scroll position of whatever content is genuinely still
 // on screen at that moment rather than content a slow previous fetch
 // hasn't replaced yet.
 func (r *Root) gitBreachSaveDiffScroll() {
-	if r.gitBreachDiffScrollKey == "" {
+	if r.gitBreach.DiffScrollKey == "" {
 		return
 	}
-	if r.gitBreachDiffScroll == nil {
-		r.gitBreachDiffScroll = make(map[string]int)
+	if r.gitBreach.DiffScroll == nil {
+		r.gitBreach.DiffScroll = make(map[string]int)
 	}
-	row, _ := r.gitBreachDiffView.GetScrollOffset()
-	r.gitBreachDiffScroll[r.gitBreachDiffScrollKey] = row
+	row, _ := r.gitBreach.DiffView.GetScrollOffset()
+	r.gitBreach.DiffScroll[r.gitBreach.DiffScrollKey] = row
 }
 
 // gitBreachActivateDiffKey saves the outgoing key's own scroll
-// position (see gitBreachSaveDiffScroll), switches gitBreachDiffScrollKey
+// position (see gitBreachSaveDiffScroll), switches gitBreach.DiffScrollKey
 // to key, and restores whatever was last remembered for it —
 // synchronously, before the row's own real content has even started
 // fetching (see startGitBreachDiff and its two siblings' own debounce).
@@ -464,14 +527,14 @@ func (r *Root) gitBreachSaveDiffScroll() {
 // row's remembered one.
 func (r *Root) gitBreachActivateDiffKey(key string) {
 	r.gitBreachSaveDiffScroll()
-	r.gitBreachDiffScrollKey = key
-	r.gitBreachDiffView.ScrollTo(r.gitBreachDiffScroll[key], 0)
+	r.gitBreach.DiffScrollKey = key
+	r.gitBreach.DiffView.ScrollTo(r.gitBreach.DiffScroll[key], 0)
 }
 
 // gitBreachSetDiffText sets Main's own text and restores whatever
 // scroll position gitBreachSaveDiffScroll last remembered for key —
 // 0 (the top) for a file/commit/stash entry seen for the first time
-// this session. key becomes the new gitBreachDiffScrollKey, so the
+// this session. key becomes the new gitBreach.DiffScrollKey, so the
 // next save (on whatever row comes after this one) attributes to the
 // right entry regardless of how long this fetch took.
 //
@@ -490,22 +553,22 @@ func (r *Root) gitBreachActivateDiffKey(key string) {
 // startGitBreach*Diff functions open with, since none of their own
 // gitBreachSetDiffText calls below ever run at all in that case.
 func (r *Root) gitBreachClearDiff() {
-	r.gitBreachDiffView.SetText("")
-	r.gitBreachDiffRawText = ""
-	if r.gitBreachDiffSplit {
+	r.gitBreach.DiffView.SetText("")
+	r.gitBreach.DiffRawText = ""
+	if r.gitBreach.DiffSplit {
 		r.gitBreachRenderDiffSplit()
 	}
 }
 
 func (r *Root) gitBreachSetDiffText(key, text, rawDiff string) {
-	r.gitBreachDiffScrollKey = key
-	r.gitBreachDiffView.SetText(text)
-	r.gitBreachDiffView.ScrollTo(r.gitBreachDiffScroll[key], 0)
-	r.gitBreachDiffRawText = rawDiff
-	if r.gitBreachDiffSplit {
+	r.gitBreach.DiffScrollKey = key
+	r.gitBreach.DiffView.SetText(text)
+	r.gitBreach.DiffView.ScrollTo(r.gitBreach.DiffScroll[key], 0)
+	r.gitBreach.DiffRawText = rawDiff
+	if r.gitBreach.DiffSplit {
 		r.gitBreachRenderDiffSplit()
-		r.gitBreachDiffSplitLeft.ScrollTo(r.gitBreachDiffScroll[key], 0)
-		r.gitBreachDiffSplitRight.ScrollTo(r.gitBreachDiffScroll[key], 0)
+		r.gitBreach.DiffSplitLeft.ScrollTo(r.gitBreach.DiffScroll[key], 0)
+		r.gitBreach.DiffSplitRight.ScrollTo(r.gitBreach.DiffScroll[key], 0)
 	}
 }
 
@@ -514,7 +577,7 @@ func (r *Root) startGitBreachDiff(row int) {
 	gr, ok := r.gitBreachRowAt(row)
 	if !ok {
 		r.gitBreachSaveDiffScroll()
-		r.gitBreachDiffScrollKey = ""
+		r.gitBreach.DiffScrollKey = ""
 		r.gitBreachClearDiff()
 		return
 	}
@@ -527,8 +590,8 @@ func (r *Root) startGitBreachDiff(row int) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	r.gitBreachDiffCancel = cancel
-	root := r.gitBreachRoot
+	r.gitBreach.DiffCancel = cancel
+	root := r.gitBreach.Root
 
 	r.safeGo("Git breach diff", r.cancelGitBreachDiff, func() {
 		select {
@@ -561,7 +624,7 @@ func (r *Root) startGitBreachDiff(row int) {
 			if ctx.Err() != nil {
 				return
 			}
-			curRow, _ := r.gitBreachFilesTable.GetSelection()
+			curRow, _ := r.gitBreach.FilesTable.GetSelection()
 			curGr, ok := r.gitBreachRowAt(curRow)
 			if !ok || curGr != gr {
 				return // the cursor moved to a different row before this landed
@@ -594,7 +657,7 @@ func (r *Root) startGitBreachDiff(row int) {
 	})
 }
 
-// gitBreachFileDiffScrollKey identifies gr for gitBreachDiffScroll's
+// gitBreachFileDiffScrollKey identifies gr for gitBreach.DiffScroll's
 // own per-entry memory — kind, not just path: the same path can appear
 // twice at once (staged and unstaged), showing two different diffs
 // that need their own separate remembered scroll position.
@@ -602,15 +665,15 @@ func gitBreachFileDiffScrollKey(gr gitBreachRow) string {
 	return fmt.Sprintf("F:%d:%s", gr.kind, gr.path)
 }
 
-// gitBreachCommitAt returns gitBreachCommits[row] — the Commits table
+// gitBreachCommitAt returns gitBreach.Commits[row] — the Commits table
 // has no non-selectable header rows interspersed (same as Branches, see
 // gitBreachBranchAt's own doc comment), so the table row index maps
-// directly onto gitBreachCommits without an indirection map.
+// directly onto gitBreach.Commits without an indirection map.
 func (r *Root) gitBreachCommitAt(row int) (git.LogEntry, bool) {
-	if row < 0 || row >= len(r.gitBreachCommits) {
+	if row < 0 || row >= len(r.gitBreach.Commits) {
 		return git.LogEntry{}, false
 	}
-	return r.gitBreachCommits[row], true
+	return r.gitBreach.Commits[row], true
 }
 
 // startGitBreachCommitDiff mirrors startGitBreachDiff exactly (debounce,
@@ -625,7 +688,7 @@ func (r *Root) startGitBreachCommitDiff(row int) {
 	c, ok := r.gitBreachCommitAt(row)
 	if !ok {
 		r.gitBreachSaveDiffScroll()
-		r.gitBreachDiffScrollKey = ""
+		r.gitBreach.DiffScrollKey = ""
 		r.gitBreachClearDiff()
 		return
 	}
@@ -633,8 +696,8 @@ func (r *Root) startGitBreachCommitDiff(row int) {
 	r.gitBreachActivateDiffKey(key)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	r.gitBreachDiffCancel = cancel
-	root := r.gitBreachRoot
+	r.gitBreach.DiffCancel = cancel
+	root := r.gitBreach.Root
 
 	r.safeGo("Git breach commit diff", r.cancelGitBreachDiff, func() {
 		select {
@@ -657,7 +720,7 @@ func (r *Root) startGitBreachCommitDiff(row int) {
 			if ctx.Err() != nil {
 				return
 			}
-			curRow, _ := r.gitBreachCommitsTable.GetSelection()
+			curRow, _ := r.gitBreach.CommitsTable.GetSelection()
 			curC, ok := r.gitBreachCommitAt(curRow)
 			if !ok || curC.Hash != c.Hash {
 				return // the cursor moved to a different row before this landed
@@ -671,14 +734,14 @@ func (r *Root) startGitBreachCommitDiff(row int) {
 	})
 }
 
-// gitBreachStashAt returns gitBreachStash[row] — mirrors
+// gitBreachStashAt returns gitBreach.Stash[row] — mirrors
 // gitBreachCommitAt exactly (no non-selectable header rows in the
 // Stash table either).
 func (r *Root) gitBreachStashAt(row int) (git.Stash, bool) {
-	if row < 0 || row >= len(r.gitBreachStash) {
+	if row < 0 || row >= len(r.gitBreach.Stash) {
 		return git.Stash{}, false
 	}
-	return r.gitBreachStash[row], true
+	return r.gitBreach.Stash[row], true
 }
 
 // startGitBreachStashDiff mirrors startGitBreachCommitDiff exactly, for
@@ -688,7 +751,7 @@ func (r *Root) startGitBreachStashDiff(row int) {
 	s, ok := r.gitBreachStashAt(row)
 	if !ok {
 		r.gitBreachSaveDiffScroll()
-		r.gitBreachDiffScrollKey = ""
+		r.gitBreach.DiffScrollKey = ""
 		r.gitBreachClearDiff()
 		return
 	}
@@ -696,8 +759,8 @@ func (r *Root) startGitBreachStashDiff(row int) {
 	r.gitBreachActivateDiffKey(key)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	r.gitBreachDiffCancel = cancel
-	root := r.gitBreachRoot
+	r.gitBreach.DiffCancel = cancel
+	root := r.gitBreach.Root
 
 	r.safeGo("Git breach stash diff", r.cancelGitBreachDiff, func() {
 		select {
@@ -720,7 +783,7 @@ func (r *Root) startGitBreachStashDiff(row int) {
 			if ctx.Err() != nil {
 				return
 			}
-			curRow, _ := r.gitBreachStashTable.GetSelection()
+			curRow, _ := r.gitBreach.StashTable.GetSelection()
 			curS, ok := r.gitBreachStashAt(curRow)
 			if !ok || curS != s {
 				return // the cursor moved to a different row before this landed
@@ -738,7 +801,7 @@ func (r *Root) startGitBreachStashDiff(row int) {
 // tail — the user's own explicit request: reaching the bottom of what's
 // currently loaded should fetch another git.CommitLogLimit worth
 // rather than the list just silently stopping. Two guards, in order:
-// len(r.gitBreachCommits) != r.gitBreachCommitsLimit means Log already
+// len(r.gitBreach.Commits) != r.gitBreach.CommitsLimit means Log already
 // returned fewer than it was asked for last time, i.e. this already is
 // every commit the repository has — nothing more exists to load,
 // regardless of which row the cursor is on. row is only "the last
@@ -752,35 +815,35 @@ func (r *Root) startGitBreachStashDiff(row int) {
 // doesn't actually need it.
 //
 // On failure, shows the error via showError and leaves
-// gitBreachCommits/gitBreachCommitsLimit untouched rather than
+// gitBreach.Commits/gitBreach.CommitsLimit untouched rather than
 // replacing an already-successfully-loaded list with an error
 // placeholder — a transient git failure while paging for more
 // shouldn't cost the user everything already on screen.
 //
 // Never re-triggers itself: renderGitBreachCommits' own tail only
 // calls Select() when the current row is no longer valid (see its own
-// doc comment on gitBreachCommitsReady) — row itself doesn't change
+// doc comment on gitBreach.CommitsReady) — row itself doesn't change
 // here, so tview's own Select() never fires SetSelectionChangedFunc a
 // second time (it only fires on an actual value change), and this
 // function never recurses.
 func (r *Root) maybeLoadMoreGitBreachCommits(row int) {
-	if len(r.gitBreachCommits) == 0 || len(r.gitBreachCommits) != r.gitBreachCommitsLimit {
+	if len(r.gitBreach.Commits) == 0 || len(r.gitBreach.Commits) != r.gitBreach.CommitsLimit {
 		return
 	}
-	if row != len(r.gitBreachCommits)-1 {
+	if row != len(r.gitBreach.Commits)-1 {
 		return
 	}
 
-	newLimit := r.gitBreachCommitsLimit + git.CommitLogLimit
+	newLimit := r.gitBreach.CommitsLimit + git.CommitLogLimit
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
-	commits, err := git.Log(ctx, r.gitBreachRoot, newLimit)
+	commits, err := git.Log(ctx, r.gitBreach.Root, newLimit)
 	if err != nil {
 		r.showError(fmt.Errorf("git breach: %w", err))
 		return
 	}
-	r.gitBreachCommitsLimit = newLimit
-	r.gitBreachCommits = commits
+	r.gitBreach.CommitsLimit = newLimit
+	r.gitBreach.Commits = commits
 	r.renderGitBreachCommits()
 }
 
@@ -797,13 +860,13 @@ func (r *Root) maybeLoadMoreGitBreachCommits(row int) {
 // openGitBreachStashDrop), a separate, explicit action — never implicit
 // here.
 func (r *Root) openGitBreachStashApply() {
-	row, _ := r.gitBreachStashTable.GetSelection()
+	row, _ := r.gitBreach.StashTable.GetSelection()
 	s, ok := r.gitBreachStashAt(row)
 	if !ok {
 		return
 	}
 
-	st := r.gitBreachStatus
+	st := r.gitBreach.Status
 	if len(st.Staged) > 0 || len(st.Unstaged) > 0 || len(st.Conflicts) > 0 {
 		r.openConfirm(
 			fmt.Sprintf("Apply stash %q with uncommitted changes in the working tree?", s.Message),
@@ -824,7 +887,7 @@ func (r *Root) openGitBreachStashApply() {
 func (r *Root) applyGitBreachStash(ref string) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
-	if err := git.StashApply(ctx, r.gitBreachRoot, ref); err != nil {
+	if err := git.StashApply(ctx, r.gitBreach.Root, ref); err != nil {
 		r.showError(fmt.Errorf("git breach: %w", err))
 		return
 	}
@@ -840,7 +903,7 @@ func (r *Root) applyGitBreachStash(ref string) {
 // Scoped to the Stash table's own key capture, same as Branches' own
 // "d" is scoped to its own table — the two never collide.
 func (r *Root) openGitBreachStashDrop() {
-	row, _ := r.gitBreachStashTable.GetSelection()
+	row, _ := r.gitBreach.StashTable.GetSelection()
 	s, ok := r.gitBreachStashAt(row)
 	if !ok {
 		return
@@ -856,7 +919,7 @@ func (r *Root) openGitBreachStashDrop() {
 // state — nothing on disk in the active panel's own directory can
 // change from dropping a stash entry that was never applied to begin
 // with, but reloadGitBreach is still the right call rather than
-// hand-patching gitBreachStash: the same "re-run the real read, don't
+// hand-patching gitBreach.Stash: the same "re-run the real read, don't
 // just redraw" contract every other Git breach action already follows,
 // and the one safe way to get every later entry's own ref correctly
 // renumbered (stash@{N} is positional — dropping stash@{0} shifts every
@@ -864,7 +927,7 @@ func (r *Root) openGitBreachStashDrop() {
 func (r *Root) dropGitBreachStash(ref string) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
-	if err := git.StashDrop(ctx, r.gitBreachRoot, ref); err != nil {
+	if err := git.StashDrop(ctx, r.gitBreach.Root, ref); err != nil {
 		r.showError(fmt.Errorf("git breach: %w", err))
 		return
 	}
