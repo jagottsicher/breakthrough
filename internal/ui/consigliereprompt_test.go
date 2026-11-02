@@ -985,7 +985,7 @@ func TestConsigliereContextSnapshotDispatchesToActivityLog(t *testing.T) {
 // Message already has.
 func TestTransferCenterContextSnapshotOmitsPathsByDefault(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.transferCenterOps = []operations.Operation{
+	root.transfer.Ops = []operations.Operation{
 		{Type: "paste", Source: "/home/jens/topsecret123.txt", Target: "/mnt/backup"},
 	}
 
@@ -1008,7 +1008,7 @@ func TestTransferCenterContextSnapshotOmitsPathsByDefault(t *testing.T) {
 func TestTransferCenterContextSnapshotIncludesPathsUnderMachiavelliMode(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereHardcoreMode = true
-	root.transferCenterOps = []operations.Operation{
+	root.transfer.Ops = []operations.Operation{
 		{Type: "paste", Source: "/home/jens/topsecret123.txt", Target: "/mnt/backup"},
 	}
 
@@ -1026,7 +1026,7 @@ func TestTransferCenterContextSnapshotCapsOperationList(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereHardcoreMode = true
 	for i := 0; i < root.consigliereContextLineCap()+5; i++ {
-		root.transferCenterOps = append(root.transferCenterOps, operations.Operation{
+		root.transfer.Ops = append(root.transfer.Ops, operations.Operation{
 			Type:   "paste",
 			Source: fmt.Sprintf("/src/%d", i),
 			Target: "/dst",
@@ -1045,7 +1045,7 @@ func TestTransferCenterContextSnapshotCapsOperationList(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToTransferCenter(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = transferCenterPage
-	root.transferCenterOps = []operations.Operation{{Type: "paste", Source: "/a", Target: "/b"}}
+	root.transfer.Ops = []operations.Operation{{Type: "paste", Source: "/a", Target: "/b"}}
 
 	got := root.consigliereContextSnapshot()
 
