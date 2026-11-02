@@ -1165,7 +1165,7 @@ type Root struct {
 	activityLogNoticeDontShowAgain bool
 	// activityLogNoticeSpacer1/2 are the blank rows between header/
 	// message/checkbox/buttons — named and styled the same way
-	// duplicateSpacer/compressSpacer/rsyncSpacer already are (see their
+	// duplicateSpacer/compress.Spacer/rsyncSpacer already are (see their
 	// own doc comments) rather than left as anonymous tview.NewBox()
 	// calls, since a plain Box defaults to tview's own built-in
 	// PrimitiveBackgroundColor, not this dialog's SurfaceBackground —
@@ -1552,29 +1552,30 @@ type Root struct {
 	duplicateLayout                      *tview.Flex
 	duplicateTargets                     []string
 
-	// compressForm/compressButtons/compressLayout together make up the
+	// compress.Form/compress.Buttons/compress.Layout together make up the
 	// "Compress" dialog (compress.go) — the same Target/live-preview/
 	// Cancel-Action shape newDuplicateLayout's own doc comment already
 	// establishes, just with a fixed Format dropdown and an Output name
 	// field instead of Multiply's own strategy-dependent ones.
-	// compressTargets is the file(s) this open is for; compressFormatIndex
-	// indexes archiveFormats(); compressOutputName mirrors the Output
+	// compress.Targets is the file(s) this open is for; compress.FormatIndex
+	// indexes archiveFormats(); compress.OutputName mirrors the Output
 	// name field's own current text (needed across renderCompressForm's
 	// own rebuilds the same reason every duplicateXxxValue mirror is).
-	compressForm            *tview.Form
-	compressFormatField     *tview.DropDown
-	compressOutputNameField *tview.InputField
-	compressPreviewView     *tview.TextView
-	compressSpacer          *tview.Box
-	compressCancelBtn       *tview.Button
-	compressApplyBtn        *tview.Button
-	compressButtons         *tview.Flex
-	compressTitleBar        *tview.TextView
-	compressContentLayout   *tview.Flex
-	compressLayout          *tview.Flex
-	compressTargets         []string
-	compressFormatIndex     int
-	compressOutputName      string
+	//
+	// compress.CancelSpan asks to stop just the currently running job,
+	// never its queue (see bgjobcancel.go's own
+	// confirmCancelCurrentCompress) — zero-value (an empty, never-
+	// matching range) whenever the Compress segment isn't shown at all.
+	//
+	// compressJob is the currently-running backgrounded Compress or
+	// Extract, if any (see startCompressJob's own doc comment in
+	// compressjob.go) — entirely independent of pasteJob/rsyncJob for
+	// the same reason those two are independent of each other: a
+	// separate process tree with nothing to serialize against either.
+	// nil whenever no background Compress/Extract is currently running.
+	// compress.Queue mirrors rsyncQueue for a further Compress/Extract
+	// asked for while one is already running — see advanceCompressQueue.
+	compress compressState
 
 	// The "Rsync" dialog (see rsync.go) — source/destination and the
 	// free-text Excludes/Extra flags fields live in rsyncForm; the five
@@ -2255,7 +2256,7 @@ type Root struct {
 	// — launches the configured mail client, the same action "ge"
 	// already reaches — and each of the three background-job progress
 	// segments' own "✕" (pasteCancelSpan/rsyncCancelSpan/
-	// compressCancelSpan) — asks to stop just the currently running
+	// compress.CancelSpan) — asks to stop just the currently running
 	// job, never its queue (see bgjobcancel.go's own
 	// confirmCancelCurrentPaste/Rsync/Compress). Each is zero-value (an
 	// empty, never-matching range) whenever its own segment isn't
@@ -2284,7 +2285,6 @@ type Root struct {
 	mailBadgeSpan       buttonBarSpan
 	pasteCancelSpan     buttonBarSpan
 	rsyncCancelSpan     buttonBarSpan
-	compressCancelSpan  buttonBarSpan
 	labelScanCancelSpan buttonBarSpan
 	gitStatusSpan       buttonBarSpan
 
@@ -2472,17 +2472,6 @@ type Root struct {
 	// rsyncQueue mirrors pasteQueue for a background rsync asked for
 	// while one is already running — see advanceRsyncQueue.
 	rsyncQueue []queuedRsync
-
-	// compressJob is the currently-running backgrounded Compress or
-	// Extract, if any (see startCompressJob's own doc comment in
-	// compressjob.go) — entirely independent of pasteJob/rsyncJob above
-	// for the same reason those two are independent of each other: a
-	// separate process tree with nothing to serialize against either.
-	// nil whenever no background Compress/Extract is currently running.
-	compressJob *compressJob
-	// compressQueue mirrors rsyncQueue for a further Compress/Extract
-	// asked for while one is already running — see advanceCompressQueue.
-	compressQueue []compressRequest
 
 	// labelScanCancel is set for as long as the Options screen's own
 	// "Remove orphaned labels" background scan is running (see
@@ -3026,11 +3015,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The Compress dialog (see compress.go/openCompress) — same
 	// build-once/repopulate-on-open shape as Duplicate just above.
-	r.compressForm = r.newCompressForm()
-	r.compressPreviewView = r.newCompressPreviewView()
-	r.compressSpacer = tview.NewBox()
-	r.compressButtons = r.newCompressButtons()
-	r.compressLayout = r.newCompressLayout()
+	r.compress.Form = r.newCompressForm()
+	r.compress.PreviewView = r.newCompressPreviewView()
+	r.compress.Spacer = tview.NewBox()
+	r.compress.Buttons = r.newCompressButtons()
+	r.compress.Layout = r.newCompressLayout()
 
 	// The "Rsync" dialog (see rsync.go) — same "built once here,
 	// contents rebuilt fresh per open" shape as Multiply just above.
@@ -3344,7 +3333,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
-	r.AddPage(compressPage, r.compressLayout, false, false)
+	r.AddPage(compressPage, r.compress.Layout, false, false)
 	r.AddPage(rsyncPage, r.rsyncLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
@@ -4459,7 +4448,7 @@ func (r *Root) RequestCancel() {
 	// Ctrl+C path deliberately stays coarse. Unaffected by, and unaware
 	// of, Paste's own pause dialog above — see pastepause.go's own
 	// package doc comment.
-	if r.rsyncJob != nil || r.compressJob != nil {
+	if r.rsyncJob != nil || r.compress.Job != nil {
 		r.openConfirm("Cancel the running Rsync and/or Compress/Extract job(s)? Their own queued jobs are dropped too.", "Yes, cancel them", func() {
 			r.cancelRsyncJob()
 			r.cancelCompressJob()
