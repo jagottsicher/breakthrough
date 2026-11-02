@@ -1091,9 +1091,9 @@ func TestConsigliereContextSnapshotDispatchesToToolbox(t *testing.T) {
 // sends by default, so it is never withheld behind Machiavelli Mode.
 func TestCompareTreeContextSnapshotIncludesDifferingEntries(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.compareTreeA, root.compareTreeB = "/tmp/a", "/tmp/b"
-	root.compareTreeStats = compare.Stats{Differs: 1, OnlyInA: 1}
-	root.compareTreeEntries = []compare.Entry{
+	root.compare.TreeA, root.compare.TreeB = "/tmp/a", "/tmp/b"
+	root.compare.TreeStats = compare.Stats{Differs: 1, OnlyInA: 1}
+	root.compare.TreeEntries = []compare.Entry{
 		{RelPath: "changed.txt", Verdict: compare.Differs},
 		{RelPath: "only-a.txt", Verdict: compare.OnlyInA},
 		{RelPath: "same.txt", Verdict: compare.Identical},
@@ -1117,7 +1117,7 @@ func TestCompareTreeContextSnapshotIncludesDifferingEntries(t *testing.T) {
 func TestCompareTreeContextSnapshotCapsEntryList(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	for i := 0; i < consigliereMaxCompareTreeEntries+5; i++ {
-		root.compareTreeEntries = append(root.compareTreeEntries, compare.Entry{
+		root.compare.TreeEntries = append(root.compare.TreeEntries, compare.Entry{
 			RelPath: fmt.Sprintf("file-%d.txt", i),
 			Verdict: compare.Differs,
 		})
@@ -1135,7 +1135,7 @@ func TestCompareTreeContextSnapshotCapsEntryList(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToCompareTree(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = compareTreePage
-	root.compareTreeEntries = []compare.Entry{{RelPath: "a.txt", Verdict: compare.Differs}}
+	root.compare.TreeEntries = []compare.Entry{{RelPath: "a.txt", Verdict: compare.Differs}}
 
 	got := root.consigliereContextSnapshot()
 

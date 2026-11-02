@@ -39,7 +39,7 @@ func openCompareDiffWithManyLines(t *testing.T, width, height int) *Root {
 	}
 
 	r.SetRect(0, 0, width, height)
-	r.compareDiffLayout.SetRect(0, 0, width, height)
+	r.compare.DiffLayout.SetRect(0, 0, width, height)
 	return r
 }
 
@@ -51,15 +51,15 @@ func drawCompareDiff(t *testing.T, r *Root, width, height int) {
 	}
 	t.Cleanup(screen.Fini)
 	screen.SetSize(width, height)
-	r.compareDiffLayout.Draw(screen)
+	r.compare.DiffLayout.Draw(screen)
 }
 
 // TestCompareDiffRightPaneClickFocusesIt is a real, reproduced
 // regression test: a MouseLeftDown anywhere in the whole screen was
-// swallowed before ever reaching compareDiffRight, by two different
-// widgets in turn — compareDiffSeparator's own gitBreachBlockFocusSteal
+// swallowed before ever reaching compare.DiffRight, by two different
+// widgets in turn — compare.DiffSeparator's own gitBreachBlockFocusSteal
 // capture (fixed with an explicit InRect check, same shape as the
-// catalog table headers' own fix), and then compareDiffTitleBar's own
+// catalog table headers' own fix), and then compare.DiffTitleBar's own
 // capture, whose fallback branch called gitBreachBlockFocusSteal with
 // no position check at all. Both had to be fixed before a click on the
 // right pane actually focused it.
@@ -67,20 +67,20 @@ func TestCompareDiffRightPaneClickFocusesIt(t *testing.T) {
 	r := openCompareDiffWithManyLines(t, 100, 20)
 	drawCompareDiff(t, r, 100, 20)
 
-	r.app.SetFocus(r.compareDiffLeft)
-	rx, ry, _, _ := r.compareDiffRight.GetRect()
+	r.app.SetFocus(r.compare.DiffLeft)
+	rx, ry, _, _ := r.compare.DiffRight.GetRect()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.compareDiffLayout.MouseHandler()
+	handler := r.compare.DiffLayout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(rx+1, ry, tcell.Button1, 0), setFocus)
 
-	if !r.compareDiffRight.HasFocus() {
-		t.Error("clicking inside compareDiffRight's own rect should focus it")
+	if !r.compare.DiffRight.HasFocus() {
+		t.Error("clicking inside compare.DiffRight's own rect should focus it")
 	}
 }
 
 // TestCompareDiffScrollbarsMoveBothPanesWhenLinked pins the default,
-// linked state (openCompareDiff sets compareDiffLinked = true): a click
+// linked state (openCompareDiff sets compare.DiffLinked = true): a click
 // on either pane's own down arrow must scroll both panes together, the
 // same lockstep scrollCompareDiff itself already enforces for the
 // keyboard and mouse wheel.
@@ -88,23 +88,23 @@ func TestCompareDiffScrollbarsMoveBothPanesWhenLinked(t *testing.T) {
 	r := openCompareDiffWithManyLines(t, 100, 20)
 	drawCompareDiff(t, r, 100, 20)
 
-	if !r.compareDiffLinked {
-		t.Fatal("setup: compareDiffLinked = false, want true (openCompareDiff's own default)")
+	if !r.compare.DiffLinked {
+		t.Fatal("setup: compare.DiffLinked = false, want true (openCompareDiff's own default)")
 	}
-	sb := r.compareDiffLeftScrollbar
+	sb := r.compare.DiffLeftScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow for 60 lines on a 20-row screen", sb.maxOffset())
 	}
 	sbx, sby, _, sbh := sb.GetRect()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.compareDiffLayout.MouseHandler()
+	handler := r.compare.DiffLayout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
 
-	leftRow, _ := r.compareDiffLeft.GetScrollOffset()
-	rightRow, _ := r.compareDiffRight.GetScrollOffset()
+	leftRow, _ := r.compare.DiffLeft.GetScrollOffset()
+	rightRow, _ := r.compare.DiffRight.GetScrollOffset()
 	if leftRow != 1 {
 		t.Errorf("left pane offset = %d, want 1", leftRow)
 	}
@@ -119,26 +119,26 @@ func TestCompareDiffScrollbarsMoveBothPanesWhenLinked(t *testing.T) {
 func TestCompareDiffScrollbarsMoveOnlyOwnPaneWhenUnlinked(t *testing.T) {
 	r := openCompareDiffWithManyLines(t, 100, 20)
 	r.toggleCompareDiffLinked()
-	if r.compareDiffLinked {
+	if r.compare.DiffLinked {
 		t.Fatal("setup: toggleCompareDiffLinked should have turned linking off")
 	}
 	drawCompareDiff(t, r, 100, 20)
 
-	sb := r.compareDiffLeftScrollbar
+	sb := r.compare.DiffLeftScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow for 60 lines on a 20-row screen", sb.maxOffset())
 	}
 	sbx, sby, _, sbh := sb.GetRect()
-	rightBefore, _ := r.compareDiffRight.GetScrollOffset()
+	rightBefore, _ := r.compare.DiffRight.GetScrollOffset()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.compareDiffLayout.MouseHandler()
+	handler := r.compare.DiffLayout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
 
-	leftRow, _ := r.compareDiffLeft.GetScrollOffset()
-	rightAfter, _ := r.compareDiffRight.GetScrollOffset()
+	leftRow, _ := r.compare.DiffLeft.GetScrollOffset()
+	rightAfter, _ := r.compare.DiffRight.GetScrollOffset()
 	if leftRow != 1 {
 		t.Errorf("left pane offset = %d, want 1", leftRow)
 	}
@@ -169,7 +169,7 @@ func openCompareDiffWithWideLines(t *testing.T, width, height int) *Root {
 	}
 
 	r.SetRect(0, 0, width, height)
-	r.compareDiffLayout.SetRect(0, 0, width, height)
+	r.compare.DiffLayout.SetRect(0, 0, width, height)
 	return r
 }
 
@@ -181,23 +181,23 @@ func TestCompareDiffHScrollbarsMoveBothPanesWhenLinked(t *testing.T) {
 	r := openCompareDiffWithWideLines(t, 60, 20)
 	drawCompareDiff(t, r, 60, 20)
 
-	if !r.compareDiffLinked {
-		t.Fatal("setup: compareDiffLinked = false, want true (openCompareDiff's own default)")
+	if !r.compare.DiffLinked {
+		t.Fatal("setup: compare.DiffLinked = false, want true (openCompareDiff's own default)")
 	}
-	sb := r.compareDiffLeftHScrollbar
+	sb := r.compare.DiffLeftHScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow for a 200-column line on a 60-column screen", sb.maxOffset())
 	}
 	sbx, sby, _, _ := sb.GetRect()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.compareDiffLayout.MouseHandler()
+	handler := r.compare.DiffLayout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
 
-	_, leftCol := r.compareDiffLeft.GetScrollOffset()
-	_, rightCol := r.compareDiffRight.GetScrollOffset()
+	_, leftCol := r.compare.DiffLeft.GetScrollOffset()
+	_, rightCol := r.compare.DiffRight.GetScrollOffset()
 	if leftCol != 1 {
 		t.Errorf("left pane column offset = %d, want 1", leftCol)
 	}
@@ -212,26 +212,26 @@ func TestCompareDiffHScrollbarsMoveBothPanesWhenLinked(t *testing.T) {
 func TestCompareDiffHScrollbarsMoveOnlyOwnPaneWhenUnlinked(t *testing.T) {
 	r := openCompareDiffWithWideLines(t, 60, 20)
 	r.toggleCompareDiffLinked()
-	if r.compareDiffLinked {
+	if r.compare.DiffLinked {
 		t.Fatal("setup: toggleCompareDiffLinked should have turned linking off")
 	}
 	drawCompareDiff(t, r, 60, 20)
 
-	sb := r.compareDiffLeftHScrollbar
+	sb := r.compare.DiffLeftHScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow for a 200-column line on a 60-column screen", sb.maxOffset())
 	}
 	sbx, sby, _, _ := sb.GetRect()
-	_, rightBefore := r.compareDiffRight.GetScrollOffset()
+	_, rightBefore := r.compare.DiffRight.GetScrollOffset()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.compareDiffLayout.MouseHandler()
+	handler := r.compare.DiffLayout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
 
-	_, leftCol := r.compareDiffLeft.GetScrollOffset()
-	_, rightAfter := r.compareDiffRight.GetScrollOffset()
+	_, leftCol := r.compare.DiffLeft.GetScrollOffset()
+	_, rightAfter := r.compare.DiffRight.GetScrollOffset()
 	if leftCol != 1 {
 		t.Errorf("left pane column offset = %d, want 1", leftCol)
 	}
@@ -248,8 +248,8 @@ func TestCompareDiffScrollbarsDoNotShareTheCornerCell(t *testing.T) {
 	r := openCompareDiffWithManyLines(t, 100, 20)
 	drawCompareDiff(t, r, 100, 20)
 
-	vx, _, _, _ := r.compareDiffLeftScrollbar.GetRect()
-	hx, _, hw, _ := r.compareDiffLeftHScrollbar.GetRect()
+	vx, _, _, _ := r.compare.DiffLeftScrollbar.GetRect()
+	hx, _, hw, _ := r.compare.DiffLeftHScrollbar.GetRect()
 	if hx+hw > vx {
 		t.Errorf("left pane's horizontal bar (x=%d width=%d) reaches into the vertical bar's own column (x=%d)", hx, hw, vx)
 	}
