@@ -424,16 +424,16 @@ func (r *Root) captureSessionsKey(event *tcell.EventKey) *tcell.EventKey {
 	// startConsigliereChord's own doc comment in consigliere.go and
 	// captureLogAuditSelectionTableKey's own identical shape.
 	// sessionsTable is this screen's only real focus target.
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.consigliereInput)
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		if event.Key() == tcell.KeyBacktab {
-			if r.consigliereScrollbar.maxOffset() > 0 {
-				r.app.SetFocus(r.consigliereHistory)
+			if r.consigliere.Scrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliere.History)
 			} else {
-				r.app.SetFocus(r.consigliereInput)
+				r.app.SetFocus(r.consigliere.Input)
 			}
 			return nil
 		}
@@ -518,7 +518,7 @@ func (r *Root) applySessionsTheme(theme config.ResolvedTheme) {
 	if r.sessionsTable == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.sessionsLayout.SetBackgroundColor(theme.PanelBackground)
 	r.sessionsTable.SetBackgroundColor(theme.PanelBackground)
@@ -534,7 +534,7 @@ func (r *Root) applySessionsTheme(theme config.ResolvedTheme) {
 	r.sessionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.sessionsTitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.sessionsHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.sessionsHint.SetTextColor(theme.TextColor)
 	sessionsHintText, sessionsHintSpans := buildListHint(theme, sessionsHintEntries())

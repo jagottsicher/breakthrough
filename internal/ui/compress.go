@@ -520,7 +520,7 @@ func (r *Root) newCompressButtons() *tview.Flex {
 	// r.app.SetFocus(r.compress.FormatField) — naming the field
 	// directly would leave compress.Form's own internal focusedElement
 	// counter stale, the same real bug connectdialog.go's own
-	// connectConnectBtn.SetExitFunc found and fixed first (see its own
+	// connect.ConnectBtn.SetExitFunc found and fixed first (see its own
 	// doc comment for the full tview.Form internals).
 	r.compress.CancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {

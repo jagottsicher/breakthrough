@@ -63,7 +63,7 @@ func TestConsigliereSplashArtIncludesTheCaption(t *testing.T) {
 // TestConsigliereSplashArtCentersEveryWrappedCaptionLine pins the real
 // bug the user reported ("weder Bild noch Text mittig"): at a width
 // too narrow for consigliereSplashCaption to fit on one line, every
-// line it wraps into (via wrapText, not consigliereHistory's own
+// line it wraps into (via wrapText, not consigliere.History's own
 // SetWrap) must be centered on its own, not just the first one.
 func TestConsigliereSplashArtCentersEveryWrappedCaptionLine(t *testing.T) {
 	width := len(consigliereSplashCaption) / 2

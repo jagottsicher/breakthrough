@@ -427,7 +427,7 @@ func (r *Root) newDuplicateButtons() *tview.Flex {
 	// not a direct r.app.SetFocus(r.duplicateStrategyField) — naming
 	// the field directly would leave duplicateForm's own internal
 	// focusedElement counter stale, the same real bug
-	// connectdialog.go's own connectConnectBtn.SetExitFunc found and
+	// connectdialog.go's own connect.ConnectBtn.SetExitFunc found and
 	// fixed first (see its own doc comment for the full tview.Form
 	// internals).
 	r.duplicateCancelBtn.SetExitFunc(func(key tcell.Key) {
