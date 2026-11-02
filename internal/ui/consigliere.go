@@ -1625,7 +1625,7 @@ func (r *Root) consigliereMachiavelliActionLogEntries() string {
 func (r *Root) transferCenterContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Undertow.\n")
-	ops := r.transferCenterOps
+	ops := r.transfer.Ops
 	fmt.Fprintf(&b, "%d operations.\n", len(ops))
 	byType := map[string]int{}
 	for _, op := range ops {
@@ -1649,7 +1649,7 @@ func (r *Root) transferCenterContextSnapshot() string {
 // current operation's own Source/Target, verbatim, once Machiavelli
 // Mode is on.
 func (r *Root) consigliereMachiavelliTransferCenterOperations() string {
-	ops := r.transferCenterOps
+	ops := r.transfer.Ops
 	if len(ops) == 0 {
 		return ""
 	}
