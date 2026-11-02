@@ -97,8 +97,8 @@ func (r *Root) newCompareFileScreen() {
 // bare, default tview widget (gray-on-black, unstyled buttons) no
 // matter which color scheme was active — a real gap, not a rendering
 // artifact. SurfaceBackground/styleButton here match the same "popup
-// floating over the main panel" convention batchRenameLayout and
-// mountsLayout's own doc comments already establish.
+// floating over the main panel" convention batch.Layout and
+// mounts.Layout's own doc comments already establish.
 func (r *Root) applyCompareFileTheme(theme config.ResolvedTheme) {
 	if r.compareLayout == nil {
 		return

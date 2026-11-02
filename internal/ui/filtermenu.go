@@ -344,7 +344,7 @@ func (r *Root) renderFilterMenu() {
 	// for the same verification) cascades down through globRow to it,
 	// so typing works the instant this dropdown opens, matching every
 	// other dialog in this app whose own first field takes focus
-	// immediately (Sed Replace's sedForm, Search's Filename span, ...).
+	// immediately (Sed Replace's sed.Form, Search's Filename span, ...).
 	//
 	// filterField itself stretches to fill whatever filterMenuWidth
 	// leaves once the checkbox/regex-button take their own fixed share

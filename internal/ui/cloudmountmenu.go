@@ -65,18 +65,18 @@ func (r *Root) toggleCloudMount(entry rclone.MountEntry) {
 		return
 	}
 
-	if r.cloudMountPending == nil {
-		r.cloudMountPending = map[string]string{}
+	if r.cloud.MountPending == nil {
+		r.cloud.MountPending = map[string]string{}
 	}
 	if mounted {
-		r.cloudMountPending[entry.Target] = "unmounting…"
+		r.cloud.MountPending[entry.Target] = "unmounting…"
 	} else {
-		r.cloudMountPending[entry.Target] = "mounting…"
+		r.cloud.MountPending[entry.Target] = "mounting…"
 	}
 	r.renderConnectionMenu()
 
 	onPanic := func() {
-		delete(r.cloudMountPending, entry.Target)
+		delete(r.cloud.MountPending, entry.Target)
 		r.renderConnectionMenu()
 	}
 	r.safeGo("cloud mount toggle", onPanic, func() {
@@ -93,7 +93,7 @@ func (r *Root) toggleCloudMount(entry rclone.MountEntry) {
 			}
 		}
 		r.app.QueueUpdateDraw(func() {
-			delete(r.cloudMountPending, entry.Target)
+			delete(r.cloud.MountPending, entry.Target)
 			r.renderConnectionMenu()
 			if opErr != nil {
 				r.showError(fmt.Errorf("cloud mount %q: %w", entry.RemoteName, opErr))
@@ -176,9 +176,9 @@ func (r *Root) deleteCloudRemoteByName(remoteName string, mountEntry *rclone.Mou
 		}
 	}
 	if err := rclone.DeleteRemote(remoteName); err != nil {
-		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("removed cloud mount %q but failed to delete its remote: %v", remoteName, err))
+		r.activity.Logger.Error(activitylog.CategoryRemote, fmt.Sprintf("removed cloud mount %q but failed to delete its remote: %v", remoteName, err))
 		r.showError(err)
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("deleted cloud remote %q", remoteName))
+	r.activity.Logger.Action(activitylog.CategoryRemote, fmt.Sprintf("deleted cloud remote %q", remoteName))
 }

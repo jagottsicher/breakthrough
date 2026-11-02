@@ -310,7 +310,7 @@ func (sb *searchBuilder) choice(selected bool, label string, action func()) {
 // click or Enter opens the one shared inline editor
 // (search.EditField) positioned right over whichever field that is,
 // and Cancel/Search sit in their own always-visible button row
-// (search.Buttons), styled the same as propertiesButtons.
+// (search.Buttons), styled the same as properties.Buttons.
 //
 // One deliberate difference from Properties: three separate TextViews
 // instead of one, so MC's own two-column layout (Filename options
@@ -399,8 +399,8 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	// reached the button at all — captureSearchKey's own unconditional
 	// KeyEnter/' ' cases swallowed them first. Properties never had
 	// this bug for the same structural reason: capturePropertiesKey
-	// sits on propertiesText alone, already a sibling of
-	// propertiesButtons rather than an ancestor of it (see
+	// sits on properties.Text alone, already a sibling of
+	// properties.Buttons rather than an ancestor of it (see
 	// newPropertiesView).
 	spanArea := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.search.Top, 7, 0, true).
@@ -1169,7 +1169,7 @@ func (r *Root) moveSearch(x, y int) {
 // (see its own, considerably longer doc comment for the full
 // reasoning, including why captureOutsideClick needs its own
 // search.Dragging check the same way it already has one for
-// propertiesDragging: dragging up/left past the not-yet-updated rect
+// properties.Dragging: dragging up/left past the not-yet-updated rect
 // would otherwise stop reaching this capture at all). Unlike
 // dragPropertiesMouseCapture, this doesn't need a three-return
 // "handled" signal of its own: there's no further, unrelated capture
@@ -1715,7 +1715,7 @@ func (r *Root) applySearchTheme(theme config.ResolvedTheme) {
 	styleButton(r.search.SearchBtn, theme)
 	// FocusedBackground, fixed — Search is a single-layer, always-modal
 	// dialog nothing else ever stacks on top of, the same reasoning
-	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
+	// confirmDialogTitleBar/chmodTitleBar/sed.TitleBar already follow.
 	r.search.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.search.TitleBar.SetTextColor(theme.TextColor)
 	r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme

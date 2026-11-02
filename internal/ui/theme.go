@@ -187,14 +187,14 @@ func applyTviewDefaultTheme(theme config.ResolvedTheme) {
 func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.theme = theme
 	applyTviewDefaultTheme(theme)   // see its own doc comment
-	r.updateOverlayTitleBarColors() // propertiesTitleBar/menuTitleBar — see its own doc comment
+	r.updateOverlayTitleBarColors() // properties.TitleBar/menuTitleBar — see its own doc comment
 
 	// AccentBackground: the shared, constant "normal panel background"
-	// every panel now uses (see propertiesText's own comment below for
+	// every panel now uses (see properties.Text's own comment below for
 	// the full reasoning) — menuTitleBar's own background is set via
 	// updateOverlayTitleBarColors below instead, since — per the user's
 	// own explicit request — it now depends on whether the context menu
-	// is the currently active overlay, the same as propertiesTitleBar.
+	// is the currently active overlay, the same as properties.TitleBar.
 	styleList(r.menu, theme)
 	r.menuTitleBar.SetTextColor(theme.Text)
 
@@ -212,11 +212,11 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.prompt.SetLabelColor(theme.TextColor)
 
 	// FocusedBackground, fixed rather than active/inactive-dependent the
-	// way propertiesTitleBar/menuTitleBar are (see updateOverlayTitleBarColors):
+	// way properties.TitleBar/menuTitleBar are (see updateOverlayTitleBarColors):
 	// quitConfirm/confirmDialog are single-layer, always-modal blocking
 	// dialogs, never themselves the base a further overlay stacks on top
 	// of the way Properties/Menu/Help can be — the same reasoning
-	// optionsTitleBar's own fixed FocusedBackground already follows.
+	// options.TitleBar's own fixed FocusedBackground already follows.
 	styleList(r.quitConfirm, theme)
 	r.quitConfirmTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.quitConfirmTitleBar.SetTextColor(theme.TextColor)
@@ -225,14 +225,14 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.confirmDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.confirmDialogTitleBar.SetTextColor(theme.TextColor)
 
-	styleList(r.activityLogNoticeList, theme)
-	r.activityLogNoticeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.activityLogNoticeTitleBar.SetTextColor(theme.TextColor)
+	styleList(r.activity.NoticeList, theme)
+	r.activity.NoticeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.activity.NoticeTitleBar.SetTextColor(theme.TextColor)
 
 	// scrollAcknowledgeNotice (see scrollacknowledge.go) — same
 	// "single-layer, always-modal, fixed FocusedBackground" reasoning
 	// as confirmDialog/quitConfirm just above; the message itself gets
-	// consigliereHistory's own ordinary SurfaceBackground/TextColor
+	// consigliere.History's own ordinary SurfaceBackground/TextColor
 	// pairing, not activityLogNotice's red error one, since this isn't
 	// an error notice.
 	styleList(r.scrollAcknowledgeList, theme)
@@ -245,14 +245,14 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// explicit request that this notice's message read "in rot (wie die
 	// ja sonst auch aussehen)", i.e. exactly like any other error text in
 	// this app rather than a one-off color.
-	r.activityLogNoticeMessageView.SetTextColor(theme.Text)
-	r.activityLogNoticeMessageView.SetBackgroundColor(theme.ErrorBackground)
-	styleButton(r.activityLogNoticeCancelButton, theme)
-	styleButton(r.activityLogNoticeOKButton, theme)
+	r.activity.NoticeMessageView.SetTextColor(theme.Text)
+	r.activity.NoticeMessageView.SetBackgroundColor(theme.ErrorBackground)
+	styleButton(r.activity.NoticeCancelButton, theme)
+	styleButton(r.activity.NoticeOKButton, theme)
 	// SurfaceBackground, matching styleList's own call just above — a
 	// plain tview.NewBox() defaults to tview's own built-in
 	// PrimitiveBackgroundColor otherwise, the same mismatch
-	// duplicateSpacer/compressSpacer/rsyncSpacer's own doc comments
+	// duplicate.Spacer/compress.Spacer/rsync.Spacer's own doc comments
 	// already warn about.
 	r.activityLogNoticeSpacer1.SetBackgroundColor(theme.SurfaceBackground)
 	r.activityLogNoticeSpacer2.SetBackgroundColor(theme.SurfaceBackground)
@@ -319,16 +319,16 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// every panel floating over the main one now uses (toolWindow/
 	// Details' own content areas included — see
 	// toolwindow.go/detailssidebar.go), per the user's own explicit
-	// request. propertiesTitleBar's own background is set via
+	// request. properties.TitleBar's own background is set via
 	// updateOverlayTitleBarColors below instead, since it now depends on
 	// whether Properties is the currently active overlay — see its own
 	// doc comment.
-	r.propertiesText.SetBackgroundColor(theme.SurfaceBackground)
-	styleInput(r.propertiesEditField, theme, true)
-	r.propertiesButtons.SetBackgroundColor(theme.SurfaceBackground)
-	r.propertiesTitleBar.SetTextColor(theme.TextColor)
-	styleButton(r.propertiesCancelBtn, theme)
-	styleButton(r.propertiesSaveBtn, theme)
+	r.properties.Text.SetBackgroundColor(theme.SurfaceBackground)
+	styleInput(r.properties.EditField, theme, true)
+	r.properties.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+	r.properties.TitleBar.SetTextColor(theme.TextColor)
+	styleButton(r.properties.CancelBtn, theme)
+	styleButton(r.properties.SaveBtn, theme)
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
 
 	// The Options screen (see optionsscreen.go/applyOptionsTheme).
@@ -383,7 +383,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		// Without this, tview's own default selected-cell style just
 		// reverses each cell's own foreground into a background instead
 		// of using one consistent selection bar — the same fix already
-		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
+		// applied to sshKeysTable/connectionMenuTable/sed.PreviewTable/
 		// tabSwitcher/gitBreach's tables, for the identical reason.
 		r.compareTreeTable.SetSelectedStyle(tcell.StyleDefault.
 			Background(theme.SelectionBackground).
@@ -395,7 +395,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		styleButton(r.compareTreeShowSameBtn, theme)
 		styleButton(r.compareTreeCloseBtn, theme)
 
-		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+		// FocusedBackground, fixed — same reasoning mounts.TitleBar's own
 		// fixed FocusedBackground follows.
 		r.compareTreeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 		r.compareTreeTitleBar.SetTextColor(theme.TextColor)
@@ -423,7 +423,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.chmodButtons.SetBackgroundColor(theme.SurfaceBackground)
 		// FocusedBackground, fixed — chmod is a single-layer, always-modal
 		// dialog nothing else ever stacks on top of, the same reasoning
-		// optionsTitleBar's own fixed FocusedBackground already follows
+		// options.TitleBar's own fixed FocusedBackground already follows
 		// (see confirmDialogTitleBar/quitConfirmTitleBar just above for
 		// the identical choice on the same grounds).
 		r.chmodTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
@@ -449,39 +449,39 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	if r.helpTitleBar != nil {
 		// Background is set via updateOverlayTitleBarColors above
 		// instead, since it depends on whether Help is currently the
-		// active overlay, the same as propertiesTitleBar/menuTitleBar.
+		// active overlay, the same as properties.TitleBar/menuTitleBar.
 		r.helpTitleBar.SetTextColor(theme.Text)
 	}
 
-	if r.consigliereHistory != nil {
+	if r.consigliere.History != nil {
 		// SurfaceBackground, the same floating-chrome surface Help's
 		// own helpView uses (see above) — a chat overlay reads as the
 		// same kind of floating dialog, not a full-bleed catalog body
-		// the way viewerView/mountsLayout are.
-		r.consigliereHistory.SetBackgroundColor(theme.SurfaceBackground)
-		r.consigliereHistory.SetTextColor(theme.TextColor)
+		// the way viewerView/mounts.Layout are.
+		r.consigliere.History.SetBackgroundColor(theme.SurfaceBackground)
+		r.consigliere.History.SetTextColor(theme.TextColor)
 	}
-	if r.consigliereTitleBar != nil {
-		// Re-derived from consigliereHistory's own current focus state
+	if r.consigliere.TitleBar != nil {
+		// Re-derived from consigliere.History's own current focus state
 		// (see its own SetFocusFunc/SetBlurFunc in consigliere.go)
 		// rather than always reset to the unfocused look — the same
 		// "a live theme switch mid-focus must not show the wrong one
 		// until the next blur/focus cycle" hazard detailsTitleBar's
 		// own identical block documents.
-		r.consigliereTitleBar.SetBackgroundColor(r.consigliereTitleBarBackground(r.consigliereHistory.HasFocus()))
-		r.consigliereTitleBar.SetTextColor(theme.Text)
+		r.consigliere.TitleBar.SetBackgroundColor(r.consigliereTitleBarBackground(r.consigliere.History.HasFocus()))
+		r.consigliere.TitleBar.SetTextColor(theme.Text)
 	}
-	if r.consigliereInput != nil {
+	if r.consigliere.Input != nil {
 		// Always the focused style: the input field is the only
 		// widget this overlay ever actually focuses (see
 		// openConsigliere) — there is no unfocused state of its own
 		// worth distinguishing, unlike an ordinary form field sitting
 		// next to others.
-		styleInput(r.consigliereInput, theme, true)
+		styleInput(r.consigliere.Input, theme, true)
 	}
 
 	if r.viewerView != nil {
-		// PanelBackground, not SurfaceBackground — see mountsLayout's own
+		// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 		// comment: every full-bleed catalog/viewer body rests on the same
 		// background as the main panel, not the lighter floating-chrome
 		// surface.
@@ -518,19 +518,19 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// Sed Replace (see sedreplace.go/applySedTheme).
 	r.applySedTheme(theme)
 
-	r.connectForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.connectForm.SetLabelColor(theme.TextColor)
-	r.connectForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.connectForm.SetFieldTextColor(theme.TextColor)
-	r.connectStatus.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.connectCancelBtn, theme)
-	styleButton(r.connectOKBtn, theme)
-	styleButton(r.connectConnectBtn, theme)
-	r.connectTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.connectTitleBar.SetTextColor(theme.TextColor)
+	r.connect.Form.SetBackgroundColor(theme.SurfaceBackground)
+	r.connect.Form.SetLabelColor(theme.TextColor)
+	r.connect.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.connect.Form.SetFieldTextColor(theme.TextColor)
+	r.connect.Status.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.connect.CancelBtn, theme)
+	styleButton(r.connect.OKBtn, theme)
+	styleButton(r.connect.ConnectBtn, theme)
+	r.connect.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.connect.TitleBar.SetTextColor(theme.TextColor)
 
 	// The "API key (encrypted)" dialog (see apikeydialog.go) — same
-	// shape as connectForm/connectTitleBar/connect*Btn just above.
+	// shape as connect.Form/connect.TitleBar/connect*Btn just above.
 	// apiKeyDialogForm is rebuilt from scratch on every step change
 	// (see rebuildAPIKeyDialogFields), so this also has to run again
 	// there, not just here on a live theme switch — see that
@@ -543,50 +543,50 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.apiKeyDialogTitleBar.SetTextColor(theme.TextColor)
 
 	// The "New cloud mount" dialog (see cloudmountdialog.go) — same
-	// shape as connectForm/connectTitleBar/connect*Btn just above,
+	// shape as connect.Form/connect.TitleBar/connect*Btn just above,
 	// this dialog's own equivalents. A real, reported gap: these were
 	// never added here at all, so every one of them still showed
 	// tview's own unthemed black background/default colors regardless
 	// of the active color scheme.
-	r.cloudMountDialogForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.cloudMountDialogForm.SetLabelColor(theme.TextColor)
-	r.cloudMountDialogForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.cloudMountDialogForm.SetFieldTextColor(theme.TextColor)
+	r.cloud.MountDialogForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.cloud.MountDialogForm.SetLabelColor(theme.TextColor)
+	r.cloud.MountDialogForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.cloud.MountDialogForm.SetFieldTextColor(theme.TextColor)
 	// Per-field styleInput/styleDropDown on top of the Form-level
 	// colors just above — see styleCloudMountDialogFields' own doc
 	// comment for why the Form-level ones alone aren't enough (every
 	// field here has a placeholder, which ignores them).
 	r.styleCloudMountDialogFields()
-	styleButton(r.cloudMountDialogCancelBtn, theme)
-	styleButton(r.cloudMountDialogOKBtn, theme)
-	styleButton(r.cloudMountDialogMountBtn, theme)
-	styleButton(r.cloudMountDialogDeleteBtn, theme)
-	r.cloudMountDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.cloudMountDialogTitleBar.SetTextColor(theme.TextColor)
+	styleButton(r.cloud.MountDialogCancelBtn, theme)
+	styleButton(r.cloud.MountDialogOKBtn, theme)
+	styleButton(r.cloud.MountDialogMountBtn, theme)
+	styleButton(r.cloud.MountDialogDeleteBtn, theme)
+	r.cloud.MountDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.cloud.MountDialogTitleBar.SetTextColor(theme.TextColor)
 
 	// The "New cloud remote" dialog (see cloudremotedialog.go) — same
-	// gap, same fix. cloudRemoteDialogForm is rebuilt from scratch on
+	// gap, same fix. cloud.RemoteDialogForm is rebuilt from scratch on
 	// every backend-type change (see rebuildCloudRemoteDialogFields),
 	// so this also has to run again there, not just here on a live
 	// theme switch — see that function's own call to styleCloudRemoteDialogForm.
 	r.styleCloudRemoteDialogForm()
-	// Guarded: unlike cloudMountDialogForm's own fields (created
+	// Guarded: unlike cloud.MountDialogForm's own fields (created
 	// unconditionally in newCloudMountDialogForm, during NewRoot),
-	// cloudRemoteDialogBackendField and the rest only exist once
+	// cloud.RemoteDialogBackendField and the rest only exist once
 	// rebuildCloudRemoteDialogFields has actually run at least once
 	// (openCloudRemoteDialog, on first open) — applyTheme itself runs
 	// during NewRoot's own startup, before that, so calling this
 	// unconditionally would dereference a nil DropDown.
-	if r.cloudRemoteDialogBackendField != nil {
+	if r.cloud.RemoteDialogBackendField != nil {
 		r.styleCloudRemoteDialogFields()
 	}
-	styleButton(r.cloudRemoteDialogCancelBtn, theme)
-	styleButton(r.cloudRemoteDialogTestBtn, theme)
-	styleButton(r.cloudRemoteDialogOKBtn, theme)
-	styleButton(r.cloudRemoteDialogCreateBtn, theme)
-	r.cloudRemoteDialogStatus.SetBackgroundColor(theme.SurfaceBackground)
-	r.cloudRemoteDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.cloudRemoteDialogTitleBar.SetTextColor(theme.TextColor)
+	styleButton(r.cloud.RemoteDialogCancelBtn, theme)
+	styleButton(r.cloud.RemoteDialogTestBtn, theme)
+	styleButton(r.cloud.RemoteDialogOKBtn, theme)
+	styleButton(r.cloud.RemoteDialogCreateBtn, theme)
+	r.cloud.RemoteDialogStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.cloud.RemoteDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.cloud.RemoteDialogTitleBar.SetTextColor(theme.TextColor)
 
 	styleList(r.hostKeyConfirmDialog, theme)
 	r.hostKeyConfirmTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
@@ -625,7 +625,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 
 	// The "gs" SSH shell dropdown/dialog pair (see sshshell.go) — the
 	// identical two blocks just above, mirrored one-for-one: "Add new
-	// ssh connection" styled like connectForm/connectLayout, the
+	// ssh connection" styled like connect.Form/connect.Layout, the
 	// dropdown ("Open shell to") styled like connectionMenuTable/
 	// TitleBar. Every new widget in this app needs its own explicit
 	// line here — nothing above or below gets colored automatically
@@ -665,7 +665,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// borrowed from renderHelpTitleBar instead.
 	r.sshShellMenuTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	// TextColor, not Text — see this block's own doc comment just above:
-	// every close-glyph title bar in this app (propertiesTitleBar,
+	// every close-glyph title bar in this app (properties.TitleBar,
 	// search.TitleBar, ...) paints with TextColor, not connectionMenu-
 	// TitleBar's own Text.
 	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)
@@ -692,55 +692,55 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// Duplicate/Multiply (see duplicate.go/applyDuplicateTheme).
 	r.applyDuplicateTheme(theme)
 
-	if r.compressForm != nil {
-		r.compressForm.SetBackgroundColor(theme.SurfaceBackground)
-		r.compressForm.SetLabelColor(theme.TextColor)
-		r.compressForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-		r.compressForm.SetFieldTextColor(theme.TextColor)
-		if r.compressFormatField != nil {
-			r.themeDuplicateDropDown(r.compressFormatField)
+	if r.compress.Form != nil {
+		r.compress.Form.SetBackgroundColor(theme.SurfaceBackground)
+		r.compress.Form.SetLabelColor(theme.TextColor)
+		r.compress.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
+		r.compress.Form.SetFieldTextColor(theme.TextColor)
+		if r.compress.FormatField != nil {
+			r.themeDuplicateDropDown(r.compress.FormatField)
 		}
-		r.compressPreviewView.SetBackgroundColor(theme.SurfaceBackground)
-		r.compressPreviewView.SetTextColor(theme.TextColor)
-		r.compressSpacer.SetBackgroundColor(theme.SurfaceBackground)
-		r.compressButtons.SetBackgroundColor(theme.SurfaceBackground)
-		styleButton(r.compressCancelBtn, theme)
-		styleButton(r.compressApplyBtn, theme)
+		r.compress.PreviewView.SetBackgroundColor(theme.SurfaceBackground)
+		r.compress.PreviewView.SetTextColor(theme.TextColor)
+		r.compress.Spacer.SetBackgroundColor(theme.SurfaceBackground)
+		r.compress.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+		styleButton(r.compress.CancelBtn, theme)
+		styleButton(r.compress.ApplyBtn, theme)
 		// FocusedBackground, fixed — the same reasoning
-		// duplicateTitleBar's own identical choice just above follows.
-		r.compressTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.compressTitleBar.SetTextColor(theme.TextColor)
+		// duplicate.TitleBar's own identical choice just above follows.
+		r.compress.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.compress.TitleBar.SetTextColor(theme.TextColor)
 	}
 
-	r.rsyncForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.rsyncForm.SetLabelColor(theme.TextColor)
-	r.rsyncForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.rsyncForm.SetFieldTextColor(theme.TextColor)
-	styleList(r.rsyncFlagsList, theme)
-	r.rsyncPreviewView.SetBackgroundColor(theme.SurfaceBackground)
-	r.rsyncPreviewView.SetTextColor(theme.TextColor)
-	r.rsyncHintView.SetBackgroundColor(theme.SurfaceBackground)
-	r.rsyncHintView.SetTextColor(theme.TextColor)
-	r.rsyncSpacer.SetBackgroundColor(theme.SurfaceBackground)
-	r.rsyncPickButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.rsyncPickSourceBtn, theme)
-	styleButton(r.rsyncPickDestinationBtn, theme)
-	r.rsyncButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.rsyncCancelBtn, theme)
-	styleButton(r.rsyncRunBtn, theme)
-	styleButton(r.rsyncRunBackgroundBtn, theme)
-	r.rsyncTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.rsyncTitleBar.SetTextColor(theme.TextColor)
+	r.rsync.Form.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsync.Form.SetLabelColor(theme.TextColor)
+	r.rsync.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.rsync.Form.SetFieldTextColor(theme.TextColor)
+	styleList(r.rsync.FlagsList, theme)
+	r.rsync.PreviewView.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsync.PreviewView.SetTextColor(theme.TextColor)
+	r.rsync.HintView.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsync.HintView.SetTextColor(theme.TextColor)
+	r.rsync.Spacer.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsync.PickButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.rsync.PickSourceBtn, theme)
+	styleButton(r.rsync.PickDestinationBtn, theme)
+	r.rsync.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.rsync.CancelBtn, theme)
+	styleButton(r.rsync.RunBtn, theme)
+	styleButton(r.rsync.RunBackgroundBtn, theme)
+	r.rsync.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.rsync.TitleBar.SetTextColor(theme.TextColor)
 
-	r.sedPreviewStatus.SetBackgroundColor(theme.SurfaceBackground)
-	r.sedPreviewStatus.SetTextColor(theme.TextColor)
-	r.sedPreviewTable.SetBackgroundColor(theme.SurfaceBackground)
-	r.sedPreviewTable.SetSelectedStyle(tcell.StyleDefault.
+	r.sed.PreviewStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.sed.PreviewStatus.SetTextColor(theme.TextColor)
+	r.sed.PreviewTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.sed.PreviewTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
-	styleList(r.sedPreviewActions, theme)
-	r.sedPreviewTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.sedPreviewTitleBar.SetTextColor(theme.TextColor)
+	styleList(r.sed.PreviewActions, theme)
+	r.sed.PreviewTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.sed.PreviewTitleBar.SetTextColor(theme.TextColor)
 
 	r.tabSwitcher.SetBackgroundColor(theme.SurfaceBackground)
 	r.tabSwitcher.SetSelectedStyle(tcell.StyleDefault.
@@ -808,7 +808,7 @@ func styleList(l *tview.List, theme config.ResolvedTheme) {
 	// literally for every item that isn't the current selection —
 	// visible as a plain black row on any List with more than one row
 	// visible, or, on a single-item List with SetSelectedFocusOnly
-	// (see this file's own activityLogNoticeList wiring), on that one
+	// (see this file's own activity.NoticeList wiring), on that one
 	// item the moment it loses focus. Per the user's own explicit
 	// report that the checkbox row's background was wrong once focus
 	// moved on to Cancel/OK.
