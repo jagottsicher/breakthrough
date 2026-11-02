@@ -1248,7 +1248,7 @@ func (r *Root) renderDetailsSidebar() {
 // Mirrors Properties' own computeHashes exactly (see its doc comment
 // for the full reasoning on the background goroutine/animation/
 // cancellation shape) — duplicated rather than shared because the two
-// track independent state (detailsHashes vs propertiesHashes) for what
+// track independent state (detailsHashes vs properties.Hashes) for what
 // can, deliberately, be two different displays of the very same file at
 // once (Details isn't modal — see newDetailsSidebarView's own doc
 // comment — so it can stay open behind Properties).
@@ -1338,8 +1338,8 @@ func (r *Root) finishDetailsHashComputation(target string, hashes fsops.Hashes, 
 // needing the two independent progress states to stay synchronized
 // while a computation is still in flight.
 func (r *Root) propagateHashResult(target string, hashes fsops.Hashes) {
-	if r.activePage == propertiesPage && r.propertiesTarget == target {
-		r.propertiesHashes = &hashes
+	if r.activePage == propertiesPage && r.properties.Target == target {
+		r.properties.Hashes = &hashes
 		r.rerenderProperties()
 	}
 	if r.detailsSidebarVisible && r.detailsTarget == target {
@@ -1372,8 +1372,8 @@ func (r *Root) detailsHashesFor(target string) *fsops.Hashes {
 // that's guaranteed, not just usually true) adopts that result
 // immediately too, rather than needing its own separate computation.
 func (r *Root) propertiesHashesFor(target string) *fsops.Hashes {
-	if r.activePage == propertiesPage && r.propertiesTarget == target {
-		return r.propertiesHashes
+	if r.activePage == propertiesPage && r.properties.Target == target {
+		return r.properties.Hashes
 	}
 	return nil
 }

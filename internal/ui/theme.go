@@ -187,14 +187,14 @@ func applyTviewDefaultTheme(theme config.ResolvedTheme) {
 func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.theme = theme
 	applyTviewDefaultTheme(theme)   // see its own doc comment
-	r.updateOverlayTitleBarColors() // propertiesTitleBar/menuTitleBar — see its own doc comment
+	r.updateOverlayTitleBarColors() // properties.TitleBar/menuTitleBar — see its own doc comment
 
 	// AccentBackground: the shared, constant "normal panel background"
-	// every panel now uses (see propertiesText's own comment below for
+	// every panel now uses (see properties.Text's own comment below for
 	// the full reasoning) — menuTitleBar's own background is set via
 	// updateOverlayTitleBarColors below instead, since — per the user's
 	// own explicit request — it now depends on whether the context menu
-	// is the currently active overlay, the same as propertiesTitleBar.
+	// is the currently active overlay, the same as properties.TitleBar.
 	styleList(r.menu, theme)
 	r.menuTitleBar.SetTextColor(theme.Text)
 
@@ -212,7 +212,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.prompt.SetLabelColor(theme.TextColor)
 
 	// FocusedBackground, fixed rather than active/inactive-dependent the
-	// way propertiesTitleBar/menuTitleBar are (see updateOverlayTitleBarColors):
+	// way properties.TitleBar/menuTitleBar are (see updateOverlayTitleBarColors):
 	// quitConfirm/confirmDialog are single-layer, always-modal blocking
 	// dialogs, never themselves the base a further overlay stacks on top
 	// of the way Properties/Menu/Help can be — the same reasoning
@@ -319,16 +319,16 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// every panel floating over the main one now uses (toolWindow/
 	// Details' own content areas included — see
 	// toolwindow.go/detailssidebar.go), per the user's own explicit
-	// request. propertiesTitleBar's own background is set via
+	// request. properties.TitleBar's own background is set via
 	// updateOverlayTitleBarColors below instead, since it now depends on
 	// whether Properties is the currently active overlay — see its own
 	// doc comment.
-	r.propertiesText.SetBackgroundColor(theme.SurfaceBackground)
-	styleInput(r.propertiesEditField, theme, true)
-	r.propertiesButtons.SetBackgroundColor(theme.SurfaceBackground)
-	r.propertiesTitleBar.SetTextColor(theme.TextColor)
-	styleButton(r.propertiesCancelBtn, theme)
-	styleButton(r.propertiesSaveBtn, theme)
+	r.properties.Text.SetBackgroundColor(theme.SurfaceBackground)
+	styleInput(r.properties.EditField, theme, true)
+	r.properties.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+	r.properties.TitleBar.SetTextColor(theme.TextColor)
+	styleButton(r.properties.CancelBtn, theme)
+	styleButton(r.properties.SaveBtn, theme)
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
 
 	// The Options screen (see optionsscreen.go/applyOptionsTheme).
@@ -449,7 +449,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	if r.helpTitleBar != nil {
 		// Background is set via updateOverlayTitleBarColors above
 		// instead, since it depends on whether Help is currently the
-		// active overlay, the same as propertiesTitleBar/menuTitleBar.
+		// active overlay, the same as properties.TitleBar/menuTitleBar.
 		r.helpTitleBar.SetTextColor(theme.Text)
 	}
 
@@ -665,7 +665,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// borrowed from renderHelpTitleBar instead.
 	r.sshShellMenuTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	// TextColor, not Text — see this block's own doc comment just above:
-	// every close-glyph title bar in this app (propertiesTitleBar,
+	// every close-glyph title bar in this app (properties.TitleBar,
 	// searchTitleBar, ...) paints with TextColor, not connectionMenu-
 	// TitleBar's own Text.
 	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)

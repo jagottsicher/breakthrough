@@ -279,7 +279,7 @@ func (r *Root) normalizeConnectIdentifierField() {
 // isConnectIdentifierRune) and 32-character cap live, as each
 // keystroke (or paste) arrives — the
 // same SetAcceptanceFunc-as-validator shape chmodEditField/
-// propertiesEditField already use elsewhere in this app. tview's own
+// properties.EditField already use elsewhere in this app. tview's own
 // InputField has no SetMaxLength in this version (verified directly
 // against inputfield.go, not guessed — see chmodEditField's own doc
 // comment, which found this gap first), so rejecting anything past the

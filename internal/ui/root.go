@@ -85,7 +85,7 @@ const (
 // again after whatever was layered on top of it closes. Properties is
 // the only current user (see showOverlayWithRestore/restoreProperties)
 // — it keeps several sub-widgets simultaneously visible (see
-// newPropertiesView), so simply refocusing r.properties itself isn't
+// newPropertiesView), so simply refocusing r.properties.Pages itself isn't
 // precise enough to land keyboard focus back on the right one.
 //
 // emptyStackFocus is a second, separate override — see
@@ -112,7 +112,7 @@ type overlayFrame struct {
 // showOverlay/hideOverlay), and closing whichever one is open when the
 // user clicks outside it (captureOutsideClick) — except Properties while
 // it has unsaved edits in progress, which blocks that instead (see
-// propertiesDirty).
+// properties.Dirty).
 //
 // The context menu itself (its registry, rendering, and drill-down
 // submenu navigation) lives in contextmenu.go — see that file's own
@@ -1878,7 +1878,7 @@ type Root struct {
 	detailsSidebarVisible bool
 
 	// detailsTarget/Stat/StatErr/Image cache what the sidebar is
-	// currently showing — mirrors propertiesTarget/propertiesStat above,
+	// currently showing — mirrors properties.Target/properties.Stat above,
 	// but reloaded on every selection change (see refreshDetailsSidebar),
 	// not just once when opened. detailsTarget is "" whenever nothing
 	// meaningfully selected (the ".." row, or an empty listing) — see
@@ -1923,7 +1923,7 @@ type Root struct {
 	detailsMetaRowEnd         int
 
 	// detailsHashes/InProgress/AnimFrame/Cancel/BytesRead/RowStart mirror
-	// propertiesHashes/hashInProgress/hashAnimFrame/hashCancel/
+	// properties.Hashes/hashInProgress/hashAnimFrame/hashCancel/
 	// hashBytesRead/hashSectionRow above exactly (see computeDetailsHashes'
 	// own doc comment on why this is a second, independent copy rather
 	// than shared state) — detailsHashRowStart is -1 whenever the current
@@ -2060,7 +2060,7 @@ type Root struct {
 	// and searchEditField, the one shared inline editor repositioned
 	// over whichever field is currently being edited (see
 	// activateSearchTextField) — the same "one shared field,
-	// repositioned per use" approach propertiesEditField/Root.rename/
+	// repositioned per use" approach properties.EditField/Root.rename/
 	// Root.prompt all already use. searchEditCommit is that field's own
 	// pending commit callback, set fresh each time (see
 	// activateSearchTextField/finishSearchEdit).
@@ -2114,7 +2114,7 @@ type Root struct {
 	// otherwise — the exact opposite scoping of searchIncludeArchives).
 	searchPages             *tview.Pages
 	searchFieldsPages       *tview.Pages
-	searchTitleBar          *tview.TextView // " Search " — see newSearchDialog, the same absolutely-positioned extra Pages page propertiesTitleBar/chmodTitleBar already are
+	searchTitleBar          *tview.TextView // " Search " — see newSearchDialog, the same absolutely-positioned extra Pages page properties.TitleBar/chmodTitleBar already are
 	searchTop               *tview.TextView
 	searchLeft              *tview.TextView
 	searchRight             *tview.TextView
@@ -2205,7 +2205,7 @@ type Root struct {
 	chmodEditField  *tview.InputField
 	chmodEditTarget chmodField
 	chmodButtons    *tview.Flex
-	chmodTitleBar   *tview.TextView // " Permissions " — see newChmodDialog, the same absolutely-positioned extra Pages page propertiesTitleBar already is
+	chmodTitleBar   *tview.TextView // " Permissions " — see newChmodDialog, the same absolutely-positioned extra Pages page properties.TitleBar already is
 	chmodCancelBtn  *tview.Button
 	chmodApplyBtn   *tview.Button
 	chmodSpans      []chmodSpan
@@ -2355,23 +2355,15 @@ type Root struct {
 	// (see refreshStatusBar).
 	currentUser string
 
-	// properties is the Properties overlay's own nested Pages (see
-	// newPropertiesView) — propertiesText is the always-visible read-only
-	// display; propertiesEditField is shown/positioned on top of it only
-	// while a field is being text-edited; propertiesButtons (and its two
-	// buttons, propertiesCancelBtn/propertiesSaveBtn — kept individually
+	// properties.Pages is the Properties overlay's own nested Pages (see
+	// newPropertiesView) — properties.Text is the always-visible read-only
+	// display; properties.EditField is shown/positioned on top of it only
+	// while a field is being text-edited; properties.Buttons (and its two
+	// buttons, properties.CancelBtn/properties.SaveBtn — kept individually
 	// addressable so setPropertiesFocus can give either one real keyboard
 	// focus) are visible the whole time Properties is open.
-	properties           *tview.Pages
-	propertiesTitleBar   *tview.TextView
-	propertiesText       *tview.TextView
-	propertiesEditField  *tview.InputField
-	propertiesEditTarget propertyField
-	propertiesButtons    *tview.Flex
-	propertiesCancelBtn  *tview.Button
-	propertiesSaveBtn    *tview.Button
-
-	// propertiesDragging/propertiesDragOffsetX/Y make Properties'
+	//
+	// properties.Dragging/properties.DragOffsetX/Y make Properties'
 	// own title bar draggable — the same "click position minus the
 	// window's own x/y at drag-start, kept constant for the rest of the
 	// drag" shape toolWindow's own dragging/dragOffsetX/Y already
@@ -2382,11 +2374,10 @@ type Root struct {
 	// user's own explicit request: still opens at the exact same anchor
 	// as before (see openProperties/resizeProperties, both untouched),
 	// only draggable afterward.
-	propertiesDragging                           bool
-	propertiesDragOffsetX, propertiesDragOffsetY int
+	properties propertiesState
 
 	// searchDragging/searchDragOffsetX/Y are dragSearchMouseCapture's
-	// own equivalent of propertiesDragging/propertiesDragOffsetX/Y just
+	// own equivalent of properties.Dragging/properties.DragOffsetX/Y just
 	// above, for the search dialog's own title bar (search.go) — same
 	// shape, same reasoning, per the user's own explicit request that
 	// it become movable (with a close glyph) too.
@@ -2405,16 +2396,6 @@ type Root struct {
 	// another way to close it.
 	logAuditDetailDragging                               bool
 	logAuditDetailDragOffsetX, logAuditDetailDragOffsetY int
-
-	// propertiesFocusIndex is Properties' own keyboard-navigation cursor
-	// (see setPropertiesFocus/movePropertiesFocus/capturePropertiesKey):
-	// -1 (nothing focused, Properties' state right after opening) or an
-	// index into propertyFieldOrder for a field span, or
-	// len(propertyFieldOrder)/len(propertyFieldOrder)+1 for the Cancel/
-	// Save buttons. Clicking a field (see activatePropertyField) sets it
-	// too, so keyboard navigation continues naturally from wherever the
-	// mouse last landed.
-	propertiesFocusIndex int
 
 	// promptSubmit is what the currently-open prompt overlay (see
 	// openPrompt/finishPrompt) runs with the typed text if the user
@@ -2544,12 +2525,12 @@ type Root struct {
 	target    string
 	targetRow int
 
-	// propertiesTarget/propertiesStat cache what the Properties overlay is
+	// properties.Target/properties.Stat cache what the Properties overlay is
 	// currently showing, so computeHashes (triggered separately, after
 	// Properties is already open — see capturePropertiesKey/
 	// capturePropertiesMouse) knows what to hash and can re-render the
 	// same text with the results appended, without re-running fsops.Stat.
-	// propertiesHashes holds the computed digests once that's happened,
+	// properties.Hashes holds the computed digests once that's happened,
 	// nil until then — renderProperties reads it directly rather than
 	// taking it as a parameter, since it's re-run after every kind of
 	// edit, not just this one. hashSectionRow is the 0-based row, within
@@ -2562,11 +2543,8 @@ type Root struct {
 	// right row and a column inside this width, per the user's own
 	// explicit request that this be a real button, not "click anywhere
 	// on this line or below it" the way it used to be.
-	propertiesTarget string
-	propertiesStat   fsops.Info
-	propertiesHashes *fsops.Hashes
-	hashSectionRow   int
-	hashButtonWidth  int
+	hashSectionRow  int
+	hashButtonWidth int
 
 	// hashInProgress/hashAnimFrame/hashCancel back computeHashes' own
 	// "in progress" animation (see hashAnimationFrames): hashInProgress
@@ -2597,7 +2575,7 @@ type Root struct {
 	// hashBytesRead is how many bytes hashFile's in-flight call has
 	// streamed so far (see computeHashes' own onProgress callback),
 	// read by renderProperties to show a percentage alongside the
-	// animation whenever propertiesStat.Size is known. Unlike
+	// animation whenever properties.Stat.Size is known. Unlike
 	// hashInProgress/hashAnimFrame/hashCancel above — which are only
 	// ever touched from within the tview event loop, either directly or
 	// via QueueUpdateDraw — this one is also written from hashFile's
@@ -2610,16 +2588,16 @@ type Root struct {
 	// renderProperties call.
 	propertySpans []propertySpan
 
-	// propertiesDirty/stagedName/stagedMode/stagedMtime/stagedOwner/
+	// properties.Dirty/stagedName/stagedMode/stagedMtime/stagedOwner/
 	// stagedGroup hold the Properties overlay's in-progress edit, if any
 	// — see markPropertiesDirty and savePropertiesEdit. The staged values
-	// start out equal to propertiesStat's own (set in openProperties) and
+	// start out equal to properties.Stat's own (set in openProperties) and
 	// only diverge as fields are edited; nothing here is written to the
 	// real file until Save. stagedOwner/stagedGroup are plain name
 	// strings either way — chosen via the owner/group picker or typed
 	// into its text fallback — resolved to a uid/gid via
 	// fsops.ResolveUID/ResolveGID only at Save time, the same as
-	// propertiesStat.Owner/Group are themselves already just names.
+	// properties.Stat.Owner/Group are themselves already just names.
 	//
 	// stagedRecursiveOwner/stagedRecursiveGroup are the directory-only
 	// "apply recursively" toggles (see recursiveApplyField/
@@ -2629,7 +2607,6 @@ type Root struct {
 	// Always reset to false in openProperties, never carried over from a
 	// previous Properties session, since each describes what this
 	// particular Save should do, not a standing preference.
-	propertiesDirty      bool
 	stagedName           string
 	stagedMode           os.FileMode
 	stagedMtime          time.Time
@@ -2795,7 +2772,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		// so it's already correct for anything that renders Properties
 		// without going through openProperties (e.g. seedProperties in
 		// the test suite).
-		propertiesFocusIndex: -1,
+		properties: propertiesState{FocusIndex: -1},
 
 		// Seeded from settings.OpenWithCommand rather than left at its
 		// zero value — see that setting's own doc comment: this is
@@ -2843,7 +2820,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.prompt = tview.NewInputField()
 	r.prompt.SetDoneFunc(r.finishPrompt) // Enter or Escape
 
-	r.properties = r.newPropertiesView()
+	r.properties.Pages = r.newPropertiesView()
 	r.errorView = r.newErrorView()
 
 	// Panel reports its own failures (unreadable directory, bad path
@@ -3110,7 +3087,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The generic picker (see openOwnerGroupPicker and, unrelated,
 	// openRsyncTabPicker) — one shared List, repopulated and
 	// repositioned per open, the same pattern rename/prompt/
-	// propertiesEditField already use. The two callers are never open
+	// properties.EditField already use. The two callers are never open
 	// at the same time, so neither has to know about the other's own
 	// state.
 	r.picker = tview.NewList().ShowSecondaryText(false)
@@ -3320,7 +3297,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(contextMenuPage, r.menuLayout, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
 	r.AddPage(promptPage, r.prompt, false, false)
-	r.AddPage(propertiesPage, r.properties, false, false)
+	r.AddPage(propertiesPage, r.properties.Pages, false, false)
 	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirmLayout, false, false)
@@ -3855,7 +3832,7 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 // updateOverlayTitleBarColors recolors every modal overlay's own title
 // bar that doesn't already track its own focus state the way
 // toolWindow's/Details' do (see toolwindow.go/detailssidebar.go) —
-// currently propertiesTitleBar/menuTitleBar/helpTitleBar — based on
+// currently properties.TitleBar/menuTitleBar/helpTitleBar — based on
 // which one, if any, is currently the topmost overlay (r.activePage):
 // FocusedBackground for that one, EditableBackground for every other,
 // per the user's own explicit request that this same active/inactive
@@ -3874,7 +3851,7 @@ func (r *Root) updateOverlayTitleBarColors() {
 			bar.SetBackgroundColor(r.theme.InputBackground)
 		}
 	}
-	set(r.propertiesTitleBar, propertiesPage)
+	set(r.properties.TitleBar, propertiesPage)
 	set(r.menuTitleBar, contextMenuPage)
 	set(r.helpTitleBar, helpPage)
 }
@@ -3983,7 +3960,7 @@ func (r *Root) closeAllOverlays() {
 // kept in sync here by hand.
 //
 // The Properties overlay is one exception to "click outside closes it":
-// once propertiesDirty is true (see markPropertiesDirty), an outside
+// once properties.Dirty is true (see markPropertiesDirty), an outside
 // click is consumed and otherwise ignored instead — Cancel or Save is
 // the only way out from there, so an in-progress edit (a permission bit
 // already toggled, a name half-typed) can't be silently discarded, or
@@ -4039,24 +4016,24 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// dragPropertiesMouseCapture at all, silently dropping the rest of
 	// the drag. A real, user-reported bug: Properties could only ever be
 	// dragged down/right, never up/left, for exactly this reason.
-	if r.propertiesDragging {
+	if r.properties.Dragging {
 		out, outEvent, _ := r.dragPropertiesMouseCapture(action, event)
 		return out, outEvent
 	}
 
 	// A search-dialog drag in progress — same reasoning as
-	// propertiesDragging just above (dragSearchMouseCapture's own doc
+	// properties.Dragging just above (dragSearchMouseCapture's own doc
 	// comment has the details): must keep receiving every subsequent
 	// move/release itself regardless of whether the cursor still falls
 	// inside the dialog's own rect, or an upward/leftward drag could
-	// only ever move it down/right, the same bug propertiesDragging's
+	// only ever move it down/right, the same bug properties.Dragging's
 	// own check exists to prevent.
 	if r.searchDragging {
 		return r.dragSearchMouseCapture(action, event)
 	}
 
 	// A Log entry detail dialog drag in progress — same reasoning as
-	// searchDragging/propertiesDragging above: dragging up/left past
+	// searchDragging/properties.Dragging above: dragging up/left past
 	// the not-yet-updated rect would otherwise stop reaching
 	// dragLogAuditDetailMouseCapture at all.
 	if r.logAuditDetailDragging {
@@ -4064,7 +4041,7 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	}
 
 	// A Log Audit timeline drag in progress — same reasoning as
-	// searchDragging/propertiesDragging just above: the bar is a
+	// searchDragging/properties.Dragging just above: the bar is a
 	// single thin row, so a drag that so much as jitters one pixel up
 	// or down off it would otherwise fall through to ordinary
 	// position-based dispatch mid-drag, leaving logAuditTimelineDragging
@@ -4122,8 +4099,8 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	}
 
 	if action == tview.MouseLeftClick || action == tview.MouseRightClick {
-		if r.activePage == propertiesPage && r.propertiesDirty {
-			return tview.MouseConsumed, nil // Cancel/Save only, see propertiesDirty's own doc comment above
+		if r.activePage == propertiesPage && r.properties.Dirty {
+			return tview.MouseConsumed, nil // Cancel/Save only, see properties.Dirty's own doc comment above
 		}
 		if r.activePage == pasteConflictPage {
 			return tview.MouseConsumed, nil // its own buttons (or Escape) only, see this function's own doc comment above
