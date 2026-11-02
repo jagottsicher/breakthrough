@@ -404,7 +404,7 @@ type Root struct {
 	// rather than kept in sync in place the way connect.Form's own fixed
 	// set of plain input fields is. The plain firewallAddRuleXxx fields
 	// below mirror the form's own current values, the same "value
-	// mirror" shape duplicateStrategy and friends already establish.
+	// mirror" shape duplicate.Strategy and friends already establish.
 	firewallAddRuleLayout     *tview.Flex
 	firewallAddRuleTitleBar   *tview.TextView
 	firewallAddRuleForm       *tview.Form
@@ -554,7 +554,7 @@ type Root struct {
 	// AddFormItem" shape newFirewallAddRuleForm's own doc comment
 	// establishes. The plain sshKeysGenerateXxx fields below mirror the
 	// form's own current values, the same "value mirror" shape
-	// duplicateStrategy and friends already establish.
+	// duplicate.Strategy and friends already establish.
 	sshKeysGenerateLayout       *tview.Flex
 	sshKeysGenerateTitleBar     *tview.TextView
 	sshKeysGenerateForm         *tview.Form
@@ -1120,7 +1120,7 @@ type Root struct {
 	// Cancel distinct from OK.
 	// activityLogNoticeSpacer1/2 are the blank rows between header/
 	// message/checkbox/buttons — named and styled the same way
-	// duplicateSpacer/compress.Spacer/rsyncSpacer already are (see their
+	// duplicate.Spacer/compress.Spacer/rsyncSpacer already are (see their
 	// own doc comments) rather than left as anonymous tview.NewBox()
 	// calls, since a plain Box defaults to tview's own built-in
 	// PrimitiveBackgroundColor, not this dialog's SurfaceBackground —
@@ -1373,7 +1373,7 @@ type Root struct {
 	// untouched.
 	sshShellSubmit func(remotefs.Connection)
 
-	// duplicateForm/duplicateButtons/duplicateLayout together make up the
+	// duplicate.Form/duplicate.Buttons/duplicate.Layout together make up the
 	// "Multiply" dialog (see duplicate.go). Unlike Sed Replace's own
 	// fixed field set, Multiply's own Form is genuinely strategy-driven:
 	// only the fields the currently selected naming strategy actually
@@ -1382,33 +1382,33 @@ type Root struct {
 	// as one confusing pile rather than a guided choice. Strategy itself
 	// is a real Form dropdown (tview.Form.AddDropDown) rather than a
 	// separate cycling row; the Date/time strategy has a second dropdown
-	// of its own, duplicateDateTimeTypeField ("Date/time format type" —
+	// of its own, duplicate.DateTimeTypeField ("Date/time format type" —
 	// Go format string/Strftime-style Format/Unix timestamp), which
 	// replaced an earlier pair of Form checkboxes entirely, per the
 	// user's own explicit request — a real "X"-shaped checkbox glyph
 	// looked out of place next to every other field's own plain text,
 	// and a second dropdown reads exactly like the first one already
-	// does. duplicateButtons is a real Cancel/Duplicate button row,
+	// does. duplicate.Buttons is a real Cancel/Duplicate button row,
 	// bottom-left/bottom-right, the same shape newChmodButtons/
 	// newSearchButtons/newPropertiesButtons already establish elsewhere
 	// in this app, not the vertical two-item List Sed Replace's own
 	// dialog uses for the same job.
 	//
-	// duplicateForm's own field widgets (duplicateSeparatorField and
+	// duplicate.Form's own field widgets (duplicate.SeparatorField and
 	// friends) only exist for as long as the current strategy actually
 	// shows them — nil otherwise (see renderDuplicateForm's own reset at
 	// the top) — so every *value* that has to survive a strategy switch
 	// (which rebuilds the Form's items from scratch, the same "Form has
 	// no in-place reset" reasoning newSedForm's own doc comment gives)
 	// is separately mirrored into its own plain string field
-	// (duplicateSeparatorValue and friends, kept in sync via each
+	// (duplicate.SeparatorValue and friends, kept in sync via each
 	// field's own SetChangedFunc/dropdown callback) — reading these
 	// mirrors, never the widgets themselves, is what makes
 	// currentDuplicateOptions/applyDuplicateSelection/
 	// renderDuplicatePreview safe to call regardless of which fields
-	// happen to be mounted right now. duplicateDateTimeFormatGoValue and
-	// duplicateDateTimeFormatStrftimeValue are two *separate* mirrors,
-	// not one shared with duplicateDateTimeFormatType picking how to
+	// happen to be mounted right now. duplicate.DateTimeFormatGoValue and
+	// duplicate.DateTimeFormatStrftimeValue are two *separate* mirrors,
+	// not one shared with duplicate.DateTimeFormatType picking how to
 	// interpret it: switching "Date/time format type" swaps in a whole
 	// different example string appropriate to that syntax (a Go layout
 	// makes no sense typed as strftime, or the reverse), so each keeps
@@ -1418,45 +1418,21 @@ type Root struct {
 	// written back on confirm (see applyDuplicateSelection) — Cancel
 	// leaves the sticky defaults alone.
 	//
-	// duplicatePreviewView/duplicateSpacer are their own always-visible
-	// sibling rows below the Form, never Form items — duplicatePreviewView
+	// duplicate.PreviewView/duplicate.Spacer are their own always-visible
+	// sibling rows below the Form, never Form items — duplicate.PreviewView
 	// deliberately, after a real, reproducible bug an earlier version of
 	// this dialog had: a TextView added via Form.AddFormItem without an
 	// explicit height defaulted to tview's own 5-row
 	// DefaultFormFieldHeight and bled into the widget below it. Living
 	// outside the Form entirely rules that whole class of bug out rather
-	// than just remembering to set the height correctly. duplicateSpacer
-	// is a single blank row between duplicatePreviewView and
-	// duplicateButtons, per the user's own explicit request for one
+	// than just remembering to set the height correctly. duplicate.Spacer
+	// is a single blank row between duplicate.PreviewView and
+	// duplicate.Buttons, per the user's own explicit request for one
 	// there.
 	//
-	// duplicateTargets is the file(s) this open is for (see
+	// duplicate.Targets is the file(s) this open is for (see
 	// selectedOrCurrentPaths).
-	duplicateForm                        *tview.Form
-	duplicateStrategyField               *tview.DropDown
-	duplicateSeparatorField              *tview.InputField
-	duplicateSuffixTextField             *tview.InputField
-	duplicateNumberPaddingField          *tview.InputField
-	duplicateDateTimeTypeField           *tview.DropDown
-	duplicateDateTimeFormatField         *tview.InputField
-	duplicateCountField                  *tview.InputField
-	duplicateSeparatorValue              string
-	duplicateStrategy                    string
-	duplicateSuffixTextValue             string
-	duplicateNumberPaddingValue          string
-	duplicateDateTimeFormatType          string
-	duplicateDateTimeFormatGoValue       string
-	duplicateDateTimeFormatStrftimeValue string
-	duplicateCountValue                  string
-	duplicatePreviewView                 *tview.TextView
-	duplicateSpacer                      *tview.Box
-	duplicateCancelBtn                   *tview.Button
-	duplicateApplyBtn                    *tview.Button
-	duplicateButtons                     *tview.Flex
-	duplicateTitleBar                    *tview.TextView
-	duplicateContentLayout               *tview.Flex
-	duplicateLayout                      *tview.Flex
-	duplicateTargets                     []string
+	duplicate duplicateState
 
 	// compress.Form/compress.Buttons/compress.Layout together make up the
 	// "Compress" dialog (compress.go) — the same Target/live-preview/
@@ -1492,9 +1468,9 @@ type Root struct {
 	// real text field's own). rsyncPreviewView is its own always-
 	// visible sibling row below the Form, never a Form item — the same
 	// "living outside the Form rules out a whole real bug class" reason
-	// duplicatePreviewView's own doc comment gives. rsyncButtons is a
+	// duplicate.PreviewView's own doc comment gives. rsyncButtons is a
 	// real Cancel/Run button pair, the current established shape for a
-	// dialog's own action row (see duplicateButtons' own doc comment),
+	// dialog's own action row (see duplicate.Buttons' own doc comment),
 	// not Sed Replace's older vertical-List actions.
 	rsyncForm             *tview.Form
 	rsyncSourceField      *tview.InputField
@@ -2890,11 +2866,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The "Multiply" dialog (see duplicate.go) — same "built once here,
 	// contents rebuilt fresh per open" shape as Sed Replace just above.
-	r.duplicateForm = r.newDuplicateForm()
-	r.duplicatePreviewView = r.newDuplicatePreviewView()
-	r.duplicateSpacer = tview.NewBox()
-	r.duplicateButtons = r.newDuplicateButtons()
-	r.duplicateLayout = r.newDuplicateLayout()
+	r.duplicate.Form = r.newDuplicateForm()
+	r.duplicate.PreviewView = r.newDuplicatePreviewView()
+	r.duplicate.Spacer = tview.NewBox()
+	r.duplicate.Buttons = r.newDuplicateButtons()
+	r.duplicate.Layout = r.newDuplicateLayout()
 
 	// The Compress dialog (see compress.go/openCompress) — same
 	// build-once/repopulate-on-open shape as Duplicate just above.
@@ -3215,7 +3191,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(bgJobCancelPage, r.bgJobCancelDialogLayout, false, false)
 	r.AddPage(sedReplacePage, r.sed.Layout, false, false)
 	r.AddPage(sedPreviewPage, r.sed.PreviewLayout, false, false)
-	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
+	r.AddPage(duplicatePage, r.duplicate.Layout, false, false)
 	r.AddPage(compressPage, r.compress.Layout, false, false)
 	r.AddPage(rsyncPage, r.rsyncLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole

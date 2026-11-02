@@ -252,7 +252,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// SurfaceBackground, matching styleList's own call just above — a
 	// plain tview.NewBox() defaults to tview's own built-in
 	// PrimitiveBackgroundColor otherwise, the same mismatch
-	// duplicateSpacer/compress.Spacer/rsyncSpacer's own doc comments
+	// duplicate.Spacer/compress.Spacer/rsyncSpacer's own doc comments
 	// already warn about.
 	r.activityLogNoticeSpacer1.SetBackgroundColor(theme.SurfaceBackground)
 	r.activityLogNoticeSpacer2.SetBackgroundColor(theme.SurfaceBackground)
@@ -707,7 +707,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		styleButton(r.compress.CancelBtn, theme)
 		styleButton(r.compress.ApplyBtn, theme)
 		// FocusedBackground, fixed — the same reasoning
-		// duplicateTitleBar's own identical choice just above follows.
+		// duplicate.TitleBar's own identical choice just above follows.
 		r.compress.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 		r.compress.TitleBar.SetTextColor(theme.TextColor)
 	}
