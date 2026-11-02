@@ -776,7 +776,7 @@ func (r *Root) renderOptionValue(opt optionSpec, value string) string {
 // consigliereModelOptionFor/consigliereEffortOptionFor in
 // optioncatalog.go) — optionDefaultHint/showOptionInfo both need to
 // single these out, regardless of which provider's own copy a given
-// row is, to surface consigliereModelFetchErr.
+// row is, to surface consigliere.ModelFetchErr.
 func isConsigliereModelOrEffortKey(key string) bool {
 	for _, provider := range []string{"anthropic", "openai", "deepseek", "gemini", "ollama", "custom"} {
 		if key == consigliereModelEffortKeyFor(provider, "model") || key == consigliereModelEffortKeyFor(provider, "effort") {
@@ -794,11 +794,11 @@ func (r *Root) optionDefaultHint(opt optionSpec) string {
 	// silent, since a failed fetch otherwise looks identical to a
 	// provider that genuinely has nothing beyond its own default: both
 	// show just "(default: ...)"/"(model default)", and nothing else
-	// in this screen ever reads consigliereModelFetchErr (a real,
+	// in this screen ever reads consigliere.ModelFetchErr (a real,
 	// reported case of exactly that silent failure).
 	if isConsigliereModelOrEffortKey(opt.key) {
 		provider := r.settings.ConsigliereProvider
-		if err, ok := r.consigliereModelFetchErr[provider]; ok {
+		if err, ok := r.consigliere.ModelFetchErr[provider]; ok {
 			// Capped — a real provider error can run well past a
 			// normal "default: ..." hint's own length (a real,
 			// reported case: the Default column's own overflow pushed
@@ -812,7 +812,7 @@ func (r *Root) optionDefaultHint(opt optionSpec) string {
 		// silent otherwise: the provider's own response parsed fine
 		// and simply listed nothing, which still leaves Model/Effort
 		// stuck on just their own default with no visible reason why.
-		if cached, ok := r.consigliereModelCache[provider]; ok && len(cached) == 0 {
+		if cached, ok := r.consigliere.ModelCache[provider]; ok && len(cached) == 0 {
 			return "model list came back empty"
 		}
 	}
@@ -1125,7 +1125,7 @@ func (r *Root) showOptionInfo(opt optionSpec) {
 	// instead, the one place in this screen that already has room for
 	// a long explanation.
 	if isConsigliereModelOrEffortKey(opt.key) {
-		if err, ok := r.consigliereModelFetchErr[r.settings.ConsigliereProvider]; ok {
+		if err, ok := r.consigliere.ModelFetchErr[r.settings.ConsigliereProvider]; ok {
 			fmt.Fprintf(&b, "\n\n[::d]Model list fetch failed:[::-] %s", err.Error())
 		}
 	}

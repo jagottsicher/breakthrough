@@ -593,7 +593,7 @@ func (r *Root) newRsyncButtons() *tview.Flex {
 			// Form.SetFocus(0), not a direct
 			// r.app.SetFocus(r.rsyncSourceField) — the identical real,
 			// user-reported bug connectdialog.go's own
-			// connectConnectBtn.SetExitFunc found and fixed first (see
+			// connect.ConnectBtn.SetExitFunc found and fixed first (see
 			// its own doc comment for the full tview.Form internals):
 			// naming the field directly here left rsyncForm's own
 			// focusedElement counter stale, so the next Backtab from

@@ -1200,7 +1200,7 @@ func TestGCReachesAIConsigliereFromEveryLogAuditCapture(t *testing.T) {
 			if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
 				t.Fatal("the resolving 'C' should have been consumed")
 			}
-			if !r.consigliereVisible {
+			if !r.consigliere.Visible {
 				t.Error("\"gC\" should have opened the AI Consigliere sidebar")
 			}
 		})
@@ -1227,7 +1227,7 @@ func TestGCInLogAuditDoesNotReachOtherGotoMembers(t *testing.T) {
 		t.Fatal("the resolving 'b' should still have been consumed (even though it's unbound here)")
 	}
 
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		t.Error("'b' is not 'C' — this must not have opened the AI Consigliere")
 	}
 	// The real goto family's own "gb" navigates the panel straight to
@@ -1302,8 +1302,8 @@ func TestTabBacktabReachConsigliereFromLogAuditSelection(t *testing.T) {
 	if got := r.captureLogAuditSelectionTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
 		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
 	}
-	if !r.consigliereInput.HasFocus() {
-		t.Error("Tab should have reached consigliereInput")
+	if !r.consigliere.Input.HasFocus() {
+		t.Error("Tab should have reached consigliere.Input")
 	}
 }
 
@@ -1325,8 +1325,8 @@ func TestTabFromLogAuditViewerTableReachesConsigliere(t *testing.T) {
 	if got := r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
 		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
 	}
-	if !r.consigliereInput.HasFocus() {
-		t.Error("Tab from the table should have reached consigliereInput, not wrapped to Keyword")
+	if !r.consigliere.Input.HasFocus() {
+		t.Error("Tab from the table should have reached consigliere.Input, not wrapped to Keyword")
 	}
 }
 
@@ -1345,14 +1345,14 @@ func TestBacktabFromLogAuditKeywordReachesConsigliere(t *testing.T) {
 	// call a DoneFunc set on it).
 	r.logAuditKeywordField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), func(tview.Primitive) {})
 
-	// Lands on consigliereHistory, not consigliereInput, whenever
+	// Lands on consigliere.History, not consigliere.Input, whenever
 	// there's something to scroll to (the default, tiny Root rect this
 	// test runs on makes consigliereSplashArt overflow it — same
 	// precondition TestCycleFocusShortcutLoopsPanelInputHistoryPanel's
 	// own doc comment already documents) — either one still proves
 	// the backward edge reached consigliere instead of wrapping to
 	// the table.
-	if !r.consigliereInput.HasFocus() && !r.consigliereHistory.HasFocus() {
+	if !r.consigliere.Input.HasFocus() && !r.consigliere.History.HasFocus() {
 		t.Error("Backtab from Keyword should have reached consigliere, not wrapped to the table")
 	}
 }
@@ -1374,8 +1374,8 @@ func TestTabBacktabReachConsigliereFromLogAuditDetail(t *testing.T) {
 	if got := r.captureLogAuditDetailKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
 		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
 	}
-	if !r.consigliereInput.HasFocus() {
-		t.Error("Tab should have reached consigliereInput")
+	if !r.consigliere.Input.HasFocus() {
+		t.Error("Tab should have reached consigliere.Input")
 	}
 }
 
@@ -1591,7 +1591,7 @@ func TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere(t *testing.T
 	r.openLogAuditViewer()
 	r.app.SetFocus(r.logAuditViewerTable)
 	// The real "gC" entry path, not a direct showConsigliere() call —
-	// that's what actually sets consigliereForwardExit (see
+	// that's what actually sets consigliere.ForwardExit (see
 	// startConsigliereChord's own doc comment), the whole thing this
 	// test exists to pin.
 	r.captureLogAuditViewerTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
@@ -1605,9 +1605,9 @@ func TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere(t *testing.T
 			current.(*tview.InputField).InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
 		case r.logAuditTimelineView:
 			r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
-		case r.consigliereInput:
+		case r.consigliere.Input:
 			r.handleConsigliereInputDone(tcell.KeyTab)
-		case r.consigliereHistory:
+		case r.consigliere.History:
 			r.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		default:
 			t.Fatalf("tabFrom: unhandled current focus %v", current)
@@ -1616,22 +1616,22 @@ func TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere(t *testing.T
 	}
 
 	var visited []tview.Primitive
-	var current tview.Primitive = r.consigliereInput // where "gC" just left focus
+	var current tview.Primitive = r.consigliere.Input // where "gC" just left focus
 	for i := 0; i < 8; i++ {
 		current = tabFrom(current)
 		visited = append(visited, current)
-		if current == r.consigliereInput && i > 0 {
+		if current == r.consigliere.Input && i > 0 {
 			break // back to the start — one full lap done
 		}
 	}
 
 	want := map[string]tview.Primitive{
-		"consigliereInput": r.consigliereInput,
-		"Keyword":          r.logAuditKeywordField,
-		"Time":             r.logAuditTimeField,
-		"Level":            r.logAuditLevelField,
-		"Timeline":         r.logAuditTimelineView,
-		"Table":            r.logAuditViewerTable,
+		"consigliere.Input": r.consigliere.Input,
+		"Keyword":           r.logAuditKeywordField,
+		"Time":              r.logAuditTimeField,
+		"Level":             r.logAuditLevelField,
+		"Timeline":          r.logAuditTimelineView,
+		"Table":             r.logAuditViewerTable,
 	}
 	for name, stop := range want {
 		found := false
@@ -1650,13 +1650,13 @@ func TestFullTabLapFromLogAuditViewerVisitsEveryFieldAndConsigliere(t *testing.T
 // TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing
 // is the exact scenario the user reported: open the AI Consigliere
 // from Log Audit's own selection screen (gC while r.logAuditTable has
-// focus — captures consigliereReturnFocus pointing at it), then drill
+// focus — captures consigliere.ReturnFocus pointing at it), then drill
 // into a specific file's viewer (still open, per the user's own
 // earlier explicit request that it survive this) — the selection
 // screen's own table is now covered, not destroyed, so without
-// consigliereExitPage's own staleness check, Tab/Backtab out of the
+// consigliere.ExitPage's own staleness check, Tab/Backtab out of the
 // sidebar kept landing on it anyway: a real, reported dead end ("ich
-// komme aus dem Consig nicht mehr raus"). Tab from consigliereInput
+// komme aus dem Consig nicht mehr raus"). Tab from consigliere.Input
 // must re-join the *viewer's* own ring (Keyword/Time/Level/Timeline/
 // Table), never the hidden selection table.
 func TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing(t *testing.T) {
@@ -1665,7 +1665,7 @@ func TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing
 	r := newTestRootForLogAudit(t, dir)
 	r.captureLogAuditSelectionTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
 	r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone))
-	if !r.consigliereVisible {
+	if !r.consigliere.Visible {
 		t.Fatal("setup: \"gC\" from the selection screen should have opened the sidebar")
 	}
 
@@ -1680,9 +1680,9 @@ func TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing
 			current.(*tview.InputField).InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
 		case r.logAuditTimelineView:
 			r.captureLogAuditTimelineKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
-		case r.consigliereInput:
+		case r.consigliere.Input:
 			r.handleConsigliereInputDone(tcell.KeyTab)
-		case r.consigliereHistory:
+		case r.consigliere.History:
 			r.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		default:
 			t.Fatalf("tabFrom: unhandled current focus %v", current)
@@ -1691,14 +1691,14 @@ func TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing
 	}
 
 	var visited []tview.Primitive
-	var current tview.Primitive = r.consigliereInput
+	var current tview.Primitive = r.consigliere.Input
 	for i := 0; i < 8; i++ {
 		current = tabFrom(current)
 		visited = append(visited, current)
 		if current == r.logAuditTable {
 			t.Fatalf("Tab landed on the hidden selection table (covered by the viewer, not destroyed): %v", visited)
 		}
-		if current == r.consigliereInput && i > 0 {
+		if current == r.consigliere.Input && i > 0 {
 			break
 		}
 	}
@@ -1728,7 +1728,7 @@ func TestConsigliereOpenedFromSelectionThenDrilledIntoViewerReJoinsTheViewerRing
 // the one other place the old "same page the whole time" assumption
 // could still be hiding, per the advisor's own explicit caution:
 // hideConsigliere must still work correctly from
-// consigliereHistory/consigliereInput after the host page has moved
+// consigliere.History/consigliere.Input after the host page has moved
 // on, not just the Tab/Backtab paths the rest of this test covers.
 func TestEscapeClosesConsigliereEvenAfterDrillingToADifferentPage(t *testing.T) {
 	dir := t.TempDir()
@@ -1742,7 +1742,7 @@ func TestEscapeClosesConsigliereEvenAfterDrillingToADifferentPage(t *testing.T) 
 
 	r.handleConsigliereInputDone(tcell.KeyEscape)
 
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		t.Error("Escape should have closed the sidebar even after drilling into the viewer")
 	}
 	if r.activePage != logAuditViewerPage {
