@@ -378,7 +378,7 @@ func (r *Root) applySSHKeysTheme(theme config.ResolvedTheme) {
 	if r.sshKeysTable == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.sshKeysLayout.SetBackgroundColor(theme.PanelBackground)
 	r.sshKeysTable.SetBackgroundColor(theme.PanelBackground)
@@ -394,12 +394,12 @@ func (r *Root) applySSHKeysTheme(theme config.ResolvedTheme) {
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
 
-	// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+	// FocusedBackground, fixed — same reasoning mounts.TitleBar's own
 	// fixed FocusedBackground follows.
 	r.sshKeysTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.sshKeysTitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.sshKeysHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.sshKeysHint.SetTextColor(theme.TextColor)
 	sshKeysHintText, sshKeysHintSpans := buildListHint(theme, sshKeysHintEntries())

@@ -393,7 +393,7 @@ func (r *Root) applyFirewallTheme(theme config.ResolvedTheme) {
 		// (black) background instead of SurfaceBackground — caught per the
 		// user's own explicit report that the "tool pages" didn't match
 		// the rest of the theme.
-		// PanelBackground, not SurfaceBackground — see mountsLayout's
+		// PanelBackground, not SurfaceBackground — see mounts.Layout's
 		// own identical comment (mounts.go) for the full reasoning.
 		r.firewallLayout.SetBackgroundColor(theme.PanelBackground)
 		r.firewallTable.SetBackgroundColor(theme.PanelBackground)
@@ -406,12 +406,12 @@ func (r *Root) applyFirewallTheme(theme config.ResolvedTheme) {
 			Background(theme.SelectionBackground).
 			Foreground(theme.TextColor))
 
-		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+		// FocusedBackground, fixed — same reasoning mounts.TitleBar's own
 		// fixed FocusedBackground above follows.
 		r.firewallTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 		r.firewallTitleBar.SetTextColor(theme.TextColor)
 		// SurfaceBackground/TextColor, matching the main screen's own
-		// buttonBar/statusBar — see mountsHint's own identical comment.
+		// buttonBar/statusBar — see mounts.Hint's own identical comment.
 		r.firewallHint.SetBackgroundColor(theme.SurfaceBackground)
 		r.firewallHint.SetTextColor(theme.TextColor)
 		firewallHintText, firewallHintSpans := buildListHint(theme, firewallHintEntries())

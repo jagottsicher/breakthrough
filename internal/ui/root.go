@@ -27,7 +27,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/logview"
-	"github.com/jagottsicher/breakthrough/internal/mounts"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/operations"
@@ -421,16 +420,9 @@ type Root struct {
 	// as one more entry there, per the user's own explicit request:
 	// this one shows live, structured data (with a computed "would this
 	// survive a reboot" column) rather than a list of commands to run.
-	// mountsEntries/mountsErr hold the last read result, refreshed by
+	// mounts.Entries/mounts.Err hold the last read result, refreshed by
 	// reloadMounts (on open, and on "r").
-	mountsLayout    *tview.Flex
-	mountsTitleBar  *tview.TextView
-	mountsHint      *tview.TextView
-	mountsHintSpans []listHintSpan
-	mountsTable     *tview.Table
-	mountsScrollbar *verticalScrollbar
-	mountsEntries   []mounts.Entry
-	mountsErr       error
+	mounts mountsState
 
 	// The Firewall screen (see firewall.go) — a fourth full-screen
 	// catalog, showing this host's own actual firewall rules (whichever
@@ -454,7 +446,7 @@ type Root struct {
 	// dropdowns, so the form is rebuilt fresh on every open via
 	// renderFirewallAddRuleForm, the same "Clear(true) then
 	// AddFormItem" shape newCompressForm's own doc comment establishes,
-	// rather than kept in sync in place the way connectForm's own fixed
+	// rather than kept in sync in place the way connect.Form's own fixed
 	// set of plain input fields is. The plain firewallAddRuleXxx fields
 	// below mirror the form's own current values, the same "value
 	// mirror" shape duplicateStrategy and friends already establish.
@@ -1267,44 +1259,29 @@ type Root struct {
 	sedPreviewTotal      int
 	sedPreviewCurrentPos string
 
-	// connectForm/connectButtons/connectLayout make up the "Connect"
+	// connect.Form/connect.Buttons/connect.Layout make up the "Connect"
 	// dialog (see connectdialog.go) — a fixed field set (Host/Port/
 	// User/Password/Identifier/Tags), so it's built once here rather
 	// than rebuilt fresh per open the way Sed Replace's own variable
 	// field set is (see newSedForm's own doc comment on that
 	// distinction).
-	// connectStatus is the one-line area below the form showing either
+	// connect.Status is the one-line area below the form showing either
 	// an in-progress "Connecting…" animation or the last attempt's own
-	// error, in place, without closing the dialog. connectCancelBtn/
-	// connectConnectBtn are a real button pair (see newConnectButtons'
+	// error, in place, without closing the dialog. connect.CancelBtn/
+	// connect.ConnectBtn are a real button pair (see newConnectButtons'
 	// own doc comment for why, not a List).
-	connectForm            *tview.Form
-	connectHostField       *tview.InputField
-	connectPortField       *tview.InputField
-	connectUserField       *tview.InputField
-	connectPasswordField   *tview.InputField
-	connectIdentifierField *tview.InputField
-	connectTagsField       *tview.InputField
-	connectStatus          *tview.TextView
-	connectCancelBtn       *tview.Button
-	// connectOKBtn/connectConnectBtn and connectMode (see
+	//
+	// connect.OKBtn/connect.ConnectBtn and connect.Mode (see
 	// connectDialogMode) are the "Cancel/OK/Connect" buttons'
 	// own current-mode switch — see setConnectButtonsMode's own doc
 	// comment on why the Flex's own contents and wiring change per
 	// open rather than staying fixed.
-	connectOKBtn      *tview.Button
-	connectConnectBtn *tview.Button
-	connectMode       connectDialogMode
-	connectButtons    *tview.Flex
-	connectTitleBar   *tview.TextView
-	connectLayout     *tview.Flex
-	connectCancel     context.CancelFunc
-	connectAnimFrame  int
+	connect connectDialogState
 
 	// cloudMountDialog* is the "New cloud mount" dialog (see
 	// cloudmountdialog.go), reached via the "+ New" chooser
 	// (openNewConnectionChooser) rather than its own key, same shape as
-	// connectLayout above just with a remote picker instead of Host/
+	// connect.Layout above just with a remote picker instead of Host/
 	// Port/User/Password.
 	cloudMountDialogForm            *tview.Form
 	cloudMountDialogRemoteField     *tview.DropDown
@@ -1358,7 +1335,7 @@ type Root struct {
 	cloudRemoteDialogContent      *tview.Flex
 	cloudRemoteDialogLayout       *tview.Flex
 
-	// connectPendingSkipHostKey/connectPendingSkipHostKeyConn back the
+	// connect.PendingSkipHostKey/connect.PendingSkipHostKeyConn back the
 	// "Connect anyway" retry after a HostKeyMismatchError (see
 	// connectdialog.go's own finishConnect/runConnect) — set only once
 	// finishConnect has actually shown the mismatch, consumed (and
@@ -1366,8 +1343,6 @@ type Root struct {
 	// for the exact same Connection it was shown for, so editing a
 	// field first can never silently carry an accepted bypass over to
 	// a different host.
-	connectPendingSkipHostKey     bool
-	connectPendingSkipHostKeyConn remotefs.Connection
 
 	// hostKeyConfirmDialog/Layout is the trust-on-first-use prompt a
 	// Dial attempt can raise mid-connection (see hostkeyconfirm.go's
@@ -1482,7 +1457,7 @@ type Root struct {
 
 	// sshShellForm/.../sshShellLayout make up "Add new ssh connection"
 	// (see sshshell.go) — Host/Port/User, the same three fields
-	// connectForm already has, plus four checkboxes for the one-off
+	// connect.Form already has, plus four checkboxes for the one-off
 	// ssh flags a saved entry can carry (see remotefs.Connection's own
 	// Shell* fields; plainFormCheckbox for why these are that type, not
 	// a bare *tview.Checkbox). No password field: a real `ssh` process
@@ -2740,16 +2715,10 @@ type Root struct {
 	// r.operations (internal/operations), the Aufgaben-/Transferzentrale
 	// feature_ideas.txt's own "3." describes, same build-once/
 	// repopulate-on-open shape every other full-screen catalog here
-	// already uses. transferCenterOps holds the last rendered snapshot
+	// already uses. transfer.Ops holds the last rendered snapshot
 	// (newest first), refreshed by reloadTransferCenter on open, on "r",
 	// and live via r.operations.Subscribe while the screen is open.
-	transferCenterLayout    *tview.Flex
-	transferCenterTitleBar  *tview.TextView
-	transferCenterHint      *tview.TextView
-	transferCenterHintSpans []listHintSpan
-	transferCenterTable     *tview.Table
-	transferCenterScrollbar *verticalScrollbar
-	transferCenterOps       []operations.Operation
+	transfer transferCenterState
 
 	// easterEggView/easterEggCancel back the hidden "follow the white
 	// rabbit" overlay (see easteregg.go) — built once like every other
@@ -3102,9 +3071,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// connectdialog.go/hostkeyconfirm.go) — a fixed field set, built
 	// once here the same way Sed Replace's own form is (see
 	// newConnectForm's own doc comment).
-	r.connectForm = r.newConnectForm()
-	r.connectButtons = r.newConnectButtons()
-	r.connectLayout = r.newConnectLayout()
+	r.connect.Form = r.newConnectForm()
+	r.connect.Buttons = r.newConnectButtons()
+	r.connect.Layout = r.newConnectLayout()
 
 	// The "API key (encrypted)" dialog (see apikeydialog.go) — the
 	// Options screen's own "AI Consigliere" category.
@@ -3429,7 +3398,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Mounts screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox screens' own
 	// comments above give.
-	r.AddPage(mountsPage, r.mountsLayout, true, false)
+	r.AddPage(mountsPage, r.mounts.Layout, true, false)
 	// resize=true: the Firewall screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts
 	// screens' own comments above give.
@@ -3440,7 +3409,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Transfer-Zentrale screen deliberately fills the
 	// whole terminal too, the same reasoning every other full-screen
 	// catalog above gives.
-	r.AddPage(transferCenterPage, r.transferCenterLayout, true, false)
+	r.AddPage(transferCenterPage, r.transfer.Layout, true, false)
 	// resize=true: the Sessions screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
@@ -3483,7 +3452,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
-	r.AddPage(connectDialogPage, r.connectLayout, false, false)
+	r.AddPage(connectDialogPage, r.connect.Layout, false, false)
 	r.AddPage(apiKeyDialogPage, r.apiKeyDialogLayout, false, false)
 	r.AddPage(cloudMountDialogPage, r.cloudMountDialogLayout, false, false)
 	r.AddPage(cloudRemoteDialogPage, r.cloudRemoteDialogLayout, false, false)

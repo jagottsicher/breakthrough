@@ -1637,7 +1637,7 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	if r.logAuditTable == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.logAuditSelectionLayout.SetBackgroundColor(theme.PanelBackground)
 	r.logAuditTable.SetBackgroundColor(theme.PanelBackground)
@@ -1652,7 +1652,7 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	r.logAuditTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.logAuditTitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.logAuditHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.logAuditHint.SetTextColor(theme.TextColor)
 	hintText, hintSpans := buildListHint(theme, logAuditSelectionHintEntries())
@@ -1660,7 +1660,7 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	r.logAuditHintSpans = hintSpans
 	r.renderLogAuditSelection() // cell colors are baked in per cell, not looked up live at draw time
 
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.logAuditViewerLayout.SetBackgroundColor(theme.PanelBackground)
 	r.logAuditViewerTable.SetBackgroundColor(theme.PanelBackground)
@@ -1692,7 +1692,7 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	// to pass in (see logAuditCurrentlyFocused's own doc comment).
 	r.restyleLogAuditFocusTargets(r.logAuditCurrentlyFocused())
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.logAuditViewerHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.logAuditViewerHint.SetTextColor(theme.TextColor)
 	viewerHintText, viewerHintSpans := buildListHint(theme, logAuditViewerHintEntries())

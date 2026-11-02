@@ -402,7 +402,7 @@ func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
 	if r.activityLogTable == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.activityLogLayout.SetBackgroundColor(theme.PanelBackground)
 	r.activityLogTable.SetBackgroundColor(theme.PanelBackground)
@@ -418,7 +418,7 @@ func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
 	r.activityLogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.activityLogTitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.activityLogHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.activityLogHint.SetTextColor(theme.TextColor)
 	activityLogHintText, activityLogHintSpans := buildListHint(theme, activityLogHintEntries())

@@ -395,7 +395,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		styleButton(r.compareTreeShowSameBtn, theme)
 		styleButton(r.compareTreeCloseBtn, theme)
 
-		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+		// FocusedBackground, fixed — same reasoning mounts.TitleBar's own
 		// fixed FocusedBackground follows.
 		r.compareTreeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 		r.compareTreeTitleBar.SetTextColor(theme.TextColor)
@@ -457,7 +457,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		// SurfaceBackground, the same floating-chrome surface Help's
 		// own helpView uses (see above) — a chat overlay reads as the
 		// same kind of floating dialog, not a full-bleed catalog body
-		// the way viewerView/mountsLayout are.
+		// the way viewerView/mounts.Layout are.
 		r.consigliere.History.SetBackgroundColor(theme.SurfaceBackground)
 		r.consigliere.History.SetTextColor(theme.TextColor)
 	}
@@ -481,7 +481,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	}
 
 	if r.viewerView != nil {
-		// PanelBackground, not SurfaceBackground — see mountsLayout's own
+		// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 		// comment: every full-bleed catalog/viewer body rests on the same
 		// background as the main panel, not the lighter floating-chrome
 		// surface.
@@ -518,19 +518,19 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// Sed Replace (see sedreplace.go/applySedTheme).
 	r.applySedTheme(theme)
 
-	r.connectForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.connectForm.SetLabelColor(theme.TextColor)
-	r.connectForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.connectForm.SetFieldTextColor(theme.TextColor)
-	r.connectStatus.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.connectCancelBtn, theme)
-	styleButton(r.connectOKBtn, theme)
-	styleButton(r.connectConnectBtn, theme)
-	r.connectTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.connectTitleBar.SetTextColor(theme.TextColor)
+	r.connect.Form.SetBackgroundColor(theme.SurfaceBackground)
+	r.connect.Form.SetLabelColor(theme.TextColor)
+	r.connect.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.connect.Form.SetFieldTextColor(theme.TextColor)
+	r.connect.Status.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.connect.CancelBtn, theme)
+	styleButton(r.connect.OKBtn, theme)
+	styleButton(r.connect.ConnectBtn, theme)
+	r.connect.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.connect.TitleBar.SetTextColor(theme.TextColor)
 
 	// The "API key (encrypted)" dialog (see apikeydialog.go) — same
-	// shape as connectForm/connectTitleBar/connect*Btn just above.
+	// shape as connect.Form/connect.TitleBar/connect*Btn just above.
 	// apiKeyDialogForm is rebuilt from scratch on every step change
 	// (see rebuildAPIKeyDialogFields), so this also has to run again
 	// there, not just here on a live theme switch — see that
@@ -543,7 +543,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.apiKeyDialogTitleBar.SetTextColor(theme.TextColor)
 
 	// The "New cloud mount" dialog (see cloudmountdialog.go) — same
-	// shape as connectForm/connectTitleBar/connect*Btn just above,
+	// shape as connect.Form/connect.TitleBar/connect*Btn just above,
 	// this dialog's own equivalents. A real, reported gap: these were
 	// never added here at all, so every one of them still showed
 	// tview's own unthemed black background/default colors regardless
@@ -625,7 +625,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 
 	// The "gs" SSH shell dropdown/dialog pair (see sshshell.go) — the
 	// identical two blocks just above, mirrored one-for-one: "Add new
-	// ssh connection" styled like connectForm/connectLayout, the
+	// ssh connection" styled like connect.Form/connect.Layout, the
 	// dropdown ("Open shell to") styled like connectionMenuTable/
 	// TitleBar. Every new widget in this app needs its own explicit
 	// line here — nothing above or below gets colored automatically

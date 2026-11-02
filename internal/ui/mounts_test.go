@@ -75,7 +75,7 @@ func TestGCReachesAIConsigliereFromMounts(t *testing.T) {
 // consumed and re-reads the mount table (via reloadMounts) without
 // closing the screen — even when findmnt itself fails (a real
 // possibility on a non-Linux build target), reloadMounts reports that
-// through mountsErr rather than leaving the screen in an inconsistent
+// through mounts.Err rather than leaving the screen in an inconsistent
 // state, so this doesn't need requireCommand to hold either way.
 func TestCaptureMountsKeyRRefreshesWithoutClosing(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
@@ -100,12 +100,12 @@ func TestRenderMountsShowsTheErrorInPlaceOfRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.mountsErr = errors.New("findmnt: command not found")
-	r.mountsEntries = nil
+	r.mounts.Err = errors.New("findmnt: command not found")
+	r.mounts.Entries = nil
 
 	r.renderMounts()
 
-	got := strings.TrimSpace(r.mountsTable.GetCell(1, mountsColTarget).Text)
+	got := strings.TrimSpace(r.mounts.Table.GetCell(1, mountsColTarget).Text)
 	if !strings.Contains(got, "not found") {
 		t.Errorf("row 1 = %q, want it to show the read error", got)
 	}
@@ -121,12 +121,12 @@ func TestRenderMountsShowsAPlaceholderWhenGenuinelyEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.mountsErr = nil
-	r.mountsEntries = nil
+	r.mounts.Err = nil
+	r.mounts.Entries = nil
 
 	r.renderMounts()
 
-	got := strings.TrimSpace(r.mountsTable.GetCell(1, mountsColTarget).Text)
+	got := strings.TrimSpace(r.mounts.Table.GetCell(1, mountsColTarget).Text)
 	if !strings.Contains(got, "No real storage mounted") {
 		t.Errorf("row 1 = %q, want the empty-read placeholder", got)
 	}
@@ -142,15 +142,15 @@ func TestMountsReloadIntoAnErrorNeverHangsOnDown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.mountsErr = errors.New("findmnt: command not found")
-	r.mountsEntries = nil
+	r.mounts.Err = errors.New("findmnt: command not found")
+	r.mounts.Entries = nil
 	r.renderMounts()
-	r.mountsTable.Select(15, 0) // simulate a stale cursor from a much longer previous list
+	r.mounts.Table.Select(15, 0) // simulate a stale cursor from a much longer previous list
 
 	r.renderMounts() // still errors — re-renders down to just 2 rows
 
 	callWithTimeout(t, 2*time.Second, func() {
-		r.mountsTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+		r.mounts.Table.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
 	})
 }
 
@@ -165,8 +165,8 @@ func TestMountsErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.mountsErr = errors.New("findmnt: command not found")
-	r.mountsEntries = nil
+	r.mounts.Err = errors.New("findmnt: command not found")
+	r.mounts.Entries = nil
 	r.renderMounts()
 
 	screen := tcell.NewSimulationScreen("")
@@ -175,11 +175,11 @@ func TestMountsErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
 	}
 	defer screen.Fini()
 	screen.SetSize(100, 40)
-	r.mountsTable.SetRect(0, 0, 100, 40)
-	r.mountsTable.Draw(screen) // the real app's own ordinary redraw
+	r.mounts.Table.SetRect(0, 0, 100, 40)
+	r.mounts.Table.Draw(screen) // the real app's own ordinary redraw
 
 	callWithTimeout(t, 2*time.Second, func() {
-		r.mountsTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+		r.mounts.Table.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
 	})
 }
 
@@ -196,16 +196,16 @@ func TestRenderMountsPersistentColumnUsesTheSamePlainColorRegardless(t *testing.
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.mountsErr = nil
-	r.mountsEntries = []mounts.Entry{
+	r.mounts.Err = nil
+	r.mounts.Entries = []mounts.Entry{
 		{Target: "/", Source: "/dev/md0", Fstype: "ext4", Persistent: true},
 		{Target: "/mnt/usb", Source: "/dev/sdb1", Fstype: "vfat", Persistent: false},
 	}
 
 	r.renderMounts()
 
-	persistentColor := cellTextColor(r.mountsTable.GetCell(1, mountsColPersistent))
-	manualColor := cellTextColor(r.mountsTable.GetCell(2, mountsColPersistent))
+	persistentColor := cellTextColor(r.mounts.Table.GetCell(1, mountsColPersistent))
+	manualColor := cellTextColor(r.mounts.Table.GetCell(2, mountsColPersistent))
 
 	if persistentColor != r.theme.PlaceholderText {
 		t.Errorf("persistent entry's own color = %v, want the plain PlaceholderText color %v", persistentColor, r.theme.PlaceholderText)
@@ -223,11 +223,11 @@ func TestRenderMountsSelectsTheFirstDataRowOnFirstRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.mountsEntries = []mounts.Entry{{Target: "/", Source: "/dev/md0", Fstype: "ext4"}}
+	r.mounts.Entries = []mounts.Entry{{Target: "/", Source: "/dev/md0", Fstype: "ext4"}}
 
 	r.renderMounts()
 
-	row, _ := r.mountsTable.GetSelection()
+	row, _ := r.mounts.Table.GetSelection()
 	if row != 1 {
 		t.Errorf("selected row = %d, want 1 (the first real data row, not the row-0 header)", row)
 	}
@@ -253,18 +253,18 @@ func TestMountsTitleBarReloadButtonClickReloads(t *testing.T) {
 
 	screen := simulationScreen(t, 100, 30)
 	r.handleBeforeDraw(screen) // establishes lastScreenWidth, which renderReloadTitleBar's own column math needs
-	r.mountsEntries = []mounts.Entry{{Target: "/definitely-not-a-real-mount-xyz"}}
+	r.mounts.Entries = []mounts.Entry{{Target: "/definitely-not-a-real-mount-xyz"}}
 	r.renderMounts()
-	r.mountsTitleBar.SetRect(0, 0, 100, 1) // the same rect a real Draw would have left it at
+	r.mounts.TitleBar.SetRect(0, 0, 100, 1) // the same rect a real Draw would have left it at
 
-	_, y, width, _ := r.mountsTitleBar.GetRect()
+	_, y, width, _ := r.mounts.TitleBar.GetRect()
 	col := reloadTitleBarButtonCol(width)
-	captured, _ := captureReloadTitleBarMouse(r.mountsTitleBar, r.reloadMounts)(tview.MouseLeftClick, tcell.NewEventMouse(col, y, tcell.ButtonNone, 0))
+	captured, _ := captureReloadTitleBarMouse(r.mounts.TitleBar, r.reloadMounts)(tview.MouseLeftClick, tcell.NewEventMouse(col, y, tcell.ButtonNone, 0))
 
 	if captured != tview.MouseConsumed {
 		t.Error("clicking the reload glyph should consume the click")
 	}
-	for _, e := range r.mountsEntries {
+	for _, e := range r.mounts.Entries {
 		if e.Target == "/definitely-not-a-real-mount-xyz" {
 			t.Error("the placeholder entry survived the click, want it replaced by a real re-read")
 		}
@@ -280,15 +280,15 @@ func TestMountsTitleBarClickElsewhereDoesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.mountsEntries = []mounts.Entry{{Target: "/", Source: "/dev/md0", Fstype: "ext4"}}
+	r.mounts.Entries = []mounts.Entry{{Target: "/", Source: "/dev/md0", Fstype: "ext4"}}
 
 	screen := simulationScreen(t, 100, 30)
 	r.handleBeforeDraw(screen)
 	r.renderMounts()
-	r.mountsTitleBar.SetRect(0, 0, 100, 1)
+	r.mounts.TitleBar.SetRect(0, 0, 100, 1)
 
 	reloaded := false
-	captured, _ := captureReloadTitleBarMouse(r.mountsTitleBar, func() { reloaded = true })(tview.MouseLeftClick, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
+	captured, _ := captureReloadTitleBarMouse(r.mounts.TitleBar, func() { reloaded = true })(tview.MouseLeftClick, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
 
 	if captured == tview.MouseConsumed {
 		t.Error("a click away from the reload glyph should not be consumed")
