@@ -74,7 +74,7 @@ type rsyncJob struct {
 	// opID is this job's own internal/operations.Tracker entry — set
 	// once, right after r.operations.Start in reallyStartRsyncBackground,
 	// closed out by finishRsyncJob — see root.go's own operations field
-	// doc comment for why this exists alongside activityLog/notify
+	// doc comment for why this exists alongside activity.Logger/notify
 	// rather than instead of either.
 	opID uint64
 
@@ -399,11 +399,11 @@ func (r *Root) finishRsyncJob(job *rsyncJob, err error) {
 		// what makes cmd.Wait return an error too — that one is
 		// expected, already handled by cancelRsyncJob itself, and must
 		// not also show as a spurious error overlay).
-		r.activityLog.Error(activitylog.CategoryRsync, fmt.Sprintf("rsync %s: %v", job.label, err))
+		r.activity.Logger.Error(activitylog.CategoryRsync, fmt.Sprintf("rsync %s: %v", job.label, err))
 		r.notify.Push(notify.LevelError, notify.CategoryRsync, fmt.Sprintf("rsync %s failed: %v", job.label, err))
 		r.showError(err)
 	case !wasCancelled:
-		r.activityLog.Action(activitylog.CategoryRsync, fmt.Sprintf("rsync %s", job.label))
+		r.activity.Logger.Action(activitylog.CategoryRsync, fmt.Sprintf("rsync %s", job.label))
 		r.notify.Push(notify.LevelSuccess, notify.CategoryRsync, fmt.Sprintf("rsync %s finished", job.label))
 	}
 	switch {

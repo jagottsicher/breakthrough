@@ -101,10 +101,10 @@ func listOllamaModelsWithNativeFallback(ctx context.Context, key, baseURL string
 // of "there's no key" the user actually needs to fix.
 func (r *Root) refreshConsigliereModelCache() {
 	provider := r.settings.ConsigliereProvider
-	if r.consigliereModelFetchInFlight[provider] {
+	if r.consigliere.ModelFetchInFlight[provider] {
 		return
 	}
-	if _, cached := r.consigliereModelCache[provider]; cached {
+	if _, cached := r.consigliere.ModelCache[provider]; cached {
 		return
 	}
 
@@ -134,18 +134,18 @@ func (r *Root) refreshConsigliereModelCache() {
 			}
 		}
 		if err != nil {
-			r.consigliereModelFetchErr[provider] = err
+			r.consigliere.ModelFetchErr[provider] = err
 			return
 		}
 	}
 
-	r.consigliereModelFetchInFlight[provider] = true
-	delete(r.consigliereModelFetchErr, provider)
+	r.consigliere.ModelFetchInFlight[provider] = true
+	delete(r.consigliere.ModelFetchErr, provider)
 
 	ctx, cancel := context.WithTimeout(context.Background(), consigliereModelFetchTimeout)
 	r.safeGo("AI Consigliere model list", func() {
 		cancel()
-		r.consigliereModelFetchInFlight[provider] = false
+		r.consigliere.ModelFetchInFlight[provider] = false
 	}, func() {
 		models, err := listConsigliereModelsFunc(ctx, provider, key, r.consigliereBaseURLOverride(provider))
 		cancel()
@@ -162,12 +162,12 @@ func (r *Root) refreshConsigliereModelCache() {
 // finishConnect's/showSedPreviewResult's own identical doc comments
 // give for the identical split).
 func (r *Root) finishConsigliereModelFetch(provider string, models []consigliere.ModelInfo, err error) {
-	r.consigliereModelFetchInFlight[provider] = false
+	r.consigliere.ModelFetchInFlight[provider] = false
 	if err != nil {
-		r.consigliereModelFetchErr[provider] = err
+		r.consigliere.ModelFetchErr[provider] = err
 		return
 	}
-	r.consigliereModelCache[provider] = models
+	r.consigliere.ModelCache[provider] = models
 	r.renderOptions()
 }
 
@@ -236,7 +236,7 @@ func consigliereDefaultChoiceLabel(fetchErr error, fetched bool, defaultText str
 }
 
 // consigliereModelChoices is the "Model" row's own choices — reads
-// consigliereModelCache only, never fetches (see
+// consigliere.ModelCache only, never fetches (see
 // refreshConsigliereModelCache's own doc comment on why). Always
 // offers "" (the provider's own built-in default) first, and always
 // includes whatever's currently stored even when the live list isn't
@@ -246,13 +246,13 @@ func consigliereDefaultChoiceLabel(fetchErr error, fetched bool, defaultText str
 // deliberate override with "default" the moment Enter is pressed.
 func (r *Root) consigliereModelChoices() []optionChoice {
 	provider := r.settings.ConsigliereProvider
-	cached, ok := r.consigliereModelCache[provider]
+	cached, ok := r.consigliere.ModelCache[provider]
 
 	defaultText := ""
 	if d := consigliereDefaultModelFor(provider); d != "" {
 		defaultText = "default: " + d
 	}
-	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(r.consigliereModelFetchErr[provider], ok, defaultText)}}
+	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(r.consigliere.ModelFetchErr[provider], ok, defaultText)}}
 
 	if !ok {
 		if v := r.settings.ConsigliereModelFor(provider); v != "" {
@@ -286,7 +286,7 @@ func (r *Root) consigliereEffortLevelsFor(provider, model string) []string {
 	if provider == "openai" {
 		return consigliere.OpenAIEffortLevels
 	}
-	for _, m := range r.consigliereModelCache[provider] {
+	for _, m := range r.consigliere.ModelCache[provider] {
 		if m.ID == model {
 			return m.EffortLevels
 		}
@@ -304,13 +304,13 @@ func (r *Root) consigliereEffortChoices() []optionChoice {
 	if model == "" {
 		model = consigliereDefaultModelFor(provider)
 	}
-	_, fetched := r.consigliereModelCache[provider]
+	_, fetched := r.consigliere.ModelCache[provider]
 
 	defaultText := ""
 	if fetched {
 		defaultText = "model default"
 	}
-	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(r.consigliereModelFetchErr[provider], fetched, defaultText)}}
+	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(r.consigliere.ModelFetchErr[provider], fetched, defaultText)}}
 	for _, lvl := range r.consigliereEffortLevelsFor(provider, model) {
 		choices = append(choices, optionChoice{value: lvl, label: lvl})
 	}

@@ -827,7 +827,7 @@ func (r *Root) acceptsPropertiesAwareKey() bool {
 	if r.acceptsPlainKeyCommand() {
 		return true
 	}
-	return r.activePage == propertiesPage && !r.propertiesEditField.HasFocus()
+	return r.activePage == propertiesPage && !r.properties.EditField.HasFocus()
 }
 
 // refreshChordHintBar rebuilds and redraws the button bar's own chord

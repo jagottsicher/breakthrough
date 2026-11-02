@@ -1271,10 +1271,10 @@ func (r *Root) disconnectConnectionRow(row int) bool {
 	label := r.panel.remoteConn.Label()
 	r.hideOverlay()
 	if err := r.panel.disconnectRemote(); err != nil {
-		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("disconnect from %s: %v", label, err))
+		r.activity.Logger.Error(activitylog.CategoryRemote, fmt.Sprintf("disconnect from %s: %v", label, err))
 		r.showError(err)
 	} else {
-		r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("disconnected from %s", label))
+		r.activity.Logger.Action(activitylog.CategoryRemote, fmt.Sprintf("disconnected from %s", label))
 	}
 	return true
 }

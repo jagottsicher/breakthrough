@@ -427,7 +427,7 @@ func (r *Root) newDuplicateButtons() *tview.Flex {
 	// not a direct r.app.SetFocus(r.duplicateStrategyField) — naming
 	// the field directly would leave duplicateForm's own internal
 	// focusedElement counter stale, the same real bug
-	// connectdialog.go's own connectConnectBtn.SetExitFunc found and
+	// connectdialog.go's own connect.ConnectBtn.SetExitFunc found and
 	// fixed first (see its own doc comment for the full tview.Form
 	// internals).
 	r.duplicateCancelBtn.SetExitFunc(func(key tcell.Key) {
@@ -464,7 +464,7 @@ func (r *Root) newDuplicateButtons() *tview.Flex {
 // newDuplicateLayout wraps duplicateTitleBar (" Multiply ") above
 // duplicateContentLayout — the same widget/layout split
 // menu/menuTitleBar/menuLayout already established, mirrored exactly
-// by sedLayout/sedTitleBar/sedContentLayout for Sed Replace.
+// by sed.Layout/sed.TitleBar/sed.ContentLayout for Sed Replace.
 func (r *Root) newDuplicateLayout() *tview.Flex {
 	r.duplicateTitleBar = newPlainTitleBar("Multiply")
 	r.duplicateContentLayout = r.newDuplicateContentLayout()
@@ -711,12 +711,12 @@ func (r *Root) runDuplicate() {
 func (r *Root) finishDuplicate(created int, err error, targetCount int) {
 	r.reloadPanel(nil)
 	if err != nil {
-		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("duplicate: created %d, then: %v", created, err))
+		r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("duplicate: created %d, then: %v", created, err))
 		r.showError(fmt.Errorf("duplicate: created %d, then: %w", created, err))
 		return
 	}
 	if created > 0 {
-		r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("duplicated %d item(s) from %d target(s)", created, targetCount))
+		r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("duplicated %d item(s) from %d target(s)", created, targetCount))
 	}
 }
 
@@ -791,7 +791,7 @@ func (r *Root) applyDuplicateTheme(theme config.ResolvedTheme) {
 	styleButton(r.duplicateApplyBtn, theme)
 	// FocusedBackground, fixed — Multiply is a single-layer, always-modal
 	// dialog nothing else ever stacks on top of, the same reasoning
-	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
+	// confirmDialogTitleBar/chmodTitleBar/sed.TitleBar already follow.
 	r.duplicateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.duplicateTitleBar.SetTextColor(theme.TextColor)
 }

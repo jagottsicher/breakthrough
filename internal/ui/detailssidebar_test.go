@@ -1304,8 +1304,8 @@ func TestPropagateHashResultUpdatesBothWhenShowingSameTarget(t *testing.T) {
 
 	r.propagateHashResult(path, fsops.Hashes{MD5: "abc123"})
 
-	if r.propertiesHashes == nil || r.propertiesHashes.MD5 != "abc123" {
-		t.Errorf("propertiesHashes = %v, want MD5 abc123", r.propertiesHashes)
+	if r.properties.Hashes == nil || r.properties.Hashes.MD5 != "abc123" {
+		t.Errorf("properties.Hashes = %v, want MD5 abc123", r.properties.Hashes)
 	}
 	if r.detailsHashes == nil || r.detailsHashes.MD5 != "abc123" {
 		t.Errorf("detailsHashes = %v, want MD5 abc123", r.detailsHashes)
@@ -1334,8 +1334,8 @@ func TestPropagateHashResultIgnoresUnrelatedTarget(t *testing.T) {
 
 	r.propagateHashResult(filepath.Join(dir, "unrelated.txt"), fsops.Hashes{MD5: "xyz"})
 
-	if r.propertiesHashes != nil {
-		t.Errorf("propertiesHashes = %v, want nil — the result was for a different file", r.propertiesHashes)
+	if r.properties.Hashes != nil {
+		t.Errorf("properties.Hashes = %v, want nil — the result was for a different file", r.properties.Hashes)
 	}
 	if r.detailsHashes != nil {
 		t.Errorf("detailsHashes = %v, want nil — the result was for a different file", r.detailsHashes)
@@ -1365,8 +1365,8 @@ func TestOpenPropertiesAdoptsExistingDetailsHash(t *testing.T) {
 	r.target = path
 	r.openProperties()
 
-	if r.propertiesHashes == nil || r.propertiesHashes.MD5 != "abc123" {
-		t.Errorf("propertiesHashes = %v, want adopted MD5 abc123 from Details", r.propertiesHashes)
+	if r.properties.Hashes == nil || r.properties.Hashes.MD5 != "abc123" {
+		t.Errorf("properties.Hashes = %v, want adopted MD5 abc123 from Details", r.properties.Hashes)
 	}
 }
 
@@ -1389,7 +1389,7 @@ func TestLoadDetailsTargetAdoptsExistingPropertiesHash(t *testing.T) {
 	r.panel.focusRow(1)
 	r.target = path
 	r.openProperties()
-	r.propertiesHashes = &fsops.Hashes{MD5: "xyz789"} // simulating an already-computed result
+	r.properties.Hashes = &fsops.Hashes{MD5: "xyz789"} // simulating an already-computed result
 
 	r.showDetailsSidebar() // Details loads for the first time, same target
 

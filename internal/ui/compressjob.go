@@ -124,7 +124,7 @@ type compressJob struct {
 
 // compressRequest is everything one Compress/Extract run needs — both
 // startCompressJob's own argument and, unchanged, what sits in
-// r.compressQueue while a further request waits behind an already-
+// r.compress.Queue while a further request waits behind an already-
 // running job (see queuedRsync's own identical dual role in rsyncjob.go).
 type compressRequest struct {
 	// command is the real shell command line to run for a subprocess-
@@ -152,8 +152,8 @@ type compressRequest struct {
 // same way startRsyncBackground already queues behind a running rsync,
 // or starts req immediately otherwise.
 func (r *Root) startCompressJob(req compressRequest) {
-	if r.compressJob != nil {
-		r.compressQueue = append(r.compressQueue, req)
+	if r.compress.Job != nil {
+		r.compress.Queue = append(r.compress.Queue, req)
 		r.refreshStatusBar()
 		return
 	}
@@ -204,13 +204,13 @@ func (r *Root) reallyStartCompressJob(req compressRequest) {
 		onSuccess: req.onSuccess,
 	}
 	job.opID = r.operations.Start(string(activitylog.CategoryArchive), req.label, req.destDir)
-	r.compressJob = job
+	r.compress.Job = job
 
 	if err := cmd.Start(); err != nil {
 		cancel()
 		r.operations.Finish(job.opID, operations.OutcomeFailed, 0, 1, 0, []string{err.Error()})
 		r.showError(fmt.Errorf("%s: %w", req.errContext, err))
-		r.compressJob = nil
+		r.compress.Job = nil
 		return
 	}
 
@@ -253,7 +253,7 @@ func (r *Root) reallyStartCompressGoFunc(req compressRequest) {
 		onSuccess: req.onSuccess,
 	}
 	job.opID = r.operations.Start(string(activitylog.CategoryArchive), req.label, req.destDir)
-	r.compressJob = job
+	r.compress.Job = job
 
 	r.safeGo(req.errContext+" job", func() { r.finishCompressJob(job, nil) }, func() {
 		err := req.goFunc(ctx)
@@ -278,21 +278,21 @@ func (r *Root) reallyStartCompressGoFunc(req compressRequest) {
 // deleteExtractedArchive — never for a failed or cancelled job, which
 // left nothing safe to delete), and starts the next queued run, if any.
 func (r *Root) finishCompressJob(job *compressJob, err error) {
-	if r.compressJob != job {
+	if r.compress.Job != job {
 		return // already superseded/cancelled
 	}
 	// Read before job.cancel() below, which would otherwise make this
 	// check always true — see finishRsyncJob's own identical ordering.
 	wasCancelled := job.ctx.Err() != nil
-	r.compressJob = nil
+	r.compress.Job = nil
 	job.cancel()
 
 	switch {
 	case err != nil && !wasCancelled:
-		r.activityLog.Error(activitylog.CategoryArchive, fmt.Sprintf("%s %s: %v", compressPastTenseVerb(job.verb), job.label, err))
+		r.activity.Logger.Error(activitylog.CategoryArchive, fmt.Sprintf("%s %s: %v", compressPastTenseVerb(job.verb), job.label, err))
 		r.showError(err)
 	case !wasCancelled:
-		r.activityLog.Action(activitylog.CategoryArchive, fmt.Sprintf("%s %s", compressPastTenseVerb(job.verb), job.label))
+		r.activity.Logger.Action(activitylog.CategoryArchive, fmt.Sprintf("%s %s", compressPastTenseVerb(job.verb), job.label))
 		r.forEachTab(func(p *Panel) {
 			if p.path == job.destDir {
 				r.showError(p.load(p.path))
@@ -334,11 +334,11 @@ func compressPastTenseVerb(verb string) string {
 // any — Ctrl+C's own third target alongside cancelPasteJob/
 // cancelRsyncJob (see RequestCancel).
 func (r *Root) cancelCompressJob() {
-	if r.compressJob == nil {
+	if r.compress.Job == nil {
 		return
 	}
-	r.compressJob.cancel()
-	r.compressQueue = nil
+	r.compress.Job.cancel()
+	r.compress.Queue = nil
 }
 
 // cancelCompressKeepQueue is cancelCompressJob's narrower sibling —
@@ -352,21 +352,21 @@ func (r *Root) cancelCompressJob() {
 // runs — real, given a confirmation dialog sits between the click/
 // chord and this call.
 func (r *Root) cancelCompressKeepQueue() {
-	if r.compressJob == nil {
+	if r.compress.Job == nil {
 		return
 	}
-	r.compressJob.cancel()
+	r.compress.Job.cancel()
 	r.advanceCompressQueue()
 }
 
 // advanceCompressQueue starts the next queued Compress/Extract, if any
 // — the same shape advanceRsyncQueue already has.
 func (r *Root) advanceCompressQueue() {
-	if len(r.compressQueue) == 0 {
+	if len(r.compress.Queue) == 0 {
 		return
 	}
-	next := r.compressQueue[0]
-	r.compressQueue = r.compressQueue[1:]
+	next := r.compress.Queue[0]
+	r.compress.Queue = r.compress.Queue[1:]
 	r.reallyStartCompressJob(next)
 }
 

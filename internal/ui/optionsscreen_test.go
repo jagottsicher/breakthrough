@@ -31,7 +31,7 @@ func selectOptionCategory(t *testing.T, r *Root, name string) {
 	t.Helper()
 	for i, cat := range optionCategories() {
 		if cat.name == name {
-			r.optionsCategories.SetCurrentItem(i)
+			r.options.Categories.SetCurrentItem(i)
 			return
 		}
 	}
@@ -71,10 +71,10 @@ func confirmReset(t *testing.T, r *Root) {
 func TestOpenOptionsFocusesCategoriesNotSettings(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 
-	if !r.optionsCategories.HasFocus() {
+	if !r.options.Categories.HasFocus() {
 		t.Error("opening Options should focus the category list, not the settings table")
 	}
-	if r.optionsTable.HasFocus() {
+	if r.options.Table.HasFocus() {
 		t.Error("opening Options should not already have focus on the settings table")
 	}
 }
@@ -214,9 +214,9 @@ func TestOptionsTableKeyMOpensTypedEntryOnARowThatHasIt(t *testing.T) {
 	if !ok {
 		t.Fatal("no consigliere_anthropic_model row")
 	}
-	r.optionsTable.Select(row, 0)
+	r.options.Table.Select(row, 0)
 
-	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModNone), func(tview.Primitive) {})
+	r.options.Table.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != optionsInputPage {
 		t.Errorf("activePage = %q, want the free-text input open", r.activePage)
@@ -234,10 +234,10 @@ func TestOptionsTableKeyMIsANoOpOnARowWithoutTypedEntry(t *testing.T) {
 	if !ok {
 		t.Fatal("no color_scheme row")
 	}
-	r.optionsTable.Select(row, 0)
+	r.options.Table.Select(row, 0)
 	before := r.activePage
 
-	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModNone), func(tview.Primitive) {})
+	r.options.Table.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != before {
 		t.Errorf("activePage changed to %q after \"m\" on a row with no typed entry", r.activePage)
@@ -262,8 +262,8 @@ func TestEditOptionValueBlankCommitIsNoOpWithoutEmptyMeansDefault(t *testing.T) 
 	}
 
 	r.editOptionValue(opt)
-	r.optionsInput.SetText("")
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText("")
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if applied {
 		t.Error("apply should not have been called for a blank commit without emptyMeansDefault")
@@ -288,8 +288,8 @@ func TestEditOptionValueBlankCommitAppliesWhenEmptyMeansDefault(t *testing.T) {
 	}
 
 	r.editOptionValue(opt)
-	r.optionsInput.SetText("")
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText("")
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if !applied {
 		t.Fatal("apply should have been called with \"\" for a blank commit with emptyMeansDefault")
@@ -413,7 +413,7 @@ func TestDefaultHintAppearsOnlyWhileTheValueDiffers(t *testing.T) {
 		t.Fatal("no show_hidden row")
 	}
 	hint := func() string {
-		return strings.TrimSpace(r.optionsTable.GetCell(row, optionsColDefault).Text)
+		return strings.TrimSpace(r.options.Table.GetCell(row, optionsColDefault).Text)
 	}
 
 	if got := hint(); got != "" {
@@ -444,7 +444,7 @@ func TestDefaultHintRendersInTheSameVocabularyAsTheValue(t *testing.T) {
 	}
 	r.activateOptionRow(row) // make it differ, so the hint shows at all
 
-	got := strings.TrimSpace(r.optionsTable.GetCell(row, optionsColDefault).Text)
+	got := strings.TrimSpace(r.options.Table.GetCell(row, optionsColDefault).Text)
 	if strings.Contains(got, "true") || strings.Contains(got, "false") {
 		t.Errorf("default hint = %q, want the radio glyph rather than a boolean literal", got)
 	}
@@ -563,10 +563,10 @@ func TestOptionsSpaceActivatesTheSelectedRow(t *testing.T) {
 	if !ok {
 		t.Fatal("no show_hidden row")
 	}
-	r.optionsTable.Select(row, 0)
+	r.options.Table.Select(row, 0)
 	before := r.panel.showHidden
 
-	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), func(tview.Primitive) {})
+	r.options.Table.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), func(tview.Primitive) {})
 
 	if r.panel.showHidden == before {
 		t.Error("Space didn't toggle the selected setting")
@@ -579,11 +579,11 @@ func TestOptionsSpaceActivatesTheSelectedRow(t *testing.T) {
 func TestOptionsInfoOpensAndCloses(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 
-	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '?', tcell.ModNone), func(tview.Primitive) {})
+	r.options.Table.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '?', tcell.ModNone), func(tview.Primitive) {})
 	if r.activePage != optionsInfoPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, optionsInfoPage)
 	}
-	if got := r.optionsInfo.GetText(true); !strings.Contains(got, "Config key:") {
+	if got := r.options.Info.GetText(true); !strings.Contains(got, "Config key:") {
 		t.Errorf("info text = %q, want it to name the config key", got)
 	}
 
@@ -598,7 +598,7 @@ func TestOptionsInfoOpensAndCloses(t *testing.T) {
 // could have caught: tview.TextView.InputHandler only calls its own
 // done func on Escape/Enter/Tab/Backtab if one was actually set
 // (verified directly against its source) — with none ever bound to
-// r.optionsInfo, a real Escape keypress on the focused popup did
+// r.options.Info, a real Escape keypress on the focused popup did
 // nothing at all, leaving no keyboard way to close it (only the
 // mouse-only captureOutsideClick). Drives the actual widget's own
 // InputHandler, the same way a real keypress would reach it once it
@@ -606,12 +606,12 @@ func TestOptionsInfoOpensAndCloses(t *testing.T) {
 func TestOptionsInfoRealEscapeKeypressCloses(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 
-	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '?', tcell.ModNone), func(tview.Primitive) {})
+	r.options.Table.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '?', tcell.ModNone), func(tview.Primitive) {})
 	if r.activePage != optionsInfoPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, optionsInfoPage)
 	}
 
-	r.optionsInfo.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Info.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != optionsPage {
 		t.Errorf("activePage = %q after a real Escape keypress on the info popup, want back on %q", r.activePage, optionsPage)
@@ -688,8 +688,8 @@ func TestOptionsIntegerEditCommitsOnEnter(t *testing.T) {
 		t.Fatalf("activePage = %q, want the input dialog %q", r.activePage, optionsInputPage)
 	}
 
-	r.optionsInput.SetText("45")
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText("45")
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.settings.TrashMaxAgeDays != 45 {
 		t.Errorf("TrashMaxAgeDays = %d, want 45", r.settings.TrashMaxAgeDays)
@@ -712,8 +712,8 @@ func TestOptionsIntegerEditEscapeDiscards(t *testing.T) {
 	original := r.settings.TrashMaxAgeDays
 
 	r.activateOptionRow(row)
-	r.optionsInput.SetText("999")
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText("999")
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.settings.TrashMaxAgeDays != original {
 		t.Errorf("TrashMaxAgeDays = %d after Escape, want the original %d", r.settings.TrashMaxAgeDays, original)
@@ -762,7 +762,7 @@ func TestBooleanOptionsRenderAsRadioGlyphs(t *testing.T) {
 		t.Fatal("no show_hidden row")
 	}
 
-	before := strings.TrimSpace(r.optionsTable.GetCell(row, optionsColValue).Text)
+	before := strings.TrimSpace(r.options.Table.GetCell(row, optionsColValue).Text)
 	if want := checkboxText(r.panel.showHidden); before != want {
 		t.Errorf("value cell = %q, want the radio glyph %q", before, want)
 	}
@@ -772,7 +772,7 @@ func TestBooleanOptionsRenderAsRadioGlyphs(t *testing.T) {
 
 	r.activateOptionRow(row)
 
-	after := strings.TrimSpace(r.optionsTable.GetCell(row, optionsColValue).Text)
+	after := strings.TrimSpace(r.options.Table.GetCell(row, optionsColValue).Text)
 	if after == before {
 		t.Errorf("the glyph didn't change on toggle (still %q)", after)
 	}
@@ -788,14 +788,14 @@ func TestBooleanOptionsRenderAsRadioGlyphs(t *testing.T) {
 func TestOptionsArrowKeysMoveBetweenPanes(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 
-	r.app.SetFocus(r.optionsCategories)
-	r.optionsCategories.InputHandler()(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone), func(tview.Primitive) {})
-	if !r.optionsTable.HasFocus() {
+	r.app.SetFocus(r.options.Categories)
+	r.options.Categories.InputHandler()(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone), func(tview.Primitive) {})
+	if !r.options.Table.HasFocus() {
 		t.Error("Right from the categories should focus the settings table")
 	}
 
-	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone), func(tview.Primitive) {})
-	if !r.optionsCategories.HasFocus() {
+	r.options.Table.InputHandler()(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone), func(tview.Primitive) {})
+	if !r.options.Categories.HasFocus() {
 		t.Error("Left from the settings table should focus the categories")
 	}
 }
@@ -807,10 +807,10 @@ func TestOptionsArrowKeysMoveBetweenPanes(t *testing.T) {
 func TestOptionsLeftOnTheCategoriesIsInert(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 
-	r.app.SetFocus(r.optionsCategories)
-	r.optionsCategories.InputHandler()(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.app.SetFocus(r.options.Categories)
+	r.options.Categories.InputHandler()(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone), func(tview.Primitive) {})
 
-	if !r.optionsCategories.HasFocus() {
+	if !r.options.Categories.HasFocus() {
 		t.Error("Left on the leftmost pane moved focus somewhere, want it left alone")
 	}
 }
@@ -861,7 +861,7 @@ func TestCopyMoveIsASubsectionOfBehaviorNotItsOwnCategory(t *testing.T) {
 	if headerRow == -1 {
 		t.Fatal("no \"Copy & Move\" subsection header found under Behavior")
 	}
-	if got := strings.TrimSpace(r.optionsTable.GetCell(headerRow, optionsColLabel).Text); got != "Copy & Move" {
+	if got := strings.TrimSpace(r.options.Table.GetCell(headerRow, optionsColLabel).Text); got != "Copy & Move" {
 		t.Errorf("header row label = %q, want %q", got, "Copy & Move")
 	}
 
@@ -1046,7 +1046,7 @@ func TestOptionAtRowReturnsFalseForHeaderRow(t *testing.T) {
 func TestOptionsArrowKeysSkipTheSubsectionHeader(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	selectOptionCategory(t, r, "Behavior")
-	r.app.SetFocus(r.optionsTable)
+	r.app.SetFocus(r.options.Table)
 
 	headerRow, ok := func() (int, bool) {
 		for i, dr := range optionCategoryDisplayRows(r, mustOptionCategory(t, "Behavior")) {
@@ -1060,11 +1060,11 @@ func TestOptionsArrowKeysSkipTheSubsectionHeader(t *testing.T) {
 		t.Fatal("no \"Copy & Move\" header found under Behavior")
 	}
 
-	r.optionsTable.Select(0, 0)
-	rowCount := r.optionsTable.GetRowCount()
+	r.options.Table.Select(0, 0)
+	rowCount := r.options.Table.GetRowCount()
 	for i := 0; i < rowCount; i++ {
-		r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
-		row, _ := r.optionsTable.GetSelection()
+		r.options.Table.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+		row, _ := r.options.Table.GetSelection()
 		if row == headerRow {
 			t.Fatalf("cursor landed on the header row (%d) after %d Down presses", headerRow, i+1)
 		}
@@ -1172,10 +1172,10 @@ func TestRenderOptionsRecoversFromOutOfRangeCursorOntoARealOption(t *testing.T) 
 	r, _ := newOptionsRoot(t)
 	selectOptionCategory(t, r, "Behavior")
 
-	r.optionsTable.Select(9999, 0) // simulate a cursor left over from a longer category
+	r.options.Table.Select(9999, 0) // simulate a cursor left over from a longer category
 	r.renderOptions()
 
-	row, _ := r.optionsTable.GetSelection()
+	row, _ := r.options.Table.GetSelection()
 	opt, ok := r.optionAtRow(row)
 	if !ok {
 		t.Fatalf("recovered cursor landed on row %d, which isn't a real option", row)
@@ -1205,7 +1205,7 @@ func TestClickingACategoryDoesNotCloseTheScreen(t *testing.T) {
 
 	// A point inside the categories pane — which is emphatically part of
 	// the Options screen, however "outside the focused widget" it is.
-	x, y, _, _ := r.optionsCategories.GetRect()
+	x, y, _, _ := r.options.Categories.GetRect()
 	r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(x+1, y+1, tcell.Button1, 0))
 
 	if r.activePage != optionsPage {
@@ -1228,7 +1228,7 @@ func TestClickingTheButtonRowDoesNotCloseTheScreen(t *testing.T) {
 	r.SetRect(0, 0, 110, 30)
 	r.Draw(screen)
 
-	x, y, _, _ := r.optionsResetAllBtn.GetRect()
+	x, y, _, _ := r.options.ResetAllBtn.GetRect()
 	r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(x+1, y, tcell.Button1, 0))
 
 	if r.activePage != optionsPage {
@@ -1271,10 +1271,10 @@ func TestOptionsFocusIsVisiblyDistinct(t *testing.T) {
 	r.Draw(screen)
 
 	// The first row of each pane is the selected one on a fresh open.
-	catX, catY, _, _ := r.optionsCategories.GetInnerRect()
-	tableX, tableY, _, _ := r.optionsTable.GetInnerRect()
+	catX, catY, _, _ := r.options.Categories.GetInnerRect()
+	tableX, tableY, _, _ := r.options.Table.GetInnerRect()
 
-	r.app.SetFocus(r.optionsTable)
+	r.app.SetFocus(r.options.Table)
 	if got, want := backgroundAt(tableX, tableY), r.theme.FocusedBackground; got != want {
 		t.Errorf("focused settings row drew %v, want FocusedBackground %v", got, want)
 	}
@@ -1282,7 +1282,7 @@ func TestOptionsFocusIsVisiblyDistinct(t *testing.T) {
 		t.Errorf("unfocused category row drew %v, want EditableBackground %v", got, want)
 	}
 
-	r.app.SetFocus(r.optionsCategories)
+	r.app.SetFocus(r.options.Categories)
 	if got, want := backgroundAt(catX, catY), r.theme.FocusedBackground; got != want {
 		t.Errorf("focused category row drew %v, want FocusedBackground %v", got, want)
 	}
@@ -1527,7 +1527,7 @@ func TestLabelCategoryRowsShowTheirOwnLabelColorBehindTheFieldName(t *testing.T)
 	for row := 0; row < config.MaxLabelID; row++ {
 		id := row + 1
 		want := r.theme.LabelBackground(id)
-		cell := r.optionsTable.GetCell(row, optionsColLabel)
+		cell := r.options.Table.GetCell(row, optionsColLabel)
 		_, got, _ := cell.Style.Decompose()
 		if got != want {
 			t.Errorf("row %d (label %d) cell background = %v, want %v", row, id, got, want)
