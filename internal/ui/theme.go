@@ -395,7 +395,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		styleButton(r.compareTreeShowSameBtn, theme)
 		styleButton(r.compareTreeCloseBtn, theme)
 
-		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+		// FocusedBackground, fixed — same reasoning mounts.TitleBar's own
 		// fixed FocusedBackground follows.
 		r.compareTreeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 		r.compareTreeTitleBar.SetTextColor(theme.TextColor)
@@ -457,7 +457,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		// SurfaceBackground, the same floating-chrome surface Help's
 		// own helpView uses (see above) — a chat overlay reads as the
 		// same kind of floating dialog, not a full-bleed catalog body
-		// the way viewerView/mountsLayout are.
+		// the way viewerView/mounts.Layout are.
 		r.consigliereHistory.SetBackgroundColor(theme.SurfaceBackground)
 		r.consigliereHistory.SetTextColor(theme.TextColor)
 	}
@@ -481,7 +481,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	}
 
 	if r.viewerView != nil {
-		// PanelBackground, not SurfaceBackground — see mountsLayout's own
+		// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 		// comment: every full-bleed catalog/viewer body rests on the same
 		// background as the main panel, not the lighter floating-chrome
 		// surface.

@@ -1219,7 +1219,7 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	if r.toolboxTable == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.toolboxLayout.SetBackgroundColor(theme.PanelBackground)
 	r.toolboxTable.SetBackgroundColor(theme.PanelBackground)
@@ -1240,7 +1240,7 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	r.toolboxTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.toolboxTitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.toolboxHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.toolboxHint.SetTextColor(theme.TextColor)
 	toolboxHintText, toolboxHintSpans := buildListHint(theme, toolboxHintEntries())
