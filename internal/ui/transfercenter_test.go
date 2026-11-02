@@ -29,7 +29,7 @@ func TestGCReachesAIConsigliereFromTransferCenter(t *testing.T) {
 	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
 		t.Fatal("the resolving 'C' should have been consumed")
 	}
-	if !r.consigliereVisible {
+	if !r.consigliere.Visible {
 		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
 	}
 }
@@ -47,19 +47,19 @@ func TestOpenTransferCenterShowsRunningAndFinishedOperations(t *testing.T) {
 
 	r.openTransferCenter()
 
-	if len(r.transferCenterOps) != 2 {
-		t.Fatalf("transferCenterOps has %d entries, want 2", len(r.transferCenterOps))
+	if len(r.transfer.Ops) != 2 {
+		t.Fatalf("transfer.Ops has %d entries, want 2", len(r.transfer.Ops))
 	}
 	// Newest first (see reloadTransferCenter's own doc comment) — doneID
 	// started after runningID, so it comes first.
-	if r.transferCenterOps[0].ID != doneID {
-		t.Errorf("first entry = %+v, want ID %d (newest first)", r.transferCenterOps[0], doneID)
+	if r.transfer.Ops[0].ID != doneID {
+		t.Errorf("first entry = %+v, want ID %d (newest first)", r.transfer.Ops[0], doneID)
 	}
-	if r.transferCenterOps[1].ID != runningID {
-		t.Errorf("second entry = %+v, want ID %d", r.transferCenterOps[1], runningID)
+	if r.transfer.Ops[1].ID != runningID {
+		t.Errorf("second entry = %+v, want ID %d", r.transfer.Ops[1], runningID)
 	}
 
-	text := r.transferCenterTable.GetCell(1, transferCenterColResult).Text
+	text := r.transfer.Table.GetCell(1, transferCenterColResult).Text
 	if !strings.Contains(text, "permission denied") {
 		t.Errorf("Result column for the failed entry = %q, want it to include the error", text)
 	}
@@ -73,7 +73,7 @@ func TestReloadTransferCenterShowsPlaceholderWhenEmpty(t *testing.T) {
 	}
 	r.openTransferCenter()
 
-	cell := r.transferCenterTable.GetCell(1, 0)
+	cell := r.transfer.Table.GetCell(1, 0)
 	if cell == nil || !strings.Contains(cell.Text, "Nothing running") {
 		t.Errorf("empty state should show the placeholder, got %+v", cell)
 	}
@@ -86,14 +86,14 @@ func TestTransferCenterLiveUpdatesWhileOpen(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.openTransferCenter()
-	if len(r.transferCenterOps) != 0 {
-		t.Fatalf("setup: expected no operations yet, got %d", len(r.transferCenterOps))
+	if len(r.transfer.Ops) != 0 {
+		t.Fatalf("setup: expected no operations yet, got %d", len(r.transfer.Ops))
 	}
 
 	r.operations.Start(string(notify.CategoryPaste), "/src", "/dst")
 
-	if len(r.transferCenterOps) != 1 {
-		t.Errorf("transferCenterOps should have updated live via Subscribe while the screen is open, got %d entries", len(r.transferCenterOps))
+	if len(r.transfer.Ops) != 1 {
+		t.Errorf("transfer.Ops should have updated live via Subscribe while the screen is open, got %d entries", len(r.transfer.Ops))
 	}
 }
 
@@ -106,8 +106,8 @@ func TestTransferCenterDoesNotUpdateWhileClosed(t *testing.T) {
 	// Never opened — activePage isn't transferCenterPage.
 	r.operations.Start(string(notify.CategoryPaste), "/src", "/dst")
 
-	if r.transferCenterOps != nil {
-		t.Errorf("transferCenterOps should stay unset while the screen was never opened, got %+v", r.transferCenterOps)
+	if r.transfer.Ops != nil {
+		t.Errorf("transfer.Ops should stay unset while the screen was never opened, got %+v", r.transfer.Ops)
 	}
 }
 
@@ -120,7 +120,7 @@ func TestCancelSelectedTransferCenterOperationCancelsTheLivePasteJob(t *testing.
 	job := newPasteTestJob(r, false, destDir, 1)
 	job.opID = r.operations.Start(string(notify.CategoryPaste), "/src", destDir)
 	r.openTransferCenter()
-	r.transferCenterTable.Select(1, 0)
+	r.transfer.Table.Select(1, 0)
 
 	r.cancelSelectedTransferCenterOperation()
 
@@ -142,7 +142,7 @@ func TestCancelSelectedTransferCenterOperationIgnoresAFinishedRow(t *testing.T) 
 	id := r.operations.Start(string(notify.CategoryPaste), "/src", "/dst")
 	r.operations.Finish(id, operations.OutcomeSucceeded, 1, 0, 0, nil)
 	r.openTransferCenter()
-	r.transferCenterTable.Select(1, 0)
+	r.transfer.Table.Select(1, 0)
 
 	r.cancelSelectedTransferCenterOperation() // must not panic on a nil r.pasteJob
 
@@ -161,7 +161,7 @@ func TestPauseResumeSelectedTransferCenterOperationTogglesPasteState(t *testing.
 	job := newPasteTestJob(r, false, destDir, 1)
 	job.opID = r.operations.Start(string(notify.CategoryPaste), "/src", destDir)
 	r.openTransferCenter()
-	r.transferCenterTable.Select(1, 0)
+	r.transfer.Table.Select(1, 0)
 
 	r.pauseResumeSelectedTransferCenterOperation()
 	if got := r.operations.List()[0].State; got != operations.StatePaused {
@@ -182,7 +182,7 @@ func TestPauseResumeSelectedTransferCenterOperationIgnoresRsync(t *testing.T) {
 	job.opID = r.operations.Start(string(notify.CategoryRsync), "/a", r.panel.path)
 	r.rsync.Job = job
 	r.openTransferCenter()
-	r.transferCenterTable.Select(1, 0)
+	r.transfer.Table.Select(1, 0)
 
 	r.pauseResumeSelectedTransferCenterOperation() // must be a no-op, not a panic
 

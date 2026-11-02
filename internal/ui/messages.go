@@ -645,14 +645,14 @@ func (r *Root) applyMessagesTheme(theme config.ResolvedTheme) {
 	if r.messagesTable == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.messagesLayout.SetBackgroundColor(theme.PanelBackground)
 	r.messagesTable.SetBackgroundColor(theme.PanelBackground)
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
-	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// to sshKeysTable/connectionMenuTable/sed.PreviewTable/tabSwitcher/
 	// gitBreach's tables, for the identical reason.
 	r.messagesTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
@@ -661,7 +661,7 @@ func (r *Root) applyMessagesTheme(theme config.ResolvedTheme) {
 	r.messagesTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.messagesTitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.messagesHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.messagesHint.SetTextColor(theme.TextColor)
 	messagesHintText, messagesHintSpans := buildListHint(theme, messagesHintEntries())

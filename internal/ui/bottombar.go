@@ -479,13 +479,13 @@ func (r *Root) buildStatusBar() string {
 	// same reason: a separate process tree, free to run alongside
 	// either of the other two (see compressjob.go's own package doc
 	// comment).
-	r.compressCancelSpan = buttonBarSpan{}
-	if r.compressJob != nil {
-		write(compressProgressText(r.compressJob, len(r.compressQueue)))
+	r.compress.CancelSpan = buttonBarSpan{}
+	if r.compress.Job != nil {
+		write(compressProgressText(r.compress.Job, len(r.compress.Queue)))
 		write(" ")
 		compressCancelStart := col
 		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
-		r.compressCancelSpan = buttonBarSpan{startCol: compressCancelStart, endCol: col, run: func(r *Root) { r.confirmCancelCurrentCompress() }}
+		r.compress.CancelSpan = buttonBarSpan{startCol: compressCancelStart, endCol: col, run: func(r *Root) { r.confirmCancelCurrentCompress() }}
 		sep()
 	}
 
@@ -563,7 +563,7 @@ func (r *Root) buildStatusBar() string {
 	}
 	// Stale otherwise — same "zero-value, never matches a click" shape
 	// every other optional segment's own span already follows (see
-	// pasteCancelSpan/rsync.CancelSpan/compressCancelSpan/
+	// pasteCancelSpan/rsync.CancelSpan/compress.CancelSpan/
 	// labelScanCancelSpan just above): without this, a click at this
 	// segment's last-known column could still fire after Git Status
 	// itself is toggled off or the panel leaves a repo.
@@ -1207,7 +1207,7 @@ func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.Even
 	x, _ := event.Position()
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
 	col := x - rectX
-	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsync.CancelSpan, r.compressCancelSpan, r.labelScanCancelSpan, r.gitStatusSpan} {
+	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsync.CancelSpan, r.compress.CancelSpan, r.labelScanCancelSpan, r.gitStatusSpan} {
 		if span.run != nil && col >= span.startCol && col < span.endCol {
 			span.run(r)
 			break
@@ -1726,11 +1726,11 @@ func (r *Root) runEditor(path string, line int) {
 // directory afterward, unchanged.
 func (r *Root) runCommandOnFileAndReload(command, path string, line int) {
 	if err := r.runCommandOnFile(command, path, line); err != nil {
-		r.activityLog.Error(activitylog.CategoryShell, fmt.Sprintf("run %s on %s: %v", command, path, err))
+		r.activity.Logger.Error(activitylog.CategoryShell, fmt.Sprintf("run %s on %s: %v", command, path, err))
 		r.showError(fmt.Errorf("run %s on %s: %w", command, path, err))
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryShell, fmt.Sprintf("ran %s on %s", command, path))
+	r.activity.Logger.Action(activitylog.CategoryShell, fmt.Sprintf("ran %s on %s", command, path))
 	if r.panel.searchMode {
 		return
 	}
@@ -1819,11 +1819,11 @@ func (r *Root) openRemoteEntryWithCommand(remote remotefs.Client, remotePath, co
 	}
 
 	if err := r.runCommandOnFile(command, localPath, 0); err != nil {
-		r.activityLog.Error(activitylog.CategoryShell, fmt.Sprintf("run %s on %s: %v", command, remotePath, err))
+		r.activity.Logger.Error(activitylog.CategoryShell, fmt.Sprintf("run %s on %s: %v", command, remotePath, err))
 		r.showError(fmt.Errorf("open %s: %w", remotePath, err))
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryShell, fmt.Sprintf("ran %s on %s", command, remotePath))
+	r.activity.Logger.Action(activitylog.CategoryShell, fmt.Sprintf("ran %s on %s", command, remotePath))
 
 	r.showError(r.finishRemoteEdit(remote, remotePath, localPath, before))
 }
@@ -1846,10 +1846,10 @@ func (r *Root) finishRemoteEdit(remote remotefs.Client, remotePath, localPath st
 	}
 
 	if err := copyTransferFile(transferSide{}, transferSide{client: remote}, localPath, remotePath); err != nil {
-		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("upload changes to %s: %v", remotePath, err))
+		r.activity.Logger.Error(activitylog.CategoryRemote, fmt.Sprintf("upload changes to %s: %v", remotePath, err))
 		return fmt.Errorf("uploading changes back to %s: %w", remotePath, err)
 	}
-	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("uploaded changes to %s", remotePath))
+	r.activity.Logger.Action(activitylog.CategoryRemote, fmt.Sprintf("uploaded changes to %s", remotePath))
 	return r.panel.load(r.panel.path)
 }
 

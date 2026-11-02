@@ -340,16 +340,16 @@ func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 	// responsible for its own entry point into the sidebar, the same
 	// "single-node ring" case Log Audit's selection/detail screens
 	// already have. A no-op whenever the sidebar isn't even open.
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.consigliereInput)
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		if event.Key() == tcell.KeyBacktab {
-			if r.consigliereScrollbar.maxOffset() > 0 {
-				r.app.SetFocus(r.consigliereHistory)
+			if r.consigliere.Scrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliere.History)
 			} else {
-				r.app.SetFocus(r.consigliereInput)
+				r.app.SetFocus(r.consigliere.Input)
 			}
 			return nil
 		}
@@ -393,25 +393,25 @@ func (r *Root) applyFirewallTheme(theme config.ResolvedTheme) {
 		// (black) background instead of SurfaceBackground — caught per the
 		// user's own explicit report that the "tool pages" didn't match
 		// the rest of the theme.
-		// PanelBackground, not SurfaceBackground — see mountsLayout's
+		// PanelBackground, not SurfaceBackground — see mounts.Layout's
 		// own identical comment (mounts.go) for the full reasoning.
 		r.firewallLayout.SetBackgroundColor(theme.PanelBackground)
 		r.firewallTable.SetBackgroundColor(theme.PanelBackground)
 		// Without this, tview's own default selected-cell style just
 		// reverses each cell's own foreground into a background instead
 		// of using one consistent selection bar — the same fix already
-		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
+		// applied to sshKeysTable/connectionMenuTable/sed.PreviewTable/
 		// tabSwitcher/gitBreach's tables, for the identical reason.
 		r.firewallTable.SetSelectedStyle(tcell.StyleDefault.
 			Background(theme.SelectionBackground).
 			Foreground(theme.TextColor))
 
-		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+		// FocusedBackground, fixed — same reasoning mounts.TitleBar's own
 		// fixed FocusedBackground above follows.
 		r.firewallTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 		r.firewallTitleBar.SetTextColor(theme.TextColor)
 		// SurfaceBackground/TextColor, matching the main screen's own
-		// buttonBar/statusBar — see mountsHint's own identical comment.
+		// buttonBar/statusBar — see mounts.Hint's own identical comment.
 		r.firewallHint.SetBackgroundColor(theme.SurfaceBackground)
 		r.firewallHint.SetTextColor(theme.TextColor)
 		firewallHintText, firewallHintSpans := buildListHint(theme, firewallHintEntries())

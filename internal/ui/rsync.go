@@ -583,7 +583,7 @@ func (r *Root) newRsyncPickButtons() *tview.Flex {
 // newRsyncButtons builds rsync.Form's own action row once, from
 // NewRoot — a real Cancel/Run button pair, the same established shape
 // newDuplicateButtons/newChmodButtons/newSearchButtons already use for
-// theirs (see duplicateButtons' own doc comment on root.go for why
+// theirs (see duplicate.Buttons' own doc comment on root.go for why
 // this, not a vertical List).
 func (r *Root) newRsyncButtons() *tview.Flex {
 	r.rsync.CancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
@@ -624,7 +624,7 @@ func (r *Root) newRsyncButtons() *tview.Flex {
 			// Form.SetFocus(0), not a direct
 			// r.app.SetFocus(r.rsync.SourceField) — the identical real,
 			// user-reported bug connectdialog.go's own
-			// connectConnectBtn.SetExitFunc found and fixed first (see
+			// connect.ConnectBtn.SetExitFunc found and fixed first (see
 			// its own doc comment for the full tview.Form internals):
 			// naming the field directly here left rsync.Form's own
 			// focusedElement counter stale, so the next Backtab from

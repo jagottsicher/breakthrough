@@ -27,7 +27,7 @@ func sshHomeDir(t *testing.T) string {
 
 // selectSSHKeysGenerateAlgorithm drives the real Algorithm dropdown's
 // own SetCurrentOption — which fires its own SetOptions callback
-// synchronously (see duplicateStrategyField's own doc comment in
+// synchronously (see duplicate.StrategyField's own doc comment in
 // duplicate.go for the exact mechanism) — rather than duplicating that
 // callback's own logic inline, so a test exercising it actually pins
 // the real code path.

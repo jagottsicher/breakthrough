@@ -151,7 +151,7 @@ func TestCaptureStatusBarMouseClickOnGitStatusOpensGitBreach(t *testing.T) {
 
 // TestGitStatusSpanIsStaleWhenSettingIsOff pins the "zero-value, never
 // matches a click" contract every other optional status-bar span
-// already follows (see rsync.CancelSpan/compressCancelSpan): toggling
+// already follows (see rsync.CancelSpan/compress.CancelSpan): toggling
 // Git Status off must clear gitStatusSpan too, not just the visible
 // text, or a stale column range from before the toggle could still
 // fire.

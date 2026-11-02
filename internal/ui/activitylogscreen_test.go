@@ -163,12 +163,12 @@ func TestOpenActivityLogPopulatesTableFromRealFile(t *testing.T) {
 		t.Fatalf("activePage = %q, want the Activity Log screen", r.activePage)
 	}
 	// Header row (0) + 3 entries.
-	if got, want := r.activityLogTable.GetRowCount(), 4; got != want {
+	if got, want := r.activity.Table.GetRowCount(), 4; got != want {
 		t.Fatalf("table has %d rows, want %d (header + 3 entries)", got, want)
 	}
 	// Newest first (see readActivityLogEntries): row 1 is the fixture's
 	// own last, latest-timestamped entry.
-	if got, want := r.activityLogTable.GetCell(1, activityLogColMessage).Text, "chmod 644 report.pdf"; got != want {
+	if got, want := r.activity.Table.GetCell(1, activityLogColMessage).Text, "chmod 644 report.pdf"; got != want {
 		t.Errorf("row 1 Message = %q, want %q (newest entry first)", got, want)
 	}
 }
@@ -189,8 +189,8 @@ func TestOpenActivityLogFocusesTable(t *testing.T) {
 
 	r.openActivityLog()
 
-	if !r.activityLogTable.HasFocus() {
-		t.Error("openActivityLog should focus the table, not activityLogKeywordField")
+	if !r.activity.Table.HasFocus() {
+		t.Error("openActivityLog should focus the table, not activity.KeywordField")
 	}
 }
 
@@ -217,7 +217,7 @@ func TestGCReachesAIConsigliereFromActivityLog(t *testing.T) {
 	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
 		t.Fatal("the resolving 'C' should have been consumed")
 	}
-	if !r.consigliereVisible {
+	if !r.consigliere.Visible {
 		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
 	}
 }
@@ -234,10 +234,10 @@ func TestRenderActivityLogShowsPlaceholderWhenEmpty(t *testing.T) {
 
 	r.openActivityLog()
 
-	if got := r.activityLogTable.GetRowCount(); got != 2 {
+	if got := r.activity.Table.GetRowCount(); got != 2 {
 		t.Fatalf("table has %d rows, want 2 (header + placeholder)", got)
 	}
-	placeholder, _ := r.activityLogTable.GetCell(1, activityLogColTime).Text, ""
+	placeholder, _ := r.activity.Table.GetCell(1, activityLogColTime).Text, ""
 	if placeholder != "No activity logged yet." {
 		t.Errorf("placeholder = %q, want %q", placeholder, "No activity logged yet.")
 	}
@@ -257,9 +257,9 @@ func TestRenderActivityLogFiltersLiveAsYouType(t *testing.T) {
 	}
 	r.openActivityLog()
 
-	r.activityLogKeywordField.SetText("chmod")
+	r.activity.KeywordField.SetText("chmod")
 
-	if got, want := r.activityLogTable.GetRowCount(), 2; got != want {
+	if got, want := r.activity.Table.GetRowCount(), 2; got != want {
 		t.Fatalf("table has %d rows after typing a keyword, want %d (header + 1 matching entry)", got, want)
 	}
 }
@@ -292,14 +292,14 @@ func TestCaptureActivityLogTableKeyRReloads(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.openActivityLog()
-	if got, want := r.activityLogTable.GetRowCount(), 2; got != want {
+	if got, want := r.activity.Table.GetRowCount(), 2; got != want {
 		t.Fatalf("table has %d rows before logging anything, want %d (header + placeholder)", got, want)
 	}
 
 	writeActivityLogLines(t, systemDir, activityLogFixture()...)
 	r.captureActivityLogTableKey(tcell.NewEventKey(tcell.KeyRune, 'r', tcell.ModNone))
 
-	if got, want := r.activityLogTable.GetRowCount(), 4; got != want {
+	if got, want := r.activity.Table.GetRowCount(), 4; got != want {
 		t.Errorf("table has %d rows after \"r\", want %d (header + 3 entries) — reload didn't pick up the new file content", got, want)
 	}
 }
@@ -315,13 +315,13 @@ func TestActivityLogReloadIntoAnErrorNeverHangsOnDown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.openActivityLog()              // no file yet — the "No activity logged yet." placeholder
-	r.activityLogTable.Select(15, 0) // simulate a stale cursor from a much longer previous list
+	r.openActivityLog()            // no file yet — the "No activity logged yet." placeholder
+	r.activity.Table.Select(15, 0) // simulate a stale cursor from a much longer previous list
 
 	r.reloadActivityLog() // still nothing to show — re-renders down to just 2 rows
 
 	callWithTimeout(t, 2*time.Second, func() {
-		r.activityLogTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+		r.activity.Table.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
 	})
 }
 
@@ -345,11 +345,11 @@ func TestActivityLogErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
 	}
 	defer screen.Fini()
 	screen.SetSize(100, 40)
-	r.activityLogTable.SetRect(0, 0, 100, 40)
-	r.activityLogTable.Draw(screen) // the real app's own ordinary redraw
+	r.activity.Table.SetRect(0, 0, 100, 40)
+	r.activity.Table.Draw(screen) // the real app's own ordinary redraw
 
 	callWithTimeout(t, 2*time.Second, func() {
-		r.activityLogTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+		r.activity.Table.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
 	})
 }
 
@@ -366,7 +366,7 @@ func TestCaptureActivityLogTableKeyTabFocusesKeywordField(t *testing.T) {
 
 	r.captureActivityLogTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 
-	if !r.activityLogKeywordField.HasFocus() {
+	if !r.activity.KeywordField.HasFocus() {
 		t.Error("Tab from the table should focus the keyword field")
 	}
 }
@@ -383,7 +383,7 @@ func TestActivityLogFieldDoneEscapeClosesFromEitherField(t *testing.T) {
 	}
 	r.openActivityLog()
 
-	r.activityLogFieldDone(tcell.KeyEscape, r.activityLogTimeField, r.activityLogTable)
+	r.activityLogFieldDone(tcell.KeyEscape, r.activity.TimeField, r.activity.Table)
 
 	if r.activePage == activityLogPage {
 		t.Error("Escape from the keyword field should have closed the Activity Log screen")
@@ -401,7 +401,7 @@ func TestActivityLogHintUsesButtonColoredKeys(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	got := r.activityLogHint.GetText(false)
+	got := r.activity.Hint.GetText(false)
 	keyBG := colorTag(r.theme.ButtonBackground)
 	for _, want := range []string{
 		fmt.Sprintf("[:%s:]Tab[-:-:-]next field", keyBG),
@@ -409,7 +409,7 @@ func TestActivityLogHintUsesButtonColoredKeys(t *testing.T) {
 		fmt.Sprintf("[:%s:]Esc[-:-:-]close", keyBG),
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("activityLogHint text = %q, want it to contain %q", got, want)
+			t.Errorf("activity.Hint text = %q, want it to contain %q", got, want)
 		}
 	}
 }
@@ -429,9 +429,9 @@ func TestApplyThemeRecolorsActivityLogHint(t *testing.T) {
 	newTheme.ButtonBackground = 0x123456
 	r.applyTheme(newTheme)
 
-	got := r.activityLogHint.GetText(false)
+	got := r.activity.Hint.GetText(false)
 	if !strings.Contains(got, colorTag(0x123456)) {
-		t.Errorf("activityLogHint text = %q, want it recolored with the new theme's own ButtonBackground", got)
+		t.Errorf("activity.Hint text = %q, want it recolored with the new theme's own ButtonBackground", got)
 	}
 }
 
@@ -447,8 +447,8 @@ func TestActivityLogHintEscButtonClickClosesTheScreen(t *testing.T) {
 	}
 	r.openActivityLog()
 
-	escSpan := r.activityLogHintSpans[len(r.activityLogHintSpans)-1] // Esc is always last
-	clickListHint(t, r, r.activityLogHint, &r.activityLogHintSpans, escSpan.startCol)
+	escSpan := r.activity.HintSpans[len(r.activity.HintSpans)-1] // Esc is always last
+	clickListHint(t, r, r.activity.Hint, &r.activity.HintSpans, escSpan.startCol)
 
 	if r.activePage == activityLogPage {
 		t.Error("clicking the Esc button should have closed the Activity Log screen")
@@ -465,15 +465,15 @@ func TestActivityLogHintRButtonClickReloadsTheLog(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.openActivityLog()
-	if got := r.activityLogTable.GetRowCount(); got != 2 {
+	if got := r.activity.Table.GetRowCount(); got != 2 {
 		t.Fatalf("setup: table has %d rows, want 2 (header + placeholder, no log file yet)", got)
 	}
 
 	writeActivityLogLines(t, systemDir, activityLogFixture()...)
-	rSpan := r.activityLogHintSpans[1] // Tab, r, Esc, in that order
-	clickListHint(t, r, r.activityLogHint, &r.activityLogHintSpans, rSpan.startCol)
+	rSpan := r.activity.HintSpans[1] // Tab, r, Esc, in that order
+	clickListHint(t, r, r.activity.Hint, &r.activity.HintSpans, rSpan.startCol)
 
-	if got, want := r.activityLogTable.GetRowCount(), 4; got != want {
+	if got, want := r.activity.Table.GetRowCount(), 4; got != want {
 		t.Errorf("table has %d rows after clicking r, want %d (header + 3 entries) — the click should have reloaded", got, want)
 	}
 }
