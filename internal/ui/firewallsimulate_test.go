@@ -34,18 +34,18 @@ func TestOpenFirewallSimulateWorksWithoutAnActiveBackend(t *testing.T) {
 
 func TestOpenFirewallSimulateResetsToHarmlessDefaults(t *testing.T) {
 	r := newFirewallAddRuleTestRoot(t, firewall.BackendUFW)
-	r.firewallSimulatePortText = "9999"
-	r.firewallSimulateResult.SetText("stale result from a previous open")
+	r.firewall.SimulatePortText = "9999"
+	r.firewall.SimulateResult.SetText("stale result from a previous open")
 
 	r.openFirewallSimulate()
 
-	if r.firewallSimulateDirection != firewall.DirectionIn {
-		t.Errorf("Direction = %v, want DirectionIn (harmless default)", r.firewallSimulateDirection)
+	if r.firewall.SimulateDirection != firewall.DirectionIn {
+		t.Errorf("Direction = %v, want DirectionIn (harmless default)", r.firewall.SimulateDirection)
 	}
-	if r.firewallSimulatePortText != "" {
-		t.Errorf("PortText = %q, want blank (reset on every open, never sticky)", r.firewallSimulatePortText)
+	if r.firewall.SimulatePortText != "" {
+		t.Errorf("PortText = %q, want blank (reset on every open, never sticky)", r.firewall.SimulatePortText)
 	}
-	if got := r.firewallSimulateResult.GetText(true); got != "" {
+	if got := r.firewall.SimulateResult.GetText(true); got != "" {
 		t.Errorf("result = %q, want cleared on every open", got)
 	}
 }
@@ -65,12 +65,12 @@ func TestRunFirewallSimulateReportsTheMatchedRule(t *testing.T) {
 	isolateFirewallRead(t, snapshot, nil)
 	r.openFirewall()
 	r.openFirewallSimulate()
-	r.firewallSimulateProtocol = "tcp"
-	r.firewallSimulatePortText = "22"
+	r.firewall.SimulateProtocol = "tcp"
+	r.firewall.SimulatePortText = "22"
 
 	r.runFirewallSimulate()
 
-	got := r.firewallSimulateResult.GetText(true)
+	got := r.firewall.SimulateResult.GetText(true)
 	if !strings.Contains(got, "#1") || !strings.Contains(got, "ALLOW") {
 		t.Errorf("result = %q, want it to report rule #1 (ALLOW)", got)
 	}
@@ -90,12 +90,12 @@ func TestRunFirewallSimulateReportsNoMatch(t *testing.T) {
 	isolateFirewallRead(t, snapshot, nil)
 	r.openFirewall()
 	r.openFirewallSimulate()
-	r.firewallSimulateProtocol = "tcp"
-	r.firewallSimulatePortText = "22"
+	r.firewall.SimulateProtocol = "tcp"
+	r.firewall.SimulatePortText = "22"
 
 	r.runFirewallSimulate()
 
-	got := r.firewallSimulateResult.GetText(true)
+	got := r.firewall.SimulateResult.GetText(true)
 	if !strings.Contains(got, "No rule matches") || !strings.Contains(got, string(firewall.BackendUFW)) {
 		t.Errorf("result = %q, want a \"no rule matches\" message naming the active backend", got)
 	}
@@ -107,7 +107,7 @@ func TestRunFirewallSimulateReportsNoActiveBackendDistinctly(t *testing.T) {
 
 	r.runFirewallSimulate()
 
-	got := r.firewallSimulateResult.GetText(true)
+	got := r.firewall.SimulateResult.GetText(true)
 	if !strings.Contains(got, "No active firewall backend") {
 		t.Errorf("result = %q, want a message about there being no active backend at all", got)
 	}
@@ -116,14 +116,14 @@ func TestRunFirewallSimulateReportsNoActiveBackendDistinctly(t *testing.T) {
 func TestRunFirewallSimulateReportsAMalformedPortInPlace(t *testing.T) {
 	r := newFirewallAddRuleTestRoot(t, firewall.BackendUFW)
 	r.openFirewallSimulate()
-	r.firewallSimulatePortText = "not-a-port"
+	r.firewall.SimulatePortText = "not-a-port"
 
 	r.runFirewallSimulate()
 
 	if r.activePage != firewallSimulatePage {
 		t.Errorf("activePage = %q, want to stay on the Simulate form after a validation error", r.activePage)
 	}
-	if got := r.firewallSimulateResult.GetText(true); got == "" {
+	if got := r.firewall.SimulateResult.GetText(true); got == "" {
 		t.Error("result is empty, want the parse error reported in place")
 	}
 }
@@ -142,11 +142,11 @@ func TestRunFirewallSimulateIgnoresQueryDirectionMismatch(t *testing.T) {
 	isolateFirewallRead(t, snapshot, nil)
 	r.openFirewall()
 	r.openFirewallSimulate()
-	r.firewallSimulateDirection = firewall.DirectionIn // default, but explicit here for clarity
+	r.firewall.SimulateDirection = firewall.DirectionIn // default, but explicit here for clarity
 
 	r.runFirewallSimulate()
 
-	got := r.firewallSimulateResult.GetText(true)
+	got := r.firewall.SimulateResult.GetText(true)
 	if !strings.Contains(got, "No rule matches") {
 		t.Errorf("result = %q, want no match — the only rule is Outgoing", got)
 	}

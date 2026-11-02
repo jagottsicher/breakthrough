@@ -101,7 +101,7 @@ func TestGCReachesAIConsigliereFromFirewall(t *testing.T) {
 	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
 		t.Fatal("the resolving 'C' should have been consumed")
 	}
-	if !r.consigliereVisible {
+	if !r.consigliere.Visible {
 		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
 	}
 }
@@ -124,21 +124,21 @@ func TestFirewallHintArrowButtonClickMovesTheSelection(t *testing.T) {
 		},
 	}, nil)
 	r.openFirewall()
-	r.firewallTable.Select(2, 0) // the first rule row — row 1 is the "Incoming" section label
+	r.firewall.Table.Select(2, 0) // the first rule row — row 1 is the "Incoming" section label
 
 	// firewallHintEntries: {"↑","↓"} group, then r, a, t, Esc — spans[0]
 	// is "↑", spans[1] is "↓".
-	downSpan := r.firewallHintSpans[1]
-	clickListHint(t, r, r.firewallHint, &r.firewallHintSpans, downSpan.startCol)
+	downSpan := r.firewall.HintSpans[1]
+	clickListHint(t, r, r.firewall.Hint, &r.firewall.HintSpans, downSpan.startCol)
 
-	if row, _ := r.firewallTable.GetSelection(); row != 3 {
+	if row, _ := r.firewall.Table.GetSelection(); row != 3 {
 		t.Errorf("selected row = %d after clicking ↓, want 3 (one row down)", row)
 	}
 
-	upSpan := r.firewallHintSpans[0]
-	clickListHint(t, r, r.firewallHint, &r.firewallHintSpans, upSpan.startCol)
+	upSpan := r.firewall.HintSpans[0]
+	clickListHint(t, r, r.firewall.Hint, &r.firewall.HintSpans, upSpan.startCol)
 
-	if row, _ := r.firewallTable.GetSelection(); row != 2 {
+	if row, _ := r.firewall.Table.GetSelection(); row != 2 {
 		t.Errorf("selected row = %d after clicking ↑, want 2 (back up one row)", row)
 	}
 }
@@ -170,12 +170,12 @@ func TestRenderFirewallShowsTheErrorInPlaceOfRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.firewallErr = errors.New("nft: command not found")
-	r.firewallSnapshot = firewall.Snapshot{}
+	r.firewall.Err = errors.New("nft: command not found")
+	r.firewall.Snapshot = firewall.Snapshot{}
 
 	r.renderFirewall()
 
-	got := strings.TrimSpace(r.firewallTable.GetCell(1, firewallColOrder).Text)
+	got := strings.TrimSpace(r.firewall.Table.GetCell(1, firewallColOrder).Text)
 	if !strings.Contains(got, "not found") {
 		t.Errorf("row 1 = %q, want it to show the read error", got)
 	}
@@ -189,12 +189,12 @@ func TestRenderFirewallShowsNoBackendMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.firewallErr = nil
-	r.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendNone}
+	r.firewall.Err = nil
+	r.firewall.Snapshot = firewall.Snapshot{Backend: firewall.BackendNone}
 
 	r.renderFirewall()
 
-	got := strings.TrimSpace(r.firewallTable.GetCell(1, firewallColOrder).Text)
+	got := strings.TrimSpace(r.firewall.Table.GetCell(1, firewallColOrder).Text)
 	if !strings.Contains(got, "No supported firewall backend") {
 		t.Errorf("row 1 = %q, want the no-backend message", got)
 	}
@@ -216,12 +216,12 @@ func TestFirewallReloadIntoAnErrorNeverHangsOnDown(t *testing.T) {
 	}
 	isolateFirewallRead(t, firewall.Snapshot{}, errors.New("permission denied"))
 	r.openFirewall()
-	r.firewallTable.Select(15, 0) // simulate a stale cursor from a much longer previous list
+	r.firewall.Table.Select(15, 0) // simulate a stale cursor from a much longer previous list
 
 	r.reloadFirewall() // still errors — re-renders down to just 2 rows
 
 	callWithTimeout(t, 2*time.Second, func() {
-		r.firewallTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+		r.firewall.Table.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
 	})
 }
 
@@ -250,11 +250,11 @@ func TestFirewallErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
 	}
 	defer screen.Fini()
 	screen.SetSize(100, 40)
-	r.firewallTable.SetRect(0, 0, 100, 40)
-	r.firewallTable.Draw(screen) // the real app's own ordinary redraw
+	r.firewall.Table.SetRect(0, 0, 100, 40)
+	r.firewall.Table.Draw(screen) // the real app's own ordinary redraw
 
 	callWithTimeout(t, 2*time.Second, func() {
-		r.firewallTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+		r.firewall.Table.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
 	})
 }
 
@@ -266,8 +266,8 @@ func TestRenderFirewallColorsAllowAndDenyRowsApart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.firewallErr = nil
-	r.firewallSnapshot = firewall.Snapshot{
+	r.firewall.Err = nil
+	r.firewall.Snapshot = firewall.Snapshot{
 		Backend: firewall.BackendUFW,
 		Rules: []firewall.Rule{
 			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow, Protocol: "tcp", PortFrom: 22, PortTo: 22},
@@ -278,8 +278,8 @@ func TestRenderFirewallColorsAllowAndDenyRowsApart(t *testing.T) {
 	r.renderFirewall()
 
 	// Row 1 is the "Incoming" section label; the rules start at row 2.
-	allowColor := cellTextColor(r.firewallTable.GetCell(2, firewallColAction))
-	denyColor := cellTextColor(r.firewallTable.GetCell(3, firewallColAction))
+	allowColor := cellTextColor(r.firewall.Table.GetCell(2, firewallColAction))
+	denyColor := cellTextColor(r.firewall.Table.GetCell(3, firewallColAction))
 
 	if allowColor != r.theme.EntryExecutable {
 		t.Errorf("ALLOW row's own action color = %v, want EntryExecutable %v", allowColor, r.theme.EntryExecutable)
@@ -297,8 +297,8 @@ func TestRenderFirewallMutesAShadowedRuleAndNotesWhy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.firewallErr = nil
-	r.firewallSnapshot = firewall.Snapshot{
+	r.firewall.Err = nil
+	r.firewall.Snapshot = firewall.Snapshot{
 		Backend: firewall.BackendUFW,
 		Rules: []firewall.Rule{
 			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow},
@@ -311,11 +311,11 @@ func TestRenderFirewallMutesAShadowedRuleAndNotesWhy(t *testing.T) {
 
 	// Row 1 is the "Incoming" section label; the shadowed rule is the
 	// second rule, at row 3.
-	gotColor := cellTextColor(r.firewallTable.GetCell(3, firewallColAction))
+	gotColor := cellTextColor(r.firewall.Table.GetCell(3, firewallColAction))
 	if gotColor != r.theme.MutedTextColor {
 		t.Errorf("shadowed row's own action color = %v, want MutedTextColor %v", gotColor, r.theme.MutedTextColor)
 	}
-	note := r.firewallTable.GetCell(3, firewallColNote).Text
+	note := r.firewall.Table.GetCell(3, firewallColNote).Text
 	if !strings.Contains(note, "shadowed by #1") {
 		t.Errorf("shadowed row's own note = %q, want it to mention \"shadowed by #1\"", note)
 	}
@@ -329,8 +329,8 @@ func TestRenderFirewallSelectsTheFirstRuleRowOnFirstRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.firewallErr = nil
-	r.firewallSnapshot = firewall.Snapshot{
+	r.firewall.Err = nil
+	r.firewall.Snapshot = firewall.Snapshot{
 		Backend: firewall.BackendUFW,
 		Rules: []firewall.Rule{
 			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow, Protocol: "tcp", PortFrom: 22, PortTo: 22},
@@ -339,7 +339,7 @@ func TestRenderFirewallSelectsTheFirstRuleRowOnFirstRender(t *testing.T) {
 
 	r.renderFirewall()
 
-	row, _ := r.firewallTable.GetSelection()
+	row, _ := r.firewall.Table.GetSelection()
 	if row != 2 {
 		t.Errorf("selected row = %d, want 2 (the first real rule row, past the row-0 header and row-1 section label)", row)
 	}

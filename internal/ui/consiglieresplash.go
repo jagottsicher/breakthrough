@@ -60,7 +60,7 @@ var consigliereSplashGrid = func() []string {
 // ("darf keinen HG haben"), background pixels render as a plain,
 // untagged space instead of any fill color — see
 // consigliereSplashArt — so the portrait shows through to whatever
-// consigliereHistory's own real background already is (SurfaceBackground,
+// consigliere.History's own real background already is (SurfaceBackground,
 // see theme.go), rather than sitting in a separate colored box.
 var consigliereSplashColors = map[byte]string{
 	'H': "#16161b", // hat
@@ -138,7 +138,7 @@ func consigliereSplashLines() []string {
 //
 // The caption is wrapped (via wrapText, see errors.go) to width
 // *before* centering, each wrapped line on its own: centering the
-// full, unwrapped caption string once and letting consigliereHistory's
+// full, unwrapped caption string once and letting consigliere.History's
 // own SetWrap break it afterwards — the original version of this —
 // only ever centers the first wrapped line; every further line a long
 // caption needs starts flush left instead, a real, visible bug the

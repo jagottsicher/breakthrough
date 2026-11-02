@@ -137,7 +137,7 @@ func TestOwnerGroupPickerPositionedNearField(t *testing.T) {
 	if !ok {
 		t.Fatal("no fieldOwner span found")
 	}
-	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	rectX, rectY, _, _ := r.properties.Text.GetInnerRect()
 	// -1 on X: the picker's own 1-char left padding (SetBorderPadding in
 	// NewRoot) means its *text* starts 1 column right of its outer
 	// rect — so the outer rect itself sits 1 column left of the field to
@@ -187,7 +187,7 @@ func TestActivatePropertyFieldOwnerOpensPicker(t *testing.T) {
 		}
 		t.Fatalf("activePage = %q, want %q", r.activePage, pickerPage)
 	}
-	if !r.propertiesDirty {
+	if !r.properties.Dirty {
 		t.Error("clicking Owner should mark Properties dirty immediately")
 	}
 }

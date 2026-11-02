@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -32,6 +34,57 @@ import (
 // never actually fire.
 
 const firewallPage = "firewall"
+
+// firewallState holds the Firewall screen's widgets/last read result,
+// the "Add rule" form's own widgets/values, the self-lockout rollback
+// prompt's own state, and the "Simulate" form's own widgets/values.
+type firewallState struct {
+	Layout             *tview.Flex
+	TitleBar           *tview.TextView
+	Hint               *tview.TextView
+	HintSpans          []listHintSpan
+	Table              *tview.Table
+	Scrollbar          *verticalScrollbar
+	Snapshot           firewall.Snapshot
+	Err                error
+	Services           firewall.ServiceLookup
+	AddRuleLayout      *tview.Flex
+	AddRuleTitleBar    *tview.TextView
+	AddRuleForm        *tview.Form
+	AddRuleStatus      *tview.TextView
+	AddRuleButtons     *tview.Flex
+	AddRuleCancelBtn   *tview.Button
+	AddRuleAddBtn      *tview.Button
+	AddRuleDirection   firewall.Direction
+	AddRuleAction      firewall.Action
+	AddRuleProtocol    string
+	AddRulePortText    string
+	AddRuleSourceText  string
+	AddRuleDestText    string
+	AddRuleIfaceText   string
+	RollbackLayout     *tview.Flex
+	RollbackTitleBar   *tview.TextView
+	RollbackText       *tview.TextView
+	RollbackKeepBtn    *tview.Button
+	RollbackTimer      *time.Timer
+	RollbackCancel     context.CancelFunc
+	RollbackDeadline   time.Time
+	RollbackBackend    firewall.Backend
+	RollbackSpec       firewall.NewRuleSpec
+	SimulateLayout     *tview.Flex
+	SimulateTitleBar   *tview.TextView
+	SimulateForm       *tview.Form
+	SimulateResult     *tview.TextView
+	SimulateButtons    *tview.Flex
+	SimulateCloseBtn   *tview.Button
+	SimulateRunBtn     *tview.Button
+	SimulateDirection  firewall.Direction
+	SimulateProtocol   string
+	SimulatePortText   string
+	SimulateSourceText string
+	SimulateDestText   string
+	SimulateIfaceText  string
+}
 
 const (
 	firewallColOrder = iota
@@ -109,34 +162,34 @@ func firewallHintEntries() []listHintEntry {
 // newFirewallScreen builds the whole screen once, at startup — the same
 // build-once/repopulate-on-open shape newMountsScreen already establishes.
 func (r *Root) newFirewallScreen() {
-	r.firewallTable = tview.NewTable()
-	r.firewallTable.SetBorders(false)
-	r.firewallTable.SetBorderPadding(1, 0, 2, 1)
-	r.firewallTable.SetSelectable(true, false)
-	r.firewallTable.SetFixed(1, 0)
-	r.firewallTable.SetInputCapture(r.captureFirewallKey)
+	r.firewall.Table = tview.NewTable()
+	r.firewall.Table.SetBorders(false)
+	r.firewall.Table.SetBorderPadding(1, 0, 2, 1)
+	r.firewall.Table.SetSelectable(true, false)
+	r.firewall.Table.SetFixed(1, 0)
+	r.firewall.Table.SetInputCapture(r.captureFirewallKey)
 
-	r.firewallTitleBar = newPlainTitleBar("Firewall")
-	r.firewallTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.firewallTitleBar, r.reloadFirewall, r.closeFirewall))
+	r.firewall.TitleBar = newPlainTitleBar("Firewall")
+	r.firewall.TitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.firewall.TitleBar, r.reloadFirewall, r.closeFirewall))
 
-	r.firewallHint = tview.NewTextView()
-	r.firewallHint.SetWrap(false)
-	r.firewallHint.SetDynamicColors(true)
-	firewallHintText, firewallHintSpans := buildListHint(r.theme, firewallHintEntries())
-	r.firewallHint.SetText(firewallHintText)
-	r.firewallHintSpans = firewallHintSpans
-	r.firewallHint.SetMouseCapture(r.captureListHintMouse(r.firewallHint, &r.firewallHintSpans))
+	r.firewall.Hint = tview.NewTextView()
+	r.firewall.Hint.SetWrap(false)
+	r.firewall.Hint.SetDynamicColors(true)
+	firewallHintText, hintSpans := buildListHint(r.theme, firewallHintEntries())
+	r.firewall.Hint.SetText(firewallHintText)
+	r.firewall.HintSpans = hintSpans
+	r.firewall.Hint.SetMouseCapture(r.captureListHintMouse(r.firewall.Hint, &r.firewall.HintSpans))
 
-	r.firewallScrollbar = newVerticalScrollbarForTable(r, r.firewallTable)
+	r.firewall.Scrollbar = newVerticalScrollbarForTable(r, r.firewall.Table)
 	firewallTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.firewallTable, 0, 1, true).
-		AddItem(r.firewallScrollbar, 1, 0, false)
-	firewallTableRow.SetMouseCapture(r.firewallScrollbar.captureMouse)
+		AddItem(r.firewall.Table, 0, 1, true).
+		AddItem(r.firewall.Scrollbar, 1, 0, false)
+	firewallTableRow.SetMouseCapture(r.firewall.Scrollbar.captureMouse)
 
-	r.firewallLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.firewallTitleBar, 1, 0, false).
+	r.firewall.Layout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.firewall.TitleBar, 1, 0, false).
 		AddItem(firewallTableRow, 0, 1, true).
-		AddItem(r.firewallHint, 1, 0, false)
+		AddItem(r.firewall.Hint, 1, 0, false)
 }
 
 // openFirewall shows the Firewall screen, freshly read every time — the
@@ -144,7 +197,7 @@ func (r *Root) newFirewallScreen() {
 // reasoning openMounts' own doc comment gives.
 func (r *Root) openFirewall() {
 	r.reloadFirewall()
-	r.showOverlay(firewallPage, r.firewallLayout)
+	r.showOverlay(firewallPage, r.firewall.Layout)
 }
 
 // closeFirewall hides the Firewall screen. Nothing to save — a pure
@@ -159,9 +212,9 @@ func (r *Root) closeFirewall() {
 // systemd unit, another admin) while this screen is open.
 func (r *Root) reloadFirewall() {
 	snapshot, err := readFirewallSnapshot()
-	r.firewallSnapshot = snapshot
-	r.firewallErr = err
-	r.firewallServices = loadFirewallServices()
+	r.firewall.Snapshot = snapshot
+	r.firewall.Err = err
+	r.firewall.Services = loadFirewallServices()
 	r.renderFirewall()
 }
 
@@ -173,10 +226,10 @@ func (r *Root) reloadFirewall() {
 // the same "report it, don't swallow it" principle renderMounts already
 // follows.
 func (r *Root) renderFirewall() {
-	r.firewallTable.Clear()
+	r.firewall.Table.Clear()
 
 	header := func(col int, text string) {
-		r.firewallTable.SetCell(0, col,
+		r.firewall.Table.SetCell(0, col,
 			tview.NewTableCell(padRight(text, firewallColumnWidth(col))).
 				SetTextColor(r.theme.Text).
 				SetAttributes(tcell.AttrBold).
@@ -192,22 +245,22 @@ func (r *Root) renderFirewall() {
 	header(firewallColInterface, "Interface")
 	header(firewallColNote, "Note")
 
-	renderReloadCloseTitleBar(r.firewallTitleBar, " "+firewallTitle(r.firewallSnapshot, r.firewallErr)+" ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.firewall.TitleBar, " "+firewallTitle(r.firewall.Snapshot, r.firewall.Err)+" ", r.lastScreenWidth)
 
 	// See showTablePlaceholder's own doc comment for why every early
 	// return below goes through it rather than a bare SetCell — it's
 	// the fix for a real, reported freeze, not just a message.
-	if r.firewallErr != nil {
-		showTablePlaceholder(r.firewallTable, r.firewallErr.Error(), r.theme.EntryError)
+	if r.firewall.Err != nil {
+		showTablePlaceholder(r.firewall.Table, r.firewall.Err.Error(), r.theme.EntryError)
 		return
 	}
-	if r.firewallSnapshot.Backend == firewall.BackendNone {
-		showTablePlaceholder(r.firewallTable, "No supported firewall backend (ufw, nftables, or iptables) is active on this system.", r.theme.PlaceholderText)
+	if r.firewall.Snapshot.Backend == firewall.BackendNone {
+		showTablePlaceholder(r.firewall.Table, "No supported firewall backend (ufw, nftables, or iptables) is active on this system.", r.theme.PlaceholderText)
 		return
 	}
 
 	var in, out []firewall.Rule
-	for _, rule := range r.firewallSnapshot.Rules {
+	for _, rule := range r.firewall.Snapshot.Rules {
 		if rule.Direction == firewall.DirectionIn {
 			in = append(in, rule)
 		} else {
@@ -230,19 +283,19 @@ func (r *Root) renderFirewall() {
 		}
 	}
 	if firstDataRow == 0 {
-		showTablePlaceholder(r.firewallTable, "No rules configured.", r.theme.PlaceholderText)
+		showTablePlaceholder(r.firewall.Table, "No rules configured.", r.theme.PlaceholderText)
 		return
 	}
 
 	// Real, selectable rows exist again — see showTablePlaceholder's own
 	// doc comment for why this isn't optional cosmetic tidiness.
-	enableTableSelection(r.firewallTable)
+	enableTableSelection(r.firewall.Table)
 
 	// Keep the cursor in range (and off the header/section-label rows)
 	// after a refresh changed how many rows there are — the same
 	// restraint renderMounts' own tail already shows.
-	if cur, _ := r.firewallTable.GetSelection(); cur < firstDataRow || cur >= row {
-		r.firewallTable.Select(firstDataRow, 0)
+	if cur, _ := r.firewall.Table.GetSelection(); cur < firstDataRow || cur >= row {
+		r.firewall.Table.Select(firstDataRow, 0)
 	}
 }
 
@@ -263,7 +316,7 @@ func firewallTitle(snap firewall.Snapshot, err error) string {
 // index just past the last one written.
 func (r *Root) renderFirewallSection(startRow int, label string, rules []firewall.Rule) int {
 	row := startRow
-	r.firewallTable.SetCell(row, firewallColOrder,
+	r.firewall.Table.SetCell(row, firewallColOrder,
 		tview.NewTableCell(label).
 			SetTextColor(r.theme.Text).
 			SetAttributes(tcell.AttrBold).
@@ -293,7 +346,7 @@ func (r *Root) renderFirewallRow(row int, rule firewall.Rule) {
 	}
 
 	cell := func(col int, text string, color tcell.Color) {
-		r.firewallTable.SetCell(row, col,
+		r.firewall.Table.SetCell(row, col,
 			tview.NewTableCell(padRight(text, firewallColumnWidth(col))).
 				SetTextColor(color).SetSelectable(true))
 	}
@@ -305,7 +358,7 @@ func (r *Root) renderFirewallRow(row int, rule firewall.Rule) {
 		protocol = "any"
 	}
 	cell(firewallColProtocol, protocol, textColor)
-	cell(firewallColPort, rule.PortLabel(r.firewallServices), textColor)
+	cell(firewallColPort, rule.PortLabel(r.firewall.Services), textColor)
 	cell(firewallColSource, rule.SourceLabel(), textColor)
 	cell(firewallColDestination, rule.DestinationLabel(), textColor)
 	cell(firewallColInterface, rule.InterfaceLabel(), textColor)
@@ -336,20 +389,20 @@ func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 	// Tab/Backtab reach the AI Consigliere sidebar — see
 	// startConsigliereChord's own doc comment in consigliere.go and
 	// captureLogAuditSelectionTableKey's own identical shape.
-	// firewallTable is this screen's only real focus target, so it's
+	// firewall.Table is this screen's only real focus target, so it's
 	// responsible for its own entry point into the sidebar, the same
 	// "single-node ring" case Log Audit's selection/detail screens
 	// already have. A no-op whenever the sidebar isn't even open.
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.consigliereInput)
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		if event.Key() == tcell.KeyBacktab {
-			if r.consigliereScrollbar.maxOffset() > 0 {
-				r.app.SetFocus(r.consigliereHistory)
+			if r.consigliere.Scrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliere.History)
 			} else {
-				r.app.SetFocus(r.consigliereInput)
+				r.app.SetFocus(r.consigliere.Input)
 			}
 			return nil
 		}
@@ -368,7 +421,7 @@ func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 	// "gC" reaches the AI Consigliere from here too — see
 	// startConsigliereChord's own doc comment in consigliere.go.
-	// firewallTable is a *tview.Table, which (unlike a *tview.TextView)
+	// firewall.Table is a *tview.Table, which (unlike a *tview.TextView)
 	// has no built-in meaning for a bare 'g' to begin with, so nothing
 	// existing is lost by claiming it here.
 	if event.Key() == tcell.KeyRune && event.Rune() == 'g' {
@@ -386,37 +439,37 @@ func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 // theme unconditionally, regardless of whether the main screen's own
 // table exists yet.
 func (r *Root) applyFirewallTheme(theme config.ResolvedTheme) {
-	if r.firewallTable != nil {
+	if r.firewall.Table != nil {
 		// A real, previously-unnoticed gap: unlike every other full-screen
 		// catalog here, this block never existed at all, so the Firewall
 		// screen's own layout/table sat at tview's plain, unthemed default
 		// (black) background instead of SurfaceBackground — caught per the
 		// user's own explicit report that the "tool pages" didn't match
 		// the rest of the theme.
-		// PanelBackground, not SurfaceBackground — see mountsLayout's
+		// PanelBackground, not SurfaceBackground — see mounts.Layout's
 		// own identical comment (mounts.go) for the full reasoning.
-		r.firewallLayout.SetBackgroundColor(theme.PanelBackground)
-		r.firewallTable.SetBackgroundColor(theme.PanelBackground)
+		r.firewall.Layout.SetBackgroundColor(theme.PanelBackground)
+		r.firewall.Table.SetBackgroundColor(theme.PanelBackground)
 		// Without this, tview's own default selected-cell style just
 		// reverses each cell's own foreground into a background instead
 		// of using one consistent selection bar — the same fix already
-		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
+		// applied to sshKeysTable/connectionMenuTable/sed.PreviewTable/
 		// tabSwitcher/gitBreach's tables, for the identical reason.
-		r.firewallTable.SetSelectedStyle(tcell.StyleDefault.
+		r.firewall.Table.SetSelectedStyle(tcell.StyleDefault.
 			Background(theme.SelectionBackground).
 			Foreground(theme.TextColor))
 
-		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+		// FocusedBackground, fixed — same reasoning mounts.TitleBar's own
 		// fixed FocusedBackground above follows.
-		r.firewallTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.firewallTitleBar.SetTextColor(theme.TextColor)
+		r.firewall.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.firewall.TitleBar.SetTextColor(theme.TextColor)
 		// SurfaceBackground/TextColor, matching the main screen's own
-		// buttonBar/statusBar — see mountsHint's own identical comment.
-		r.firewallHint.SetBackgroundColor(theme.SurfaceBackground)
-		r.firewallHint.SetTextColor(theme.TextColor)
-		firewallHintText, firewallHintSpans := buildListHint(theme, firewallHintEntries())
-		r.firewallHint.SetText(firewallHintText)
-		r.firewallHintSpans = firewallHintSpans
+		// buttonBar/statusBar — see mounts.Hint's own identical comment.
+		r.firewall.Hint.SetBackgroundColor(theme.SurfaceBackground)
+		r.firewall.Hint.SetTextColor(theme.TextColor)
+		firewallHintText, hintSpans := buildListHint(theme, firewallHintEntries())
+		r.firewall.Hint.SetText(firewallHintText)
+		r.firewall.HintSpans = hintSpans
 
 		r.renderFirewall() // cell colors are baked in per cell, not looked up live at draw time
 	}
@@ -431,31 +484,31 @@ func (r *Root) applyFirewallTheme(theme config.ResolvedTheme) {
 	// the theme — the same class of gap, so fixed for all three together
 	// rather than leaving Add rule/the rollback prompt with the identical
 	// defect right next to the one actually reported.
-	r.firewallAddRuleForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.firewallAddRuleForm.SetLabelColor(theme.TextColor)
-	r.firewallAddRuleForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.firewallAddRuleForm.SetFieldTextColor(theme.TextColor)
-	r.firewallAddRuleStatus.SetBackgroundColor(theme.SurfaceBackground)
-	r.firewallAddRuleButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.firewallAddRuleCancelBtn, theme)
-	styleButton(r.firewallAddRuleAddBtn, theme)
-	r.firewallAddRuleTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.firewallAddRuleTitleBar.SetTextColor(theme.TextColor)
+	r.firewall.AddRuleForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewall.AddRuleForm.SetLabelColor(theme.TextColor)
+	r.firewall.AddRuleForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.firewall.AddRuleForm.SetFieldTextColor(theme.TextColor)
+	r.firewall.AddRuleStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewall.AddRuleButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.firewall.AddRuleCancelBtn, theme)
+	styleButton(r.firewall.AddRuleAddBtn, theme)
+	r.firewall.AddRuleTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.firewall.AddRuleTitleBar.SetTextColor(theme.TextColor)
 
-	r.firewallRollbackText.SetBackgroundColor(theme.SurfaceBackground)
-	r.firewallRollbackText.SetTextColor(theme.TextColor)
-	styleButton(r.firewallRollbackKeepBtn, theme)
-	r.firewallRollbackTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.firewallRollbackTitleBar.SetTextColor(theme.TextColor)
+	r.firewall.RollbackText.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewall.RollbackText.SetTextColor(theme.TextColor)
+	styleButton(r.firewall.RollbackKeepBtn, theme)
+	r.firewall.RollbackTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.firewall.RollbackTitleBar.SetTextColor(theme.TextColor)
 
-	r.firewallSimulateForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.firewallSimulateForm.SetLabelColor(theme.TextColor)
-	r.firewallSimulateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.firewallSimulateForm.SetFieldTextColor(theme.TextColor)
-	r.firewallSimulateResult.SetBackgroundColor(theme.SurfaceBackground)
-	r.firewallSimulateButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.firewallSimulateCloseBtn, theme)
-	styleButton(r.firewallSimulateRunBtn, theme)
-	r.firewallSimulateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.firewallSimulateTitleBar.SetTextColor(theme.TextColor)
+	r.firewall.SimulateForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewall.SimulateForm.SetLabelColor(theme.TextColor)
+	r.firewall.SimulateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.firewall.SimulateForm.SetFieldTextColor(theme.TextColor)
+	r.firewall.SimulateResult.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewall.SimulateButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.firewall.SimulateCloseBtn, theme)
+	styleButton(r.firewall.SimulateRunBtn, theme)
+	r.firewall.SimulateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.firewall.SimulateTitleBar.SetTextColor(theme.TextColor)
 }
