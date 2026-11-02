@@ -417,17 +417,23 @@ func TestDiskUsageTextUsesFstypeAsLabel(t *testing.T) {
 // using a remote panel's fake client (see diskUsageFor) to control
 // HasInodes directly, the same way
 // TestDiskUsageForOnARemotePanelUsesTheClientNotLocalDf does.
+// TestBuildStatusBarOmitsInodesWhenNotAvailable applies each result
+// directly via applyPanelDiskUsage rather than just setting
+// client.diskUsage and calling buildStatusBar — diskUsageFor no longer
+// reads the remote Client synchronously (see refreshPanelDiskUsage's
+// own doc comment in bottombar.go), so buildStatusBar only ever shows
+// whatever the cache already has.
 func TestBuildStatusBarOmitsInodesWhenNotAvailable(t *testing.T) {
 	r := newTestRemoteRoot(t)
 	r.settings.StatusBarShowInodes = true
 	client := r.panel.remote.(*fakeRemoteClient)
 
-	client.diskUsage = fsops.DiskUsage{AvailBytes: 900, UsedBytes: 100, HasInodes: false}
+	r.applyPanelDiskUsage(r.panel, client, r.panel.path, fsops.DiskUsage{AvailBytes: 900, UsedBytes: 100, HasInodes: false}, nil)
 	if got := r.buildStatusBar(); strings.Contains(got, "Inodes used") {
 		t.Errorf("status bar = %q, want no Inodes segment when HasInodes is false", got)
 	}
 
-	client.diskUsage = fsops.DiskUsage{AvailBytes: 900, UsedBytes: 100, HasInodes: true, UsedInodes: 1, AvailInodes: 9}
+	r.applyPanelDiskUsage(r.panel, client, r.panel.path, fsops.DiskUsage{AvailBytes: 900, UsedBytes: 100, HasInodes: true, UsedInodes: 1, AvailInodes: 9}, nil)
 	if got := r.buildStatusBar(); !strings.Contains(got, "Inodes used") {
 		t.Errorf("status bar = %q, want the Inodes segment once HasInodes is true", got)
 	}
