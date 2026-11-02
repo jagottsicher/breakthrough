@@ -502,13 +502,13 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	if r.gitBreachLayout == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.gitBreachLayout.SetBackgroundColor(theme.PanelBackground)
 	r.gitBreachTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.gitBreachTitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.gitBreachHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.gitBreachHint.SetTextColor(theme.TextColor)
 	r.refreshGitBreachHint()

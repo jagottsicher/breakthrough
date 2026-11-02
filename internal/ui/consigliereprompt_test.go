@@ -738,7 +738,7 @@ func TestFirewallContextSnapshotCapsRuleList(t *testing.T) {
 // exactly as visible the moment the panel itself browses into it.
 func TestMountsContextSnapshotIncludesEntries(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.mountsEntries = []mounts.Entry{
+	root.mounts.Entries = []mounts.Entry{
 		{Target: "/mnt/home", Source: "family-nas:/export/home", Fstype: "nfs4", Persistent: true},
 	}
 
@@ -755,7 +755,7 @@ func TestMountsContextSnapshotIncludesEntries(t *testing.T) {
 // a failed findmnt read is surfaced, not a silently empty snapshot.
 func TestMountsContextSnapshotReportsReadError(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.mountsErr = errors.New("findmnt: command not found")
+	root.mounts.Err = errors.New("findmnt: command not found")
 
 	got := root.mountsContextSnapshot()
 
@@ -772,7 +772,7 @@ func TestMountsContextSnapshotCapsEntryList(t *testing.T) {
 	for i := 0; i < consigliereMaxMountEntries+5; i++ {
 		entries = append(entries, mounts.Entry{Target: "distinct-target", Source: "src", Fstype: "ext4"})
 	}
-	root.mountsEntries = entries
+	root.mounts.Entries = entries
 
 	got := root.mountsContextSnapshot()
 
@@ -786,7 +786,7 @@ func TestMountsContextSnapshotCapsEntryList(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToMounts(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = mountsPage
-	root.mountsEntries = []mounts.Entry{{Target: "/mnt/home"}}
+	root.mounts.Entries = []mounts.Entry{{Target: "/mnt/home"}}
 
 	got := root.consigliereContextSnapshot()
 
