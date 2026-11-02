@@ -15,7 +15,7 @@ import (
 )
 
 // sshShellMenuCol{Label,Edit,Remove} are the three columns
-// sshShellMenuTable's own rows carry — the identical shape
+// ssh.ShellMenuTable's own rows carry — the identical shape
 // connectionMenuCol* (connectionmenu.go) establishes, minus an eject
 // column: launching a shell is a one-off, there's no ongoing
 // connection here to detach from the way an SFTP-mounted panel has.
@@ -38,8 +38,8 @@ func (r *Root) openSSHShellMenu() {
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
 	r.renderSSHShellMenuTitleBar(width)
-	r.sshShellMenuLayout.SetRect(x, y, width, height)
-	r.showOverlay(sshShellMenuPage, r.sshShellMenuTable)
+	r.ssh.ShellMenuLayout.SetRect(x, y, width, height)
+	r.showOverlay(sshShellMenuPage, r.ssh.ShellMenuTable)
 }
 
 // renderSSHShellMenu rebuilds the dropdown's own rows from the exact
@@ -57,9 +57,9 @@ func (r *Root) openSSHShellMenu() {
 // remotefs.Connection's own doc comment); that second suffix is what
 // tells those apart from one another at a glance.
 func (r *Root) renderSSHShellMenu() {
-	table := r.sshShellMenuTable
+	table := r.ssh.ShellMenuTable
 	table.Clear()
-	r.sshShellMenuHistoryRows = map[int]remotefs.Connection{}
+	r.ssh.ShellMenuHistoryRows = map[int]remotefs.Connection{}
 
 	history, _ := remotefs.LoadHistory()
 	row := 0
@@ -91,7 +91,7 @@ func (r *Root) renderSSHShellMenu() {
 				SetSelectable(true).
 				SetClickedFunc(r.clickSSHShellMenuCell(thisRow, sshShellMenuColRemove)))
 
-		r.sshShellMenuHistoryRows[thisRow] = entry.Connection
+		r.ssh.ShellMenuHistoryRows[thisRow] = entry.Connection
 		row++
 	}
 
@@ -121,8 +121,8 @@ func (r *Root) newSSHShellMenuTable() *tview.Table {
 
 func (r *Root) newSSHShellMenuLayout() *tview.Flex {
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.sshShellMenuTitleBar, 1, 0, false).
-		AddItem(r.sshShellMenuTable, 0, 1, true)
+		AddItem(r.ssh.ShellMenuTitleBar, 1, 0, false).
+		AddItem(r.ssh.ShellMenuTable, 0, 1, true)
 }
 
 // newSSHShellMenuTitleBar builds the dropdown's own title bar — a
@@ -136,7 +136,7 @@ func (r *Root) newSSHShellMenuTitleBar() *tview.TextView {
 	return bar
 }
 
-// renderSSHShellMenuTitleBar sets sshShellMenuTitleBar's own text to
+// renderSSHShellMenuTitleBar sets ssh.ShellMenuTitleBar's own text to
 // "Open shell to", padded out to width columns, with the close glyph
 // placed at toolWindowCloseButtonCol's own one-column-in-from-the-edge
 // spot — the identical convention renderHelpTitleBar already
@@ -154,7 +154,7 @@ func (r *Root) renderSSHShellMenuTitleBar(width int) {
 	if padding < 0 {
 		padding = 0
 	}
-	r.sshShellMenuTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
+	r.ssh.ShellMenuTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
 }
 
 // captureSSHShellMenuTitleBarMouse closes the dropdown when the click
@@ -167,7 +167,7 @@ func (r *Root) captureSSHShellMenuTitleBarMouse(action tview.MouseAction, event 
 		return action, event
 	}
 	x, y := event.Position()
-	rectX, rectY, width, _ := r.sshShellMenuTitleBar.GetRect()
+	rectX, rectY, width, _ := r.ssh.ShellMenuTitleBar.GetRect()
 	if y != rectY || x != rectX+toolWindowCloseButtonCol(0, width) {
 		return action, event
 	}
@@ -183,7 +183,7 @@ func (r *Root) captureSSHShellMenuTitleBarMouse(action tview.MouseAction, event 
 // unlike reconnecting an SFTP panel, there's no in-progress dial to
 // show a status line for; Suspend+exec either runs or it doesn't.
 func (r *Root) activateSSHShellMenuCell(row, column int) {
-	conn, ok := r.sshShellMenuHistoryRows[row]
+	conn, ok := r.ssh.ShellMenuHistoryRows[row]
 	if !ok {
 		r.hideOverlay()
 		r.openSSHShellDialog(remotefs.Connection{})
@@ -214,7 +214,7 @@ func (r *Root) clickSSHShellMenuCell(row, column int) func() bool {
 // "e" eject case (see sshShellMenuColLabel's own doc comment on why
 // there's no active-row concept here at all).
 func (r *Root) captureSSHShellMenuKey(event *tcell.EventKey) *tcell.EventKey {
-	row, column := r.sshShellMenuTable.GetSelection()
+	row, column := r.ssh.ShellMenuTable.GetSelection()
 
 	switch {
 	case event.Key() == tcell.KeyEscape:
@@ -231,7 +231,7 @@ func (r *Root) captureSSHShellMenuKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 
 	if event.Key() == tcell.KeyRune && event.Rune() == 'e' {
-		if conn, ok := r.sshShellMenuHistoryRows[row]; ok {
+		if conn, ok := r.ssh.ShellMenuHistoryRows[row]; ok {
 			r.hideOverlay()
 			r.openSSHShellDialog(conn)
 			return nil
@@ -246,7 +246,7 @@ func (r *Root) captureSSHShellMenuKey(event *tcell.EventKey) *tcell.EventKey {
 // re-renders the dropdown in place — the identical shape
 // removeConnectionHistoryRow already establishes.
 func (r *Root) removeSSHShellHistoryRow(row int) bool {
-	conn, ok := r.sshShellMenuHistoryRows[row]
+	conn, ok := r.ssh.ShellMenuHistoryRows[row]
 	if !ok {
 		return false
 	}
@@ -257,7 +257,7 @@ func (r *Root) removeSSHShellHistoryRow(row int) bool {
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
 	r.renderSSHShellMenuTitleBar(width)
-	r.sshShellMenuLayout.SetRect(x, y, width, height)
+	r.ssh.ShellMenuLayout.SetRect(x, y, width, height)
 	return true
 }
 
@@ -266,7 +266,7 @@ func (r *Root) removeSSHShellHistoryRow(row int) bool {
 // its own doc comment for why this has to be measured per column
 // rather than by summing a single row).
 func (r *Root) sshShellMenuSize() (width, height int) {
-	table := r.sshShellMenuTable
+	table := r.ssh.ShellMenuTable
 	rows := table.GetRowCount()
 
 	columnWidths := make([]int, sshShellMenuColRemove+1)
@@ -318,7 +318,7 @@ func shellFlagsSuffix(conn remotefs.Connection) string {
 	return "  [" + strings.Join(letters, " ") + "]"
 }
 
-// plainFormCheckbox renders one of sshShellForm's own boolean fields
+// plainFormCheckbox renders one of ssh.ShellForm's own boolean fields
 // as plain themed text — a filled/hollow dot ("●"/"○") in the same
 // foreground color used everywhere else, no highlighted background
 // behind it — rather than tview.Checkbox's own default behavior of
@@ -388,27 +388,27 @@ func (c *plainFormCheckbox) SetFormAttributes(labelWidth int, labelColor, bgColo
 // prefill — the zero Connection for a blank "+ New connection…" open,
 // or a history entry's own Connection when editing it. The identical
 // shape openConnectDialog already establishes, minus the password
-// field: see sshShellForm's own doc comment on Root for why.
+// field: see ssh.ShellForm's own doc comment on Root for why.
 func (r *Root) openSSHShellDialog(prefill remotefs.Connection) {
-	r.sshShellHostField.SetText(prefill.Host)
+	r.ssh.ShellHostField.SetText(prefill.Host)
 	if prefill.Port != 0 {
-		r.sshShellPortField.SetText(strconv.Itoa(prefill.Port))
+		r.ssh.ShellPortField.SetText(strconv.Itoa(prefill.Port))
 	} else {
-		r.sshShellPortField.SetText("")
+		r.ssh.ShellPortField.SetText("")
 	}
-	r.sshShellUserField.SetText(prefill.User)
-	r.sshShellAgentCheckbox.SetChecked(prefill.ShellAgentForwarding)
-	r.sshShellCompressionCheckbox.SetChecked(prefill.ShellCompression)
-	r.sshShellVerboseCheckbox.SetChecked(prefill.ShellVerbose)
-	r.sshShellX11Checkbox.SetChecked(prefill.ShellX11Forwarding)
+	r.ssh.ShellUserField.SetText(prefill.User)
+	r.ssh.ShellAgentCheckbox.SetChecked(prefill.ShellAgentForwarding)
+	r.ssh.ShellCompressionCheckbox.SetChecked(prefill.ShellCompression)
+	r.ssh.ShellVerboseCheckbox.SetChecked(prefill.ShellVerbose)
+	r.ssh.ShellX11Checkbox.SetChecked(prefill.ShellX11Forwarding)
 	r.setSSHShellStatus("", r.theme.Text)
 
-	// height covers sshShellTitleBar's own row plus sshShellLayout's
-	// three stacked pieces: sshShellForm's own 15 (2 border padding +
+	// height covers ssh.ShellTitleBar's own row plus ssh.ShellLayout's
+	// three stacked pieces: ssh.ShellForm's own 15 (2 border padding +
 	// 7 fields [3 InputFields, 4 Checkboxes] + 6 gaps between them —
 	// the identical accounting newConnectLayout's own doc comment
-	// gives for its own, smaller field set), sshShellStatus's 1,
-	// sshShellButtons' 1.
+	// gives for its own, smaller field set), ssh.ShellStatus's 1,
+	// ssh.ShellButtons' 1.
 	width, height := 64, 18
 	_, _, screenWidth, screenHeight := r.GetRect()
 	if width > screenWidth-4 {
@@ -420,8 +420,8 @@ func (r *Root) openSSHShellDialog(prefill remotefs.Connection) {
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
 	r.renderSSHShellTitleBar(width)
-	r.sshShellLayout.SetRect(x, y, width, height)
-	r.showOverlay(sshShellDialogPage, r.sshShellLayout)
+	r.ssh.ShellLayout.SetRect(x, y, width, height)
+	r.showOverlay(sshShellDialogPage, r.ssh.ShellLayout)
 }
 
 // newSSHShellForm builds the (initially empty) "Add new ssh
@@ -437,36 +437,36 @@ func (r *Root) newSSHShellForm() *tview.Form {
 		return event
 	})
 
-	r.sshShellHostField = tview.NewInputField().SetLabel("Host")
-	f.AddFormItem(r.sshShellHostField)
-	r.sshShellPortField = tview.NewInputField().SetLabel("Port (default 22)")
-	f.AddFormItem(r.sshShellPortField)
-	r.sshShellUserField = tview.NewInputField().SetLabel("User")
-	f.AddFormItem(r.sshShellUserField)
+	r.ssh.ShellHostField = tview.NewInputField().SetLabel("Host")
+	f.AddFormItem(r.ssh.ShellHostField)
+	r.ssh.ShellPortField = tview.NewInputField().SetLabel("Port (default 22)")
+	f.AddFormItem(r.ssh.ShellPortField)
+	r.ssh.ShellUserField = tview.NewInputField().SetLabel("User")
+	f.AddFormItem(r.ssh.ShellUserField)
 	// plainFormCheckbox, not a bare *tview.Checkbox — see its own doc
 	// comment on Root for why: Form.Draw would otherwise repaint these
 	// every frame in the same highlighted field-background color an
 	// InputField's own editable area gets, which read as "ein Feld
 	// hinterlegt" rather than a plain radio-style toggle, per the
 	// user's own explicit, repeated report.
-	r.sshShellAgentCheckbox = newPlainFormCheckbox("Agent forwarding (-A)")
-	f.AddFormItem(r.sshShellAgentCheckbox)
-	r.sshShellCompressionCheckbox = newPlainFormCheckbox("Compression (-C)")
-	f.AddFormItem(r.sshShellCompressionCheckbox)
-	r.sshShellVerboseCheckbox = newPlainFormCheckbox("Verbose (-v)")
-	f.AddFormItem(r.sshShellVerboseCheckbox)
-	r.sshShellX11Checkbox = newPlainFormCheckbox("X11 forwarding (-X)")
-	f.AddFormItem(r.sshShellX11Checkbox)
+	r.ssh.ShellAgentCheckbox = newPlainFormCheckbox("Agent forwarding (-A)")
+	f.AddFormItem(r.ssh.ShellAgentCheckbox)
+	r.ssh.ShellCompressionCheckbox = newPlainFormCheckbox("Compression (-C)")
+	f.AddFormItem(r.ssh.ShellCompressionCheckbox)
+	r.ssh.ShellVerboseCheckbox = newPlainFormCheckbox("Verbose (-v)")
+	f.AddFormItem(r.ssh.ShellVerboseCheckbox)
+	r.ssh.ShellX11Checkbox = newPlainFormCheckbox("X11 forwarding (-X)")
+	f.AddFormItem(r.ssh.ShellX11Checkbox)
 
 	// Tab/Enter on the form's own last field (X11 forwarding) would
 	// otherwise just wrap back to its first one instead of ever
-	// reaching sshShellCancelBtn/sshShellOpenBtn — the identical
+	// reaching ssh.ShellCancelBtn/ssh.ShellOpenBtn — the identical
 	// SetInputCapture-over-SetFinishedFunc reasoning newConnectForm's
 	// own doc comment explains for its own last field.
-	r.sshShellX11Checkbox.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	r.ssh.ShellX11Checkbox.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sshShellCancelBtn)
+			r.app.SetFocus(r.ssh.ShellCancelBtn)
 			return nil
 		case tcell.KeyEnter:
 			r.runSSHShellFromDialog()
@@ -481,65 +481,65 @@ func (r *Root) newSSHShellForm() *tview.Form {
 // newSSHShellButtons builds a real Cancel/"Open shell" button pair —
 // the identical shape newConnectButtons already establishes.
 func (r *Root) newSSHShellButtons() *tview.Flex {
-	r.sshShellCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelSSHShell)
-	r.sshShellOpenBtn = tview.NewButton("Open shell").SetSelectedFunc(r.runSSHShellFromDialog)
-	r.sshShellCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelSSHShell))
-	r.sshShellOpenBtn.SetInputCapture(spaceAlsoActivates(r.runSSHShellFromDialog))
+	r.ssh.ShellCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelSSHShell)
+	r.ssh.ShellOpenBtn = tview.NewButton("Open shell").SetSelectedFunc(r.runSSHShellFromDialog)
+	r.ssh.ShellCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelSSHShell))
+	r.ssh.ShellOpenBtn.SetInputCapture(spaceAlsoActivates(r.runSSHShellFromDialog))
 
-	r.sshShellCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.ssh.ShellCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sshShellOpenBtn)
+			r.app.SetFocus(r.ssh.ShellOpenBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.sshShellX11Checkbox)
+			r.app.SetFocus(r.ssh.ShellX11Checkbox)
 		case tcell.KeyEscape:
 			r.cancelSSHShell()
 		}
 	})
-	r.sshShellOpenBtn.SetExitFunc(func(key tcell.Key) {
+	r.ssh.ShellOpenBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
 			// Form.SetFocus(0), not a direct
-			// r.app.SetFocus(r.sshShellHostField) — the identical real,
+			// r.app.SetFocus(r.ssh.ShellHostField) — the identical real,
 			// user-reported bug connectdialog.go's own
-			// connectConnectBtn.SetExitFunc found and fixed first (see
+			// connect.ConnectBtn.SetExitFunc found and fixed first (see
 			// its own doc comment for the full tview.Form internals):
-			// naming the field directly here left sshShellForm's own
+			// naming the field directly here left ssh.ShellForm's own
 			// focusedElement counter stale, so the next Backtab from
 			// Host landed on the wrong field instead of wrapping back
 			// to X11 forwarding.
-			r.sshShellForm.SetFocus(0)
-			r.app.SetFocus(r.sshShellForm)
+			r.ssh.ShellForm.SetFocus(0)
+			r.app.SetFocus(r.ssh.ShellForm)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.sshShellCancelBtn)
+			r.app.SetFocus(r.ssh.ShellCancelBtn)
 		case tcell.KeyEscape:
 			r.cancelSSHShell()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.sshShellCancelBtn, 0, 1, false).
-		AddItem(r.sshShellOpenBtn, 0, 1, false)
+		AddItem(r.ssh.ShellCancelBtn, 0, 1, false).
+		AddItem(r.ssh.ShellOpenBtn, 0, 1, false)
 }
 
-// newSSHShellLayout wraps sshShellTitleBar over the form, a one-line
+// newSSHShellLayout wraps ssh.ShellTitleBar over the form, a one-line
 // status area, and the Cancel/"Open shell" buttons — the identical
 // shape newConnectLayout already establishes.
 func (r *Root) newSSHShellLayout() *tview.Flex {
-	r.sshShellTitleBar = tview.NewTextView()
-	r.sshShellTitleBar.SetWrap(false)
-	r.sshShellTitleBar.SetMouseCapture(r.captureSSHShellTitleBarMouse)
-	r.sshShellStatus = tview.NewTextView().SetDynamicColors(true)
+	r.ssh.ShellTitleBar = tview.NewTextView()
+	r.ssh.ShellTitleBar.SetWrap(false)
+	r.ssh.ShellTitleBar.SetMouseCapture(r.captureSSHShellTitleBarMouse)
+	r.ssh.ShellStatus = tview.NewTextView().SetDynamicColors(true)
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.sshShellForm, 15, 0, true).
-		AddItem(r.sshShellStatus, 1, 0, false).
-		AddItem(r.sshShellButtons, 1, 0, false)
+		AddItem(r.ssh.ShellForm, 15, 0, true).
+		AddItem(r.ssh.ShellStatus, 1, 0, false).
+		AddItem(r.ssh.ShellButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.sshShellTitleBar, 1, 0, false).
+		AddItem(r.ssh.ShellTitleBar, 1, 0, false).
 		AddItem(content, 0, 1, true)
 }
 
-// renderSSHShellTitleBar sets sshShellTitleBar's own text to "Add new
+// renderSSHShellTitleBar sets ssh.ShellTitleBar's own text to "Add new
 // ssh connection", padded out to width columns, with the close glyph
 // placed the same way renderSSHShellMenuTitleBar's own does — see its
 // doc comment. Called from openSSHShellDialog, since width can change
@@ -551,7 +551,7 @@ func (r *Root) renderSSHShellTitleBar(width int) {
 	if padding < 0 {
 		padding = 0
 	}
-	r.sshShellTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
+	r.ssh.ShellTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
 }
 
 // captureSSHShellTitleBarMouse closes the dialog (the same as Cancel/
@@ -563,7 +563,7 @@ func (r *Root) captureSSHShellTitleBarMouse(action tview.MouseAction, event *tce
 		return action, event
 	}
 	x, y := event.Position()
-	rectX, rectY, width, _ := r.sshShellTitleBar.GetRect()
+	rectX, rectY, width, _ := r.ssh.ShellTitleBar.GetRect()
 	if y != rectY || x != rectX+toolWindowCloseButtonCol(0, width) {
 		return action, event
 	}
@@ -572,12 +572,12 @@ func (r *Root) captureSSHShellTitleBarMouse(action tview.MouseAction, event *tce
 }
 
 func (r *Root) setSSHShellStatus(text string, color tcell.Color) {
-	r.sshShellStatus.SetTextColor(color)
-	r.sshShellStatus.SetText(text)
+	r.ssh.ShellStatus.SetTextColor(color)
+	r.ssh.ShellStatus.SetText(text)
 }
 
 func (r *Root) cancelSSHShell() {
-	r.sshShellSubmit = nil
+	r.ssh.ShellSubmit = nil
 	r.hideOverlay()
 }
 
@@ -586,13 +586,13 @@ func (r *Root) cancelSSHShell() {
 // touching the network) — the identical validation runConnect already
 // does — then hides the dialog and launches the shell.
 func (r *Root) runSSHShellFromDialog() {
-	host := strings.TrimSpace(r.sshShellHostField.GetText())
+	host := strings.TrimSpace(r.ssh.ShellHostField.GetText())
 	if host == "" {
 		r.setSSHShellStatus("Host is required.", r.theme.CriticalText)
 		return
 	}
 	port := 0
-	if text := strings.TrimSpace(r.sshShellPortField.GetText()); text != "" {
+	if text := strings.TrimSpace(r.ssh.ShellPortField.GetText()); text != "" {
 		p, err := strconv.Atoi(text)
 		if err != nil || p <= 0 || p > 65535 {
 			r.setSSHShellStatus("Port must be a number from 1 to 65535.", r.theme.CriticalText)
@@ -600,7 +600,7 @@ func (r *Root) runSSHShellFromDialog() {
 		}
 		port = p
 	}
-	user := strings.TrimSpace(r.sshShellUserField.GetText())
+	user := strings.TrimSpace(r.ssh.ShellUserField.GetText())
 	if user == "" {
 		user = currentUsername()
 	}
@@ -610,16 +610,16 @@ func (r *Root) runSSHShellFromDialog() {
 		Port: port,
 		User: user,
 
-		ShellAgentForwarding: r.sshShellAgentCheckbox.IsChecked(),
-		ShellCompression:     r.sshShellCompressionCheckbox.IsChecked(),
-		ShellVerbose:         r.sshShellVerboseCheckbox.IsChecked(),
-		ShellX11Forwarding:   r.sshShellX11Checkbox.IsChecked(),
+		ShellAgentForwarding: r.ssh.ShellAgentCheckbox.IsChecked(),
+		ShellCompression:     r.ssh.ShellCompressionCheckbox.IsChecked(),
+		ShellVerbose:         r.ssh.ShellVerboseCheckbox.IsChecked(),
+		ShellX11Forwarding:   r.ssh.ShellX11Checkbox.IsChecked(),
 	}
 
 	r.hideOverlay()
-	if r.sshShellSubmit != nil {
-		submit := r.sshShellSubmit
-		r.sshShellSubmit = nil
+	if r.ssh.ShellSubmit != nil {
+		submit := r.ssh.ShellSubmit
+		r.ssh.ShellSubmit = nil
 		submit(conn)
 		return
 	}
@@ -652,10 +652,10 @@ func (r *Root) launchSSHShell(conn remotefs.Connection) {
 	switch outcome {
 	case sshshell.Succeeded:
 		_ = remotefs.RecordAttempt(conn, false)
-		r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s", conn.Label()))
+		r.activity.Logger.Action(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s", conn.Label()))
 	case sshshell.ConnectionFailed:
 		_ = remotefs.RecordAttempt(conn, true)
-		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s: connection failed", conn.Label()))
+		r.activity.Logger.Error(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s: connection failed", conn.Label()))
 	case sshshell.LocalError:
 		// ssh itself never actually ran (missing binary, ...) — a local
 		// problem, not a connection attempt at all, so history is left

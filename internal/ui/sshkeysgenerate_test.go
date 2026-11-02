@@ -27,13 +27,13 @@ func sshHomeDir(t *testing.T) string {
 
 // selectSSHKeysGenerateAlgorithm drives the real Algorithm dropdown's
 // own SetCurrentOption — which fires its own SetOptions callback
-// synchronously (see duplicateStrategyField's own doc comment in
+// synchronously (see duplicate.StrategyField's own doc comment in
 // duplicate.go for the exact mechanism) — rather than duplicating that
 // callback's own logic inline, so a test exercising it actually pins
 // the real code path.
 func selectSSHKeysGenerateAlgorithm(t *testing.T, r *Root, algorithm string) {
 	t.Helper()
-	dd, ok := r.sshKeysGenerateForm.GetFormItem(0).(*tview.DropDown)
+	dd, ok := r.ssh.KeysGenerateForm.GetFormItem(0).(*tview.DropDown)
 	if !ok {
 		t.Fatal("form item 0 is not the Algorithm dropdown")
 	}
@@ -58,11 +58,11 @@ func TestOpenSSHKeysGenerateSetsHarmlessDefaults(t *testing.T) {
 	if r.activePage != sshKeysGeneratePage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, sshKeysGeneratePage)
 	}
-	if r.sshKeysGenerateAlgorithm != "ed25519" {
-		t.Errorf("sshKeysGenerateAlgorithm = %q, want ed25519", r.sshKeysGenerateAlgorithm)
+	if r.ssh.KeysGenerateAlgorithm != "ed25519" {
+		t.Errorf("ssh.KeysGenerateAlgorithm = %q, want ed25519", r.ssh.KeysGenerateAlgorithm)
 	}
-	if r.sshKeysGenerateFilenameText == "" {
-		t.Error("sshKeysGenerateFilenameText is empty, want a harmless default filename")
+	if r.ssh.KeysGenerateFilenameText == "" {
+		t.Error("ssh.KeysGenerateFilenameText is empty, want a harmless default filename")
 	}
 }
 
@@ -88,15 +88,15 @@ func TestSubmitSSHKeysGenerateReportsAnInvalidSpecInPlace(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.openSSHKeysGenerate()
-	r.sshKeysGenerateFilenameText = ""
+	r.ssh.KeysGenerateFilenameText = ""
 
 	r.submitSSHKeysGenerate()
 
 	if r.activePage != sshKeysGeneratePage {
 		t.Errorf("activePage = %q, want to stay on the Generate key form after a validation error", r.activePage)
 	}
-	if got := r.sshKeysGenerateStatus.GetText(true); got == "" {
-		t.Error("sshKeysGenerateStatus is empty, want the validation error reported in place")
+	if got := r.ssh.KeysGenerateStatus.GetText(true); got == "" {
+		t.Error("ssh.KeysGenerateStatus is empty, want the validation error reported in place")
 	}
 }
 
@@ -120,8 +120,8 @@ func TestSubmitSSHKeysGenerateRefusesAnAlreadyExistingFilename(t *testing.T) {
 	if r.activePage != sshKeysGeneratePage {
 		t.Errorf("activePage = %q, want to stay on the Generate key form after a filename collision", r.activePage)
 	}
-	if got := r.sshKeysGenerateStatus.GetText(true); !strings.Contains(got, "already exists") {
-		t.Errorf("sshKeysGenerateStatus = %q, want it to mention the existing file", got)
+	if got := r.ssh.KeysGenerateStatus.GetText(true); !strings.Contains(got, "already exists") {
+		t.Errorf("ssh.KeysGenerateStatus = %q, want it to mention the existing file", got)
 	}
 }
 
@@ -135,7 +135,7 @@ func TestSubmitSSHKeysGenerateShowsConfirmWithTheExactCommand(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.openSSHKeysGenerate()
-	r.sshKeysGenerateCommentText = ""
+	r.ssh.KeysGenerateCommentText = ""
 
 	r.submitSSHKeysGenerate()
 
@@ -184,8 +184,8 @@ func TestSSHKeysGenerateAlgorithmChangeUpdatesAnUntouchedFilename(t *testing.T) 
 
 	selectSSHKeysGenerateAlgorithm(t, r, "rsa")
 
-	if r.sshKeysGenerateFilenameText != "id_rsa" {
-		t.Errorf("sshKeysGenerateFilenameText = %q, want it to follow the algorithm change to id_rsa", r.sshKeysGenerateFilenameText)
+	if r.ssh.KeysGenerateFilenameText != "id_rsa" {
+		t.Errorf("ssh.KeysGenerateFilenameText = %q, want it to follow the algorithm change to id_rsa", r.ssh.KeysGenerateFilenameText)
 	}
 }
 
@@ -199,12 +199,12 @@ func TestSSHKeysGenerateAlgorithmChangeKeepsATypedFilename(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.openSSHKeysGenerate()
-	r.sshKeysGenerateFilenameText = "my_custom_key"
+	r.ssh.KeysGenerateFilenameText = "my_custom_key"
 
 	selectSSHKeysGenerateAlgorithm(t, r, "rsa")
 
-	if r.sshKeysGenerateFilenameText != "my_custom_key" {
-		t.Errorf("sshKeysGenerateFilenameText = %q, want the user's own typed filename left alone", r.sshKeysGenerateFilenameText)
+	if r.ssh.KeysGenerateFilenameText != "my_custom_key" {
+		t.Errorf("ssh.KeysGenerateFilenameText = %q, want the user's own typed filename left alone", r.ssh.KeysGenerateFilenameText)
 	}
 }
 
@@ -217,15 +217,15 @@ func TestRenderSSHKeysGenerateFormShowsBitsOnlyForRSAAndECDSA(t *testing.T) {
 	r.openSSHKeysGenerate() // ed25519, the default
 
 	// Algorithm + Filename + Comment, no Bits field.
-	if got := r.sshKeysGenerateForm.GetFormItemCount(); got != 3 {
+	if got := r.ssh.KeysGenerateForm.GetFormItemCount(); got != 3 {
 		t.Errorf("form item count for ed25519 = %d, want 3 (no Bits field)", got)
 	}
 
-	r.sshKeysGenerateAlgorithm = "rsa"
-	r.sshKeysGenerateBits = RSABitsChoices[len(RSABitsChoices)-1]
+	r.ssh.KeysGenerateAlgorithm = "rsa"
+	r.ssh.KeysGenerateBits = RSABitsChoices[len(RSABitsChoices)-1]
 	r.renderSSHKeysGenerateForm()
 
-	if got := r.sshKeysGenerateForm.GetFormItemCount(); got != 4 {
+	if got := r.ssh.KeysGenerateForm.GetFormItemCount(); got != 4 {
 		t.Errorf("form item count for rsa = %d, want 4 (Algorithm, Bits, Filename, Comment)", got)
 	}
 }

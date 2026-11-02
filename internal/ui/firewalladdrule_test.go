@@ -88,22 +88,22 @@ func TestOpenFirewallAddRuleRefusesNFTables(t *testing.T) {
 
 func TestOpenFirewallAddRuleResetsToHarmlessDefaults(t *testing.T) {
 	r := newFirewallAddRuleTestRoot(t, firewall.BackendUFW)
-	r.firewallAddRulePortText = "9999"
-	r.firewallAddRuleAction = firewall.ActionDeny
+	r.firewall.AddRulePortText = "9999"
+	r.firewall.AddRuleAction = firewall.ActionDeny
 
 	r.openFirewallAddRule()
 
 	if r.activePage != firewallAddRulePage {
 		t.Fatalf("activePage = %q, want the Add rule form", r.activePage)
 	}
-	if r.firewallAddRuleDirection != firewall.DirectionIn {
-		t.Errorf("Direction = %v, want DirectionIn (harmless default)", r.firewallAddRuleDirection)
+	if r.firewall.AddRuleDirection != firewall.DirectionIn {
+		t.Errorf("Direction = %v, want DirectionIn (harmless default)", r.firewall.AddRuleDirection)
 	}
-	if r.firewallAddRuleAction != firewall.ActionAllow {
-		t.Errorf("Action = %v, want ActionAllow (harmless default)", r.firewallAddRuleAction)
+	if r.firewall.AddRuleAction != firewall.ActionAllow {
+		t.Errorf("Action = %v, want ActionAllow (harmless default)", r.firewall.AddRuleAction)
 	}
-	if r.firewallAddRulePortText != "" {
-		t.Errorf("PortText = %q, want blank (reset on every open, never sticky)", r.firewallAddRulePortText)
+	if r.firewall.AddRulePortText != "" {
+		t.Errorf("PortText = %q, want blank (reset on every open, never sticky)", r.firewall.AddRulePortText)
 	}
 }
 
@@ -123,12 +123,12 @@ func TestOpenFirewallAddRuleUsesConfiguredDefaults(t *testing.T) {
 	r.openFirewallAddRule()
 
 	switch {
-	case r.firewallAddRuleDirection != firewall.DirectionOut:
-		t.Errorf("Direction = %v, want DirectionOut (from settings)", r.firewallAddRuleDirection)
-	case r.firewallAddRuleAction != firewall.ActionDeny:
-		t.Errorf("Action = %v, want ActionDeny (from settings)", r.firewallAddRuleAction)
-	case r.firewallAddRuleProtocol != "tcp":
-		t.Errorf("Protocol = %q, want %q (from settings)", r.firewallAddRuleProtocol, "tcp")
+	case r.firewall.AddRuleDirection != firewall.DirectionOut:
+		t.Errorf("Direction = %v, want DirectionOut (from settings)", r.firewall.AddRuleDirection)
+	case r.firewall.AddRuleAction != firewall.ActionDeny:
+		t.Errorf("Action = %v, want ActionDeny (from settings)", r.firewall.AddRuleAction)
+	case r.firewall.AddRuleProtocol != "tcp":
+		t.Errorf("Protocol = %q, want %q (from settings)", r.firewall.AddRuleProtocol, "tcp")
 	}
 }
 
@@ -144,9 +144,9 @@ func TestSubmitFirewallAddRuleNeverWritesBackToSettings(t *testing.T) {
 	configPath := isolateUserConfigFile(t)
 	r := newFirewallAddRuleTestRoot(t, firewall.BackendUFW)
 	r.openFirewallAddRule() // seeds Direction=in/Action=allow/Protocol="" from settings' own defaults
-	r.firewallAddRuleDirection = firewall.DirectionOut
-	r.firewallAddRuleAction = firewall.ActionDeny
-	r.firewallAddRuleProtocol = "udp"
+	r.firewall.AddRuleDirection = firewall.DirectionOut
+	r.firewall.AddRuleAction = firewall.ActionDeny
+	r.firewall.AddRuleProtocol = "udp"
 
 	r.submitFirewallAddRule()
 
@@ -170,8 +170,8 @@ func TestSubmitFirewallAddRuleNeverWritesBackToSettings(t *testing.T) {
 func TestSubmitFirewallAddRuleShowsConfirmWithTheExactCommand(t *testing.T) {
 	r := newFirewallAddRuleTestRoot(t, firewall.BackendUFW)
 	r.openFirewallAddRule()
-	r.firewallAddRulePortText = "22"
-	r.firewallAddRuleProtocol = "tcp"
+	r.firewall.AddRulePortText = "22"
+	r.firewall.AddRuleProtocol = "tcp"
 
 	r.submitFirewallAddRule()
 
@@ -193,15 +193,15 @@ func TestSubmitFirewallAddRuleShowsConfirmWithTheExactCommand(t *testing.T) {
 func TestSubmitFirewallAddRuleReportsAnInvalidPortInPlace(t *testing.T) {
 	r := newFirewallAddRuleTestRoot(t, firewall.BackendUFW)
 	r.openFirewallAddRule()
-	r.firewallAddRulePortText = "not-a-port"
+	r.firewall.AddRulePortText = "not-a-port"
 
 	r.submitFirewallAddRule()
 
 	if r.activePage != firewallAddRulePage {
 		t.Errorf("activePage = %q, want to stay on the Add rule form after a validation error", r.activePage)
 	}
-	if got := r.firewallAddRuleStatus.GetText(true); got == "" {
-		t.Error("firewallAddRuleStatus is empty, want the parse error reported in place")
+	if got := r.firewall.AddRuleStatus.GetText(true); got == "" {
+		t.Error("firewall.AddRuleStatus is empty, want the parse error reported in place")
 	}
 }
 
@@ -250,16 +250,16 @@ func TestApplyFirewallAddRuleArmsRollbackWhenSSHRelevantOverSSH(t *testing.T) {
 
 	r.applyFirewallAddRule(firewall.BackendUFW, spec, command)
 	t.Cleanup(func() {
-		if r.firewallRollbackTimer != nil {
-			r.firewallRollbackTimer.Stop()
+		if r.firewall.RollbackTimer != nil {
+			r.firewall.RollbackTimer.Stop()
 		}
-		if r.firewallRollbackCancel != nil {
-			r.firewallRollbackCancel()
+		if r.firewall.RollbackCancel != nil {
+			r.firewall.RollbackCancel()
 		}
 	})
 
-	if r.firewallRollbackTimer == nil {
-		t.Fatal("firewallRollbackTimer is nil, want an armed rollback for an SSH-relevant Deny rule applied over SSH")
+	if r.firewall.RollbackTimer == nil {
+		t.Fatal("firewall.RollbackTimer is nil, want an armed rollback for an SSH-relevant Deny rule applied over SSH")
 	}
 	if r.activePage != firewallRollbackPage {
 		t.Errorf("activePage = %q, want the rollback countdown overlay", r.activePage)
@@ -282,8 +282,8 @@ func TestApplyFirewallAddRuleDoesNotArmRollbackWithoutSSH(t *testing.T) {
 
 	r.applyFirewallAddRule(firewall.BackendUFW, spec, command)
 
-	if r.firewallRollbackTimer != nil {
-		t.Error("firewallRollbackTimer armed without an active SSH session, want it left nil")
+	if r.firewall.RollbackTimer != nil {
+		t.Error("firewall.RollbackTimer armed without an active SSH session, want it left nil")
 	}
 }
 
@@ -305,8 +305,8 @@ func TestApplyFirewallAddRuleDoesNotArmRollbackForAllow(t *testing.T) {
 
 	r.applyFirewallAddRule(firewall.BackendUFW, spec, command)
 
-	if r.firewallRollbackTimer != nil {
-		t.Error("firewallRollbackTimer armed for an Allow rule, want it left nil")
+	if r.firewall.RollbackTimer != nil {
+		t.Error("firewall.RollbackTimer armed for an Allow rule, want it left nil")
 	}
 }
 
@@ -321,14 +321,14 @@ func TestKeepFirewallRuleStopsTheTimerAndLogs(t *testing.T) {
 	spec := firewall.NewRuleSpec{Direction: firewall.DirectionIn, Action: firewall.ActionDeny, PortFrom: 22, PortTo: 22}
 	command, _ := firewall.UFWAddRuleCommand(spec)
 	r.applyFirewallAddRule(firewall.BackendUFW, spec, command)
-	if r.firewallRollbackTimer == nil {
+	if r.firewall.RollbackTimer == nil {
 		t.Fatal("rollback not armed, precondition for this test failed")
 	}
 
 	r.keepFirewallRule()
 
-	if r.firewallRollbackTimer != nil {
-		t.Error("keepFirewallRule left firewallRollbackTimer set, want it cleared")
+	if r.firewall.RollbackTimer != nil {
+		t.Error("keepFirewallRule left firewall.RollbackTimer set, want it cleared")
 	}
 	if r.activePage == firewallRollbackPage {
 		t.Error("keepFirewallRule left the countdown overlay open")
@@ -349,10 +349,10 @@ func TestRollbackFirewallRuleRunsDeleteAndReportsIt(t *testing.T) {
 	spec := firewall.NewRuleSpec{Direction: firewall.DirectionIn, Action: firewall.ActionDeny, PortFrom: 22, PortTo: 22}
 	command, _ := firewall.UFWAddRuleCommand(spec)
 	r.applyFirewallAddRule(firewall.BackendUFW, spec, command)
-	if r.firewallRollbackTimer == nil {
+	if r.firewall.RollbackTimer == nil {
 		t.Fatal("rollback not armed, precondition for this test failed")
 	}
-	r.firewallRollbackTimer.Stop() // don't race the real timer — call the same action it would fire directly
+	r.firewall.RollbackTimer.Stop() // don't race the real timer — call the same action it would fire directly
 
 	r.rollbackFirewallRule()
 
@@ -386,10 +386,10 @@ func TestRollbackFirewallRulePushesANotification(t *testing.T) {
 	spec := firewall.NewRuleSpec{Direction: firewall.DirectionIn, Action: firewall.ActionDeny, PortFrom: 22, PortTo: 22}
 	command, _ := firewall.UFWAddRuleCommand(spec)
 	r.applyFirewallAddRule(firewall.BackendUFW, spec, command)
-	if r.firewallRollbackTimer == nil {
+	if r.firewall.RollbackTimer == nil {
 		t.Fatal("rollback not armed, precondition for this test failed")
 	}
-	r.firewallRollbackTimer.Stop() // don't race the real timer — call the same action it would fire directly
+	r.firewall.RollbackTimer.Stop() // don't race the real timer — call the same action it would fire directly
 
 	r.rollbackFirewallRule()
 

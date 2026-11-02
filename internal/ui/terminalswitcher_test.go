@@ -368,11 +368,11 @@ func TestTerminalSwitcherNewTerminalRowOpensTheReusedDialog(t *testing.T) {
 	if r.activePage != sshShellDialogPage {
 		t.Errorf("activePage = %q, want %q", r.activePage, sshShellDialogPage)
 	}
-	if r.sshShellSubmit == nil {
-		t.Error("sshShellSubmit wasn't set — the dialog would fall back to the default ssh launcher")
+	if r.ssh.ShellSubmit == nil {
+		t.Error("ssh.ShellSubmit wasn't set — the dialog would fall back to the default ssh launcher")
 	}
 
-	r.sshShellHostField.SetText("newhost")
+	r.ssh.ShellHostField.SetText("newhost")
 	r.runSSHShellFromDialog()
 
 	if len(r.shells) != 2 {
@@ -622,11 +622,11 @@ func TestTerminalSwitcherEditActionOnAHistoryRowOpensThePrefilledDialog(t *testi
 	if r.activePage != sshShellDialogPage {
 		t.Errorf("activePage = %q, want %q", r.activePage, sshShellDialogPage)
 	}
-	if got := r.sshShellHostField.GetText(); got != conn.Host {
+	if got := r.ssh.ShellHostField.GetText(); got != conn.Host {
 		t.Errorf("Host field = %q, want %q (prefilled)", got, conn.Host)
 	}
-	if r.sshShellSubmit == nil {
-		t.Error("sshShellSubmit wasn't set — submitting would fall back to the default ssh launcher")
+	if r.ssh.ShellSubmit == nil {
+		t.Error("ssh.ShellSubmit wasn't set — submitting would fall back to the default ssh launcher")
 	}
 }
 

@@ -133,11 +133,11 @@ func TestOpenSearchShowsFieldsPrefilledWithPanelScopeAndFocusesFilename(t *testi
 	if r.activePage != searchPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, searchPage)
 	}
-	if r.searchFilenameValue != "" {
-		t.Errorf("Filename = %q, want empty", r.searchFilenameValue)
+	if r.search.FilenameValue != "" {
+		t.Errorf("Filename = %q, want empty", r.search.FilenameValue)
 	}
-	if r.searchScopeValue != dir {
-		t.Errorf("Start at = %q, want the panel's own current directory %q", r.searchScopeValue, dir)
+	if r.search.ScopeValue != dir {
+		t.Errorf("Start at = %q, want the panel's own current directory %q", r.search.ScopeValue, dir)
 	}
 
 	// The user's own request: Filename, not Engine, has first focus.
@@ -145,8 +145,8 @@ func TestOpenSearchShowsFieldsPrefilledWithPanelScopeAndFocusesFilename(t *testi
 	if !ok {
 		t.Fatal("setup: no span tagged \"filename\"")
 	}
-	if r.searchFocusedIdx != wantIdx {
-		t.Errorf("searchFocusedIdx = %d, want %d (the Filename span)", r.searchFocusedIdx, wantIdx)
+	if r.search.FocusedIdx != wantIdx {
+		t.Errorf("search.FocusedIdx = %d, want %d (the Filename span)", r.search.FocusedIdx, wantIdx)
 	}
 }
 
@@ -166,18 +166,18 @@ func TestOpenSearchHasATitleBar(t *testing.T) {
 
 	r.openSearch()
 
-	titleBarText := r.searchTitleBar.GetText(true)
+	titleBarText := r.search.TitleBar.GetText(true)
 	if !strings.HasPrefix(titleBarText, " Find ") {
-		t.Errorf("searchTitleBar text = %q, want it to start with %q", titleBarText, " Find ")
+		t.Errorf("search.TitleBar text = %q, want it to start with %q", titleBarText, " Find ")
 	}
 	if !strings.Contains(titleBarText, string(toolWindowCloseGlyph)) {
-		t.Errorf("searchTitleBar text = %q, want it to contain the close glyph %q", titleBarText, string(toolWindowCloseGlyph))
+		t.Errorf("search.TitleBar text = %q, want it to contain the close glyph %q", titleBarText, string(toolWindowCloseGlyph))
 	}
-	if r.searchTitleBar.HasFocus() {
+	if r.search.TitleBar.HasFocus() {
 		t.Error("real keyboard focus should not have landed on the title bar")
 	}
-	if !r.searchFieldsPages.HasFocus() {
-		t.Error("real keyboard focus should be inside searchFieldsPages")
+	if !r.search.FieldsPages.HasFocus() {
+		t.Error("real keyboard focus should be inside search.FieldsPages")
 	}
 }
 
@@ -195,7 +195,7 @@ func TestOpenSearchStaysCenteredOnTheWholeScreenInSplitView(t *testing.T) {
 
 	r.openSearch()
 
-	x, _, width, _ := r.searchPages.GetRect()
+	x, _, width, _ := r.search.Pages.GetRect()
 	if width != searchFormWidth {
 		t.Fatalf("search dialog width = %d, want %d — clamped down to fit inside the active pane's own width instead of staying its own full size across the whole screen", width, searchFormWidth)
 	}
@@ -238,7 +238,7 @@ func TestOnSearchEscapeClosesResultsAndReturnsToStartingDirectory(t *testing.T) 
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "anything"
+	r.search.FilenameValue = "anything"
 	r.runSearch() // switches to the results page
 
 	r.panel.onSearchEscape()
@@ -270,16 +270,16 @@ func TestActivateSearchTextFieldAndCommit(t *testing.T) {
 	if !ok {
 		t.Fatal("setup: no span tagged \"filename\"")
 	}
-	r.searchSpans[idx].activate()
+	r.search.Spans[idx].activate()
 
-	if !r.searchEditField.HasFocus() {
+	if !r.search.EditField.HasFocus() {
 		t.Fatal("activating a text span should have focused the shared inline editor")
 	}
-	r.searchEditField.SetText("*.go")
+	r.search.EditField.SetText("*.go")
 	r.finishSearchEdit(tcell.KeyEnter)
 
-	if r.searchFilenameValue != "*.go" {
-		t.Errorf("searchFilenameValue = %q, want %q", r.searchFilenameValue, "*.go")
+	if r.search.FilenameValue != "*.go" {
+		t.Errorf("search.FilenameValue = %q, want %q", r.search.FilenameValue, "*.go")
 	}
 }
 
@@ -302,9 +302,9 @@ func TestCaptureSearchScopeKeyCompletesPath(t *testing.T) {
 	if !ok {
 		t.Fatal("setup: no span tagged \"start-at\"")
 	}
-	r.searchSpans[idx].activate()
-	r.searchEditField.SetText(dir + "/ap")
-	r.searchEditField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.search.Spans[idx].activate()
+	r.search.EditField.SetText(dir + "/ap")
+	r.search.EditField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	// apple.txt/apricot.txt are files, excluded outright by
 	// dirCompletions — app-data/ is the only directory starting with
@@ -312,7 +312,7 @@ func TestCaptureSearchScopeKeyCompletesPath(t *testing.T) {
 	// "ap" itself the way Panel's own plain (file-inclusive) completion
 	// would (see TestCompletions at the Panel level for that).
 	want := dir + "/app-data/"
-	if got := r.searchEditField.GetText(); got != want {
+	if got := r.search.EditField.GetText(); got != want {
 		t.Errorf("Start-at editor text after Tab = %q, want %q", got, want)
 	}
 }
@@ -340,8 +340,8 @@ func TestCaptureSearchScopeKeyAlwaysConsumesTab(t *testing.T) {
 	if !ok {
 		t.Fatal("setup: no span tagged \"start-at\"")
 	}
-	r.searchSpans[idx].activate()
-	r.searchEditField.SetText(dir + "/app")
+	r.search.Spans[idx].activate()
+	r.search.EditField.SetText(dir + "/app")
 
 	// First Tab: "app" is shared by appdata1/ and appdata2/, extending
 	// to "appdata" — consumed.
@@ -349,7 +349,7 @@ func TestCaptureSearchScopeKeyAlwaysConsumesTab(t *testing.T) {
 		t.Fatal("Tab should always be consumed")
 	}
 	want := dir + "/appdata"
-	if got := r.searchEditField.GetText(); got != want {
+	if got := r.search.EditField.GetText(); got != want {
 		t.Fatalf("after first Tab, text = %q, want %q", got, want)
 	}
 
@@ -359,7 +359,7 @@ func TestCaptureSearchScopeKeyAlwaysConsumesTab(t *testing.T) {
 	if result := r.captureSearchScopeKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); result != nil {
 		t.Error("Tab should still be consumed once nothing is left to complete")
 	}
-	if got := r.searchEditField.GetText(); got != want {
+	if got := r.search.EditField.GetText(); got != want {
 		t.Errorf("after second Tab, text = %q, want unchanged %q", got, want)
 	}
 }
@@ -393,13 +393,13 @@ func TestCaptureSearchScopeKeyExcludesFiles(t *testing.T) {
 	if !ok {
 		t.Fatal("setup: no span tagged \"start-at\"")
 	}
-	r.searchSpans[idx].activate()
-	r.searchEditField.SetText(dir + "/Down")
+	r.search.Spans[idx].activate()
+	r.search.EditField.SetText(dir + "/Down")
 
 	r.captureSearchScopeKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 
 	want := dir + "/Downloads/"
-	if got := r.searchEditField.GetText(); got != want {
+	if got := r.search.EditField.GetText(); got != want {
 		t.Errorf("Start-at editor text after Tab = %q, want %q (download-thing.sh, a file, should never have been a candidate)", got, want)
 	}
 }
@@ -421,9 +421,9 @@ func TestEnterInFilenameFieldRunsSearch(t *testing.T) {
 	if !ok {
 		t.Fatal("setup: no span tagged \"filename\"")
 	}
-	r.searchSpans[idx].activate() // opens the shared inline editor
-	r.searchEditField.SetText("*.go")
-	r.searchEditField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.search.Spans[idx].activate() // opens the shared inline editor
+	r.search.EditField.SetText("*.go")
+	r.search.EditField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if captured.Pattern != "*.go" {
 		t.Errorf("Pattern = %q, want %q — Enter in Filename should have run the search", captured.Pattern, "*.go")
@@ -456,15 +456,15 @@ func TestEnterInOtherFieldsDoesNotRunSearch(t *testing.T) {
 	if !ok {
 		t.Fatal("setup: no span tagged \"start-at\"")
 	}
-	r.searchSpans[idx].activate()
-	r.searchEditField.SetText(dir)
-	r.searchEditField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.search.Spans[idx].activate()
+	r.search.EditField.SetText(dir)
+	r.search.EditField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if searchRunCalled {
 		t.Error("Enter in Start-at should not have run the search")
 	}
-	if r.searchScopeValue != dir {
-		t.Errorf("searchScopeValue = %q, want %q — Enter should still commit", r.searchScopeValue, dir)
+	if r.search.ScopeValue != dir {
+		t.Errorf("search.ScopeValue = %q, want %q — Enter should still commit", r.search.ScopeValue, dir)
 	}
 }
 
@@ -494,20 +494,20 @@ func TestEnterInStartAtLeavesEditModeInsteadOfReopeningIt(t *testing.T) {
 		t.Fatal("setup: no span tagged \"start-at\"")
 	}
 	r.setSearchFocus(idx)
-	if !r.searchEditField.HasFocus() {
+	if !r.search.EditField.HasFocus() {
 		t.Fatal("setup: focusing Start-at should have opened its own inline edit")
 	}
 
-	r.searchEditField.SetText(dir)
+	r.search.EditField.SetText(dir)
 	r.finishSearchEdit(tcell.KeyEnter)
 
-	if r.searchEditField.HasFocus() {
+	if r.search.EditField.HasFocus() {
 		t.Error("Enter should have left Start-at's own edit mode, not reopened it on the same field")
 	}
-	if r.searchScopeValue != dir {
-		t.Errorf("searchScopeValue = %q, want %q committed before Enter moved focus on", r.searchScopeValue, dir)
+	if r.search.ScopeValue != dir {
+		t.Errorf("search.ScopeValue = %q, want %q committed before Enter moved focus on", r.search.ScopeValue, dir)
 	}
-	if r.searchFocusedIdx == idx {
+	if r.search.FocusedIdx == idx {
 		t.Error("Enter should have advanced focus (same as Tab), not left it on Start-at's own span")
 	}
 }
@@ -528,28 +528,28 @@ func TestCommitPendingSearchEditPreservesInProgressText(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.openSearch()
-	r.searchScopeValue = dir // simulates a Tree pick
+	r.search.ScopeValue = dir // simulates a Tree pick
 
 	idx, ok := r.searchSpanIndex("start-at")
 	if !ok {
 		t.Fatal("setup: no span tagged \"start-at\"")
 	}
-	r.searchSpans[idx].activate() // opens the shared inline editor, prefilled with dir
+	r.search.Spans[idx].activate() // opens the shared inline editor, prefilled with dir
 	refined := dir + "/app-data"
-	r.searchEditField.SetText(refined) // the user refining it by hand, never pressing Enter/Tab
+	r.search.EditField.SetText(refined) // the user refining it by hand, never pressing Enter/Tab
 
 	r.commitPendingSearchEdit()
 
-	if r.searchScopeValue != refined {
-		t.Errorf("searchScopeValue = %q, want %q (the refined value, not the original Tree pick)", r.searchScopeValue, refined)
+	if r.search.ScopeValue != refined {
+		t.Errorf("search.ScopeValue = %q, want %q (the refined value, not the original Tree pick)", r.search.ScopeValue, refined)
 	}
-	if r.searchEditCommit != nil {
-		t.Error("searchEditCommit should be nil again once committed — see finishSearchEdit's own doc comment on why")
+	if r.search.EditCommit != nil {
+		t.Error("search.EditCommit should be nil again once committed — see finishSearchEdit's own doc comment on why")
 	}
 }
 
 // TestCommitPendingSearchEditNoopWhenNotEditing pins that calling it
-// with nothing in progress (searchEditCommit nil) is a safe no-op —
+// with nothing in progress (search.EditCommit nil) is a safe no-op —
 // captureSearchMouse calls it unconditionally on every click,
 // regardless of whether an edit is actually in progress.
 func TestCommitPendingSearchEditNoopWhenNotEditing(t *testing.T) {
@@ -591,8 +591,8 @@ func TestRunSearchRejectsNonexistentStartAt(t *testing.T) {
 	})
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchScopeValue = dir + "/does-not-exist"
+	r.search.FilenameValue = "*.go"
+	r.search.ScopeValue = dir + "/does-not-exist"
 
 	r.runSearch()
 
@@ -641,9 +641,9 @@ func TestRunSearchAllowsNonexistentStartAtForLocate(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchScopeValue = dir + "/does-not-exist"
-	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineLocate)
+	r.search.FilenameValue = "*.go"
+	r.search.ScopeValue = dir + "/does-not-exist"
+	r.search.EngineIdx = searchEngineIndex(t, r, search.EngineLocate)
 
 	r.runSearch()
 
@@ -677,9 +677,9 @@ func TestRunSearchRejectsNonexistentStartAtForLocatePlainContentSearch(t *testin
 	})
 
 	r.openSearch()
-	r.searchContentValue = "needle" // Content only — Filename left blank
-	r.searchScopeValue = dir + "/does-not-exist"
-	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineLocate)
+	r.search.ContentValue = "needle" // Content only — Filename left blank
+	r.search.ScopeValue = dir + "/does-not-exist"
+	r.search.EngineIdx = searchEngineIndex(t, r, search.EngineLocate)
 
 	r.runSearch()
 
@@ -712,17 +712,17 @@ func TestRerenderSearchDialogUndimsStartAtForLocatePlainContentSearch(t *testing
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.openSearch()
-	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineLocate)
+	r.search.EngineIdx = searchEngineIndex(t, r, search.EngineLocate)
 
-	r.searchFilenameValue = "*.go"
-	r.searchContentValue = ""
+	r.search.FilenameValue = "*.go"
+	r.search.ContentValue = ""
 	r.rerenderSearchDialog()
 	if !rowIsDimmed(t, r, "start-at") {
 		t.Error("Start at should be dimmed for a locate filename search")
 	}
 
-	r.searchFilenameValue = ""
-	r.searchContentValue = "needle"
+	r.search.FilenameValue = ""
+	r.search.ContentValue = "needle"
 	r.rerenderSearchDialog()
 	if rowIsDimmed(t, r, "start-at") {
 		t.Error("Start at should NOT be dimmed for locate's own plain content search — it's a real, active scope here")
@@ -751,9 +751,9 @@ func TestRunSearchUsesStartAtForLocatePlainContentSearchToo(t *testing.T) {
 
 	altScope := filepath.Join(dir, "app-data") // deliberately NOT r.panel.path — must still be used, not silently swapped out
 	r.openSearch()
-	r.searchContentValue = "needle"
-	r.searchScopeValue = altScope
-	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineLocate)
+	r.search.ContentValue = "needle"
+	r.search.ScopeValue = altScope
+	r.search.EngineIdx = searchEngineIndex(t, r, search.EngineLocate)
 
 	r.runSearch()
 
@@ -781,10 +781,10 @@ func TestRunSearchKeepsStartAtScopeForLocateWithFilenameNarrowing(t *testing.T) 
 
 	altScope := filepath.Join(dir, "app-data")
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchContentValue = "needle"
-	r.searchScopeValue = altScope
-	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineLocate)
+	r.search.FilenameValue = "*.go"
+	r.search.ContentValue = "needle"
+	r.search.ScopeValue = altScope
+	r.search.EngineIdx = searchEngineIndex(t, r, search.EngineLocate)
 
 	r.runSearch()
 
@@ -809,9 +809,9 @@ func TestRunSearchKeepsStartAtScopeForFindPlainContentSearch(t *testing.T) {
 
 	altScope := filepath.Join(dir, "app-data")
 	r.openSearch()
-	r.searchContentValue = "needle"
-	r.searchScopeValue = altScope
-	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineFind)
+	r.search.ContentValue = "needle"
+	r.search.ScopeValue = altScope
+	r.search.EngineIdx = searchEngineIndex(t, r, search.EngineFind)
 
 	r.runSearch()
 
@@ -820,13 +820,13 @@ func TestRunSearchKeepsStartAtScopeForFindPlainContentSearch(t *testing.T) {
 	}
 }
 
-// searchEngineIndex finds the index into r.searchEngineOptions whose
+// searchEngineIndex finds the index into r.search.EngineOptions whose
 // own engine matches want, skipping the test if it isn't available on
 // this host (e.g. locate — see search.LocateAvailable's own doc
 // comment).
 func searchEngineIndex(t *testing.T, r *Root, want search.Engine) int {
 	t.Helper()
-	for i, opt := range r.searchEngineOptions {
+	for i, opt := range r.search.EngineOptions {
 		if opt.engine == want {
 			return i
 		}
@@ -845,12 +845,12 @@ func TestRunSearchBuildsRequestFromDialogState(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchScopeValue = "/tmp"
-	r.searchShellPatterns = false // "Using shell patterns" unchecked -> filename Mode is Regex
-	r.searchIgnoreEnabled = true
-	r.searchIgnoreValue = ".git, node_modules"
-	r.searchCaseSensitive = true
+	r.search.FilenameValue = "*.go"
+	r.search.ScopeValue = "/tmp"
+	r.search.ShellPatterns = false // "Using shell patterns" unchecked -> filename Mode is Regex
+	r.search.IgnoreEnabled = true
+	r.search.IgnoreValue = ".git, node_modules"
+	r.search.CaseSensitive = true
 
 	r.runSearch()
 
@@ -900,8 +900,8 @@ func TestRunSearchSetsSearchBrowsePathToScope(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchScopeValue = "/tmp"
+	r.search.FilenameValue = "*.go"
+	r.search.ScopeValue = "/tmp"
 
 	r.runSearch()
 
@@ -926,8 +926,8 @@ func TestRunSearchRejectedStartAtFallsBackBrowsePathToPanelPath(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured)) // never actually called — see TestRunSearchRejectsNonexistentStartAt
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchScopeValue = dir + "/does-not-exist"
+	r.search.FilenameValue = "*.go"
+	r.search.ScopeValue = dir + "/does-not-exist"
 
 	r.runSearch()
 
@@ -949,8 +949,8 @@ func TestRunSearchIncludeArchivesReachesRequest(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "abc*"
-	r.searchIncludeArchives = true
+	r.search.FilenameValue = "abc*"
+	r.search.IncludeArchives = true
 	r.runSearch()
 
 	if !captured.IncludeArchives {
@@ -975,8 +975,8 @@ func TestRunSearchIncludeArchivesIgnoredForContentSearch(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchContentValue = "TODO"
-	r.searchIncludeArchives = true
+	r.search.ContentValue = "TODO"
+	r.search.IncludeArchives = true
 	r.runSearch()
 
 	if captured.IncludeArchives {
@@ -997,8 +997,8 @@ func TestRunSearchIncludeCompressedReachesRequest(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchContentValue = "TODO"
-	r.searchIncludeCompressed = true
+	r.search.ContentValue = "TODO"
+	r.search.IncludeCompressed = true
 	r.runSearch()
 
 	if !captured.IncludeCompressed {
@@ -1021,8 +1021,8 @@ func TestRunSearchIncludeCompressedIgnoredForFilenameSearch(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchIncludeCompressed = true
+	r.search.FilenameValue = "*.go"
+	r.search.IncludeCompressed = true
 	r.runSearch()
 
 	if captured.IncludeCompressed {
@@ -1031,7 +1031,7 @@ func TestRunSearchIncludeCompressedIgnoredForFilenameSearch(t *testing.T) {
 }
 
 // TestRunSearchWiresOnProgress pins that runSearch actually sets
-// search.Request.OnProgress (see renderSearchStatus/searchCurrentPos) —
+// search.Request.OnProgress (see renderSearchStatus/search.CurrentPos) —
 // not exercised end to end here (that would need the real
 // tview.Application event loop actually running to drain
 // QueueUpdateDraw, which this package's own tests deliberately avoid
@@ -1048,7 +1048,7 @@ func TestRunSearchWiresOnProgress(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
+	r.search.FilenameValue = "*.go"
 	r.runSearch()
 
 	if captured.OnProgress == nil {
@@ -1075,9 +1075,9 @@ func TestRunSearchStripsSlashesFromIgnoreDirs(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "hangman.*"
-	r.searchIgnoreEnabled = true
-	r.searchIgnoreValue = "/development"
+	r.search.FilenameValue = "hangman.*"
+	r.search.IgnoreEnabled = true
+	r.search.IgnoreValue = "/development"
 
 	r.runSearch()
 
@@ -1104,10 +1104,10 @@ func TestRunSearchFilenameChecksMapToRequestFields(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchRecursive = false
-	r.searchFollowSymlinks = true
-	r.searchShellPatterns = true
+	r.search.FilenameValue = "*.go"
+	r.search.Recursive = false
+	r.search.FollowSymlinks = true
+	r.search.ShellPatterns = true
 
 	r.runSearch()
 
@@ -1137,10 +1137,10 @@ func TestRunSearchContentChecksMapToRequestFields(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchContentValue = "TODO" // a filled Content field is what selects content search now — see runSearch's own doc comment
-	r.searchWholeWords = true
-	r.searchContentRegex = true
-	r.searchFirstHit = true
+	r.search.ContentValue = "TODO" // a filled Content field is what selects content search now — see runSearch's own doc comment
+	r.search.WholeWords = true
+	r.search.ContentRegex = true
+	r.search.FirstHit = true
 
 	r.runSearch()
 
@@ -1169,9 +1169,9 @@ func TestRunSearchIgnoresIgnoreValueWhenDisabled(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchIgnoreValue = ".git"
-	r.searchIgnoreEnabled = false
+	r.search.FilenameValue = "*.go"
+	r.search.IgnoreValue = ".git"
+	r.search.IgnoreEnabled = false
 
 	r.runSearch()
 
@@ -1194,10 +1194,10 @@ func TestRunSearchSkipHiddenAddsGlobToIgnoreDirs(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchIgnoreEnabled = true
-	r.searchIgnoreValue = "node_modules"
-	r.searchSkipHidden = true
+	r.search.FilenameValue = "*.go"
+	r.search.IgnoreEnabled = true
+	r.search.IgnoreValue = "node_modules"
+	r.search.SkipHidden = true
 
 	r.runSearch()
 
@@ -1224,8 +1224,8 @@ func TestRunSearchUsesContentValueWhenContentFilled(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "should-be-ignored"
-	r.searchContentValue = "TODO"
+	r.search.FilenameValue = "should-be-ignored"
+	r.search.ContentValue = "TODO"
 
 	r.runSearch()
 
@@ -1256,7 +1256,7 @@ func TestRunSearchClosesFormAndShowsResultsInPanel(t *testing.T) {
 		t.Fatalf("activePage = %q before Search, want the form open (%q)", r.activePage, searchPage)
 	}
 
-	r.searchFilenameValue = "anything"
+	r.search.FilenameValue = "anything"
 	r.runSearch()
 
 	if r.activePage != "" {
@@ -1285,7 +1285,7 @@ func TestReopeningSearchFormViaFKeepsResultsAndFields(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(new(search.Request)))
 
 	r.openSearch()
-	r.searchFilenameValue = "anything"
+	r.search.FilenameValue = "anything"
 	r.runSearch()
 	r.panel.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
 
@@ -1300,8 +1300,8 @@ func TestReopeningSearchFormViaFKeepsResultsAndFields(t *testing.T) {
 	if got := r.panel.table.GetRowCount(); got != 1 {
 		t.Errorf("panel has %d rows after reopening via \"f\", want the one already-gathered result still there", got)
 	}
-	if r.searchFilenameValue != "anything" {
-		t.Errorf("searchFilenameValue = %q after reopening via \"f\", want it preserved", r.searchFilenameValue)
+	if r.search.FilenameValue != "anything" {
+		t.Errorf("search.FilenameValue = %q after reopening via \"f\", want it preserved", r.search.FilenameValue)
 	}
 }
 
@@ -1316,7 +1316,7 @@ func TestOpenSearchTreePickerSeedsFromScopeValueAndWritesBack(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.openSearch()
-	r.searchScopeValue = dir
+	r.search.ScopeValue = dir
 
 	r.openSearchTreePicker()
 
@@ -1326,8 +1326,8 @@ func TestOpenSearchTreePickerSeedsFromScopeValueAndWritesBack(t *testing.T) {
 
 	appData := filepath.Join(dir, "app-data")
 	r.confirmDirPicker() // picks whatever's currently browsed — still dir, since nothing navigated
-	if r.searchScopeValue != dir {
-		t.Errorf("Start at after confirming = %q, want %q", r.searchScopeValue, dir)
+	if r.search.ScopeValue != dir {
+		t.Errorf("Start at after confirming = %q, want %q", r.search.ScopeValue, dir)
 	}
 
 	// Navigating into a subdirectory first and confirming that instead
@@ -1335,17 +1335,17 @@ func TestOpenSearchTreePickerSeedsFromScopeValueAndWritesBack(t *testing.T) {
 	r.openSearchTreePicker()
 	r.loadDirPicker(appData)
 	r.confirmDirPicker()
-	if r.searchScopeValue != appData {
-		t.Errorf("Start at after navigating and confirming = %q, want %q", r.searchScopeValue, appData)
+	if r.search.ScopeValue != appData {
+		t.Errorf("Start at after navigating and confirming = %q, want %q", r.search.ScopeValue, appData)
 	}
 }
 
 // TestRenderSearchStatusShowsAnimationFrameAndFallbackDir pins
 // renderSearchStatus' own three-source text, most-specific first: the
 // current animation frame (see hashAnimationFrames, reused directly)
-// plus searchCurrentPos (live OnProgress) once set, falling back to
-// searchLastDir once a result has arrived, and finally to
-// searchStartDir before either one has anything at all.
+// plus search.CurrentPos (live OnProgress) once set, falling back to
+// search.LastDir once a result has arrived, and finally to
+// search.StartDir before either one has anything at all.
 func TestRenderSearchStatusShowsAnimationFrameAndFallbackDir(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -1354,10 +1354,10 @@ func TestRenderSearchStatusShowsAnimationFrameAndFallbackDir(t *testing.T) {
 	}
 	r.openSearch()
 
-	r.searchAnimFrame = 2
-	r.searchStartDir = "/start"
-	r.searchLastDir = ""
-	r.searchCurrentPos = ""
+	r.search.AnimFrame = 2
+	r.search.StartDir = "/start"
+	r.search.LastDir = ""
+	r.search.CurrentPos = ""
 	r.renderSearchStatus()
 
 	got := r.panel.header.GetText(true)
@@ -1365,32 +1365,32 @@ func TestRenderSearchStatusShowsAnimationFrameAndFallbackDir(t *testing.T) {
 		t.Errorf("status = %q, want it to contain frame %q", got, hashAnimationFrames[2])
 	}
 	if !strings.Contains(got, "/start") {
-		t.Errorf("status = %q, want the fallback searchStartDir (%q) before any result arrives", got, "/start")
+		t.Errorf("status = %q, want the fallback search.StartDir (%q) before any result arrives", got, "/start")
 	}
 
-	r.searchLastDir = "/found/here"
+	r.search.LastDir = "/found/here"
 	r.renderSearchStatus()
 	got = r.panel.header.GetText(true)
 	if !strings.Contains(got, "/found/here") {
-		t.Errorf("status = %q, want searchLastDir (%q) once a result has arrived", got, "/found/here")
+		t.Errorf("status = %q, want search.LastDir (%q) once a result has arrived", got, "/found/here")
 	}
 
-	r.searchCurrentPos = "/currently/scanning/this"
+	r.search.CurrentPos = "/currently/scanning/this"
 	r.renderSearchStatus()
 	got = r.panel.header.GetText(true)
 	if !strings.Contains(got, "/currently/scanning/this") {
-		t.Errorf("status = %q, want live searchCurrentPos (%q) to win over searchLastDir", got, "/currently/scanning/this")
+		t.Errorf("status = %q, want live search.CurrentPos (%q) to win over search.LastDir", got, "/currently/scanning/this")
 	}
 	if strings.Contains(got, "/found/here") {
-		t.Errorf("status = %q, want searchLastDir not shown once searchCurrentPos is set", got)
+		t.Errorf("status = %q, want search.LastDir not shown once search.CurrentPos is set", got)
 	}
-	// The real user report this pins: with searchCurrentPos changing
+	// The real user report this pins: with search.CurrentPos changing
 	// length on every live update, an Esc hint placed after it visibly
 	// jumped left/right along with it — see setSearchStatusLive's own
 	// doc comment. The hint's own position must stay right after the
 	// animation frame instead, never after the live-changing detail.
 	if hintIdx, detailIdx := strings.Index(got, "Esc"), strings.Index(got, "/currently/scanning/this"); hintIdx < 0 || detailIdx < 0 || hintIdx > detailIdx {
-		t.Errorf("status = %q, want the Esc hint before searchCurrentPos, not after (hintIdx=%d, detailIdx=%d)", got, hintIdx, detailIdx)
+		t.Errorf("status = %q, want the Esc hint before search.CurrentPos, not after (hintIdx=%d, detailIdx=%d)", got, hintIdx, detailIdx)
 	}
 }
 
@@ -1423,7 +1423,7 @@ func TestSetSearchStatusAlwaysAppendsEscHint(t *testing.T) {
 // TestSetSearchStatusLiveKeepsHintBeforeDetail pins the real user
 // report renderSearchStatus's own doc comment describes: with the Esc
 // hint appended at the very end (setSearchStatus's own shape), a
-// continuously changing, variable-length detail (searchCurrentPos)
+// continuously changing, variable-length detail (search.CurrentPos)
 // pushed the hint's own on-screen position left and right on every
 // single live update. setSearchStatusLive instead keeps the hint
 // sandwiched right after prefix, before detail, so the hint's own
@@ -1476,13 +1476,13 @@ func TestRunSearchCancelsPreviousSearch(t *testing.T) {
 
 	r.openSearch()
 
-	r.searchFilenameValue = "first"
+	r.search.FilenameValue = "first"
 	r.runSearch()
 	if firstCtx.Err() != nil {
 		t.Fatal("setup: the first search's context should not be cancelled yet")
 	}
 
-	r.searchFilenameValue = "second"
+	r.search.FilenameValue = "second"
 	r.runSearch()
 	if firstCtx.Err() == nil {
 		t.Error("starting a second search should have cancelled the first one's own context")
@@ -1528,13 +1528,13 @@ func TestChoiceSpanSelectsOption(t *testing.T) {
 	}
 	r.openSearch()
 
-	if !r.searchRecursive {
-		t.Fatal("setup: searchRecursive = false, want true (MC's own default — see newSearchDialog)")
+	if !r.search.Recursive {
+		t.Fatal("setup: search.Recursive = false, want true (MC's own default — see newSearchDialog)")
 	}
 
 	idx := -1
-	for i, s := range r.searchSpans {
-		if s.widget != r.searchLeft {
+	for i, s := range r.search.Spans {
+		if s.widget != r.search.Left {
 			continue
 		}
 		text, _ := textAtSpan(r, s)
@@ -1546,10 +1546,10 @@ func TestChoiceSpanSelectsOption(t *testing.T) {
 	if idx < 0 {
 		t.Fatal("setup: no span for Find recursively found")
 	}
-	r.searchSpans[idx].activate()
+	r.search.Spans[idx].activate()
 
-	if r.searchRecursive {
-		t.Error("searchRecursive = true after activating Find recursively, want false")
+	if r.search.Recursive {
+		t.Error("search.Recursive = true after activating Find recursively, want false")
 	}
 }
 
@@ -1570,9 +1570,9 @@ func TestRerenderSearchDialogHintsAtEcryptfsNextToLocate(t *testing.T) {
 	}
 	r.openSearch()
 
-	got := r.searchTop.GetText(true)
+	got := r.search.Top.GetText(true)
 	if !strings.Contains(got, "eCryptfs") {
-		t.Errorf("searchTop text = %q, want it to mention eCryptfs next to locate", got)
+		t.Errorf("search.Top text = %q, want it to mention eCryptfs next to locate", got)
 	}
 }
 
@@ -1608,18 +1608,18 @@ func TestCheckboxSpansToggle(t *testing.T) {
 		name string
 		get  func() bool
 	}{
-		{"Ignore dirs:", func() bool { return r.searchIgnoreEnabled }},
-		{"Case sensitive", func() bool { return r.searchCaseSensitive }},
-		{"Skip hidden", func() bool { return r.searchSkipHidden }},
-		{"Include zip, tar (gz, bz2, xz)", func() bool { return r.searchIncludeArchives }},
-		{"Include compressed files", func() bool { return r.searchIncludeCompressed }},
+		{"Ignore dirs:", func() bool { return r.search.IgnoreEnabled }},
+		{"Case sensitive", func() bool { return r.search.CaseSensitive }},
+		{"Skip hidden", func() bool { return r.search.SkipHidden }},
+		{"Include zip, tar (gz, bz2, xz)", func() bool { return r.search.IncludeArchives }},
+		{"Include compressed files", func() bool { return r.search.IncludeCompressed }},
 	}
 	for _, tt := range tests {
 		if tt.get() {
 			t.Fatalf("setup: %q should start unchecked", tt.name)
 		}
 		idx := -1
-		for i, s := range r.searchSpans {
+		for i, s := range r.search.Spans {
 			text, ok := textAtSpan(r, s)
 			if ok && strings.HasSuffix(text, tt.name) {
 				idx = i
@@ -1629,7 +1629,7 @@ func TestCheckboxSpansToggle(t *testing.T) {
 		if idx < 0 {
 			t.Fatalf("no span found for %q", tt.name)
 		}
-		r.searchSpans[idx].activate()
+		r.search.Spans[idx].activate()
 		if !tt.get() {
 			t.Errorf("%q should be checked after activating its span", tt.name)
 		}
@@ -1647,33 +1647,33 @@ func TestMoveSearchFocusWrapsThroughButtons(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.openSearch()
-	n := len(r.searchSpans)
+	n := len(r.search.Spans)
 
 	r.setSearchFocus(n - 1) // the last real span
 	r.moveSearchFocus(1)
-	if r.searchFocusedIdx != n {
-		t.Errorf("focus after Tab past the last span = %d, want %d (Cancel)", r.searchFocusedIdx, n)
+	if r.search.FocusedIdx != n {
+		t.Errorf("focus after Tab past the last span = %d, want %d (Cancel)", r.search.FocusedIdx, n)
 	}
-	if !r.searchCancelBtn.HasFocus() {
+	if !r.search.CancelBtn.HasFocus() {
 		t.Error("real focus should be on Cancel")
 	}
 
 	r.moveSearchFocus(1)
-	if r.searchFocusedIdx != n+1 {
-		t.Errorf("focus after Tab from Cancel = %d, want %d (Search)", r.searchFocusedIdx, n+1)
+	if r.search.FocusedIdx != n+1 {
+		t.Errorf("focus after Tab from Cancel = %d, want %d (Search)", r.search.FocusedIdx, n+1)
 	}
-	if !r.searchSearchBtn.HasFocus() {
+	if !r.search.SearchBtn.HasFocus() {
 		t.Error("real focus should be on Search")
 	}
 
 	r.moveSearchFocus(1)
-	if r.searchFocusedIdx != 0 {
-		t.Errorf("focus after Tab from Search = %d, want 0 (wraps to the first span)", r.searchFocusedIdx)
+	if r.search.FocusedIdx != 0 {
+		t.Errorf("focus after Tab from Search = %d, want 0 (wraps to the first span)", r.search.FocusedIdx)
 	}
 
 	r.moveSearchFocus(-1)
-	if r.searchFocusedIdx != n+1 {
-		t.Errorf("focus after Backtab from the first span = %d, want %d (wraps to Search)", r.searchFocusedIdx, n+1)
+	if r.search.FocusedIdx != n+1 {
+		t.Errorf("focus after Backtab from the first span = %d, want %d (wraps to Search)", r.search.FocusedIdx, n+1)
 	}
 }
 
@@ -1683,7 +1683,7 @@ func TestMoveSearchFocusWrapsThroughButtons(t *testing.T) {
 // captureSearchKey directly (as most of this file's other tests do)
 // could never have caught it — the bug was one level up, in *where*
 // that capture was installed, not in what it does. It used to sit on
-// fields, the shared ancestor of both the span area AND searchButtons;
+// fields, the shared ancestor of both the span area AND search.Buttons;
 // tview.Application dispatches every key event to a.root and lets each
 // ancestor's own SetInputCapture run before delegating further down
 // to whichever descendant actually has focus (see application.go's own
@@ -1691,10 +1691,10 @@ func TestMoveSearchFocusWrapsThroughButtons(t *testing.T) {
 // WrapInputHandler) — so captureSearchKey's unconditional KeyEnter/' '
 // cases swallowed the event before it ever reached the focused
 // button's own SetSelectedFunc/spaceAlsoActivates. Fixed by moving the
-// capture down onto spanArea, a sibling of searchButtons rather than
+// capture down onto spanArea, a sibling of search.Buttons rather than
 // an ancestor of it (see newSearchDialog's own doc comment).
 //
-// So this dispatches through r.searchFieldsPages.InputHandler() —
+// So this dispatches through r.search.FieldsPages.InputHandler() —
 // the real ancestor chain tview.Application itself would use, not a
 // direct call to the button's own InputHandler — to actually exercise
 // that chain and catch a regression if the capture ever migrates back
@@ -1709,9 +1709,9 @@ func TestFocusedSearchButtonActivatesViaEnterAndSpace(t *testing.T) {
 			t.Fatalf("NewRoot: %v", err)
 		}
 		r.openSearch()
-		r.setSearchFocus(len(r.searchSpans)) // Cancel
+		r.setSearchFocus(len(r.search.Spans)) // Cancel
 
-		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
+		r.search.FieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
 
 		if r.activePage != "" {
 			t.Errorf("activePage = %q after Enter on a focused Cancel, want closed", r.activePage)
@@ -1725,9 +1725,9 @@ func TestFocusedSearchButtonActivatesViaEnterAndSpace(t *testing.T) {
 			t.Fatalf("NewRoot: %v", err)
 		}
 		r.openSearch()
-		r.setSearchFocus(len(r.searchSpans)) // Cancel
+		r.setSearchFocus(len(r.search.Spans)) // Cancel
 
-		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), noop)
+		r.search.FieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), noop)
 
 		if r.activePage != "" {
 			t.Errorf("activePage = %q after Space on a focused Cancel, want closed", r.activePage)
@@ -1743,10 +1743,10 @@ func TestFocusedSearchButtonActivatesViaEnterAndSpace(t *testing.T) {
 		var captured search.Request
 		isolateSearchRun(t, fakeSearchRun(&captured))
 		r.openSearch()
-		r.searchFilenameValue = "anything"
-		r.setSearchFocus(len(r.searchSpans) + 1) // Search
+		r.search.FilenameValue = "anything"
+		r.setSearchFocus(len(r.search.Spans) + 1) // Search
 
-		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
+		r.search.FieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
 
 		if !r.panel.searchMode {
 			t.Error("panel.searchMode = false after Enter on a focused Search, want true")
@@ -1762,10 +1762,10 @@ func TestFocusedSearchButtonActivatesViaEnterAndSpace(t *testing.T) {
 		var captured search.Request
 		isolateSearchRun(t, fakeSearchRun(&captured))
 		r.openSearch()
-		r.searchFilenameValue = "anything"
-		r.setSearchFocus(len(r.searchSpans) + 1) // Search
+		r.search.FilenameValue = "anything"
+		r.setSearchFocus(len(r.search.Spans) + 1) // Search
 
-		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), noop)
+		r.search.FieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), noop)
 
 		if !r.panel.searchMode {
 			t.Error("panel.searchMode = false after Space on a focused Search, want true")
@@ -1794,7 +1794,7 @@ func TestEscapeClosesSearchRegardlessOfFocus(t *testing.T) {
 		}
 		r.openSearch() // first focus is the Filename span — see its own doc comment
 
-		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noop)
+		r.search.FieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noop)
 
 		if r.activePage != "" {
 			t.Errorf("activePage = %q after Escape on a focused span, want closed", r.activePage)
@@ -1808,9 +1808,9 @@ func TestEscapeClosesSearchRegardlessOfFocus(t *testing.T) {
 			t.Fatalf("NewRoot: %v", err)
 		}
 		r.openSearch()
-		r.setSearchFocus(len(r.searchSpans)) // Cancel
+		r.setSearchFocus(len(r.search.Spans)) // Cancel
 
-		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noop)
+		r.search.FieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noop)
 
 		if r.activePage != "" {
 			t.Errorf("activePage = %q after Escape on a focused Cancel, want closed", r.activePage)
@@ -1829,10 +1829,10 @@ func TestEscapeClosesSearchRegardlessOfFocus(t *testing.T) {
 			return make(chan search.Result), make(chan error)
 		})
 		r.openSearch()
-		r.searchFilenameValue = "anything"
-		r.setSearchFocus(len(r.searchSpans) + 1) // Search
+		r.search.FilenameValue = "anything"
+		r.setSearchFocus(len(r.search.Spans) + 1) // Search
 
-		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noop)
+		r.search.FieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noop)
 
 		if r.activePage != "" {
 			t.Errorf("activePage = %q after Escape on a focused Search, want closed", r.activePage)
@@ -1859,25 +1859,25 @@ func TestSearchEngineChangeDimsScopeField(t *testing.T) {
 	}
 	r.openSearch()
 
-	// Checked on Start-at's own row specifically, not searchTop's whole
+	// Checked on Start-at's own row specifically, not search.Top's whole
 	// text: Ignore dirs' own value lives in the same TextView and is
 	// dimmed by default too (its own enable checkbox starts off), so a
 	// whole-text check can't tell which field the dimming belongs to.
 	if rowIsDimmed(t, r, "start-at") {
 		t.Fatal("setup: Start at should not be dimmed while Engine=find")
 	}
-	if len(r.searchEngineOptions) < 2 {
+	if len(r.search.EngineOptions) < 2 {
 		t.Skip("locate not available in this environment")
 	}
 
-	r.searchEngineIdx = 1 // locate
+	r.search.EngineIdx = 1 // locate
 	r.rerenderSearchDialog()
 
 	if !rowIsDimmed(t, r, "start-at") {
 		t.Error("Start at should be dimmed while Engine=locate")
 	}
 
-	r.searchEngineIdx = 0 // back to find
+	r.search.EngineIdx = 0 // back to find
 	r.rerenderSearchDialog()
 	if rowIsDimmed(t, r, "start-at") {
 		t.Error("Start at should no longer be dimmed once back on find")
@@ -1894,7 +1894,7 @@ func rowIsDimmed(t *testing.T, r *Root, tagName string) bool {
 	if !ok {
 		t.Fatalf("no span tagged %q", tagName)
 	}
-	span := r.searchSpans[idx]
+	span := r.search.Spans[idx]
 	lines := strings.Split(span.widget.GetText(false), "\n")
 	if span.row < 0 || span.row >= len(lines) {
 		t.Fatalf("span row %d out of range for %q (%d lines)", span.row, tagName, len(lines))
@@ -1949,14 +1949,14 @@ func TestNewSearchDialogSeedsFieldsFromSettings(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	if r.searchShellPatterns {
-		t.Error("searchShellPatterns = true, want it seeded false from settings")
+	if r.search.ShellPatterns {
+		t.Error("search.ShellPatterns = true, want it seeded false from settings")
 	}
-	if !r.searchCaseSensitive {
-		t.Error("searchCaseSensitive = false, want it seeded true from settings")
+	if !r.search.CaseSensitive {
+		t.Error("search.CaseSensitive = false, want it seeded true from settings")
 	}
-	if !r.searchSkipHidden {
-		t.Error("searchSkipHidden = false, want it seeded true from settings")
+	if !r.search.SkipHidden {
+		t.Error("search.SkipHidden = false, want it seeded true from settings")
 	}
 }
 
@@ -1977,10 +1977,10 @@ func TestRunSearchWritesBackTheChosenDefaultsAsTheNewDefault(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchShellPatterns = false
-	r.searchCaseSensitive = true
-	r.searchSkipHidden = true
+	r.search.FilenameValue = "*.go"
+	r.search.ShellPatterns = false
+	r.search.CaseSensitive = true
+	r.search.SkipHidden = true
 
 	r.runSearch()
 
@@ -2021,9 +2021,9 @@ func TestRunSearchNeverPersistsOnAnAbortedAttempt(t *testing.T) {
 	})
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
-	r.searchScopeValue = dir + "/does-not-exist"
-	r.searchCaseSensitive = true
+	r.search.FilenameValue = "*.go"
+	r.search.ScopeValue = dir + "/does-not-exist"
+	r.search.CaseSensitive = true
 
 	r.runSearch()
 
@@ -2047,7 +2047,7 @@ func TestSearchCloseGlyphActsLikeCancel(t *testing.T) {
 	drawRoot(t, r, 120, 30)
 	r.openSearch()
 
-	wx, wy, width, _ := r.searchPages.GetRect()
+	wx, wy, width, _ := r.search.Pages.GetRect()
 	closeX := wx + toolWindowCloseButtonCol(0, width)
 
 	got, _ := r.dragSearchMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(closeX, wy, tcell.ButtonPrimary, 0))
@@ -2055,7 +2055,7 @@ func TestSearchCloseGlyphActsLikeCancel(t *testing.T) {
 	if got != tview.MouseConsumed {
 		t.Fatal("clicking the close glyph should consume the click")
 	}
-	if r.searchDragging {
+	if r.search.Dragging {
 		t.Error("clicking the close glyph should not start a drag")
 	}
 	if r.activePage == searchPage {
@@ -2077,13 +2077,13 @@ func TestSearchDragCanMoveUpAndLeft(t *testing.T) {
 	r.openSearch()
 
 	r.moveSearch(150, 20)
-	startX, startY, width, height := r.searchPages.GetRect()
+	startX, startY, width, height := r.search.Pages.GetRect()
 
 	// Press on the title bar to start the drag — dragSearchMouseCapture
 	// itself, the same way pages.SetMouseCapture's own real dispatch
 	// would reach it on an in-bounds press.
 	r.dragSearchMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
-	if !r.searchDragging {
+	if !r.search.Dragging {
 		t.Fatal("setup: pressing the title bar should have started a drag")
 	}
 
@@ -2091,20 +2091,20 @@ func TestSearchDragCanMoveUpAndLeft(t *testing.T) {
 	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(newX+2, newY, tcell.ButtonPrimary, 0))
 	r.captureOutsideClick(tview.MouseLeftUp, tcell.NewEventMouse(newX+2, newY, tcell.ButtonNone, 0))
 
-	gotX, gotY, gotWidth, gotHeight := r.searchPages.GetRect()
+	gotX, gotY, gotWidth, gotHeight := r.search.Pages.GetRect()
 	if gotX != newX || gotY != newY {
 		t.Errorf("rect = (%d,%d), want (%d,%d) — dragging up/left should move the window exactly like dragging down/right does", gotX, gotY, newX, newY)
 	}
 	if gotWidth != width || gotHeight != height {
 		t.Errorf("size changed during a pure move: (%d,%d) -> (%d,%d), want unchanged", width, height, gotWidth, gotHeight)
 	}
-	if r.searchDragging {
-		t.Error("searchDragging should be false after MouseLeftUp")
+	if r.search.Dragging {
+		t.Error("search.Dragging should be false after MouseLeftUp")
 	}
 }
 
 // TestSearchDragMovesTheOpenInlineEditField pins a real reported bug:
-// the inline edit field (searchEditField, shared across Filename/
+// the inline edit field (search.EditField, shared across Filename/
 // Content/Start-at/Ignored dirs) sat at an absolute screen position set
 // once by activateSearchTextField, and dragging the dialog's title bar
 // left it behind instead of moving along with the rest of the dialog —
@@ -2122,11 +2122,11 @@ func TestSearchDragMovesTheOpenInlineEditField(t *testing.T) {
 	drawRoot(t, r, 300, 40)
 	r.openSearch() // activates the Filename field's inline edit immediately
 
-	startX, startY, _, _ := r.searchPages.GetRect()
-	editX, editY, editW, editH := r.searchEditField.GetRect()
+	startX, startY, _, _ := r.search.Pages.GetRect()
+	editX, editY, editW, editH := r.search.EditField.GetRect()
 
 	r.dragSearchMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
-	if !r.searchDragging {
+	if !r.search.Dragging {
 		t.Fatal("setup: pressing the title bar should have started a drag")
 	}
 
@@ -2135,7 +2135,7 @@ func TestSearchDragMovesTheOpenInlineEditField(t *testing.T) {
 	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(newX+2, newY, tcell.ButtonPrimary, 0))
 	r.captureOutsideClick(tview.MouseLeftUp, tcell.NewEventMouse(newX+2, newY, tcell.ButtonNone, 0))
 
-	gotX, gotY, gotW, gotH := r.searchEditField.GetRect()
+	gotX, gotY, gotW, gotH := r.search.EditField.GetRect()
 	wantX, wantY := editX+dx, editY+dy
 	if gotX != wantX || gotY != wantY {
 		t.Errorf("edit field rect = (%d,%d), want (%d,%d) — it must move along with the dialog during a drag", gotX, gotY, wantX, wantY)
@@ -2159,13 +2159,13 @@ func TestSearchDragStopsOnStrayButtonRelease(t *testing.T) {
 	drawRoot(t, r, 120, 30)
 	r.openSearch()
 
-	startX, startY, _, _ := r.searchPages.GetRect()
+	startX, startY, _, _ := r.search.Pages.GetRect()
 	r.dragSearchMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
 
 	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(startX-5, startY-3, tcell.ButtonNone, 0))
 
-	if r.searchDragging {
-		t.Error("searchDragging should be false once a move arrives with no button held")
+	if r.search.Dragging {
+		t.Error("search.Dragging should be false once a move arrives with no button held")
 	}
 }
 
@@ -2174,7 +2174,7 @@ func TestSearchDragStopsOnStrayButtonRelease(t *testing.T) {
 // the inline edit field used to land at the screen's own top-left
 // corner, outside the dialog entirely, instead of over the Filename
 // span — openSearch's own activateFocusedSearchSpan call read
-// searchLeft's rect before any real draw pass had cascaded it down
+// search.Left's rect before any real draw pass had cascaded it down
 // through the Flex tree (see openSearch's own doc comment on
 // ForceDraw). drawRoot alone doesn't exercise this: it draws directly,
 // bypassing Root.app entirely, so openSearch's own r.app.ForceDraw()
@@ -2205,10 +2205,10 @@ func TestOpenSearchFirstTimeActivatesFilenameEditInsideTheDialog(t *testing.T) {
 
 	r.openSearch()
 
-	dialogX, dialogY, dialogW, dialogH := r.searchPages.GetRect()
-	fieldX, fieldY, _, _ := r.searchEditField.GetRect()
+	dialogX, dialogY, dialogW, dialogH := r.search.Pages.GetRect()
+	fieldX, fieldY, _, _ := r.search.EditField.GetRect()
 	if fieldX < dialogX || fieldY < dialogY || fieldX >= dialogX+dialogW || fieldY >= dialogY+dialogH {
-		t.Errorf("searchEditField rect = (%d,%d), want inside the dialog's own rect (%d,%d,%d,%d)", fieldX, fieldY, dialogX, dialogY, dialogW, dialogH)
+		t.Errorf("search.EditField rect = (%d,%d), want inside the dialog's own rect (%d,%d,%d,%d)", fieldX, fieldY, dialogX, dialogY, dialogW, dialogH)
 	}
 }
 
@@ -2219,7 +2219,7 @@ func TestOpenSearchFirstTimeActivatesFilenameEditInsideTheDialog(t *testing.T) {
 // Tab-count go by which column/row TextView they're drawn in instead.
 func searchTextFieldSpanOn(t *testing.T, r *Root, widget *tview.TextView) int {
 	t.Helper()
-	for i, s := range r.searchSpans {
+	for i, s := range r.search.Spans {
 		if s.widget == widget && s.isTextField {
 			return i
 		}
@@ -2246,16 +2246,16 @@ func TestSetSearchFocusActivatesContentAndStartAtImmediately(t *testing.T) {
 	}
 	r.openSearch()
 
-	r.searchContentValue = "needle"
-	r.searchScopeValue = "/some/preexisting/path"
+	r.search.ContentValue = "needle"
+	r.search.ScopeValue = "/some/preexisting/path"
 	r.rerenderSearchDialog()
 
-	contentIdx := searchTextFieldSpanOn(t, r, r.searchRight)
+	contentIdx := searchTextFieldSpanOn(t, r, r.search.Right)
 	r.setSearchFocus(contentIdx)
-	if !r.searchEditField.HasFocus() {
+	if !r.search.EditField.HasFocus() {
 		t.Error("focusing Content should have immediately opened its own inline edit, not merely highlighted the span")
 	}
-	if got := r.searchEditField.GetText(); got != "needle" {
+	if got := r.search.EditField.GetText(); got != "needle" {
 		t.Errorf("Content's inline edit text = %q, want the existing value %q preserved", got, "needle")
 	}
 
@@ -2264,10 +2264,10 @@ func TestSetSearchFocusActivatesContentAndStartAtImmediately(t *testing.T) {
 		t.Fatal("setup: no span tagged \"start-at\"")
 	}
 	r.setSearchFocus(startAtIdx)
-	if !r.searchEditField.HasFocus() {
+	if !r.search.EditField.HasFocus() {
 		t.Error("focusing Start-at should have immediately opened its own inline edit too")
 	}
-	if got := r.searchEditField.GetText(); got != "/some/preexisting/path" {
+	if got := r.search.EditField.GetText(); got != "/some/preexisting/path" {
 		t.Errorf("Start-at's inline edit text = %q, want the existing value %q preserved", got, "/some/preexisting/path")
 	}
 }
@@ -2286,12 +2286,12 @@ func TestFinishSearchEditTabCommitsContentBeforeLeavingIt(t *testing.T) {
 	}
 	r.openSearch()
 
-	contentIdx := searchTextFieldSpanOn(t, r, r.searchRight)
+	contentIdx := searchTextFieldSpanOn(t, r, r.search.Right)
 	r.setSearchFocus(contentIdx)
-	r.searchEditField.SetText("needle")
+	r.search.EditField.SetText("needle")
 	r.finishSearchEdit(tcell.KeyTab)
 
-	if r.searchContentValue != "needle" {
-		t.Errorf("searchContentValue = %q, want %q committed before Tab moved focus on", r.searchContentValue, "needle")
+	if r.search.ContentValue != "needle" {
+		t.Errorf("search.ContentValue = %q, want %q committed before Tab moved focus on", r.search.ContentValue, "needle")
 	}
 }

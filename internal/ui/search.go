@@ -27,6 +27,50 @@ const (
 	searchFormWidth, searchFormHeight = 84, 20
 )
 
+// searchState holds the search dialog's widgets, current form values,
+// in-flight search's own cancel/progress state, and title-bar drag
+// state.
+type searchState struct {
+	Pages             *tview.Pages
+	FieldsPages       *tview.Pages
+	TitleBar          *tview.TextView
+	Top               *tview.TextView
+	Left              *tview.TextView
+	Right             *tview.TextView
+	EditField         *tview.InputField
+	EditCommit        func(string)
+	Buttons           *tview.Flex
+	CancelBtn         *tview.Button
+	SearchBtn         *tview.Button
+	Spans             []searchSpan
+	FocusedIdx        int
+	EngineOptions     []searchEngineOption
+	EngineIdx         int
+	ScopeValue        string
+	FilenameValue     string
+	IgnoreValue       string
+	ContentValue      string
+	IgnoreEnabled     bool
+	CaseSensitive     bool
+	SkipHidden        bool
+	Recursive         bool
+	FollowSymlinks    bool
+	ShellPatterns     bool
+	ContentRegex      bool
+	WholeWords        bool
+	FirstHit          bool
+	IncludeArchives   bool
+	IncludeCompressed bool
+	Cancel            context.CancelFunc
+	AnimFrame         int
+	CurrentPos        string
+	LastDir           string
+	StartDir          string
+	Dragging          bool
+	DragOffsetX       int
+	DragOffsetY       int
+}
+
 // searchEngineOption pairs one Engine choice's own label with the
 // search.Engine it actually means — needed because, unlike a plain
 // checkbox, this choice group's own option list is built conditionally
@@ -82,8 +126,8 @@ func searchEngineIndexFor(options []searchEngineOption, value string) int {
 }
 
 // searchSpan is one clickable/keyboard-focusable region within one of
-// the search dialog's three TextViews (searchTop/searchLeft/
-// searchRight) — the same idea as Properties' own propertySpan
+// the search dialog's three TextViews (search.Top/search.Left/
+// search.Right) — the same idea as Properties' own propertySpan
 // (row/column range plus what it does), generalized with a single
 // activate callback instead of a field-kind switch: for a text field,
 // activate opens the shared inline editor (see activateSearchTextField);
@@ -92,7 +136,7 @@ func searchEngineIndexFor(options []searchEngineOption, value string) int {
 // tag optionally names a span for later lookup by searchSpanIndex (see
 // openSearch's own "first focus is Filename" requirement) — most spans
 // leave it empty, since ordinary Tab traversal only needs each span's
-// own position in searchSpans, not a name.
+// own position in search.Spans, not a name.
 type searchSpan struct {
 	widget           *tview.TextView
 	row              int
@@ -145,10 +189,10 @@ func (sb *searchBuilder) newline() {
 
 // focusTag mirrors propertiesBuilder's own — same colors, same
 // brighter/bold style for whichever span index currently has focus
-// (idx is simply len(r.searchSpans) at the point a new span is about
+// (idx is simply len(r.search.Spans) at the point a new span is about
 // to be appended, i.e. the index it's about to occupy).
 func (sb *searchBuilder) focusTag(idx int) (tag, reset string) {
-	if idx == sb.root.searchFocusedIdx {
+	if idx == sb.root.search.FocusedIdx {
 		return fmt.Sprintf("[:%s:b]", colorTag(sb.root.theme.InputFocusedBackground)), "[:-:-]"
 	}
 	return fmt.Sprintf("[:%s]", colorTag(sb.root.theme.InputBackground)), "[:-]"
@@ -182,7 +226,7 @@ func (sb *searchBuilder) hintText(s string) {
 // between start and sb.col, under activate — the shared tail every
 // span-producing builder method below ends with.
 func (sb *searchBuilder) span(start int, activate func(), tagName string, isTextField bool) {
-	sb.root.searchSpans = append(sb.root.searchSpans, searchSpan{
+	sb.root.search.Spans = append(sb.root.search.Spans, searchSpan{
 		widget: sb.widget, row: sb.row, startCol: start, endCol: sb.col,
 		activate: activate, tag: tagName, isTextField: isTextField,
 	})
@@ -203,7 +247,7 @@ func (sb *searchBuilder) span(start int, activate func(), tagName string, isText
 // misaligning every span's own row below it (a real bug, not just a
 // theoretical one).
 func (sb *searchBuilder) textField(value, placeholder string, dimmed bool, maxWidth, minWidth int, set func(string), tagName string) {
-	idx := len(sb.root.searchSpans)
+	idx := len(sb.root.search.Spans)
 	shown := value
 	if shown == "" {
 		shown = placeholder
@@ -248,7 +292,7 @@ func truncateForDisplay(s string, maxWidth int) string {
 // option and for plain checkboxes (Ignore dirs enable, Case sensitive,
 // Skip hidden) alike; a checkbox is just a choice group of one.
 func (sb *searchBuilder) choice(selected bool, label string, action func()) {
-	idx := len(sb.root.searchSpans)
+	idx := len(sb.root.search.Spans)
 	t, _ := sb.focusTag(idx)
 	sb.tag(t)
 	start := sb.col
@@ -261,16 +305,16 @@ func (sb *searchBuilder) choice(selected bool, label string, action func()) {
 // dialog, per the user's own request — including reusing Properties'
 // own editing paradigm (see newPropertiesView's doc comment for the
 // original of this pattern): fields render as plain text
-// (searchTop/searchLeft/searchRight, matching MC's own "Start
+// (search.Top/search.Left/search.Right, matching MC's own "Start
 // at/Ignore dirs" block above a two-column Filename/Content section),
 // click or Enter opens the one shared inline editor
-// (searchEditField) positioned right over whichever field that is,
+// (search.EditField) positioned right over whichever field that is,
 // and Cancel/Search sit in their own always-visible button row
-// (searchButtons), styled the same as propertiesButtons.
+// (search.Buttons), styled the same as properties.Buttons.
 //
 // One deliberate difference from Properties: three separate TextViews
 // instead of one, so MC's own two-column layout (Filename options
-// left, Content options right) can exist at all — searchSpans is
+// left, Content options right) can exist at all — search.Spans is
 // still one single, shared slice spanning all three (see searchSpan's
 // own widget field), so Tab traversal treats them as one continuous
 // sequence regardless of which TextView a given span actually lives
@@ -289,9 +333,9 @@ func (sb *searchBuilder) choice(selected bool, label string, action func()) {
 // (confirmed by reading tview's own source, not guessed), so neither
 // problem exists here.
 func (r *Root) newSearchDialog() *tview.Pages {
-	r.searchEngineOptions = buildSearchEngineOptions()
-	// searchShellPatterns/searchCaseSensitive/searchSkipHidden, and
-	// searchEngineIdx just below, are seeded from settings rather than
+	r.search.EngineOptions = buildSearchEngineOptions()
+	// search.ShellPatterns/search.CaseSensitive/search.SkipHidden, and
+	// search.EngineIdx just below, are seeded from settings rather than
 	// MC's own fixed defaults directly — self-adapting, the same shape
 	// Rsync/Sed Replace's own settings already have (see runSearch):
 	// whatever combination a real search last actually ran with becomes
@@ -301,21 +345,21 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	// config.DefaultSettings) — "Using shell patterns" checked, engine
 	// "find" — so a first run looks exactly like it always did.
 	//
-	// searchRecursive stays a fixed true, deliberately not one of
+	// search.Recursive stays a fixed true, deliberately not one of
 	// these: MC's own default there is also checked, but nothing about
 	// it is a self-adapting "sticky preference" the way the other four
 	// are documented to be (see config.Settings' own doc comment on
 	// search_engine/search_shell_patterns/search_case_sensitive/
 	// search_skip_hidden) — it's just this dialog's own ordinary
-	// built-in starting point, same as searchFollowSymlinks/
-	// searchWholeWords/searchFirstHit/searchIncludeArchives/
-	// searchIncludeCompressed below it, all of which stay at Go's own
+	// built-in starting point, same as search.FollowSymlinks/
+	// search.WholeWords/search.FirstHit/search.IncludeArchives/
+	// search.IncludeCompressed below it, all of which stay at Go's own
 	// bool zero value.
-	r.searchRecursive = true
-	r.searchShellPatterns = r.settings.SearchShellPatterns
-	r.searchCaseSensitive = r.settings.SearchCaseSensitive
-	r.searchSkipHidden = r.settings.SearchSkipHidden
-	r.searchEngineIdx = searchEngineIndexFor(r.searchEngineOptions, r.settings.SearchEngine)
+	r.search.Recursive = true
+	r.search.ShellPatterns = r.settings.SearchShellPatterns
+	r.search.CaseSensitive = r.settings.SearchCaseSensitive
+	r.search.SkipHidden = r.settings.SearchSkipHidden
+	r.search.EngineIdx = searchEngineIndexFor(r.search.EngineOptions, r.settings.SearchEngine)
 
 	// SetWrap(false) on all three: searchSpan's own row is the count of
 	// literal '\n's written (see searchBuilder.newline), which only
@@ -325,61 +369,61 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	// pushed the Tree button (written right after it, same line) onto
 	// a wrapped second line before this fix, silently misaligning
 	// every span's own row for the rest of the dialog below it.
-	r.searchTop = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	r.searchTop.SetBorderPadding(0, 0, 1, 1)
-	r.searchLeft = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	r.searchLeft.SetBorderPadding(0, 0, 1, 1)
-	r.searchRight = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	r.searchRight.SetBorderPadding(0, 0, 1, 1)
+	r.search.Top = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	r.search.Top.SetBorderPadding(0, 0, 1, 1)
+	r.search.Left = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	r.search.Left.SetBorderPadding(0, 0, 1, 1)
+	r.search.Right = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	r.search.Right.SetBorderPadding(0, 0, 1, 1)
 
-	r.searchEditField = tview.NewInputField()
-	r.searchEditField.SetDoneFunc(r.finishSearchEdit)
+	r.search.EditField = tview.NewInputField()
+	r.search.EditField.SetDoneFunc(r.finishSearchEdit)
 
-	r.searchButtons = r.newSearchButtons()
+	r.search.Buttons = r.newSearchButtons()
 
 	columns := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.searchLeft, 0, 1, false).
-		AddItem(r.searchRight, 0, 1, false)
+		AddItem(r.search.Left, 0, 1, false).
+		AddItem(r.search.Right, 0, 1, false)
 
-	// spanArea wraps searchTop/columns (i.e. searchLeft/searchRight)
-	// only — deliberately NOT searchButtons — and carries
+	// spanArea wraps search.Top/columns (i.e. search.Left/search.Right)
+	// only — deliberately NOT search.Buttons — and carries
 	// captureSearchKey/captureSearchMouse, still shared between all
 	// three TextViews the same way as before. It has to stop above
-	// searchButtons, not above it: an ancestor's own SetInputCapture
+	// search.Buttons, not above it: an ancestor's own SetInputCapture
 	// runs before delegating to whichever descendant currently has
 	// real focus (confirmed by reading tview's own WrapInputHandler
 	// source), so installing it one level higher, on fields itself
-	// (the shared ancestor of spanArea AND searchButtons), meant
+	// (the shared ancestor of spanArea AND search.Buttons), meant
 	// Enter/Space bound for a focused Cancel/Search button (see
 	// newSearchButtons' own SetSelectedFunc/spaceAlsoActivates) never
 	// reached the button at all — captureSearchKey's own unconditional
 	// KeyEnter/' ' cases swallowed them first. Properties never had
 	// this bug for the same structural reason: capturePropertiesKey
-	// sits on propertiesText alone, already a sibling of
-	// propertiesButtons rather than an ancestor of it (see
+	// sits on properties.Text alone, already a sibling of
+	// properties.Buttons rather than an ancestor of it (see
 	// newPropertiesView).
 	spanArea := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.searchTop, 7, 0, true).
+		AddItem(r.search.Top, 7, 0, true).
 		AddItem(columns, 0, 1, false)
 	spanArea.SetInputCapture(r.captureSearchKey)
 	spanArea.SetMouseCapture(r.captureSearchMouse)
 
 	fields := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(spanArea, 0, 1, true).
-		AddItem(r.searchButtons, 1, 0, false)
+		AddItem(r.search.Buttons, 1, 0, false)
 	// No border, same as Properties' own overlay (see newPropertiesView):
-	// every child (searchTop/searchLeft/searchRight, nested inside
-	// spanArea, and searchButtons alongside it) gets its own
+	// every child (search.Top/search.Left/search.Right, nested inside
+	// spanArea, and search.Buttons alongside it) gets its own
 	// AccentBackground fill (see applyTheme), and their own fixed/
 	// proportional sizes tile fields' whole rect exactly (7 fixed +
 	// proportional, nested inside spanArea's own proportional slot,
-	// + 1 fixed for searchButtons — no leftover row for the Flex's own
+	// + 1 fixed for search.Buttons — no leftover row for the Flex's own
 	// unstyled background to show through) — a border here only ate
 	// into the dialog's own content space for no visual benefit.
 
-	r.searchFieldsPages = tview.NewPages()
-	r.searchFieldsPages.AddPage("fields", fields, true, true)
-	r.searchFieldsPages.AddPage("editfield", r.searchEditField, false, false)
+	r.search.FieldsPages = tview.NewPages()
+	r.search.FieldsPages.AddPage("fields", fields, true, true)
+	r.search.FieldsPages.AddPage("editfield", r.search.EditField, false, false)
 
 	// A one-row "Find" title bar, the same shape Properties' own (see
 	// newPropertiesView) already has — per the user's own explicit
@@ -403,8 +447,8 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	// via newPlainTitleBar either — this dialog's own width is fixed
 	// (searchFormWidth), but resizeSearchPages/moveSearch still have to
 	// be the ones calling it, once a real rect actually exists.
-	r.searchTitleBar = tview.NewTextView()
-	r.searchTitleBar.SetWrap(false)
+	r.search.TitleBar = tview.NewTextView()
+	r.search.TitleBar.SetWrap(false)
 
 	pages := tview.NewPages()
 	pages.SetBorderPadding(1, 0, 0, 0)
@@ -412,7 +456,7 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	// here in a way it doesn't for Properties/chmod's own identical-
 	// looking title-bar page: openSearch shows this via a plain
 	// showOverlay (no restore callback), which falls through to
-	// Application.SetFocus(r.searchPages) directly, and tview.Pages.Focus
+	// Application.SetFocus(r.search.Pages) directly, and tview.Pages.Focus
 	// (verified directly against its own pages.go, not assumed) delegates
 	// real keyboard focus to whichever *visible* page was added *last* —
 	// not necessarily the main content one. Properties/chmod never hit
@@ -424,8 +468,8 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	// on the title bar instead of the search fields — a real regression,
 	// caught live by TestEscapeClosesSearchRegardlessOfFocus failing
 	// before this ordering was fixed.
-	pages.AddPage("titlebar", r.searchTitleBar, false, true)
-	pages.AddPage("form", r.searchFieldsPages, true, true)
+	pages.AddPage("titlebar", r.search.TitleBar, false, true)
+	pages.AddPage("form", r.search.FieldsPages, true, true)
 
 	// Installed on pages itself, the shared ancestor of "titlebar" and
 	// "form" — the same reason Properties' own hashesMouseCapture is
@@ -434,7 +478,7 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	// focused. dragSearchMouseCapture only ever claims a click that
 	// actually lands on the title bar (or continues an already-started
 	// drag); anything else returns the event unchanged, letting it fall
-	// through to spanArea's own captureSearchMouse or searchButtons
+	// through to spanArea's own captureSearchMouse or search.Buttons
 	// exactly as before this existed.
 	pages.SetMouseCapture(r.dragSearchMouseCapture)
 	return pages
@@ -448,10 +492,10 @@ func (r *Root) newSearchDialog() *tview.Pages {
 // same for Space, per the user's own request that either key activate
 // a focused button.
 func (r *Root) newSearchButtons() *tview.Flex {
-	r.searchCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.closeSearch)
-	r.searchSearchBtn = tview.NewButton("Find").SetSelectedFunc(r.runSearch)
-	r.searchCancelBtn.SetInputCapture(spaceAlsoActivates(r.closeSearch))
-	r.searchSearchBtn.SetInputCapture(spaceAlsoActivates(r.runSearch))
+	r.search.CancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.closeSearch)
+	r.search.SearchBtn = tview.NewButton("Find").SetSelectedFunc(r.runSearch)
+	r.search.CancelBtn.SetInputCapture(spaceAlsoActivates(r.closeSearch))
+	r.search.SearchBtn.SetInputCapture(spaceAlsoActivates(r.runSearch))
 
 	// Escape reaches here (not captureSearchKey — that only ever runs
 	// while a span/checkbox/field has real focus, never a button, the
@@ -474,8 +518,8 @@ func (r *Root) newSearchButtons() *tview.Flex {
 			r.moveSearchFocus(1)
 		}
 	}
-	r.searchCancelBtn.SetExitFunc(exitFunc)
-	r.searchSearchBtn.SetExitFunc(exitFunc)
+	r.search.CancelBtn.SetExitFunc(exitFunc)
+	r.search.SearchBtn.SetExitFunc(exitFunc)
 
 	// Each button gets equal proportion (0, 1) and nothing else, so the
 	// two together fill the whole row edge to edge, split exactly in
@@ -483,25 +527,25 @@ func (r *Root) newSearchButtons() *tview.Flex {
 	// user's own request that Cancel/Search match Properties' own
 	// buttons, this time width-wise too, not just their look.
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.searchCancelBtn, 0, 1, false).
-		AddItem(r.searchSearchBtn, 0, 1, false)
+		AddItem(r.search.CancelBtn, 0, 1, false).
+		AddItem(r.search.SearchBtn, 0, 1, false)
 }
 
-// rerenderSearchDialog rebuilds searchTop/searchLeft/searchRight's own
-// text and searchSpans from scratch — cheap enough (a handful of short
+// rerenderSearchDialog rebuilds search.Top/search.Left/search.Right's own
+// text and search.Spans from scratch — cheap enough (a handful of short
 // lines) to just call after every state change (a choice picked, a
 // checkbox flipped, an edit committed) rather than trying to patch
 // anything incrementally, the same "always rebuild" approach
 // rerenderProperties already takes.
 func (r *Root) rerenderSearchDialog() {
-	r.searchSpans = nil
+	r.search.Spans = nil
 
-	top := &searchBuilder{root: r, widget: r.searchTop}
+	top := &searchBuilder{root: r, widget: r.search.Top}
 	top.newline() // blank margin row — the dialog no longer has a border of its own to create this breathing room
 	top.text("Engine       ")
-	for i, opt := range r.searchEngineOptions {
+	for i, opt := range r.search.EngineOptions {
 		i := i
-		top.choice(r.searchEngineIdx == i, opt.label, func() { r.searchEngineIdx = i })
+		top.choice(r.search.EngineIdx == i, opt.label, func() { r.search.EngineIdx = i })
 		if opt.engine == search.EngineLocate {
 			// Plain informational text, not a span — nothing to click
 			// or focus here. Locate answers entirely from updatedb's own
@@ -532,11 +576,11 @@ func (r *Root) rerenderSearchDialog() {
 	// meant to be irrelevant there entirely, per the user's own
 	// explicit request — so the field showing as genuinely active
 	// (not dimmed) here is accurate, not a leftover oversight.
-	plainContentSearch := r.searchContentValue != "" && r.searchFilenameValue == ""
-	scopeDimmed := r.searchEngineOptions[r.searchEngineIdx].engine == search.EngineLocate && !plainContentSearch
+	plainContentSearch := r.search.ContentValue != "" && r.search.FilenameValue == ""
+	scopeDimmed := r.search.EngineOptions[r.search.EngineIdx].engine == search.EngineLocate && !plainContentSearch
 	top.text("Start at     ")
 	// The field fills exactly the rest of the row, right up to where
-	// "   [Tree]" itself starts — searchTopTextWidth is searchTop's own
+	// "   [Tree]" itself starts — searchTopTextWidth is search.Top's own
 	// usable width (searchFormWidth minus its SetBorderPadding's 1 col
 	// left + 1 col right); treeSuffixWidth is "   [Tree]"'s own rendered
 	// width (3 spaces + the 6-char "[Tree]" button — see button's own
@@ -549,18 +593,18 @@ func (r *Root) rerenderSearchDialog() {
 	const searchTopTextWidth = searchFormWidth - 2
 	const treeSuffixWidth = 9 // len("   [Tree]")
 	fieldWidth := searchTopTextWidth - top.col - treeSuffixWidth
-	top.textField(r.searchScopeValue, "(current directory)", scopeDimmed, fieldWidth, fieldWidth, func(s string) {
-		r.searchScopeValue = s
+	top.textField(r.search.ScopeValue, "(current directory)", scopeDimmed, fieldWidth, fieldWidth, func(s string) {
+		r.search.ScopeValue = s
 	}, "start-at")
 	top.text("   ")
 	top.button("Tree", r.openSearchTreePicker)
 	top.newline()
 	top.newline()
 
-	top.choice(r.searchIgnoreEnabled, "Ignore dirs:", func() { r.searchIgnoreEnabled = !r.searchIgnoreEnabled })
+	top.choice(r.search.IgnoreEnabled, "Ignore dirs:", func() { r.search.IgnoreEnabled = !r.search.IgnoreEnabled })
 	top.text(" ")
-	top.textField(r.searchIgnoreValue, "(none)", !r.searchIgnoreEnabled, 0, 22, func(s string) {
-		r.searchIgnoreValue = s
+	top.textField(r.search.IgnoreValue, "(none)", !r.search.IgnoreEnabled, 0, 22, func(s string) {
+		r.search.IgnoreValue = s
 	}, "")
 	// Reminds what parseIgnoreDirs actually expects (comma-separated
 	// directory names/patterns — see its own doc comment), per the
@@ -572,7 +616,7 @@ func (r *Root) rerenderSearchDialog() {
 	// needed.
 	top.text(" ")
 	top.hintText("(comma separated)")
-	r.searchTop.SetText(top.b.String())
+	r.search.Top.SetText(top.b.String())
 
 	// Filename column — after MC's own Find File dialog (verified
 	// against its real find.c source, not guessed): Find recursively/
@@ -587,31 +631,31 @@ func (r *Root) rerenderSearchDialog() {
 	// deliberately not offered here: it's about MC's own internal,
 	// locale-aware matching engine, with no equivalent flag on any
 	// find/grep this app shells out to — nothing to wire it to.
-	left := &searchBuilder{root: r, widget: r.searchLeft}
+	left := &searchBuilder{root: r, widget: r.search.Left}
 	left.text("Filename")
 	left.newline()
-	left.textField(r.searchFilenameValue, "(type a pattern)", false, 0, 36, func(s string) {
-		r.searchFilenameValue = s
+	left.textField(r.search.FilenameValue, "(type a pattern)", false, 0, 36, func(s string) {
+		r.search.FilenameValue = s
 	}, "filename")
 	left.newline()
 	left.newline()
-	left.choice(r.searchRecursive, "Find recursively", func() { r.searchRecursive = !r.searchRecursive })
+	left.choice(r.search.Recursive, "Find recursively", func() { r.search.Recursive = !r.search.Recursive })
 	left.newline()
-	left.choice(r.searchFollowSymlinks, "Follow symlinks", func() { r.searchFollowSymlinks = !r.searchFollowSymlinks })
+	left.choice(r.search.FollowSymlinks, "Follow symlinks", func() { r.search.FollowSymlinks = !r.search.FollowSymlinks })
 	left.newline()
-	left.choice(r.searchShellPatterns, "Using shell patterns", func() { r.searchShellPatterns = !r.searchShellPatterns })
+	left.choice(r.search.ShellPatterns, "Using shell patterns", func() { r.search.ShellPatterns = !r.search.ShellPatterns })
 	left.newline()
-	left.choice(r.searchCaseSensitive, "Case sensitive", func() { r.searchCaseSensitive = !r.searchCaseSensitive })
+	left.choice(r.search.CaseSensitive, "Case sensitive", func() { r.search.CaseSensitive = !r.search.CaseSensitive })
 	left.newline()
-	left.choice(r.searchSkipHidden, "Skip hidden", func() { r.searchSkipHidden = !r.searchSkipHidden })
+	left.choice(r.search.SkipHidden, "Skip hidden", func() { r.search.SkipHidden = !r.search.SkipHidden })
 	left.newline()
 	// search.Request.IncludeArchives — see its own doc comment. Its own
 	// checkbox lives here, in Filename's own column, not Content's:
 	// this matches inside a zip/tar's own member *names*, never their
 	// content, so it's an extension of a filename search specifically,
 	// per the user's own explicit design decision.
-	left.choice(r.searchIncludeArchives, "Include zip, tar (gz, bz2, xz)", func() { r.searchIncludeArchives = !r.searchIncludeArchives })
-	r.searchLeft.SetText(left.b.String())
+	left.choice(r.search.IncludeArchives, "Include zip, tar (gz, bz2, xz)", func() { r.search.IncludeArchives = !r.search.IncludeArchives })
+	r.search.Left.SetText(left.b.String())
 
 	// Content column. No more "Search in" selector (this app's own
 	// earlier addition beyond MC, for choosing plain grep vs. zgrep vs.
@@ -627,26 +671,26 @@ func (r *Root) rerenderSearchDialog() {
 	// keeps content pattern syntax and filename pattern syntax as two
 	// separate choices, never shared — see runSearch's own doc comment
 	// on why one shared Mode choice used to be wrong). Case sensitive is
-	// the *same* underlying searchCaseSensitive as Filename's own
+	// the *same* underlying search.CaseSensitive as Filename's own
 	// checkbox above — MC shows it in both columns, but this app never
 	// runs a filename and a content search at once (see
 	// search.Request's own doc comment), so one shared value serves
 	// both without any real behavior lost.
-	right := &searchBuilder{root: r, widget: r.searchRight}
+	right := &searchBuilder{root: r, widget: r.search.Right}
 	right.text("Content")
 	right.newline()
-	right.textField(r.searchContentValue, "(type a pattern)", false, 0, 36, func(s string) {
-		r.searchContentValue = s
+	right.textField(r.search.ContentValue, "(type a pattern)", false, 0, 36, func(s string) {
+		r.search.ContentValue = s
 	}, "")
 	right.newline()
 	right.newline()
-	right.choice(r.searchWholeWords, "Whole words", func() { r.searchWholeWords = !r.searchWholeWords })
+	right.choice(r.search.WholeWords, "Whole words", func() { r.search.WholeWords = !r.search.WholeWords })
 	right.newline()
-	right.choice(r.searchContentRegex, "Regular expression", func() { r.searchContentRegex = !r.searchContentRegex })
+	right.choice(r.search.ContentRegex, "Regular expression", func() { r.search.ContentRegex = !r.search.ContentRegex })
 	right.newline()
-	right.choice(r.searchCaseSensitive, "Case sensitive", func() { r.searchCaseSensitive = !r.searchCaseSensitive })
+	right.choice(r.search.CaseSensitive, "Case sensitive", func() { r.search.CaseSensitive = !r.search.CaseSensitive })
 	right.newline()
-	right.choice(r.searchFirstHit, "First hit", func() { r.searchFirstHit = !r.searchFirstHit })
+	right.choice(r.search.FirstHit, "First hit", func() { r.search.FirstHit = !r.search.FirstHit })
 	right.newline()
 	// search.Request.IncludeCompressed — see its own doc comment. Own
 	// checkbox in Content's own column, not Filename's: unlike Include
@@ -657,8 +701,8 @@ func (r *Root) rerenderSearchDialog() {
 	// internal/search's own archivecontent.go) — covering the same set of
 	// formats Include Archives itself covers, just for content instead
 	// of member names.
-	right.choice(r.searchIncludeCompressed, "Include compressed files", func() { r.searchIncludeCompressed = !r.searchIncludeCompressed })
-	r.searchRight.SetText(right.b.String())
+	right.choice(r.search.IncludeCompressed, "Include compressed files", func() { r.search.IncludeCompressed = !r.search.IncludeCompressed })
+	r.search.Right.SetText(right.b.String())
 }
 
 // button writes one "[Label]" clickable action, immediately running
@@ -667,7 +711,7 @@ func (r *Root) rerenderSearchDialog() {
 // a one-off action (opening the directory picker) that manages its own
 // re-render separately.
 func (sb *searchBuilder) button(label string, action func()) {
-	idx := len(sb.root.searchSpans)
+	idx := len(sb.root.search.Spans)
 	t, _ := sb.focusTag(idx)
 	sb.tag(t)
 	start := sb.col
@@ -678,12 +722,12 @@ func (sb *searchBuilder) button(label string, action func()) {
 
 // searchSpanIndex returns the index of the one span tagged tagName
 // (see searchSpan's own doc comment) — used only to seed
-// searchFocusedIdx on open (see openSearch's own "first focus is
+// search.FocusedIdx on open (see openSearch's own "first focus is
 // Filename" requirement, the user's own request) and while editing
 // Start-at specifically (see activateSearchTextField's own
 // Tab-completion wiring).
 func (r *Root) searchSpanIndex(tagName string) (int, bool) {
-	for i, s := range r.searchSpans {
+	for i, s := range r.search.Spans {
 		if s.tag == tagName {
 			return i, true
 		}
@@ -691,23 +735,23 @@ func (r *Root) searchSpanIndex(tagName string) (int, bool) {
 	return 0, false
 }
 
-// setSearchFocus moves keyboard focus to searchSpans[idx] (or, once
-// idx reaches len(searchSpans)/len(searchSpans)+1, to the Cancel/
+// setSearchFocus moves keyboard focus to search.Spans[idx] (or, once
+// idx reaches len(search.Spans)/len(search.Spans)+1, to the Cancel/
 // Search buttons) and re-renders so the newly-focused span's own
 // focusTag highlight actually shows — the same shape
 // setPropertiesFocus already has.
 func (r *Root) setSearchFocus(idx int) {
-	r.searchFocusedIdx = idx
+	r.search.FocusedIdx = idx
 	r.rerenderSearchDialog()
 
-	n := len(r.searchSpans)
+	n := len(r.search.Spans)
 	switch {
 	case idx == n:
-		r.app.SetFocus(r.searchCancelBtn)
+		r.app.SetFocus(r.search.CancelBtn)
 	case idx == n+1:
-		r.app.SetFocus(r.searchSearchBtn)
+		r.app.SetFocus(r.search.SearchBtn)
 	case idx >= 0 && idx < n:
-		r.app.SetFocus(r.searchSpans[idx].widget)
+		r.app.SetFocus(r.search.Spans[idx].widget)
 		// Per the user's own explicit request: Filename, Content, and
 		// Start-at (every searchSpan.isTextField span — see its own
 		// doc comment) should all be immediately typeable the moment
@@ -719,18 +763,18 @@ func (r *Root) setSearchFocus(idx int) {
 		// stays false there — see searchBuilder.choice), so arriving
 		// at one via Tab still just highlights it, never toggles it
 		// as a side effect of focus alone.
-		if r.searchSpans[idx].isTextField {
-			r.searchSpans[idx].activate()
+		if r.search.Spans[idx].isTextField {
+			r.search.Spans[idx].activate()
 		}
 	}
 }
 
-// moveSearchFocus advances searchFocusedIdx by delta (+1 for Tab, -1
+// moveSearchFocus advances search.FocusedIdx by delta (+1 for Tab, -1
 // for Backtab) among the span/button stops, wrapping past either end —
 // the same shape movePropertiesFocus already has.
 func (r *Root) moveSearchFocus(delta int) {
-	n := len(r.searchSpans)
-	idx := r.searchFocusedIdx + delta
+	n := len(r.search.Spans)
+	idx := r.search.FocusedIdx + delta
 	switch {
 	case idx < 0:
 		idx = n + 1 // wrap to Search
@@ -741,23 +785,23 @@ func (r *Root) moveSearchFocus(delta int) {
 }
 
 // activateSearchTextField positions and shows the shared inline edit
-// field over searchSpans[idx], pre-filled with prefill — the same
+// field over search.Spans[idx], pre-filled with prefill — the same
 // shape activateInlineTextField already has. Tab-completion (see
 // captureSearchScopeKey) is wired in only while editing the Start-at
 // field specifically (identified by its own "start-at" tag), removed
 // otherwise so Tab falls through to finishSearchEdit's own field-
 // navigation instead.
 func (r *Root) activateSearchTextField(idx int, prefill string, commit func(string)) {
-	if idx < 0 || idx >= len(r.searchSpans) {
+	if idx < 0 || idx >= len(r.search.Spans) {
 		return
 	}
-	span := r.searchSpans[idx]
-	r.searchEditCommit = commit
-	r.searchEditField.SetText(prefill)
+	span := r.search.Spans[idx]
+	r.search.EditCommit = commit
+	r.search.EditField.SetText(prefill)
 	if span.tag == "start-at" {
-		r.searchEditField.SetInputCapture(r.captureSearchScopeKey)
+		r.search.EditField.SetInputCapture(r.captureSearchScopeKey)
 	} else {
-		r.searchEditField.SetInputCapture(nil)
+		r.search.EditField.SetInputCapture(nil)
 	}
 
 	rectX, rectY, _, _ := span.widget.GetInnerRect()
@@ -765,10 +809,10 @@ func (r *Root) activateSearchTextField(idx int, prefill string, commit func(stri
 	if width < 22 {
 		width = 22
 	}
-	r.searchEditField.SetRect(rectX+span.startCol, rectY+span.row, width, 1)
+	r.search.EditField.SetRect(rectX+span.startCol, rectY+span.row, width, 1)
 
-	r.searchFieldsPages.ShowPage("editfield")
-	r.app.SetFocus(r.searchEditField)
+	r.search.FieldsPages.ShowPage("editfield")
+	r.app.SetFocus(r.search.EditField)
 }
 
 // finishSearchEdit handles Enter, Tab, and Backtab (commit) and Escape
@@ -794,14 +838,14 @@ func (r *Root) activateSearchTextField(idx int, prefill string, commit func(stri
 // after opening Find would otherwise do nothing visible at all instead
 // of closing it.
 func (r *Root) finishSearchEdit(key tcell.Key) {
-	text := r.searchEditField.GetText()
-	commit := r.searchEditCommit
+	text := r.search.EditField.GetText()
+	commit := r.search.EditCommit
 	editedTag := ""
-	if r.searchFocusedIdx >= 0 && r.searchFocusedIdx < len(r.searchSpans) {
-		editedTag = r.searchSpans[r.searchFocusedIdx].tag
+	if r.search.FocusedIdx >= 0 && r.search.FocusedIdx < len(r.search.Spans) {
+		editedTag = r.search.Spans[r.search.FocusedIdx].tag
 	}
-	r.searchEditCommit = nil // see commitPendingSearchEdit's own doc comment on why this must go back to nil, not just get overwritten on the next activate
-	r.searchFieldsPages.HidePage("editfield")
+	r.search.EditCommit = nil // see commitPendingSearchEdit's own doc comment on why this must go back to nil, not just get overwritten on the next activate
+	r.search.FieldsPages.HidePage("editfield")
 
 	if key == tcell.KeyEscape {
 		r.closeSearch()
@@ -863,11 +907,11 @@ func (r *Root) captureSearchScopeKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() != tcell.KeyTab {
 		return event
 	}
-	matches := r.panel.dirCompletions(r.searchEditField.GetText())
+	matches := r.panel.dirCompletions(r.search.EditField.GetText())
 	if len(matches) == 0 {
 		return nil
 	}
-	r.searchEditField.SetText(longestCommonPrefix(matches))
+	r.search.EditField.SetText(longestCommonPrefix(matches))
 	return nil
 }
 
@@ -906,10 +950,10 @@ func (r *Root) captureSearchKey(event *tcell.EventKey) *tcell.EventKey {
 }
 
 func (r *Root) activateFocusedSearchSpan() {
-	if r.searchFocusedIdx < 0 || r.searchFocusedIdx >= len(r.searchSpans) {
+	if r.search.FocusedIdx < 0 || r.search.FocusedIdx >= len(r.search.Spans) {
 		return
 	}
-	r.searchSpans[r.searchFocusedIdx].activate()
+	r.search.Spans[r.search.FocusedIdx].activate()
 }
 
 // captureSearchMouse is a click's own counterpart to captureSearchKey:
@@ -945,7 +989,7 @@ func (r *Root) captureSearchMouse(action tview.MouseAction, event *tcell.EventMo
 
 // commitPendingSearchEdit writes back whatever the shared inline edit
 // field currently holds and hides it, if it's actually showing (see
-// searchEditCommit's own nil-when-idle convention, set in
+// search.EditCommit's own nil-when-idle convention, set in
 // activateSearchTextField and cleared again in finishSearchEdit) — the
 // click-elsewhere/blur equivalent of finishSearchEdit's own Enter case
 // (commit, not discard). Without this, a click that lands on a
@@ -957,22 +1001,22 @@ func (r *Root) captureSearchMouse(action tview.MouseAction, event *tcell.EventMo
 // to whatever Start-at held before that edit began. A real bug the
 // user ran into, not just a theoretical one.
 func (r *Root) commitPendingSearchEdit() {
-	if r.searchEditCommit == nil {
+	if r.search.EditCommit == nil {
 		return
 	}
-	commit := r.searchEditCommit
-	text := r.searchEditField.GetText()
-	r.searchEditCommit = nil
-	r.searchFieldsPages.HidePage("editfield")
+	commit := r.search.EditCommit
+	text := r.search.EditField.GetText()
+	r.search.EditCommit = nil
+	r.search.FieldsPages.HidePage("editfield")
 	commit(text)
 }
 
-// searchSpanAt finds whichever searchSpans entry (if any) contains
+// searchSpanAt finds whichever search.Spans entry (if any) contains
 // (x, y) — checked against its own widget's InRect first, then its
 // exact row/column range within that widget's inner rect, the same
 // two-step check propertySpanAt already does.
 func (r *Root) searchSpanAt(x, y int) (searchSpan, int, bool) {
-	for i, s := range r.searchSpans {
+	for i, s := range r.search.Spans {
 		if !s.widget.InRect(x, y) {
 			continue
 		}
@@ -989,8 +1033,8 @@ func (r *Root) searchSpanAt(x, y int) (searchSpan, int, bool) {
 // currently holds, writing the chosen directory back into it on
 // Select. Left untouched on Cancel.
 func (r *Root) openSearchTreePicker() {
-	r.openDirPicker(r.searchScopeValue, func(path string) {
-		r.searchScopeValue = path
+	r.openDirPicker(r.search.ScopeValue, func(path string) {
+		r.search.ScopeValue = path
 		r.rerenderSearchDialog()
 	}, nil)
 }
@@ -1011,15 +1055,15 @@ func (r *Root) openSearchTreePicker() {
 // refining, since it's still the field most searches start from.
 func (r *Root) openSearch() {
 	if !r.panel.searchMode {
-		r.searchFilenameValue = ""
-		r.searchContentValue = ""
-		r.searchScopeValue = r.panel.path
+		r.search.FilenameValue = ""
+		r.search.ContentValue = ""
+		r.search.ScopeValue = r.panel.path
 	}
-	r.searchFieldsPages.SwitchToPage("fields")
+	r.search.FieldsPages.SwitchToPage("fields")
 
 	r.rerenderSearchDialog()
 	r.resizeSearchPages()
-	r.showOverlay(searchPage, r.searchPages)
+	r.showOverlay(searchPage, r.search.Pages)
 
 	if idx, ok := r.searchSpanIndex("filename"); ok {
 		// setSearchFocus itself opens the filename span's own inline
@@ -1030,7 +1074,7 @@ func (r *Root) openSearch() {
 		// means "ready to type", never "still needs Enter first".
 		//
 		// That activation positions the inline edit field from
-		// searchLeft's own GetInnerRect() — but searchLeft is nested
+		// search.Left's own GetInnerRect() — but search.Left is nested
 		// inside Flex layouts whose children only get a real rect once
 		// something actually calls their Draw(screen), which only
 		// ever happens as a side effect of a real draw pass, not of
@@ -1059,12 +1103,12 @@ func (r *Root) openSearch() {
 func (r *Root) resizeSearchPages() {
 	x, y := r.centeredOnScreen(searchFormWidth, searchFormHeight)
 	x, y, w, h := r.clampToScreen(x, y, searchFormWidth, searchFormHeight)
-	r.searchPages.SetRect(x, y, w, h)
-	r.searchTitleBar.SetRect(x, y, w, 1)
+	r.search.Pages.SetRect(x, y, w, h)
+	r.search.TitleBar.SetRect(x, y, w, 1)
 	r.renderSearchTitleBar(w)
 }
 
-// renderSearchTitleBar sets searchTitleBar's own text to
+// renderSearchTitleBar sets search.TitleBar's own text to
 // " Find Needle (in haystack) " — per the user's own explicit request
 // for a punchier title than a plain " Find " — padded out to width
 // columns, with a close glyph (toolWindowCloseGlyph, the same one
@@ -1081,7 +1125,7 @@ func (r *Root) renderSearchTitleBar(width int) {
 	if padding < 0 {
 		padding = 0
 	}
-	r.searchTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
+	r.search.TitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
 }
 
 // moveSearch repositions the search dialog to (x, y) without touching
@@ -1091,16 +1135,16 @@ func (r *Root) renderSearchTitleBar(width int) {
 // moveProperties/resizeProperties' own size-vs-position split to worry
 // about: one function covers both the initial open and every drag move.
 func (r *Root) moveSearch(x, y int) {
-	oldX, oldY, width, height := r.searchPages.GetRect()
+	oldX, oldY, width, height := r.search.Pages.GetRect()
 	x, y, width, height = r.clampToScreen(x, y, width, height)
 
-	r.searchPages.SetRect(x, y, width, height)
-	r.searchTitleBar.SetRect(x, y, width, 1)
+	r.search.Pages.SetRect(x, y, width, height)
+	r.search.TitleBar.SetRect(x, y, width, 1)
 	r.renderSearchTitleBar(width)
 
 	// The inline edit field's own "editfield" page is deliberately
 	// resize=false (see newSearchDialog's AddPage("editfield", ...)
-	// call) — unlike every other page nested under searchPages, its
+	// call) — unlike every other page nested under search.Pages, its
 	// rect is never recalculated for free by tview's own Pages.Draw
 	// cascade (see resizeSearchPages's own doc comment), so without
 	// this it stayed fixed at its pre-drag screen position while the
@@ -1109,13 +1153,13 @@ func (r *Root) moveSearch(x, y int) {
 	// Shifting by the same delta the dialog itself just moved by
 	// (rather than recomputing from span.widget.GetInnerRect() the way
 	// activateSearchTextField does) deliberately doesn't depend on
-	// searchLeft/searchRight's own rect already reflecting the new
+	// search.Left/search.Right's own rect already reflecting the new
 	// position — those only update lazily, on the next real Draw call
 	// (see openSearch's own ForceDraw comment), which hasn't happened
 	// yet at this point mid-drag.
-	if front, _ := r.searchFieldsPages.GetFrontPage(); front == "editfield" {
-		ex, ey, ew, eh := r.searchEditField.GetRect()
-		r.searchEditField.SetRect(ex+x-oldX, ey+y-oldY, ew, eh)
+	if front, _ := r.search.FieldsPages.GetFrontPage(); front == "editfield" {
+		ex, ey, ew, eh := r.search.EditField.GetRect()
+		r.search.EditField.SetRect(ex+x-oldX, ey+y-oldY, ew, eh)
 	}
 }
 
@@ -1124,13 +1168,13 @@ func (r *Root) moveSearch(x, y int) {
 // behaves exactly like Cancel — mirrors dragPropertiesMouseCapture
 // (see its own, considerably longer doc comment for the full
 // reasoning, including why captureOutsideClick needs its own
-// searchDragging check the same way it already has one for
-// propertiesDragging: dragging up/left past the not-yet-updated rect
+// search.Dragging check the same way it already has one for
+// properties.Dragging: dragging up/left past the not-yet-updated rect
 // would otherwise stop reaching this capture at all). Unlike
 // dragPropertiesMouseCapture, this doesn't need a three-return
 // "handled" signal of its own: there's no further, unrelated capture
 // downstream of this one that still needs to run when a click isn't
-// about the title bar at all (searchSpanAt/searchButtons are reached
+// about the title bar at all (searchSpanAt/search.Buttons are reached
 // by tview's own ordinary dispatch instead, once this returns the
 // event unchanged) — Properties' own hashesMouseCapture needed that
 // signal only because it has its own, separate hash-section handling
@@ -1138,32 +1182,32 @@ func (r *Root) moveSearch(x, y int) {
 func (r *Root) dragSearchMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	x, y := event.Position()
 
-	if r.searchDragging {
+	if r.search.Dragging {
 		switch action {
 		case tview.MouseMove:
 			if event.Buttons()&tcell.ButtonPrimary == 0 {
-				r.searchDragging = false
+				r.search.Dragging = false
 				return tview.MouseConsumed, nil
 			}
-			r.moveSearch(x-r.searchDragOffsetX, y-r.searchDragOffsetY)
+			r.moveSearch(x-r.search.DragOffsetX, y-r.search.DragOffsetY)
 			return tview.MouseConsumed, nil
 		case tview.MouseLeftUp:
-			r.searchDragging = false
+			r.search.Dragging = false
 			return tview.MouseConsumed, nil
 		}
 		return tview.MouseConsumed, nil // swallow everything else for the duration of the drag
 	}
 
-	if action == tview.MouseLeftDown && r.searchTitleBar.InRect(x, y) {
-		wx, wy, width, _ := r.searchPages.GetRect()
+	if action == tview.MouseLeftDown && r.search.TitleBar.InRect(x, y) {
+		wx, wy, width, _ := r.search.Pages.GetRect()
 		if y == wy && x == wx+toolWindowCloseButtonCol(0, width) {
 			// The close glyph itself — per the user's own explicit
 			// request, behaves exactly like Cancel, not a drag start.
 			r.closeSearch()
 			return tview.MouseConsumed, nil
 		}
-		r.searchDragging = true
-		r.searchDragOffsetX, r.searchDragOffsetY = x-wx, y-wy
+		r.search.Dragging = true
+		r.search.DragOffsetX, r.search.DragOffsetY = x-wx, y-wy
 		return tview.MouseConsumed, nil
 	}
 
@@ -1185,7 +1229,7 @@ func (r *Root) dragSearchMouseCapture(action tview.MouseAction, event *tcell.Eve
 // retry.
 //
 // Deliberately skips starting animateSearchProgress/streamSearchResults
-// (searchCancel stays nil) — there's no real search running here for
+// (search.Cancel stays nil) — there's no real search running here for
 // either of those to track, only this one static line to show; the
 // next real runSearch resets the header's own color back to normal
 // (see Panel.setSearchStatusColor) before showing anything else.
@@ -1226,14 +1270,14 @@ func (r *Root) closeSearch() {
 
 // cancelSearch stops whatever search.Run call is currently in flight,
 // if any (see runSearch/streamSearchResults), and its paired
-// animateSearchProgress ticker (both share the same ctx/searchCancel)
+// animateSearchProgress ticker (both share the same ctx/search.Cancel)
 // — so a slow "find /" started by an earlier search never keeps
 // working, or racing a newer one's own results into the same list,
 // once the user has moved on from it.
 func (r *Root) cancelSearch() {
-	if r.searchCancel != nil {
-		r.searchCancel()
-		r.searchCancel = nil
+	if r.search.Cancel != nil {
+		r.search.Cancel()
+		r.search.Cancel = nil
 	}
 }
 
@@ -1296,14 +1340,14 @@ func (r *Root) persistSearchDefaults(engine search.Engine) {
 		}
 	}
 	apply("search_engine", searchEngineConfigValue(engine))
-	apply("search_shell_patterns", strconv.FormatBool(r.searchShellPatterns))
-	apply("search_case_sensitive", strconv.FormatBool(r.searchCaseSensitive))
-	apply("search_skip_hidden", strconv.FormatBool(r.searchSkipHidden))
+	apply("search_shell_patterns", strconv.FormatBool(r.search.ShellPatterns))
+	apply("search_case_sensitive", strconv.FormatBool(r.search.CaseSensitive))
+	apply("search_skip_hidden", strconv.FormatBool(r.search.SkipHidden))
 }
 
 func (r *Root) runSearch() {
 	contentMode := search.ContentNone
-	if r.searchContentValue != "" {
+	if r.search.ContentValue != "" {
 		contentMode = search.ContentGrep
 	}
 
@@ -1314,19 +1358,19 @@ func (r *Root) runSearch() {
 	// "Using shell patterns" only ever affects the filename match and
 	// "Regular expression" only ever affects the content match).
 	filenameMode := search.ModeRegex
-	if r.searchShellPatterns {
+	if r.search.ShellPatterns {
 		filenameMode = search.ModeGlob
 	}
 	contentSearchMode := search.ModeKeyword
-	if r.searchContentRegex {
+	if r.search.ContentRegex {
 		contentSearchMode = search.ModeRegex
 	}
 
-	if r.searchFilenameValue == "" && r.searchContentValue == "" {
+	if r.search.FilenameValue == "" && r.search.ContentValue == "" {
 		return
 	}
-	scope := r.panel.resolvePath(r.searchScopeValue)
-	engine := r.searchEngineOptions[r.searchEngineIdx].engine
+	scope := r.panel.resolvePath(r.search.ScopeValue)
+	engine := r.search.EngineOptions[r.search.EngineIdx].engine
 
 	// A *plain* content search (Content filled in, Filename left blank
 	// — nothing for locate itself to narrow with, so there's no
@@ -1341,7 +1385,7 @@ func (r *Root) runSearch() {
 	// is exactly what a user reasonably expects a "start point" field to
 	// mean, typed value and all, whether or not it happens to match
 	// wherever the panel itself is currently sitting.
-	plainContentSearch := contentMode != search.ContentNone && r.searchFilenameValue == ""
+	plainContentSearch := contentMode != search.ContentNone && r.search.FilenameValue == ""
 
 	// Checked for EngineFind, and now also for locate's own plain
 	// content search (plainContentSearch, just above) — the one
@@ -1372,10 +1416,10 @@ func (r *Root) runSearch() {
 	r.persistSearchDefaults(engine)
 
 	var ignoreDirs []string
-	if r.searchIgnoreEnabled {
-		ignoreDirs = parseIgnoreDirs(r.searchIgnoreValue)
+	if r.search.IgnoreEnabled {
+		ignoreDirs = parseIgnoreDirs(r.search.IgnoreValue)
 	}
-	if r.searchSkipHidden {
+	if r.search.SkipHidden {
 		ignoreDirs = append(ignoreDirs, ".*")
 	}
 
@@ -1384,13 +1428,13 @@ func (r *Root) runSearch() {
 		Engine:            engine,
 		Content:           contentMode,
 		IgnoreDirs:        ignoreDirs,
-		CaseSensitive:     r.searchCaseSensitive,
-		NonRecursive:      !r.searchRecursive,
-		FollowSymlinks:    r.searchFollowSymlinks,
-		WholeWords:        r.searchWholeWords,
-		FirstHit:          r.searchFirstHit,
-		IncludeArchives:   contentMode == search.ContentNone && r.searchIncludeArchives,
-		IncludeCompressed: contentMode != search.ContentNone && r.searchIncludeCompressed,
+		CaseSensitive:     r.search.CaseSensitive,
+		NonRecursive:      !r.search.Recursive,
+		FollowSymlinks:    r.search.FollowSymlinks,
+		WholeWords:        r.search.WholeWords,
+		FirstHit:          r.search.FirstHit,
+		IncludeArchives:   contentMode == search.ContentNone && r.search.IncludeArchives,
+		IncludeCompressed: contentMode != search.ContentNone && r.search.IncludeCompressed,
 	}
 	// Content == ContentNone: Pattern is the filename match itself, run
 	// through Engine directly. Otherwise: Pattern is what grep actually
@@ -1401,18 +1445,18 @@ func (r *Root) runSearch() {
 	// anything typed into it; left blank, a content search still runs
 	// across every file under Scope exactly as before.
 	if contentMode == search.ContentNone {
-		req.Pattern = r.searchFilenameValue
+		req.Pattern = r.search.FilenameValue
 		req.Mode = filenameMode
 	} else {
-		req.Pattern = r.searchContentValue
+		req.Pattern = r.search.ContentValue
 		req.Mode = contentSearchMode
-		req.NamePattern = r.searchFilenameValue
+		req.NamePattern = r.search.FilenameValue
 		req.NameMode = filenameMode
 	}
 
 	r.cancelSearch()
 	ctx, cancel := context.WithCancel(context.Background())
-	r.searchCancel = cancel
+	r.search.Cancel = cancel
 
 	// Set here, not inside the req literal above: it closes over ctx,
 	// which doesn't exist yet at that point. Runs on whichever
@@ -1428,7 +1472,7 @@ func (r *Root) runSearch() {
 			if ctx.Err() != nil {
 				return
 			}
-			r.searchCurrentPos = path
+			r.search.CurrentPos = path
 			r.renderSearchStatus()
 		})
 	}
@@ -1444,7 +1488,7 @@ func (r *Root) runSearch() {
 	// completely unaffected. Filename only, not Content: the sentinel
 	// is about what you're looking *for*, not text appearing inside a
 	// file.
-	if strings.EqualFold(strings.TrimSpace(r.searchFilenameValue), "easteregg") {
+	if strings.EqualFold(strings.TrimSpace(r.search.FilenameValue), "easteregg") {
 		r.panel.appendEasterEggSearchResult()
 	}
 	// scope is already validated at this point for every case that
@@ -1453,10 +1497,10 @@ func (r *Root) runSearch() {
 	// real scope, not wherever the panel happened to be before it.
 	r.panel.searchBrowsePath = scope
 	r.panel.setSearchStatusColor(r.theme.Text) // undo showSearchError's own red, if a previous run left it set
-	r.searchAnimFrame = 0
-	r.searchCurrentPos = ""
-	r.searchLastDir = ""
-	r.searchStartDir = scope
+	r.search.AnimFrame = 0
+	r.search.CurrentPos = ""
+	r.search.LastDir = ""
+	r.search.StartDir = scope
 	r.renderSearchStatus()
 
 	// Both wrapped in safeGo (see its own doc comment): a panic in
@@ -1486,7 +1530,7 @@ func (r *Root) runSearch() {
 // do for config I/O).
 var searchRun = search.Run
 
-// animateSearchProgress advances searchAnimFrame every
+// animateSearchProgress advances search.AnimFrame every
 // hashAnimationInterval until ctx is done (see runSearch/cancelSearch)
 // — the same ticker-driven "in progress" animation computeHashes' own
 // animateHashProgress already uses, reusing hashAnimationFrames
@@ -1504,7 +1548,7 @@ func (r *Root) animateSearchProgress(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				r.searchAnimFrame++
+				r.search.AnimFrame++
 				r.renderSearchStatus()
 			})
 		case <-ctx.Done():
@@ -1515,12 +1559,12 @@ func (r *Root) animateSearchProgress(ctx context.Context) {
 
 // renderSearchStatus paints the panel's own header status line (see
 // Panel.setSearchStatus): the current animation frame, the Esc hint,
-// then wherever the search actually is right now — searchCurrentPos,
+// then wherever the search actually is right now — search.CurrentPos,
 // live from search.Request.OnProgress (see runSearch), whenever there
 // is one; falling back to whatever directory streamSearchResults last
-// saw a match in (searchLastDir) once progress has nothing to show
+// saw a match in (search.LastDir) once progress has nothing to show
 // (locate, or the search has already finished), and finally to Start
-// at's own value (searchStartDir) until either one has anything at
+// at's own value (search.StartDir) until either one has anything at
 // all.
 //
 // Goes through setSearchStatusLive, not the plain setSearchStatus every
@@ -1530,13 +1574,13 @@ func (r *Root) animateSearchProgress(ctx context.Context) {
 // it, distracting enough to be worse than not having a fixed position
 // for it at all.
 func (r *Root) renderSearchStatus() {
-	frame := hashAnimationFrames[r.searchAnimFrame%len(hashAnimationFrames)]
-	dir := r.searchCurrentPos
+	frame := hashAnimationFrames[r.search.AnimFrame%len(hashAnimationFrames)]
+	dir := r.search.CurrentPos
 	if dir == "" {
-		dir = r.searchLastDir
+		dir = r.search.LastDir
 	}
 	if dir == "" {
-		dir = r.searchStartDir
+		dir = r.search.StartDir
 	}
 	r.setSearchStatusLive(frame, dir)
 }
@@ -1602,7 +1646,7 @@ func noSearchResultsText(req search.Request) string {
 // goroutine's own updates still sitting in the queue skip themselves
 // instead of appending stale results (or a stale error) on top of the
 // new search's own, already-cleared listing. Each arriving result also
-// updates searchLastDir — see renderSearchStatus.
+// updates search.LastDir — see renderSearchStatus.
 //
 // The status line's own animation stops and settles on a final
 // "Done — N found" once the search is over — noSearchResultsText(req)
@@ -1618,7 +1662,7 @@ func (r *Root) streamSearchResults(ctx context.Context, req search.Request, resu
 			if ctx.Err() != nil {
 				return
 			}
-			r.searchLastDir = filepath.Dir(res.Path)
+			r.search.LastDir = filepath.Dir(res.Path)
 			r.panel.appendSearchResult(res)
 		})
 	}
@@ -1659,20 +1703,20 @@ func (r *Root) streamSearchResults(ctx context.Context, req search.Request, resu
 // way applyBatchRenameTheme is (applyTheme also runs from NewRoot,
 // before the search dialog has built any of these).
 func (r *Root) applySearchTheme(theme config.ResolvedTheme) {
-	if r.searchTop == nil {
+	if r.search.Top == nil {
 		return
 	}
-	r.searchTop.SetBackgroundColor(theme.SurfaceBackground)
-	r.searchLeft.SetBackgroundColor(theme.SurfaceBackground)
-	r.searchRight.SetBackgroundColor(theme.SurfaceBackground)
-	styleInput(r.searchEditField, theme, true)
-	r.searchButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.searchCancelBtn, theme)
-	styleButton(r.searchSearchBtn, theme)
+	r.search.Top.SetBackgroundColor(theme.SurfaceBackground)
+	r.search.Left.SetBackgroundColor(theme.SurfaceBackground)
+	r.search.Right.SetBackgroundColor(theme.SurfaceBackground)
+	styleInput(r.search.EditField, theme, true)
+	r.search.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.search.CancelBtn, theme)
+	styleButton(r.search.SearchBtn, theme)
 	// FocusedBackground, fixed — Search is a single-layer, always-modal
 	// dialog nothing else ever stacks on top of, the same reasoning
-	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
-	r.searchTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.searchTitleBar.SetTextColor(theme.TextColor)
+	// confirmDialogTitleBar/chmodTitleBar/sed.TitleBar already follow.
+	r.search.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.search.TitleBar.SetTextColor(theme.TextColor)
 	r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme
 }
