@@ -157,7 +157,7 @@ func (r *Root) styleCloudMountDialogFields() {
 	// which stomps whatever SetFieldBackgroundColor this call makes the
 	// very next redraw — true for every Form-based dialog in this app
 	// (Connect included, see theme.go's own identical
-	// connectForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	// connect.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
 	// call), not something specific to this dialog. false still matters
 	// for the parts Form.Draw doesn't touch — placeholder style, and
 	// the label's own background (see styleInput's own doc comment).
@@ -286,7 +286,7 @@ func (r *Root) setCloudMountDialogButtonsMode(showDelete bool) {
 		case tcell.KeyTab:
 			// r.cloudMountDialogForm.SetFocus(0), not
 			// r.app.SetFocus(r.cloudMountDialogRemoteField) — see
-			// connectConnectBtn's own identical wrap in connectdialog.go
+			// connect.ConnectBtn's own identical wrap in connectdialog.go
 			// for the real, user-reported bug (Form.Focus overwrites
 			// SetDoneFunc, so naming a field directly here would leave
 			// the form's own internal focusedElement counter stale)
