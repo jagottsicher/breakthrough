@@ -232,7 +232,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// scrollAcknowledgeNotice (see scrollacknowledge.go) — same
 	// "single-layer, always-modal, fixed FocusedBackground" reasoning
 	// as confirmDialog/quitConfirm just above; the message itself gets
-	// consigliereHistory's own ordinary SurfaceBackground/TextColor
+	// consigliere.History's own ordinary SurfaceBackground/TextColor
 	// pairing, not activityLogNotice's red error one, since this isn't
 	// an error notice.
 	styleList(r.scrollAcknowledgeList, theme)
@@ -453,31 +453,31 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.helpTitleBar.SetTextColor(theme.Text)
 	}
 
-	if r.consigliereHistory != nil {
+	if r.consigliere.History != nil {
 		// SurfaceBackground, the same floating-chrome surface Help's
 		// own helpView uses (see above) — a chat overlay reads as the
 		// same kind of floating dialog, not a full-bleed catalog body
 		// the way viewerView/mounts.Layout are.
-		r.consigliereHistory.SetBackgroundColor(theme.SurfaceBackground)
-		r.consigliereHistory.SetTextColor(theme.TextColor)
+		r.consigliere.History.SetBackgroundColor(theme.SurfaceBackground)
+		r.consigliere.History.SetTextColor(theme.TextColor)
 	}
-	if r.consigliereTitleBar != nil {
-		// Re-derived from consigliereHistory's own current focus state
+	if r.consigliere.TitleBar != nil {
+		// Re-derived from consigliere.History's own current focus state
 		// (see its own SetFocusFunc/SetBlurFunc in consigliere.go)
 		// rather than always reset to the unfocused look — the same
 		// "a live theme switch mid-focus must not show the wrong one
 		// until the next blur/focus cycle" hazard detailsTitleBar's
 		// own identical block documents.
-		r.consigliereTitleBar.SetBackgroundColor(r.consigliereTitleBarBackground(r.consigliereHistory.HasFocus()))
-		r.consigliereTitleBar.SetTextColor(theme.Text)
+		r.consigliere.TitleBar.SetBackgroundColor(r.consigliereTitleBarBackground(r.consigliere.History.HasFocus()))
+		r.consigliere.TitleBar.SetTextColor(theme.Text)
 	}
-	if r.consigliereInput != nil {
+	if r.consigliere.Input != nil {
 		// Always the focused style: the input field is the only
 		// widget this overlay ever actually focuses (see
 		// openConsigliere) — there is no unfocused state of its own
 		// worth distinguishing, unlike an ordinary form field sitting
 		// next to others.
-		styleInput(r.consigliereInput, theme, true)
+		styleInput(r.consigliere.Input, theme, true)
 	}
 
 	if r.viewerView != nil {

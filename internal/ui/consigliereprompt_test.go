@@ -359,21 +359,21 @@ func TestTerminalContextSnapshotExplainsVisibilityWhenScreenIsBlankUnderMachiave
 
 // TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage pins the
 // advisor-flagged regression risk: dispatch must key off the *current*
-// r.activePage, not consigliereExitPage (the page captured when the
+// r.activePage, not consigliere.ExitPage (the page captured when the
 // sidebar was first opened) — otherwise navigating from Log Audit's
 // own overview into a specific log file (pushOverlay, which the
 // sidebar is explicitly meant to survive) would keep describing the
 // overview forever.
 func TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.consigliereExitPage = logAuditSelectionPage // stale: wherever it was opened from
-	root.activePage = logAuditViewerPage             // live: wherever it actually is now
+	root.consigliere.ExitPage = logAuditSelectionPage // stale: wherever it was opened from
+	root.activePage = logAuditViewerPage              // live: wherever it actually is now
 	root.logAuditDir = "/var/log/myapp"
 
 	got := root.consigliereContextSnapshot()
 
 	if !strings.Contains(got, "Log Holepunch") {
-		t.Errorf("snapshot = %q, want a Log Holepunch snapshot even though consigliereExitPage still names the selection screen", got)
+		t.Errorf("snapshot = %q, want a Log Holepunch snapshot even though consigliere.ExitPage still names the selection screen", got)
 	}
 }
 
