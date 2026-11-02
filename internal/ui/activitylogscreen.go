@@ -34,6 +34,31 @@ import (
 
 const activityLogPage = "activitylog"
 
+// activityLogState holds the Activity Log screen's widgets, last read
+// entries, fallback-warning flag, and the startup fallback notice
+// dialog's own widgets/state (see activitylog.go).
+type activityLogState struct {
+	Logger              *activitylog.Logger
+	FallbackWarned      bool
+	Layout              *tview.Flex
+	TitleBar            *tview.TextView
+	KeywordField        *tview.InputField
+	TimeField           *tview.InputField
+	Table               *tview.Table
+	Scrollbar           *verticalScrollbar
+	Hint                *tview.TextView
+	HintSpans           []listHintSpan
+	AllEntries          []activitylog.Entry
+	ReadErr             error
+	NoticeLayout        *tview.Flex
+	NoticeTitleBar      *tview.TextView
+	NoticeMessageView   *tview.TextView
+	NoticeList          *tview.List
+	NoticeCancelButton  *tview.Button
+	NoticeOKButton      *tview.Button
+	NoticeDontShowAgain bool
+}
+
 const (
 	activityLogColTime = iota
 	activityLogColLevel
@@ -75,53 +100,53 @@ func activityLogHintEntries() []listHintEntry {
 // same build-once/repopulate-on-open shape newMountsScreen/
 // newFirewallScreen already establish.
 func (r *Root) newActivityLogScreen() {
-	r.activityLogTitleBar = newPlainTitleBar("Activity Log")
-	r.activityLogTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.activityLogTitleBar, r.reloadActivityLog, r.closeActivityLog))
+	r.activity.TitleBar = newPlainTitleBar("Activity Log")
+	r.activity.TitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.activity.TitleBar, r.reloadActivityLog, r.closeActivityLog))
 
-	r.activityLogKeywordField = tview.NewInputField()
-	r.activityLogKeywordField.SetLabel("Keyword: ")
-	r.activityLogKeywordField.SetChangedFunc(func(string) { r.renderActivityLog() })
-	r.activityLogKeywordField.SetDoneFunc(func(key tcell.Key) { r.activityLogFieldDone(key, r.activityLogTimeField, r.activityLogTable) })
-	r.activityLogKeywordField.SetFocusFunc(func() { r.activityLogSetFieldStyle(r.activityLogKeywordField, true) })
-	r.activityLogKeywordField.SetBlurFunc(func() { r.activityLogSetFieldStyle(r.activityLogKeywordField, false) })
+	r.activity.KeywordField = tview.NewInputField()
+	r.activity.KeywordField.SetLabel("Keyword: ")
+	r.activity.KeywordField.SetChangedFunc(func(string) { r.renderActivityLog() })
+	r.activity.KeywordField.SetDoneFunc(func(key tcell.Key) { r.activityLogFieldDone(key, r.activity.TimeField, r.activity.Table) })
+	r.activity.KeywordField.SetFocusFunc(func() { r.activityLogSetFieldStyle(r.activity.KeywordField, true) })
+	r.activity.KeywordField.SetBlurFunc(func() { r.activityLogSetFieldStyle(r.activity.KeywordField, false) })
 
-	r.activityLogTimeField = tview.NewInputField()
-	r.activityLogTimeField.SetLabel("Time (e.g. \"last 7 days\", \"after 2026-09-01\"): ")
-	r.activityLogTimeField.SetChangedFunc(func(string) { r.renderActivityLog() })
-	r.activityLogTimeField.SetDoneFunc(func(key tcell.Key) { r.activityLogFieldDone(key, r.activityLogTable, r.activityLogKeywordField) })
-	r.activityLogTimeField.SetFocusFunc(func() { r.activityLogSetFieldStyle(r.activityLogTimeField, true) })
-	r.activityLogTimeField.SetBlurFunc(func() { r.activityLogSetFieldStyle(r.activityLogTimeField, false) })
+	r.activity.TimeField = tview.NewInputField()
+	r.activity.TimeField.SetLabel("Time (e.g. \"last 7 days\", \"after 2026-09-01\"): ")
+	r.activity.TimeField.SetChangedFunc(func(string) { r.renderActivityLog() })
+	r.activity.TimeField.SetDoneFunc(func(key tcell.Key) { r.activityLogFieldDone(key, r.activity.Table, r.activity.KeywordField) })
+	r.activity.TimeField.SetFocusFunc(func() { r.activityLogSetFieldStyle(r.activity.TimeField, true) })
+	r.activity.TimeField.SetBlurFunc(func() { r.activityLogSetFieldStyle(r.activity.TimeField, false) })
 
 	filterRow := tview.NewFlex().
-		AddItem(r.activityLogKeywordField, 0, 1, true).
-		AddItem(r.activityLogTimeField, 0, 2, false)
+		AddItem(r.activity.KeywordField, 0, 1, true).
+		AddItem(r.activity.TimeField, 0, 2, false)
 
-	r.activityLogTable = tview.NewTable()
-	r.activityLogTable.SetBorders(false)
-	r.activityLogTable.SetBorderPadding(1, 0, 2, 1)
-	r.activityLogTable.SetSelectable(true, false)
-	r.activityLogTable.SetFixed(1, 0)
-	r.activityLogTable.SetInputCapture(r.captureActivityLogTableKey)
+	r.activity.Table = tview.NewTable()
+	r.activity.Table.SetBorders(false)
+	r.activity.Table.SetBorderPadding(1, 0, 2, 1)
+	r.activity.Table.SetSelectable(true, false)
+	r.activity.Table.SetFixed(1, 0)
+	r.activity.Table.SetInputCapture(r.captureActivityLogTableKey)
 
-	r.activityLogHint = tview.NewTextView()
-	r.activityLogHint.SetWrap(false)
-	r.activityLogHint.SetDynamicColors(true)
-	activityLogHintText, activityLogHintSpans := buildListHint(r.theme, activityLogHintEntries())
-	r.activityLogHint.SetText(activityLogHintText)
-	r.activityLogHintSpans = activityLogHintSpans
-	r.activityLogHint.SetMouseCapture(r.captureListHintMouse(r.activityLogHint, &r.activityLogHintSpans))
+	r.activity.Hint = tview.NewTextView()
+	r.activity.Hint.SetWrap(false)
+	r.activity.Hint.SetDynamicColors(true)
+	activityLogHintText, hintSpans := buildListHint(r.theme, activityLogHintEntries())
+	r.activity.Hint.SetText(activityLogHintText)
+	r.activity.HintSpans = hintSpans
+	r.activity.Hint.SetMouseCapture(r.captureListHintMouse(r.activity.Hint, &r.activity.HintSpans))
 
-	r.activityLogScrollbar = newVerticalScrollbarForTable(r, r.activityLogTable)
+	r.activity.Scrollbar = newVerticalScrollbarForTable(r, r.activity.Table)
 	activityLogTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.activityLogTable, 0, 1, true).
-		AddItem(r.activityLogScrollbar, 1, 0, false)
-	activityLogTableRow.SetMouseCapture(r.activityLogScrollbar.captureMouse)
+		AddItem(r.activity.Table, 0, 1, true).
+		AddItem(r.activity.Scrollbar, 1, 0, false)
+	activityLogTableRow.SetMouseCapture(r.activity.Scrollbar.captureMouse)
 
-	r.activityLogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.activityLogTitleBar, 1, 0, false).
+	r.activity.Layout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.activity.TitleBar, 1, 0, false).
 		AddItem(filterRow, 1, 0, false).
 		AddItem(activityLogTableRow, 0, 1, true).
-		AddItem(r.activityLogHint, 1, 0, false)
+		AddItem(r.activity.Hint, 1, 0, false)
 }
 
 // activityLogSetFieldStyle applies the shared normal/focused input
@@ -139,14 +164,14 @@ func (r *Root) activityLogSetFieldStyle(field *tview.InputField, focused bool) {
 
 // openActivityLog shows the Activity Log screen, freshly read every
 // time — the same reasoning openMounts/openFirewall's own doc comments
-// give — with the table focused first, not activityLogKeywordField: the
+// give — with the table focused first, not activity.KeywordField: the
 // same "land ready to read/navigate entries right away, not typing into
 // a filter first" fix openLogAuditViewer already applies (logaudit.go),
 // just never carried over to this sibling screen.
 func (r *Root) openActivityLog() {
 	r.reloadActivityLog()
-	r.showOverlay(activityLogPage, r.activityLogLayout)
-	r.app.SetFocus(r.activityLogTable)
+	r.showOverlay(activityLogPage, r.activity.Layout)
+	r.app.SetFocus(r.activity.Table)
 }
 
 // closeActivityLog hides the Activity Log screen. Nothing to save — a
@@ -159,8 +184,8 @@ func (r *Root) closeActivityLog() {
 // screen's own initial population, and "r"'s own manual refresh.
 func (r *Root) reloadActivityLog() {
 	entries, err := readActivityLogEntries()
-	r.activityLogAllEntries = entries
-	r.activityLogReadErr = err
+	r.activity.AllEntries = entries
+	r.activity.ReadErr = err
 	r.renderActivityLog()
 }
 
@@ -275,11 +300,11 @@ func activityLogLevelColor(theme config.ResolvedTheme, level activitylog.Level) 
 // like an empty, successful read, the same "report it, don't swallow
 // it" principle renderMounts/renderFirewall already follow.
 func (r *Root) renderActivityLog() {
-	renderReloadCloseTitleBar(r.activityLogTitleBar, " Activity Log ", r.lastScreenWidth)
-	r.activityLogTable.Clear()
+	renderReloadCloseTitleBar(r.activity.TitleBar, " Activity Log ", r.lastScreenWidth)
+	r.activity.Table.Clear()
 
 	header := func(col int, text string) {
-		r.activityLogTable.SetCell(0, col,
+		r.activity.Table.SetCell(0, col,
 			tview.NewTableCell(padRight(text, activityLogColumnWidth(col))).
 				SetTextColor(r.theme.Text).
 				SetAttributes(tcell.AttrBold).
@@ -293,30 +318,30 @@ func (r *Root) renderActivityLog() {
 	// See showTablePlaceholder's own doc comment for why both early
 	// returns below go through it rather than a bare SetCell — it's the
 	// fix for a real, reported freeze, not just a message.
-	if r.activityLogReadErr != nil {
-		showTablePlaceholder(r.activityLogTable, r.activityLogReadErr.Error(), r.theme.EntryError)
+	if r.activity.ReadErr != nil {
+		showTablePlaceholder(r.activity.Table, r.activity.ReadErr.Error(), r.theme.EntryError)
 		return
 	}
 
-	entries := filterActivityLogEntries(r.activityLogAllEntries, r.activityLogKeywordField.GetText(), r.activityLogTimeField.GetText(), time.Now())
+	entries := filterActivityLogEntries(r.activity.AllEntries, r.activity.KeywordField.GetText(), r.activity.TimeField.GetText(), time.Now())
 	if len(entries) == 0 {
 		placeholder := "No activity logged yet."
-		if len(r.activityLogAllEntries) > 0 {
+		if len(r.activity.AllEntries) > 0 {
 			placeholder = "No entries match the current filter."
 		}
-		showTablePlaceholder(r.activityLogTable, placeholder, r.theme.PlaceholderText)
+		showTablePlaceholder(r.activity.Table, placeholder, r.theme.PlaceholderText)
 		return
 	}
 
 	// Real, selectable rows exist again — see showTablePlaceholder's own
 	// doc comment for why this isn't optional cosmetic tidiness.
-	enableTableSelection(r.activityLogTable)
+	enableTableSelection(r.activity.Table)
 
 	for i, e := range entries {
 		row := i + 1
 		levelColor := activityLogLevelColor(r.theme, e.Level)
 		cell := func(col int, text string, color tcell.Color) {
-			r.activityLogTable.SetCell(row, col,
+			r.activity.Table.SetCell(row, col,
 				tview.NewTableCell(padRight(text, activityLogColumnWidth(col))).
 					SetTextColor(color).SetSelectable(true))
 		}
@@ -329,8 +354,8 @@ func (r *Root) renderActivityLog() {
 	// Keep the cursor in range after a refresh changed how many rows
 	// there are — the same restraint renderMounts/renderFirewall's own
 	// tail already shows.
-	if cur, _ := r.activityLogTable.GetSelection(); cur < 1 || cur > len(entries) {
-		r.activityLogTable.Select(1, 0)
+	if cur, _ := r.activity.Table.GetSelection(); cur < 1 || cur > len(entries) {
+		r.activity.Table.Select(1, 0)
 	}
 }
 
@@ -369,14 +394,14 @@ func (r *Root) captureActivityLogTableKey(event *tcell.EventKey) *tcell.EventKey
 		// Table), so wrapping back to Keyword (the ordinary case) is
 		// what gives way to it instead, the same shape
 		// captureLogAuditViewerTableKey already establishes.
-		if r.consigliereVisible {
-			r.app.SetFocus(r.consigliereInput)
+		if r.consigliere.Visible {
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
-		r.app.SetFocus(r.activityLogKeywordField)
+		r.app.SetFocus(r.activity.KeywordField)
 		return nil
 	case tcell.KeyBacktab:
-		r.app.SetFocus(r.activityLogTimeField)
+		r.app.SetFocus(r.activity.TimeField)
 		return nil
 	}
 	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
@@ -385,11 +410,11 @@ func (r *Root) captureActivityLogTableKey(event *tcell.EventKey) *tcell.EventKey
 	}
 	// "gC" reaches the AI Consigliere from here too — see
 	// startConsigliereChord's own doc comment in consigliere.go.
-	// activityLogTable is a *tview.Table, which (unlike the Keyword/
+	// activity.Table is a *tview.Table, which (unlike the Keyword/
 	// Time fields) has no built-in meaning for a bare 'g' to begin
 	// with, so nothing existing is lost by claiming it here.
 	if event.Key() == tcell.KeyRune && event.Rune() == 'g' {
-		r.startConsigliereChord(r.activityLogKeywordField)
+		r.startConsigliereChord(r.activity.KeywordField)
 		return nil
 	}
 	return event
@@ -399,38 +424,38 @@ func (r *Root) captureActivityLogTableKey(event *tcell.EventKey) *tcell.EventKey
 // applyTheme (see its own doc comment). Guarded the same way
 // applyOptionsTheme is.
 func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
-	if r.activityLogTable == nil {
+	if r.activity.Table == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
-	r.activityLogLayout.SetBackgroundColor(theme.PanelBackground)
-	r.activityLogTable.SetBackgroundColor(theme.PanelBackground)
+	r.activity.Layout.SetBackgroundColor(theme.PanelBackground)
+	r.activity.Table.SetBackgroundColor(theme.PanelBackground)
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
-	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// to sshKeysTable/connectionMenuTable/sed.PreviewTable/tabSwitcher/
 	// gitBreach's tables, for the identical reason.
-	r.activityLogTable.SetSelectedStyle(tcell.StyleDefault.
+	r.activity.Table.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
 
-	r.activityLogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.activityLogTitleBar.SetTextColor(theme.TextColor)
+	r.activity.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.activity.TitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
-	r.activityLogHint.SetBackgroundColor(theme.SurfaceBackground)
-	r.activityLogHint.SetTextColor(theme.TextColor)
-	activityLogHintText, activityLogHintSpans := buildListHint(theme, activityLogHintEntries())
-	r.activityLogHint.SetText(activityLogHintText)
-	r.activityLogHintSpans = activityLogHintSpans
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
+	r.activity.Hint.SetBackgroundColor(theme.SurfaceBackground)
+	r.activity.Hint.SetTextColor(theme.TextColor)
+	activityLogHintText, hintSpans := buildListHint(theme, activityLogHintEntries())
+	r.activity.Hint.SetText(activityLogHintText)
+	r.activity.HintSpans = hintSpans
 
 	// Label color (and, as of this fix, background too) already comes
 	// from styleInput itself, via activityLogSetFieldStyle below — see
 	// its own doc comment on the background mismatch this used to
 	// leave in place.
-	r.activityLogSetFieldStyle(r.activityLogKeywordField, r.activityLogKeywordField.HasFocus())
-	r.activityLogSetFieldStyle(r.activityLogTimeField, r.activityLogTimeField.HasFocus())
+	r.activityLogSetFieldStyle(r.activity.KeywordField, r.activity.KeywordField.HasFocus())
+	r.activityLogSetFieldStyle(r.activity.TimeField, r.activity.TimeField.HasFocus())
 
 	r.renderActivityLog() // cell colors are baked in per cell, not looked up live at draw time
 }

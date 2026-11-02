@@ -43,20 +43,20 @@ func newTestRootForConnect(t *testing.T) *Root {
 // focus (verified directly against tview's own form.go), so a bare
 // SetDoneFunc on the last field is silently discarded and Tab there
 // just wraps back to the first field instead of ever reaching
-// connectCancelBtn — see newConnectForm's own doc comment on why a
+// connect.CancelBtn — see newConnectForm's own doc comment on why a
 // SetInputCapture is what actually has to intercept it instead.
-// connectTagsField is the last field now (added after
-// connectIdentifierField) — see newConnectForm's own doc comment for
+// connect.TagsField is the last field now (added after
+// connect.IdentifierField) — see newConnectForm's own doc comment for
 // why this wiring moved with it.
 func TestTabFromTheTagsFieldReachesTheCancelButton(t *testing.T) {
 	r := newTestRootForConnect(t)
 	noop := func(tview.Primitive) {}
 
-	r.app.SetFocus(r.connectTagsField)
-	r.connectTagsField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	r.app.SetFocus(r.connect.TagsField)
+	r.connect.TagsField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
 
-	if !r.connectCancelBtn.HasFocus() {
-		t.Error("Tab from the tags field did not move focus to connectCancelBtn")
+	if !r.connect.CancelBtn.HasFocus() {
+		t.Error("Tab from the tags field did not move focus to connect.CancelBtn")
 	}
 }
 
@@ -68,12 +68,12 @@ func TestTabFromTheTagsFieldReachesTheCancelButton(t *testing.T) {
 func TestEnterInTheTagsFieldRunsOKNotConnect(t *testing.T) {
 	withTestConfigHome(t)
 	r := newTestRootForConnect(t)
-	r.connectHostField.SetText("example.com")
-	r.connectTagsField.SetText("web, build")
+	r.connect.HostField.SetText("example.com")
+	r.connect.TagsField.SetText("web, build")
 	noop := func(tview.Primitive) {}
 
-	r.app.SetFocus(r.connectTagsField)
-	r.connectTagsField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
+	r.app.SetFocus(r.connect.TagsField)
+	r.connect.TagsField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
 
 	history, err := remotefs.LoadHistory()
 	if err != nil {
@@ -93,14 +93,14 @@ func TestEnterInTheTagsFieldRunsOKNotConnect(t *testing.T) {
 // would reject it.
 func TestEnterInTheTagsFieldOnAnEmptyHostShowsTheSameValidationRunConnectWould(t *testing.T) {
 	r := newTestRootForConnect(t)
-	r.connectHostField.SetText("")
+	r.connect.HostField.SetText("")
 	noop := func(tview.Primitive) {}
 
-	r.app.SetFocus(r.connectTagsField)
-	r.connectTagsField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
+	r.app.SetFocus(r.connect.TagsField)
+	r.connect.TagsField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
 
-	if !strings.Contains(r.connectStatus.GetText(true), "Host is required") {
-		t.Errorf("status = %q, want runConnectOK to validate the same way runConnect does", r.connectStatus.GetText(true))
+	if !strings.Contains(r.connect.Status.GetText(true), "Host is required") {
+		t.Errorf("status = %q, want runConnectOK to validate the same way runConnect does", r.connect.Status.GetText(true))
 	}
 }
 
@@ -111,11 +111,11 @@ func TestBacktabFromTheCancelButtonReturnsToTheForm(t *testing.T) {
 	r := newTestRootForConnect(t)
 	noop := func(tview.Primitive) {}
 
-	r.app.SetFocus(r.connectCancelBtn)
-	r.connectCancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	r.app.SetFocus(r.connect.CancelBtn)
+	r.connect.CancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
 
-	if !r.connectForm.HasFocus() {
-		t.Error("Backtab from connectCancelBtn did not return focus to the form")
+	if !r.connect.Form.HasFocus() {
+		t.Error("Backtab from connect.CancelBtn did not return focus to the form")
 	}
 }
 
@@ -126,25 +126,25 @@ func TestTabCyclesThroughAllThreeButtonsInNewMode(t *testing.T) {
 	r := newTestRootForConnect(t)
 	noop := func(tview.Primitive) {}
 
-	r.app.SetFocus(r.connectCancelBtn)
-	r.connectCancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
-	if !r.connectOKBtn.HasFocus() {
-		t.Fatal("Tab from connectCancelBtn did not move focus to connectOKBtn")
+	r.app.SetFocus(r.connect.CancelBtn)
+	r.connect.CancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	if !r.connect.OKBtn.HasFocus() {
+		t.Fatal("Tab from connect.CancelBtn did not move focus to connect.OKBtn")
 	}
 
-	r.connectOKBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
-	if !r.connectConnectBtn.HasFocus() {
-		t.Fatal("Tab from connectOKBtn did not move focus to connectConnectBtn")
+	r.connect.OKBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	if !r.connect.ConnectBtn.HasFocus() {
+		t.Fatal("Tab from connect.OKBtn did not move focus to connect.ConnectBtn")
 	}
 
-	r.connectConnectBtn.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
-	if !r.connectOKBtn.HasFocus() {
-		t.Fatal("Backtab from connectConnectBtn did not move focus back to connectOKBtn")
+	r.connect.ConnectBtn.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	if !r.connect.OKBtn.HasFocus() {
+		t.Fatal("Backtab from connect.ConnectBtn did not move focus back to connect.OKBtn")
 	}
 
-	r.connectOKBtn.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
-	if !r.connectCancelBtn.HasFocus() {
-		t.Error("Backtab from connectOKBtn did not move focus back to connectCancelBtn")
+	r.connect.OKBtn.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	if !r.connect.CancelBtn.HasFocus() {
+		t.Error("Backtab from connect.OKBtn did not move focus back to connect.CancelBtn")
 	}
 }
 
@@ -156,57 +156,57 @@ func TestTabCyclesThroughBothButtonsInEditMode(t *testing.T) {
 	r.openConnectDialog(remotefs.Connection{Host: "example.com"}, connectDialogModeEdit)
 	noop := func(tview.Primitive) {}
 
-	if got, want := r.connectButtons.GetItemCount(), 2; got != want {
-		t.Fatalf("connectButtons item count = %d, want %d (Cancel/OK, no Connect)", got, want)
+	if got, want := r.connect.Buttons.GetItemCount(), 2; got != want {
+		t.Fatalf("connect.Buttons item count = %d, want %d (Cancel/OK, no Connect)", got, want)
 	}
 
-	r.app.SetFocus(r.connectCancelBtn)
-	r.connectCancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
-	if !r.connectOKBtn.HasFocus() {
-		t.Fatal("Tab from connectCancelBtn did not move focus to connectOKBtn")
+	r.app.SetFocus(r.connect.CancelBtn)
+	r.connect.CancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	if !r.connect.OKBtn.HasFocus() {
+		t.Fatal("Tab from connect.CancelBtn did not move focus to connect.OKBtn")
 	}
 
-	r.connectOKBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
-	if !r.connectForm.HasFocus() {
-		t.Error("Tab from connectOKBtn in edit mode did not wrap back to the form (there is no Connect button to land on)")
+	r.connect.OKBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	if !r.connect.Form.HasFocus() {
+		t.Error("Tab from connect.OKBtn in edit mode did not wrap back to the form (there is no Connect button to land on)")
 	}
 }
 
 func TestRunConnectRejectsAnEmptyHost(t *testing.T) {
 	r := newTestRootForConnect(t)
-	r.connectHostField.SetText("")
+	r.connect.HostField.SetText("")
 
 	r.runConnect()
 
 	if r.activePage != connectDialogPage {
 		t.Fatalf("activePage = %q, want the dialog to stay open", r.activePage)
 	}
-	if !strings.Contains(r.connectStatus.GetText(true), "Host is required") {
-		t.Errorf("status = %q, want it to mention the missing host", r.connectStatus.GetText(true))
+	if !strings.Contains(r.connect.Status.GetText(true), "Host is required") {
+		t.Errorf("status = %q, want it to mention the missing host", r.connect.Status.GetText(true))
 	}
 }
 
 func TestRunConnectRejectsAMalformedPort(t *testing.T) {
 	r := newTestRootForConnect(t)
-	r.connectHostField.SetText("example.com")
-	r.connectPortField.SetText("not-a-number")
+	r.connect.HostField.SetText("example.com")
+	r.connect.PortField.SetText("not-a-number")
 
 	r.runConnect()
 
-	if !strings.Contains(r.connectStatus.GetText(true), "Port must be a number") {
-		t.Errorf("status = %q, want it to mention the malformed port", r.connectStatus.GetText(true))
+	if !strings.Contains(r.connect.Status.GetText(true), "Port must be a number") {
+		t.Errorf("status = %q, want it to mention the malformed port", r.connect.Status.GetText(true))
 	}
 }
 
 func TestRunConnectRejectsAnOutOfRangePort(t *testing.T) {
 	r := newTestRootForConnect(t)
-	r.connectHostField.SetText("example.com")
-	r.connectPortField.SetText("99999")
+	r.connect.HostField.SetText("example.com")
+	r.connect.PortField.SetText("99999")
 
 	r.runConnect()
 
-	if !strings.Contains(r.connectStatus.GetText(true), "Port must be a number") {
-		t.Errorf("status = %q, want it to mention the out-of-range port", r.connectStatus.GetText(true))
+	if !strings.Contains(r.connect.Status.GetText(true), "Port must be a number") {
+		t.Errorf("status = %q, want it to mention the out-of-range port", r.connect.Status.GetText(true))
 	}
 }
 
@@ -282,8 +282,8 @@ func TestFinishConnectOnFailureShowsTheErrorAndKeepsTheDialogOpen(t *testing.T) 
 	if r.activePage != connectDialogPage {
 		t.Errorf("activePage = %q, want the dialog to stay open so the user can retry", r.activePage)
 	}
-	if !strings.Contains(r.connectStatus.GetText(true), errAuthFailedForTest.Error()) {
-		t.Errorf("status = %q, want it to show the Dial error", r.connectStatus.GetText(true))
+	if !strings.Contains(r.connect.Status.GetText(true), errAuthFailedForTest.Error()) {
+		t.Errorf("status = %q, want it to show the Dial error", r.connect.Status.GetText(true))
 	}
 
 	// conn has never connected successfully before, so this failure
@@ -347,14 +347,14 @@ func TestFinishConnectOnHostKeyMismatchOffersConnectAnywayWithoutSaving(t *testi
 	if r.activePage != connectDialogPage {
 		t.Errorf("activePage = %q, want the dialog to stay open so the user can retry", r.activePage)
 	}
-	if got := r.connectConnectBtn.GetLabel(); got != "Connect anyway" {
+	if got := r.connect.ConnectBtn.GetLabel(); got != "Connect anyway" {
 		t.Errorf("Connect button label = %q, want %q", got, "Connect anyway")
 	}
-	status := r.connectStatus.GetText(true)
+	status := r.connect.Status.GetText(true)
 	if !strings.Contains(status, "SHA256:newkey") || !strings.Contains(status, "SHA256:oldkey") {
 		t.Errorf("status = %q, want both the old and new fingerprints shown for comparison", status)
 	}
-	if !r.connectPendingSkipHostKey || !r.connectPendingSkipHostKeyConn.Equal(conn) {
+	if !r.connect.PendingSkipHostKey || !r.connect.PendingSkipHostKeyConn.Equal(conn) {
 		t.Error("finishConnect should arm the bypass for exactly this Connection")
 	}
 }
@@ -367,36 +367,36 @@ func TestFinishConnectOnHostKeyMismatchOffersConnectAnywayWithoutSaving(t *testi
 func TestOpenConnectDialogClearsAnyPendingConnectAnywayState(t *testing.T) {
 	withTestConfigHome(t)
 	r := newTestRootForConnect(t)
-	r.connectPendingSkipHostKey = true
-	r.connectPendingSkipHostKeyConn = remotefs.Connection{Host: "example.com", User: "tester"}
-	r.connectConnectBtn.SetLabel("Connect anyway")
+	r.connect.PendingSkipHostKey = true
+	r.connect.PendingSkipHostKeyConn = remotefs.Connection{Host: "example.com", User: "tester"}
+	r.connect.ConnectBtn.SetLabel("Connect anyway")
 
 	r.openConnectDialog(remotefs.Connection{}, connectDialogModeNew)
 
-	if r.connectPendingSkipHostKey {
+	if r.connect.PendingSkipHostKey {
 		t.Error("openConnectDialog should clear a pending bypass from an earlier attempt")
 	}
-	if got := r.connectConnectBtn.GetLabel(); got != "Connect" {
+	if got := r.connect.ConnectBtn.GetLabel(); got != "Connect" {
 		t.Errorf("Connect button label = %q, want the plain %q after reopening", got, "Connect")
 	}
 }
 
 // TestOpenConnectDialogClearsTheIdentifierFieldForABlankPrefill pins
 // the same "never inherits a stale previous open" rule for
-// connectIdentifierField specifically: reopening for a brand-new
+// connect.IdentifierField specifically: reopening for a brand-new
 // connection must not leave an earlier one's Identifier sitting in the
 // field.
 func TestOpenConnectDialogClearsTheIdentifierFieldForABlankPrefill(t *testing.T) {
 	r := newTestRootForConnect(t)
 	r.openConnectDialog(remotefs.Connection{Host: "a.example.com", Identifier: "build-1"}, connectDialogModeNew)
-	if got := r.connectIdentifierField.GetText(); got != "build-1" {
-		t.Fatalf("connectIdentifierField = %q, want %q (prefilled)", got, "build-1")
+	if got := r.connect.IdentifierField.GetText(); got != "build-1" {
+		t.Fatalf("connect.IdentifierField = %q, want %q (prefilled)", got, "build-1")
 	}
 
 	r.openConnectDialog(remotefs.Connection{Host: "b.example.com"}, connectDialogModeNew)
 
-	if got := r.connectIdentifierField.GetText(); got != "" {
-		t.Errorf("connectIdentifierField = %q, want empty after reopening for a different, unnamed connection", got)
+	if got := r.connect.IdentifierField.GetText(); got != "" {
+		t.Errorf("connect.IdentifierField = %q, want empty after reopening for a different, unnamed connection", got)
 	}
 }
 
@@ -483,14 +483,14 @@ func TestConnectTagsAcceptanceFuncAllowsTheDocumentedCharacterSet(t *testing.T) 
 func TestOpenConnectDialogClearsTheTagsFieldForABlankPrefill(t *testing.T) {
 	r := newTestRootForConnect(t)
 	r.openConnectDialog(remotefs.Connection{Host: "a.example.com", Tags: []string{"build", "staging"}}, connectDialogModeNew)
-	if got := r.connectTagsField.GetText(); got != "build, staging" {
-		t.Fatalf("connectTagsField = %q, want %q (prefilled)", got, "build, staging")
+	if got := r.connect.TagsField.GetText(); got != "build, staging" {
+		t.Fatalf("connect.TagsField = %q, want %q (prefilled)", got, "build, staging")
 	}
 
 	r.openConnectDialog(remotefs.Connection{Host: "b.example.com"}, connectDialogModeNew)
 
-	if got := r.connectTagsField.GetText(); got != "" {
-		t.Errorf("connectTagsField = %q, want empty after reopening for a different, untagged connection", got)
+	if got := r.connect.TagsField.GetText(); got != "" {
+		t.Errorf("connect.TagsField = %q, want empty after reopening for a different, untagged connection", got)
 	}
 }
 
@@ -501,19 +501,19 @@ func TestOpenConnectDialogClearsTheTagsFieldForABlankPrefill(t *testing.T) {
 // loses it.
 func TestBlurringTheTagsFieldNormalizesItsOwnText(t *testing.T) {
 	r := newTestRootForConnect(t)
-	r.connectTagsField.SetText(" web , build ,web")
+	r.connect.TagsField.SetText(" web , build ,web")
 
-	r.connectTagsField.Blur()
+	r.connect.TagsField.Blur()
 
-	if got, want := r.connectTagsField.GetText(), "build, web"; got != want {
-		t.Errorf("connectTagsField after blur = %q, want %q", got, want)
+	if got, want := r.connect.TagsField.GetText(), "build, web"; got != want {
+		t.Errorf("connect.TagsField after blur = %q, want %q", got, want)
 	}
 }
 
 // TestBacktabFromHostAfterAFullTabRoundTripWrapsToTags pins a real,
-// user-reported bug: connectConnectBtn's own Tab handler used to call
-// r.app.SetFocus(r.connectHostField) directly, which gives Host real
-// keyboard focus but never tells connectForm's own internal
+// user-reported bug: connect.ConnectBtn's own Tab handler used to call
+// r.app.SetFocus(r.connect.HostField) directly, which gives Host real
+// keyboard focus but never tells connect.Form's own internal
 // focusedElement counter (verified directly against tview's own
 // form.go, not guessed — Form.Focus/SetFinishedFunc are the only
 // things that ever update it) that this happened. A later Backtab on
@@ -529,19 +529,19 @@ func TestBacktabFromHostAfterAFullTabRoundTripWrapsToTags(t *testing.T) {
 	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
 
 	for _, p := range []tview.Primitive{
-		r.connectHostField, r.connectPortField, r.connectUserField,
-		r.connectPasswordField, r.connectIdentifierField, r.connectTagsField,
-		r.connectCancelBtn, r.connectOKBtn, r.connectConnectBtn,
+		r.connect.HostField, r.connect.PortField, r.connect.UserField,
+		r.connect.PasswordField, r.connect.IdentifierField, r.connect.TagsField,
+		r.connect.CancelBtn, r.connect.OKBtn, r.connect.ConnectBtn,
 	} {
 		tab(p)
 	}
-	if !r.connectHostField.HasFocus() {
+	if !r.connect.HostField.HasFocus() {
 		t.Fatal("full Tab loop did not wrap back to Host")
 	}
 
-	r.connectHostField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	r.connect.HostField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
 
-	if !r.connectTagsField.HasFocus() {
+	if !r.connect.TagsField.HasFocus() {
 		t.Error("Backtab from Host after a full loop did not wrap back to Tags")
 	}
 }
@@ -556,19 +556,19 @@ func TestBacktabFromHostAfterAFullTabRoundTripInEditModeWrapsToTags(t *testing.T
 	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
 
 	for _, p := range []tview.Primitive{
-		r.connectHostField, r.connectPortField, r.connectUserField,
-		r.connectPasswordField, r.connectIdentifierField, r.connectTagsField,
-		r.connectCancelBtn, r.connectOKBtn,
+		r.connect.HostField, r.connect.PortField, r.connect.UserField,
+		r.connect.PasswordField, r.connect.IdentifierField, r.connect.TagsField,
+		r.connect.CancelBtn, r.connect.OKBtn,
 	} {
 		tab(p)
 	}
-	if !r.connectHostField.HasFocus() {
+	if !r.connect.HostField.HasFocus() {
 		t.Fatal("full Tab loop did not wrap back to Host")
 	}
 
-	r.connectHostField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	r.connect.HostField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
 
-	if !r.connectTagsField.HasFocus() {
+	if !r.connect.TagsField.HasFocus() {
 		t.Error("Backtab from Host after a full loop did not wrap back to Tags")
 	}
 }

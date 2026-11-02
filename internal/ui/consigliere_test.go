@@ -13,9 +13,9 @@ import (
 )
 
 // drawConsigliereLayout forces a real Flex layout pass (via a
-// simulation screen) so consigliereHistory's own rect — and therefore
-// consigliereScrollbar.maxOffset() — actually reflects the size just
-// given to consigliereLayout: Flex only resolves a child's own rect
+// simulation screen) so consigliere.History's own rect — and therefore
+// consigliere.Scrollbar.maxOffset() — actually reflects the size just
+// given to consigliere.Layout: Flex only resolves a child's own rect
 // during Draw, never synchronously when SetRect is called on the
 // parent (see repositionConsigliereSidebar's own doc comment) — the
 // same pattern drawCompareDiff already establishes in
@@ -28,7 +28,7 @@ func drawConsigliereLayout(t *testing.T, r *Root, width, height int) {
 	}
 	t.Cleanup(screen.Fini)
 	screen.SetSize(width, height)
-	r.consigliereLayout.Draw(screen)
+	r.consigliere.Layout.Draw(screen)
 }
 
 // TestChordGoAIConsigliereOpensTheSidebarAndFocusesInput pins "gC"
@@ -42,10 +42,10 @@ func TestChordGoAIConsigliereOpensTheSidebarAndFocusesInput(t *testing.T) {
 	root.HandlePlainKey(runeEvent('g'))
 	root.HandlePlainKey(runeEvent('C'))
 
-	if !root.consigliereVisible {
+	if !root.consigliere.Visible {
 		t.Fatal("\"gC\" should have shown the AI Consigliere sidebar")
 	}
-	if !root.consigliereInput.HasFocus() {
+	if !root.consigliere.Input.HasFocus() {
 		t.Error("opening the sidebar should have focused the question field")
 	}
 }
@@ -53,7 +53,7 @@ func TestChordGoAIConsigliereOpensTheSidebarAndFocusesInput(t *testing.T) {
 // TestEscapeInConsigliereInputClosesTheSidebar pins the real close
 // path once the sidebar is open: acceptsPlainKeyCommand (see
 // keymap.go) only reads "gC" as a chord while the panel table itself
-// has focus, so once consigliereInput has it (immediately after
+// has focus, so once consigliere.Input has it (immediately after
 // opening — see above), Escape/the close glyph/a click outside are
 // what actually close it, not a second "gC" keystroke (see
 // toggleConsigliere's own doc comment).
@@ -63,7 +63,7 @@ func TestEscapeInConsigliereInputClosesTheSidebar(t *testing.T) {
 
 	root.handleConsigliereInputDone(tcell.KeyEscape)
 
-	if root.consigliereVisible {
+	if root.consigliere.Visible {
 		t.Error("Escape should have closed the sidebar")
 	}
 }
@@ -76,11 +76,11 @@ func TestEscapeInConsigliereInputClosesTheSidebar(t *testing.T) {
 func TestClosingConsigliereWithAnActiveConversationAsksFirst(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.showConsigliere()
-	root.consigliereMessages = []consigliere.Message{{Role: consigliere.RoleUser, Text: "hello"}}
+	root.consigliere.Messages = []consigliere.Message{{Role: consigliere.RoleUser, Text: "hello"}}
 
 	root.handleConsigliereInputDone(tcell.KeyEscape)
 
-	if !root.consigliereVisible {
+	if !root.consigliere.Visible {
 		t.Error("the sidebar should still be open, pending the confirmation")
 	}
 	if root.activePage != confirmPage {
@@ -89,7 +89,7 @@ func TestClosingConsigliereWithAnActiveConversationAsksFirst(t *testing.T) {
 
 	root.acceptConfirm()
 
-	if root.consigliereVisible {
+	if root.consigliere.Visible {
 		t.Error("confirming should have closed the sidebar")
 	}
 }
@@ -100,16 +100,16 @@ func TestClosingConsigliereWithAnActiveConversationAsksFirst(t *testing.T) {
 func TestClosingConsigliereWithAnActiveConversationCancelLeavesItOpen(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.showConsigliere()
-	root.consigliereMessages = []consigliere.Message{{Role: consigliere.RoleUser, Text: "hello"}}
+	root.consigliere.Messages = []consigliere.Message{{Role: consigliere.RoleUser, Text: "hello"}}
 
 	root.handleConsigliereInputDone(tcell.KeyEscape)
 	root.cancelConfirm()
 
-	if !root.consigliereVisible {
+	if !root.consigliere.Visible {
 		t.Error("cancelling the confirmation should have left the sidebar open")
 	}
-	if len(root.consigliereMessages) != 1 {
-		t.Errorf("consigliereMessages = %v, want the conversation untouched", root.consigliereMessages)
+	if len(root.consigliere.Messages) != 1 {
+		t.Errorf("consigliere.Messages = %v, want the conversation untouched", root.consigliere.Messages)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestClosingConsigliereWithNoMessagesSkipsTheConfirmation(t *testing.T) {
 
 	root.handleConsigliereInputDone(tcell.KeyEscape)
 
-	if root.consigliereVisible {
+	if root.consigliere.Visible {
 		t.Error("closing with no messages yet should not have asked for confirmation")
 	}
 	if root.activePage == confirmPage {
@@ -142,7 +142,7 @@ func TestToggleConsigliereClosesAnAlreadyOpenSidebar(t *testing.T) {
 
 	root.toggleConsigliere()
 
-	if root.consigliereVisible {
+	if root.consigliere.Visible {
 		t.Error("toggleConsigliere should have closed the already-open sidebar")
 	}
 }
@@ -157,12 +157,12 @@ func TestConsigliereShortcutOpensThenClosesItself(t *testing.T) {
 	root := newPlainKeyRoot(t)
 
 	root.ConsigliereShortcut()
-	if !root.consigliereVisible {
+	if !root.consigliere.Visible {
 		t.Fatal("expected the first call to show the sidebar")
 	}
 
 	root.ConsigliereShortcut()
-	if root.consigliereVisible {
+	if root.consigliere.Visible {
 		t.Error("a second ConsigliereShortcut call should have closed the sidebar")
 	}
 }
@@ -176,14 +176,14 @@ func TestShowConsigliereStartsAFreshSession(t *testing.T) {
 
 	root.showConsigliere()
 	root.submitConsigliereMessage("erste Frage")
-	if len(root.consigliereMessages) == 0 {
+	if len(root.consigliere.Messages) == 0 {
 		t.Fatal("submitConsigliereMessage should have recorded the question")
 	}
 	root.hideConsigliere()
 
 	root.showConsigliere()
-	if len(root.consigliereMessages) != 0 {
-		t.Errorf("consigliereMessages = %v, want an empty, fresh session", root.consigliereMessages)
+	if len(root.consigliere.Messages) != 0 {
+		t.Errorf("consigliere.Messages = %v, want an empty, fresh session", root.consigliere.Messages)
 	}
 }
 
@@ -203,10 +203,10 @@ func TestSubmitConsigliereMessageShowsTheQuestionImmediately(t *testing.T) {
 
 	root.submitConsigliereMessage("seit 3 Tagen geht mein USB-Geraet nicht mehr")
 
-	if got := root.consigliereHistory.GetText(true); got == "" {
+	if got := root.consigliere.History.GetText(true); got == "" {
 		t.Fatal("history should already show the question")
 	}
-	if root.consigliereCancel == nil {
+	if root.consigliere.Cancel == nil {
 		t.Error("submitConsigliereMessage should have started the reply in the background")
 	}
 }
@@ -426,8 +426,8 @@ func TestTabInConsigliereInputMovesFocusToHistory(t *testing.T) {
 
 	root.handleConsigliereInputDone(tcell.KeyTab)
 
-	if !root.consigliereHistory.HasFocus() {
-		t.Error("Tab should have moved focus to consigliereHistory")
+	if !root.consigliere.History.HasFocus() {
+		t.Error("Tab should have moved focus to consigliere.History")
 	}
 }
 
@@ -460,36 +460,36 @@ func TestTabInConsigliereInputSkipsHistoryWhenNothingToScroll(t *testing.T) {
 func TestEscapeInConsigliereHistoryClosesTheSidebar(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.showConsigliere()
-	root.app.SetFocus(root.consigliereHistory)
+	root.app.SetFocus(root.consigliere.History)
 
 	root.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 
-	if root.consigliereVisible {
+	if root.consigliere.Visible {
 		t.Error("Escape should have closed the sidebar from the history view too")
 	}
 }
 
 // TestConsigliereTitleBarReflectsHistoryFocusOnly pins the user's own
 // explicit request: the title bar reads as active while
-// consigliereHistory specifically has real keyboard focus, and only
-// then — not while consigliereInput has it, even though that's the
+// consigliere.History specifically has real keyboard focus, and only
+// then — not while consigliere.Input has it, even though that's the
 // widget showConsigliere itself normally focuses first.
 func TestConsigliereTitleBarReflectsHistoryFocusOnly(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.showConsigliere() // focuses consigliereInput
+	root.showConsigliere() // focuses consigliere.Input
 
 	theme := root.theme
-	if got := root.consigliereTitleBar.GetBackgroundColor(); got != theme.InputBackground {
+	if got := root.consigliere.TitleBar.GetBackgroundColor(); got != theme.InputBackground {
 		t.Errorf("title bar background with the input focused = %v, want the unfocused InputBackground", got)
 	}
 
-	root.app.SetFocus(root.consigliereHistory)
-	if got := root.consigliereTitleBar.GetBackgroundColor(); got != theme.InputFocusedBackground {
+	root.app.SetFocus(root.consigliere.History)
+	if got := root.consigliere.TitleBar.GetBackgroundColor(); got != theme.InputFocusedBackground {
 		t.Errorf("title bar background with the history focused = %v, want InputFocusedBackground", got)
 	}
 
-	root.app.SetFocus(root.consigliereInput)
-	if got := root.consigliereTitleBar.GetBackgroundColor(); got != theme.InputBackground {
+	root.app.SetFocus(root.consigliere.Input)
+	if got := root.consigliere.TitleBar.GetBackgroundColor(); got != theme.InputBackground {
 		t.Errorf("title bar background back on the input = %v, want InputBackground again", got)
 	}
 }
@@ -505,15 +505,15 @@ func TestConsigliereTitleBarShowsMachiavelliModeRegardlessOfFocus(t *testing.T) 
 	root.showConsigliere()
 
 	theme := root.theme
-	if got := root.consigliereTitleBar.GetBackgroundColor(); got != theme.ErrorBackground {
+	if got := root.consigliere.TitleBar.GetBackgroundColor(); got != theme.ErrorBackground {
 		t.Errorf("title bar background with the input focused = %v, want ErrorBackground", got)
 	}
-	if !strings.Contains(root.consigliereTitleBar.GetText(false), "MACHIAVELLI") {
-		t.Errorf("title bar text = %q, want it to mention Machiavelli Mode", root.consigliereTitleBar.GetText(false))
+	if !strings.Contains(root.consigliere.TitleBar.GetText(false), "MACHIAVELLI") {
+		t.Errorf("title bar text = %q, want it to mention Machiavelli Mode", root.consigliere.TitleBar.GetText(false))
 	}
 
-	root.app.SetFocus(root.consigliereHistory)
-	if got := root.consigliereTitleBar.GetBackgroundColor(); got != theme.ErrorBackground {
+	root.app.SetFocus(root.consigliere.History)
+	if got := root.consigliere.TitleBar.GetBackgroundColor(); got != theme.ErrorBackground {
 		t.Errorf("title bar background with the history focused = %v, want ErrorBackground still", got)
 	}
 }
@@ -540,11 +540,11 @@ func TestConsigliereTitleBarCloseGlyphColumnIsUnaffectedByMachiavelliLabel(t *te
 
 	root := newPlainKeyRoot(t)
 	root.renderConsigliereTitleBar(80)
-	plainCol := closeGlyphColumn(root.consigliereTitleBar.GetText(false))
+	plainCol := closeGlyphColumn(root.consigliere.TitleBar.GetText(false))
 
 	root.settings.ConsigliereHardcoreMode = true
 	root.renderConsigliereTitleBar(80)
-	machiavelliCol := closeGlyphColumn(root.consigliereTitleBar.GetText(false))
+	machiavelliCol := closeGlyphColumn(root.consigliere.TitleBar.GetText(false))
 
 	if plainCol != machiavelliCol {
 		t.Errorf("close glyph column = %d with Machiavelli Mode on, want the same %d the plain label uses", machiavelliCol, plainCol)
@@ -573,7 +573,7 @@ func TestShowDetailsSidebarLeavesAnOpenConsigliereOpen(t *testing.T) {
 
 	root.showDetailsSidebar()
 
-	if !root.consigliereVisible {
+	if !root.consigliere.Visible {
 		t.Error("showDetailsSidebar should not have closed the open Consigliere sidebar")
 	}
 }
@@ -581,7 +581,7 @@ func TestShowDetailsSidebarLeavesAnOpenConsigliereOpen(t *testing.T) {
 // TestCycleFocusShortcutReachesConsigliereInputFromThePanel pins the
 // real keyboard path back into the question field once focus has left
 // it some other way (a mouse click back into the panel, or tabbing on
-// into consigliereHistory) — the user's own explicit question ("wie
+// into consigliere.History) — the user's own explicit question ("wie
 // kommt man per Tastatur dann wieder ins Eingabefeld?"). Closing and
 // reopening the sidebar would also reach it, but at the cost of
 // wiping the session (see showConsigliere's own "fresh session every
@@ -594,18 +594,18 @@ func TestCycleFocusShortcutReachesConsigliereInputFromThePanel(t *testing.T) {
 	if !root.CycleFocusShortcut() {
 		t.Fatal("Tab from the panel, with the sidebar open, should report true")
 	}
-	if !root.consigliereInput.HasFocus() {
-		t.Error("Tab from the panel should have reached consigliereInput")
+	if !root.consigliere.Input.HasFocus() {
+		t.Error("Tab from the panel should have reached consigliere.Input")
 	}
 }
 
 // TestCycleFocusShortcutLoopsPanelInputHistoryPanel pins the full loop
 // Tab walks through once the sidebar is open AND its history actually
-// needs scrolling: panel -> consigliereInput -> consigliereHistory ->
+// needs scrolling: panel -> consigliere.Input -> consigliere.History ->
 // back to panel. Relies on newPlainKeyRoot's own default, uninitialized
 // Root rect (tview.Box's own 15x10 default — see showError's own doc
 // comment on the same default elsewhere) being far too small to fit
-// consigliereSplashArt's own ~11 lines, i.e. consigliereScrollbar.
+// consigliereSplashArt's own ~11 lines, i.e. consigliere.Scrollbar.
 // maxOffset() > 0 — see TestCycleFocusShortcutSkipsConsigliereHistoryWhenNothingToScroll
 // for the opposite case on a generously sized Root instead.
 func TestCycleFocusShortcutLoopsPanelInputHistoryPanel(t *testing.T) {
@@ -613,18 +613,18 @@ func TestCycleFocusShortcutLoopsPanelInputHistoryPanel(t *testing.T) {
 	root.showConsigliere()
 	root.app.SetFocus(root.panel.table)
 
-	if root.consigliereScrollbar.maxOffset() <= 0 {
+	if root.consigliere.Scrollbar.maxOffset() <= 0 {
 		t.Fatal("test precondition: expected the default tiny Root rect to make scrolling necessary")
 	}
 
 	root.CycleFocusShortcut()
-	if !root.consigliereInput.HasFocus() {
-		t.Fatal("first Tab should have reached consigliereInput")
+	if !root.consigliere.Input.HasFocus() {
+		t.Fatal("first Tab should have reached consigliere.Input")
 	}
 
 	root.CycleFocusShortcut()
-	if !root.consigliereHistory.HasFocus() {
-		t.Fatal("second Tab should have reached consigliereHistory")
+	if !root.consigliere.History.HasFocus() {
+		t.Fatal("second Tab should have reached consigliere.History")
 	}
 
 	root.CycleFocusShortcut()
@@ -634,11 +634,11 @@ func TestCycleFocusShortcutLoopsPanelInputHistoryPanel(t *testing.T) {
 }
 
 // TestCycleFocusShortcutSkipsConsigliereHistoryWhenNothingToScroll pins
-// the user's own explicit request: consigliereHistory must not be a
+// the user's own explicit request: consigliere.History must not be a
 // Tab stop at all while there's nothing in it to scroll to (a
 // generously sized Root here, unlike newPlainKeyRoot's own tiny
 // default, is what makes consigliereSplashArt's own short content fit
-// without scrolling) — Tab from consigliereInput wraps straight back
+// without scrolling) — Tab from consigliere.Input wraps straight back
 // to the panel instead of landing on a dead end.
 func TestCycleFocusShortcutSkipsConsigliereHistoryWhenNothingToScroll(t *testing.T) {
 	root := newPlainKeyRoot(t)
@@ -647,18 +647,18 @@ func TestCycleFocusShortcutSkipsConsigliereHistoryWhenNothingToScroll(t *testing
 	drawConsigliereLayout(t, root, 200, 100)
 	root.app.SetFocus(root.panel.table)
 
-	if root.consigliereScrollbar.maxOffset() > 0 {
+	if root.consigliere.Scrollbar.maxOffset() > 0 {
 		t.Fatal("test precondition: expected the generous Root rect to make scrolling unnecessary")
 	}
 
 	root.CycleFocusShortcut()
-	if !root.consigliereInput.HasFocus() {
-		t.Fatal("first Tab should still have reached consigliereInput")
+	if !root.consigliere.Input.HasFocus() {
+		t.Fatal("first Tab should still have reached consigliere.Input")
 	}
 
 	root.CycleFocusShortcut()
 	if !root.panel.table.HasFocus() {
-		t.Error("second Tab should have wrapped straight back to the panel, skipping consigliereHistory")
+		t.Error("second Tab should have wrapped straight back to the panel, skipping consigliere.History")
 	}
 }
 
@@ -670,14 +670,14 @@ func TestHideConsigliereCancelsAPendingReply(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.showConsigliere()
 	root.submitConsigliereMessage("Frage")
-	if root.consigliereCancel == nil {
+	if root.consigliere.Cancel == nil {
 		t.Fatal("expected a pending cancel func after submitting")
 	}
 
 	root.hideConsigliere()
 
-	if root.consigliereCancel != nil {
-		t.Error("hideConsigliere should have cleared consigliereCancel")
+	if root.consigliere.Cancel != nil {
+		t.Error("hideConsigliere should have cleared consigliere.Cancel")
 	}
 }
 
@@ -715,7 +715,7 @@ func TestOpeningAnotherOverlayLeavesConsigliereOpen(t *testing.T) {
 
 	root.openHelp()
 
-	if !root.consigliereVisible {
+	if !root.consigliere.Visible {
 		t.Error("opening another overlay should not have closed the already-open Consigliere sidebar")
 	}
 }
@@ -727,7 +727,7 @@ func TestClosingTheHostOverlayLeavesConsigliereOpen(t *testing.T) {
 
 	root.hideOverlay() // closes Help
 
-	if !root.consigliereVisible {
+	if !root.consigliere.Visible {
 		t.Error("closing the host overlay should not have closed Consigliere too")
 	}
 }
@@ -744,13 +744,13 @@ func TestClickOnConsigliereDoesNotCloseTheHostOverlay(t *testing.T) {
 	root.openHelp()
 	root.showConsigliere()
 
-	x, y, _, _ := root.consigliereLayout.GetRect()
+	x, y, _, _ := root.consigliere.Layout.GetRect()
 	root.captureOutsideClick(tview.MouseLeftClick, tcellMouseEventAt(x, y))
 
 	if root.activePage != helpPage {
 		t.Errorf("activePage = %q, want helpPage still open", root.activePage)
 	}
-	if !root.consigliereVisible {
+	if !root.consigliere.Visible {
 		t.Error("the sidebar itself should still be visible")
 	}
 }
@@ -768,7 +768,7 @@ func TestClickOutsideConsigliereWithNothingElseOpenLeavesItOpen(t *testing.T) {
 
 	root.captureOutsideClick(tview.MouseLeftClick, tcellMouseEventAt(0, 0))
 
-	if !root.consigliereVisible {
+	if !root.consigliere.Visible {
 		t.Error("a click outside the sidebar, with nothing else open, should not have closed it")
 	}
 }
@@ -776,7 +776,7 @@ func TestClickOutsideConsigliereWithNothingElseOpenLeavesItOpen(t *testing.T) {
 // TestCycleFocusShortcutDoesNotMatchConsigliereInsideAModal pins step
 // one of the real fix for a reported bug: once some full-screen modal
 // (Help stands in for Log Audit/Git Breach) is the active page, the
-// global focus cycle must no longer treat consigliereInput as one of
+// global focus cycle must no longer treat consigliere.Input as one of
 // its own stops at all — matching it there, before the host screen's
 // own local Tab handling ever ran, is exactly what used to strand the
 // keyboard on the hidden file panel.
@@ -784,14 +784,14 @@ func TestCycleFocusShortcutDoesNotMatchConsigliereInsideAModal(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.openHelp()
 	root.showConsigliere()
-	if !root.consigliereInput.HasFocus() {
-		t.Fatal("test precondition: expected consigliereInput to have focus")
+	if !root.consigliere.Input.HasFocus() {
+		t.Fatal("test precondition: expected consigliere.Input to have focus")
 	}
 
 	if root.CycleFocusShortcut() {
-		t.Error("CycleFocusShortcut should report false — consigliereInput must not be one of its own stops while a modal is open")
+		t.Error("CycleFocusShortcut should report false — consigliere.Input must not be one of its own stops while a modal is open")
 	}
-	if !root.consigliereInput.HasFocus() {
+	if !root.consigliere.Input.HasFocus() {
 		t.Error("focus should not have moved at all")
 	}
 }
@@ -845,7 +845,7 @@ func TestTabInConsigliereHistoryExitsToTheHost(t *testing.T) {
 	root.openHelp()
 	before := root.app.GetFocus()
 	root.showConsigliere()
-	root.app.SetFocus(root.consigliereHistory)
+	root.app.SetFocus(root.consigliere.History)
 
 	root.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 
@@ -858,11 +858,11 @@ func TestBacktabInConsigliereHistoryReturnsToInput(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.openHelp()
 	root.showConsigliere()
-	root.app.SetFocus(root.consigliereHistory)
+	root.app.SetFocus(root.consigliere.History)
 
 	root.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
 
-	if !root.consigliereInput.HasFocus() {
+	if !root.consigliere.Input.HasFocus() {
 		t.Error("Backtab from the history should have returned focus to the input field")
 	}
 }
@@ -915,16 +915,16 @@ func TestConsigliereLayoutDockedRightAndCenteredVertically(t *testing.T) {
 	root.showConsigliere()
 
 	width, height := root.consigliereSize()
-	x, y, gotWidth, gotHeight := root.consigliereLayout.GetRect()
+	x, y, gotWidth, gotHeight := root.consigliere.Layout.GetRect()
 
 	if gotWidth != width || gotHeight != height {
-		t.Errorf("consigliereLayout size = (%d, %d), want (%d, %d) from consigliereSize", gotWidth, gotHeight, width, height)
+		t.Errorf("consigliere.Layout size = (%d, %d), want (%d, %d) from consigliereSize", gotWidth, gotHeight, width, height)
 	}
 	if wantX := 120 - width; x != wantX {
-		t.Errorf("consigliereLayout x = %d, want %d (flush right)", x, wantX)
+		t.Errorf("consigliere.Layout x = %d, want %d (flush right)", x, wantX)
 	}
 	if wantY := (40 - height) / 2; y != wantY {
-		t.Errorf("consigliereLayout y = %d, want %d (vertically centered on the whole screen)", y, wantY)
+		t.Errorf("consigliere.Layout y = %d, want %d (vertically centered on the whole screen)", y, wantY)
 	}
 }
 
@@ -936,19 +936,19 @@ func TestConsigliereTitleBarCloseGlyphClickClosesIt(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.SetRect(0, 0, 100, 40)
 	root.showConsigliere()
-	// Forces a real Flex layout pass so consigliereTitleBar's own
-	// rect actually matches consigliereLayout's — see
+	// Forces a real Flex layout pass so consigliere.TitleBar's own
+	// rect actually matches consigliere.Layout's — see
 	// drawConsigliereLayout's own doc comment.
 	drawConsigliereLayout(t, root, 100, 40)
 
-	x, y, width, _ := root.consigliereTitleBar.GetRect()
+	x, y, width, _ := root.consigliere.TitleBar.GetRect()
 	closeX := x + toolWindowCloseButtonCol(0, width)
 	captured, _ := root.captureConsigliereTitleBarMouse(tview.MouseLeftDown, tcell.NewEventMouse(closeX, y, tcell.ButtonNone, 0))
 
 	if captured != tview.MouseConsumed {
 		t.Error("clicking the close glyph should consume the click")
 	}
-	if root.consigliereVisible {
+	if root.consigliere.Visible {
 		t.Error("clicking the close glyph should have closed the sidebar")
 	}
 }
@@ -962,17 +962,17 @@ func TestDraggingConsigliereTitleBarMovesIt(t *testing.T) {
 	root.showConsigliere()
 	drawConsigliereLayout(t, root, 100, 40)
 
-	startX, startY, width, height := root.consigliereLayout.GetRect()
+	startX, startY, width, height := root.consigliere.Layout.GetRect()
 	titleY := startY // the title bar is the layout's own first row
 	grabX := startX + 2
 
 	root.captureConsigliereTitleBarMouse(tview.MouseLeftDown, tcell.NewEventMouse(grabX, titleY, tcell.Button1, 0))
-	if !root.consigliereDragging {
+	if !root.consigliere.Dragging {
 		t.Fatal("pressing on the title bar (away from the close glyph) should have started a drag")
 	}
 
 	root.dragConsigliereMouseCapture(tview.MouseMove, tcell.NewEventMouse(grabX-5, titleY-3, tcell.Button1, 0))
-	newX, newY, newWidth, newHeight := root.consigliereLayout.GetRect()
+	newX, newY, newWidth, newHeight := root.consigliere.Layout.GetRect()
 	if newX == startX && newY == startY {
 		t.Error("dragging should have moved the sidebar")
 	}
@@ -981,11 +981,11 @@ func TestDraggingConsigliereTitleBarMovesIt(t *testing.T) {
 	}
 
 	root.dragConsigliereMouseCapture(tview.MouseLeftUp, tcell.NewEventMouse(grabX-5, titleY-3, tcell.ButtonNone, 0))
-	if root.consigliereDragging {
+	if root.consigliere.Dragging {
 		t.Error("releasing the mouse should have ended the drag")
 	}
-	if !root.consigliereManuallyPositioned {
-		t.Error("a completed drag should have set consigliereManuallyPositioned")
+	if !root.consigliere.ManuallyPositioned {
+		t.Error("a completed drag should have set consigliere.ManuallyPositioned")
 	}
 }
 
@@ -998,12 +998,12 @@ func TestConsigliereManuallyPositionedSurvivesResize(t *testing.T) {
 	root.SetRect(0, 0, 100, 40)
 	root.showConsigliere()
 	root.moveConsigliere(10, 5)
-	x, y, _, _ := root.consigliereLayout.GetRect()
+	x, y, _, _ := root.consigliere.Layout.GetRect()
 
 	root.SetRect(0, 0, 120, 45) // simulates a live terminal resize
 	root.repositionConsigliereSidebar()
 
-	gotX, gotY, _, _ := root.consigliereLayout.GetRect()
+	gotX, gotY, _, _ := root.consigliere.Layout.GetRect()
 	if gotX != x || gotY != y {
 		t.Errorf("position after resize = (%d, %d), want unchanged (%d, %d)", gotX, gotY, x, y)
 	}
@@ -1022,12 +1022,12 @@ func TestConsigliereManuallyPositionedResetsOnFreshOpen(t *testing.T) {
 
 	root.showConsigliere()
 
-	if root.consigliereManuallyPositioned {
+	if root.consigliere.ManuallyPositioned {
 		t.Error("a fresh session should not inherit the previous one's manual position")
 	}
 	width, height := root.consigliereSize()
 	wantX, wantY := 100-width, (40-height)/2
-	gotX, gotY, _, _ := root.consigliereLayout.GetRect()
+	gotX, gotY, _, _ := root.consigliere.Layout.GetRect()
 	if gotX != wantX || gotY != wantY {
 		t.Errorf("fresh session should be docked flush right, vertically centered — got (%d, %d), want (%d, %d)", gotX, gotY, wantX, wantY)
 	}
@@ -1039,7 +1039,7 @@ func TestConsigliereManuallyPositionedResetsOnFreshOpen(t *testing.T) {
 // pushOverlay calls) while the sidebar is open used to visually bury
 // it — tview.Pages draws in SendToFront order, not Z-index, so
 // pushing a new full-screen page redrew it on top of
-// consigliereLayout, even though the sidebar was never actually
+// consigliere.Layout, even though the sidebar was never actually
 // closed (see TestOpeningAnotherOverlayLeavesConsigliereOpen). Help
 // stands in for any pushOverlay caller.
 func TestPushOverlayKeepsConsigliereOnTopOfANewlyOpenedPage(t *testing.T) {
@@ -1076,7 +1076,7 @@ func TestShowConsigliereForcesPassphraseWhenKeyIsLockedAndStored(t *testing.T) {
 
 	root.showConsigliere()
 
-	if !root.consigliereAwaitingPassphrase {
+	if !root.consigliere.AwaitingPassphrase {
 		t.Fatal("showConsigliere should have started in passphrase mode")
 	}
 }
@@ -1099,7 +1099,7 @@ func TestShowConsigliereSkipsPassphraseWhenEnvVarAlreadyProvidesAKey(t *testing.
 
 	root.showConsigliere()
 
-	if root.consigliereAwaitingPassphrase {
+	if root.consigliere.AwaitingPassphrase {
 		t.Error("showConsigliere should not demand a passphrase when the env var already supplies a key")
 	}
 }
@@ -1122,14 +1122,14 @@ func TestSubmitConsigliereUnlockWrongPassphraseStaysLocked(t *testing.T) {
 	root.apiKeySession.Lock()
 	root.showConsigliere()
 
-	root.consigliereInput.SetText("wrong-passphrase")
+	root.consigliere.Input.SetText("wrong-passphrase")
 	root.submitConsigliereUnlock()
 
-	if !root.consigliereAwaitingPassphrase {
+	if !root.consigliere.AwaitingPassphrase {
 		t.Error("a wrong passphrase should not leave passphrase mode")
 	}
-	if root.consigliereInput.GetText() != "" {
-		t.Errorf("input text = %q, want cleared after a rejected attempt", root.consigliereInput.GetText())
+	if root.consigliere.Input.GetText() != "" {
+		t.Errorf("input text = %q, want cleared after a rejected attempt", root.consigliere.Input.GetText())
 	}
 	if root.apiKeySession.IsUnlocked() {
 		t.Error("session should still be locked after a wrong passphrase")
@@ -1151,10 +1151,10 @@ func TestSubmitConsigliereUnlockCorrectPassphraseUnlocks(t *testing.T) {
 	root.apiKeySession.Lock()
 	root.showConsigliere()
 
-	root.consigliereInput.SetText("correct-passphrase")
+	root.consigliere.Input.SetText("correct-passphrase")
 	root.submitConsigliereUnlock()
 
-	if root.consigliereAwaitingPassphrase {
+	if root.consigliere.AwaitingPassphrase {
 		t.Error("a correct passphrase should leave passphrase mode")
 	}
 	if !root.apiKeySession.IsUnlocked() {

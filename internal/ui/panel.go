@@ -1207,8 +1207,8 @@ func (p *Panel) paintStaticChrome() {
 	// beside it.
 	p.filterMenuBtn.SetBackgroundColor(p.theme.SurfaceBackground)
 
-	// FocusedBackground, not AccentBackground: like propertiesEditField/
-	// chmodEditField/searchEditField, headerEdit only ever exists on
+	// FocusedBackground, not AccentBackground: like properties.EditField/
+	// chmodEditField/search.EditField, headerEdit only ever exists on
 	// screen while it's the thing actually accepting keystrokes (see
 	// openEdit/finishEdit's own headerPages.SwitchToPage calls) — there's
 	// no "visible but not focused" state for it to distinguish from, so

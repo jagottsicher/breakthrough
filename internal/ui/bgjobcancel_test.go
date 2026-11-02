@@ -23,7 +23,7 @@ func TestOpenRsyncCancelDialogIsANoOpWhenNothingRunning(t *testing.T) {
 func TestOpenRsyncCancelDialogOpensWhenAJobIsRunning(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	r.rsyncJob = &rsyncJob{ctx: ctx, cancel: cancel}
+	r.rsync.Job = &rsyncJob{ctx: ctx, cancel: cancel}
 
 	r.openRsyncCancelDialog()
 
@@ -40,7 +40,7 @@ func TestOpenRsyncCancelDialogOpensWhenOnlyTheQueueIsNonEmpty(t *testing.T) {
 	// checks both, so this pins that it isn't accidentally
 	// rsyncJob-only.
 	r := newTestRootForRsyncJob(t)
-	r.rsyncQueue = []queuedRsync{{label: "queued"}}
+	r.rsync.Queue = []queuedRsync{{label: "queued"}}
 
 	r.openRsyncCancelDialog()
 
@@ -58,8 +58,8 @@ func TestRsyncCancelDialogCurrentItemStopsOnlyTheCurrentJob(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel}
-	r.rsyncJob = job
-	r.rsyncQueue = []queuedRsync{{
+	r.rsync.Job = job
+	r.rsync.Queue = []queuedRsync{{
 		job:   rsync.Job{Source: rsync.Endpoint{Path: filepath.Join(r.panel.path, "a.txt")}, Destination: rsync.Endpoint{Path: t.TempDir()}},
 		label: "queued",
 	}}
@@ -70,8 +70,8 @@ func TestRsyncCancelDialogCurrentItemStopsOnlyTheCurrentJob(t *testing.T) {
 	if job.ctx.Err() == nil {
 		t.Error("the current job should be cancelled")
 	}
-	if r.rsyncJob == nil || r.rsyncJob.label != "queued" {
-		t.Errorf("r.rsyncJob = %+v, want the queued run started", r.rsyncJob)
+	if r.rsync.Job == nil || r.rsync.Job.label != "queued" {
+		t.Errorf("r.rsync.Job = %+v, want the queued run started", r.rsync.Job)
 	}
 	if r.activePage == bgJobCancelPage {
 		t.Error("the dialog should have closed")
@@ -87,8 +87,8 @@ func TestRsyncCancelDialogAllItemDropsTheQueueToo(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel}
-	r.rsyncJob = job
-	r.rsyncQueue = []queuedRsync{{label: "queued"}}
+	r.rsync.Job = job
+	r.rsync.Queue = []queuedRsync{{label: "queued"}}
 	r.openRsyncCancelDialog()
 
 	r.runBgJobCancel(r.pendingBgJobCancelAll)
@@ -96,7 +96,7 @@ func TestRsyncCancelDialogAllItemDropsTheQueueToo(t *testing.T) {
 	if job.ctx.Err() == nil {
 		t.Error("the current job should be cancelled")
 	}
-	if len(r.rsyncQueue) != 0 {
+	if len(r.rsync.Queue) != 0 {
 		t.Error("the whole queue should have been dropped too")
 	}
 }
@@ -111,18 +111,18 @@ func TestRsyncCancelDialogCurrentItemIsANoOpIfTheJobAlreadyFinished(t *testing.T
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel}
-	r.rsyncJob = job
+	r.rsync.Job = job
 	r.openRsyncCancelDialog()
 
 	// The job finishes on its own, exactly as finishRsyncJob's own
 	// "already superseded" guard describes, before the dialog is ever
 	// answered.
-	r.rsyncJob = nil
+	r.rsync.Job = nil
 
 	r.runBgJobCancel(r.pendingBgJobCancelCurrent) // must not panic or touch anything
 
-	if r.rsyncJob != nil {
-		t.Error("r.rsyncJob should still be nil")
+	if r.rsync.Job != nil {
+		t.Error("r.rsync.Job should still be nil")
 	}
 }
 
@@ -139,7 +139,7 @@ func TestOpenCompressCancelDialogIsANoOpWhenNothingRunning(t *testing.T) {
 func TestOpenCompressCancelDialogOpensWhenAJobIsRunning(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	r.compressJob = &compressJob{ctx: ctx, cancel: cancel}
+	r.compress.Job = &compressJob{ctx: ctx, cancel: cancel}
 
 	r.openCompressCancelDialog()
 
@@ -163,8 +163,8 @@ func TestConfirmCancelCurrentRsyncOpensAndStopsOnlyTheCurrentJob(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel}
-	r.rsyncJob = job
-	r.rsyncQueue = []queuedRsync{{
+	r.rsync.Job = job
+	r.rsync.Queue = []queuedRsync{{
 		job:   rsync.Job{Source: rsync.Endpoint{Path: filepath.Join(r.panel.path, "a.txt")}, Destination: rsync.Endpoint{Path: t.TempDir()}},
 		label: "queued",
 	}}
@@ -178,8 +178,8 @@ func TestConfirmCancelCurrentRsyncOpensAndStopsOnlyTheCurrentJob(t *testing.T) {
 	if job.ctx.Err() == nil {
 		t.Error("the current job should be cancelled")
 	}
-	if r.rsyncJob == nil || r.rsyncJob.label != "queued" {
-		t.Errorf("r.rsyncJob = %+v, want the queued run started, not dropped", r.rsyncJob)
+	if r.rsync.Job == nil || r.rsync.Job.label != "queued" {
+		t.Errorf("r.rsync.Job = %+v, want the queued run started, not dropped", r.rsync.Job)
 	}
 	r.cancelRsyncJob() // don't leave a real rsync process running past this test
 }

@@ -488,11 +488,11 @@ func (r *Root) applyFirewallAddRule(backend firewall.Backend, spec firewall.NewR
 	r.reloadFirewall()
 
 	if runErr != nil {
-		r.activityLog.Error(activitylog.CategoryFirewall, fmt.Sprintf("add rule %q: %v", command, runErr))
+		r.activity.Logger.Error(activitylog.CategoryFirewall, fmt.Sprintf("add rule %q: %v", command, runErr))
 		r.showError(fmt.Errorf("firewall: %s: %w", command, runErr))
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryFirewall, fmt.Sprintf("added rule: %s", command))
+	r.activity.Logger.Action(activitylog.CategoryFirewall, fmt.Sprintf("added rule: %s", command))
 
 	if spec.Action != firewall.ActionAllow && spec.IsSSHRelevant() && firewall.RunningOverSSH() {
 		r.armFirewallRollback(backend, spec)
@@ -641,7 +641,7 @@ func (r *Root) keepFirewallRule() {
 		r.firewall.RollbackCancel()
 		r.firewall.RollbackCancel = nil
 	}
-	r.activityLog.Action(activitylog.CategoryFirewall, "kept SSH-relevant rule (self-lockout rollback cancelled)")
+	r.activity.Logger.Action(activitylog.CategoryFirewall, "kept SSH-relevant rule (self-lockout rollback cancelled)")
 	r.hideOverlay()
 }
 
@@ -666,7 +666,7 @@ func (r *Root) rollbackFirewallRule() {
 	backend, spec := r.firewall.RollbackBackend, r.firewall.RollbackSpec
 	command, err := firewall.DeleteRuleCommand(backend, spec)
 	if err != nil {
-		r.activityLog.Error(activitylog.CategoryFirewall, fmt.Sprintf("self-lockout rollback: %v", err))
+		r.activity.Logger.Error(activitylog.CategoryFirewall, fmt.Sprintf("self-lockout rollback: %v", err))
 		r.notify.Push(notify.LevelError, notify.CategoryFirewall, fmt.Sprintf("self-lockout rollback: %v", err))
 		r.showError(fmt.Errorf("firewall: self-lockout rollback: %w", err))
 		return
@@ -675,13 +675,13 @@ func (r *Root) rollbackFirewallRule() {
 	runErr := r.runFirewallCommandFullScreen(command)
 	r.reloadFirewall()
 	if runErr != nil {
-		r.activityLog.Error(activitylog.CategoryFirewall, fmt.Sprintf("self-lockout rollback %q: %v", command, runErr))
+		r.activity.Logger.Error(activitylog.CategoryFirewall, fmt.Sprintf("self-lockout rollback %q: %v", command, runErr))
 		r.notify.Push(notify.LevelError, notify.CategoryFirewall,
 			fmt.Sprintf("self-lockout rollback failed — the rule is still in place: %v", runErr))
 		r.showError(fmt.Errorf("firewall: self-lockout rollback failed — the rule is still in place: %s: %w", command, runErr))
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryFirewall, fmt.Sprintf("self-lockout rollback: %s", command))
+	r.activity.Logger.Action(activitylog.CategoryFirewall, fmt.Sprintf("self-lockout rollback: %s", command))
 	r.notify.Push(notify.LevelInfo, notify.CategoryFirewall,
 		"the SSH-relevant rule wasn't confirmed in time and has been reverted")
 	r.showError(fmt.Errorf("firewall: the SSH-relevant rule wasn't confirmed in time and has been reverted"))

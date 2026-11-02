@@ -78,12 +78,12 @@ func (r *Root) runBgJobCancel(action func()) {
 // already has, rather than opening a dialog with no meaningful answer
 // to give.
 func (r *Root) openRsyncCancelDialog() {
-	if r.rsyncJob == nil && len(r.rsyncQueue) == 0 {
+	if r.rsync.Job == nil && len(r.rsync.Queue) == 0 {
 		return
 	}
 	r.pendingBgJobCancelCurrent = r.cancelRsyncKeepQueue
 	r.pendingBgJobCancelAll = r.cancelRsyncJob
-	r.renderBgJobCancelDialog("Rsync", len(r.rsyncQueue))
+	r.renderBgJobCancelDialog("Rsync", len(r.rsync.Queue))
 	r.resizeBgJobCancelDialog()
 	r.bgJobCancelDialog.SetCurrentItem(bgJobCancelNeverMindItem)
 	r.showOverlay(bgJobCancelPage, r.bgJobCancelDialog)
@@ -93,12 +93,12 @@ func (r *Root) openRsyncCancelDialog() {
 // Extract counterpart — see its own doc comment for the shared
 // reasoning throughout.
 func (r *Root) openCompressCancelDialog() {
-	if r.compressJob == nil && len(r.compressQueue) == 0 {
+	if r.compress.Job == nil && len(r.compress.Queue) == 0 {
 		return
 	}
 	r.pendingBgJobCancelCurrent = r.cancelCompressKeepQueue
 	r.pendingBgJobCancelAll = r.cancelCompressJob
-	r.renderBgJobCancelDialog("Compress/Extract", len(r.compressQueue))
+	r.renderBgJobCancelDialog("Compress/Extract", len(r.compress.Queue))
 	r.resizeBgJobCancelDialog()
 	r.bgJobCancelDialog.SetCurrentItem(bgJobCancelNeverMindItem)
 	r.showOverlay(bgJobCancelPage, r.bgJobCancelDialog)
@@ -147,14 +147,14 @@ func (r *Root) resizeBgJobCancelDialog() {
 // "nothing to do" contract every cancel function in this file already
 // has.
 func (r *Root) confirmCancelCurrentRsync() {
-	if r.rsyncJob == nil {
+	if r.rsync.Job == nil {
 		return
 	}
 	r.openConfirm("Stop the current Rsync job?", "Yes, stop it", r.cancelRsyncKeepQueue)
 }
 
 func (r *Root) confirmCancelCurrentCompress() {
-	if r.compressJob == nil {
+	if r.compress.Job == nil {
 		return
 	}
 	r.openConfirm("Stop the current Compress/Extract job?", "Yes, stop it", r.cancelCompressKeepQueue)
