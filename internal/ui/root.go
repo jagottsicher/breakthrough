@@ -656,7 +656,7 @@ type Root struct {
 	logAuditTimelineEndLabel   string
 	// logAuditTimelineFocused/Anchor/Cursor/Dragging are the Timeline's
 	// own selection state — anchor+cursor is the same "text selection"
-	// shape searchFocusedIdx's own span-based focus uses, just with a
+	// shape search.FocusedIdx's own span-based focus uses, just with a
 	// range instead of a single index: a plain Left/Right collapses the
 	// selection (anchor = cursor), Shift+Left/Right extends it, and the
 	// visible/committed range is always [min(anchor,cursor),
@@ -1165,7 +1165,7 @@ type Root struct {
 	// sed.PreviewCancel/sed.PreviewAnimFrame/sed.PreviewProcessed/
 	// sed.PreviewTotal/sed.PreviewCurrentPos back the live progress
 	// animation (see animateSedPreviewProgress/renderSedPreviewStatus) —
-	// the same shape searchCancel/searchAnimFrame and friends already
+	// the same shape search.Cancel/search.AnimFrame and friends already
 	// have for a live search.
 	sed sedState
 
@@ -1876,126 +1876,121 @@ type Root struct {
 	// The search dialog (see search.go/newSearchDialog) — after MC's
 	// own Find File dialog, reusing Properties' own "plain text plus a
 	// shared inline editor" editing paradigm (see newPropertiesView).
-	// searchPages wraps searchFieldsPages (the fields — see below) as
+	// search.Pages wraps search.FieldsPages (the fields — see below) as
 	// its own single page — results themselves show directly in the
 	// panel's own normal file overview area instead of a second page
 	// here (see Panel.showSearchResults), per the user's own request.
 	//
-	// searchFieldsPages itself wraps the fields Flex (searchTop/
-	// searchLeft/searchRight — MC's own Start-at/Ignore-dirs block
-	// above a two-column Filename/Content section, plus searchButtons)
-	// and searchEditField, the one shared inline editor repositioned
+	// search.FieldsPages itself wraps the fields Flex (search.Top/
+	// search.Left/search.Right — MC's own Start-at/Ignore-dirs block
+	// above a two-column Filename/Content section, plus search.Buttons)
+	// and search.EditField, the one shared inline editor repositioned
 	// over whichever field is currently being edited (see
 	// activateSearchTextField) — the same "one shared field,
 	// repositioned per use" approach properties.EditField/Root.rename/
-	// Root.prompt all already use. searchEditCommit is that field's own
+	// Root.prompt all already use. search.EditCommit is that field's own
 	// pending commit callback, set fresh each time (see
 	// activateSearchTextField/finishSearchEdit).
 	//
-	// searchSpans is every clickable/keyboard-focusable region across
-	// all three of searchTop/searchLeft/searchRight, rebuilt on every
+	// search.Spans is every clickable/keyboard-focusable region across
+	// all three of search.Top/search.Left/search.Right, rebuilt on every
 	// render (see rerenderSearchDialog) — the same running list
 	// propertySpans is for Properties, just spanning three TextViews
-	// instead of one (see searchSpan's own doc comment). searchFocusedIdx
+	// instead of one (see searchSpan's own doc comment). search.FocusedIdx
 	// is which one currently has keyboard focus, or
-	// len(searchSpans)/len(searchSpans)+1 for Cancel/Search.
+	// len(search.Spans)/len(search.Spans)+1 for Cancel/Search.
 	//
-	// searchEngineOptions records which search.Engine each of Engine's
+	// search.EngineOptions records which search.Engine each of Engine's
 	// own choice options actually maps to (built once, since
 	// LocateAvailable doesn't change mid-session) — the group's own
 	// selected index alone isn't enough once "locate" is conditionally
-	// left out (see its own doc comment in search.go). searchEngineIdx
-	// is that selected index; searchScopeValue/searchFilenameValue/
-	// searchIgnoreValue/searchContentValue are the dialog's own four
+	// left out (see its own doc comment in search.go). search.EngineIdx
+	// is that selected index; search.ScopeValue/search.FilenameValue/
+	// search.IgnoreValue/search.ContentValue are the dialog's own four
 	// text fields. There's no equivalent choice group for Content's own
 	// search tool any more (previously "Search in": File names/Content
 	// (grep)/gzip/zip) — removed for now per the user's own request;
 	// runSearch decides content vs. filename search, always plain grep,
-	// purely from whether searchContentValue is filled in.
+	// purely from whether search.ContentValue is filled in.
 	//
 	// The rest are MC's own Find File checkboxes (verified against its
 	// real find.c source, not guessed — see rerenderSearchDialog's own
 	// doc comment), replacing this dialog's earlier, shared Glob/
-	// Keyword/Regex choice group: searchShellPatterns (Filename's own
-	// "Using shell patterns") and searchContentRegex (Content's own
+	// Keyword/Regex choice group: search.ShellPatterns (Filename's own
+	// "Using shell patterns") and search.ContentRegex (Content's own
 	// "Regular expression") are independent of each other, per MC's own
 	// design — Filename's pattern syntax and Content's pattern syntax
-	// are never the same choice. searchRecursive/searchFollowSymlinks
+	// are never the same choice. search.Recursive/search.FollowSymlinks
 	// only matter for EngineFind (locate's own index has no live
-	// traversal to shape this way); searchCaseSensitive is shown in
+	// traversal to shape this way); search.CaseSensitive is shown in
 	// both columns but is one shared value (this app never runs a
 	// filename and a content search at once, so nothing is lost keeping
-	// it single); searchSkipHidden/searchWholeWords/searchFirstHit are
+	// it single); search.SkipHidden/search.WholeWords/search.FirstHit are
 	// each their own — see runSearch for how every one of these feeds
 	// into the search.Request that's actually built.
 	//
-	// searchIncludeArchives is Filename's own "Include zip, tar (gz,
+	// search.IncludeArchives is Filename's own "Include zip, tar (gz,
 	// bz2, xz)" checkbox — search.Request.IncludeArchives, a plain
 	// filename search only (meaningless once Content is filled in, the
-	// same as searchRecursive/searchFollowSymlinks are meaningless for
+	// same as search.Recursive/search.FollowSymlinks are meaningless for
 	// EngineLocate — see its own doc comment).
 	//
-	// searchIncludeCompressed is Content's own mirror of that —
+	// search.IncludeCompressed is Content's own mirror of that —
 	// "Include compressed files" — search.Request.IncludeCompressed, a
 	// plain content search only (Content filled in, meaningless
-	// otherwise — the exact opposite scoping of searchIncludeArchives).
-	searchPages             *tview.Pages
-	searchFieldsPages       *tview.Pages
-	searchTitleBar          *tview.TextView // " Search " — see newSearchDialog, the same absolutely-positioned extra Pages page properties.TitleBar/chmodTitleBar already are
-	searchTop               *tview.TextView
-	searchLeft              *tview.TextView
-	searchRight             *tview.TextView
-	searchEditField         *tview.InputField
-	searchEditCommit        func(string)
-	searchButtons           *tview.Flex
-	searchCancelBtn         *tview.Button
-	searchSearchBtn         *tview.Button
-	searchSpans             []searchSpan
-	searchFocusedIdx        int
-	searchEngineOptions     []searchEngineOption
-	searchEngineIdx         int
-	searchScopeValue        string
-	searchFilenameValue     string
-	searchIgnoreValue       string
-	searchContentValue      string
-	searchIgnoreEnabled     bool
-	searchCaseSensitive     bool
-	searchSkipHidden        bool
-	searchRecursive         bool
-	searchFollowSymlinks    bool
-	searchShellPatterns     bool
-	searchContentRegex      bool
-	searchWholeWords        bool
-	searchFirstHit          bool
-	searchIncludeArchives   bool
-	searchIncludeCompressed bool
-	// searchCancel stops whatever search.Run call is currently in
-	// flight, if any, and its paired animateSearchProgress ticker (both
-	// share this same ctx) — called before starting a new one, and when
-	// the dialog closes, so a slow "find /" left running never keeps
-	// working after the user has moved on (see runSearch/closeSearch).
-	searchCancel context.CancelFunc
-	// searchAnimFrame/searchCurrentPos/searchLastDir/searchStartDir
-	// back the results window's own status line (see
-	// renderSearchStatus): searchAnimFrame is the current "still
-	// working" animation frame (see animateSearchProgress).
-	// searchCurrentPos is the real, live "where are we right now" —
-	// set from search.Request.OnProgress (see runSearch), which for
-	// EngineFind actually is breakthrough's own code watching the
-	// traversal happen (a second, lightweight find -type d — see
-	// internal/search's own startDirectoryProgress), not a guess.
-	// searchLastDir, the directory of the most recently streamed
-	// match, is the fallback once searchCurrentPos has nothing to show
-	// — EngineLocate (OnProgress is never called for it — see its own
-	// doc comment: locate has no live traversal to report on at all)
-	// or once the search has already finished and progress has
-	// stopped arriving. searchStartDir (Start at, as of when the
-	// search began) is the last resort, shown until either one has
-	// anything at all.
-	searchAnimFrame  int
-	searchCurrentPos string
-	searchLastDir    string
-	searchStartDir   string
+	// otherwise — the exact opposite scoping of search.IncludeArchives).
+	// The search dialog (see search.go/newSearchDialog) — after MC's
+	// own Find File dialog, reusing Properties' own "plain text plus a
+	// shared inline editor" editing paradigm (see newPropertiesView).
+	// search.Pages wraps search.FieldsPages (the fields — below) as its
+	// own single page — results themselves show directly in the
+	// panel's own normal file overview instead of a second page here
+	// (see Panel.showSearchResults), per the user's own request.
+	//
+	// search.FieldsPages itself wraps the fields Flex (search.Top/
+	// search.Left/search.Right — MC's own Start-at/Ignore-dirs block
+	// above a two-column Filename/Content section, plus search.Buttons)
+	// and search.EditField, one shared inline editor repositioned over
+	// whichever field search.FocusedIdx currently names (an index into
+	// search.Spans) — the same propertiesEditField/Root.rename/
+	// Root.prompt shared-editor shape, driven by
+	// activateSearchTextField/finishSearchEdit.
+	//
+	// search.EngineOptions/search.EngineIdx back the Engine dropdown
+	// (grep/find/locate — see internal/search's own LocateAvailable
+	// check for why "locate" is conditionally left out, see its own doc
+	// comment in search.go). search.ScopeValue/search.FilenameValue/
+	// search.IgnoreValue/search.ContentValue mirror the dialog's own four
+	// text fields. runSearch decides content vs. filename search,
+	// always plain grep, purely from whether search.ContentValue is
+	// filled in.
+	//
+	// The rest are MC's own Find File checkboxes (verified against its
+	// real find.c source, not guessed — see rerenderSearchDialog's own
+	// doc comment): search.ShellPatterns (Filename's own "Using shell
+	// patterns") and search.ContentRegex (Content's own "Regular
+	// expression") are independent of each other, per MC's own design —
+	// Filename's pattern syntax and Content's pattern syntax are never
+	// the same choice. search.Recursive/search.FollowSymlinks only
+	// matter for EngineFind; search.CaseSensitive is shown in both
+	// columns but is one shared value; search.SkipHidden/
+	// search.WholeWords/search.FirstHit are each their own — see
+	// runSearch for how every one feeds into the search.Request that's
+	// actually built. search.IncludeArchives is Filename's own "Include
+	// zip, tar (gz, bz2, xz)" checkbox; search.IncludeCompressed is
+	// Content's own mirror of that ("Include compressed files") — the
+	// exact opposite scoping of search.IncludeArchives.
+	//
+	// search.Cancel stops whatever search.Run call is currently in
+	// flight, if any, and its paired animateSearchProgress ticker —
+	// called before starting a new one, and when the dialog closes, so a
+	// slow "find /" left running never keeps working after the user has
+	// moved on (see runSearch/closeSearch). search.AnimFrame/
+	// search.CurrentPos/search.LastDir/search.StartDir back the results
+	// window's own status line (see renderSearchStatus) — see
+	// search.go's own doc comments for the exact fallback order between
+	// them.
+	search searchState
 
 	// The Chmod dialog (see chmoddialog.go/newChmodDialog) — the same
 	// "plain text plus a shared inline editor" paradigm Properties/Search
@@ -2202,17 +2197,9 @@ type Root struct {
 	// only draggable afterward.
 	properties propertiesState
 
-	// searchDragging/searchDragOffsetX/Y are dragSearchMouseCapture's
-	// own equivalent of properties.Dragging/properties.DragOffsetX/Y just
-	// above, for the search dialog's own title bar (search.go) — same
-	// shape, same reasoning, per the user's own explicit request that
-	// it become movable (with a close glyph) too.
-	searchDragging                       bool
-	searchDragOffsetX, searchDragOffsetY int
-
 	// logAuditDetailDragging/logAuditDetailDragOffsetX/Y are
 	// dragLogAuditDetailMouseCapture's own equivalent of
-	// searchDragging/searchDragOffsetX/Y just above, for the Log entry
+	// search.Dragging/search.DragOffsetX/Y just above, for the Log entry
 	// detail dialog's own title bar (logauditscreen.go) — same shape,
 	// same reasoning, per the user's own explicit request that it
 	// become movable both by mouse and by keyboard (see
@@ -2483,7 +2470,7 @@ type Root struct {
 	// rather than rebuilt. easterEggCancel is nil whenever the overlay
 	// isn't animating (closeEasterEgg always nils it back out after
 	// calling it), the same "nil means not running" contract
-	// searchCancel already establishes.
+	// search.Cancel already establishes.
 	easterEggView   *easterEggView
 	easterEggCancel context.CancelFunc
 
@@ -2986,7 +2973,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.newGitBreachScreen()
 
 	// The search dialog (see openSearch).
-	r.searchPages = r.newSearchDialog()
+	r.search.Pages = r.newSearchDialog()
 
 	// The Chmod dialog (see openChmod/chmoddialog.go).
 	r.chmodPages = r.newChmodDialog()
@@ -3200,7 +3187,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning every other full-screen catalog's
 	// own comment above gives.
 	r.AddPage(gitBreachPage, r.gitBreachLayout, true, false)
-	r.AddPage(searchPage, r.searchPages, false, false)
+	r.AddPage(searchPage, r.search.Pages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpLayout, false, false)
@@ -3843,12 +3830,12 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// inside the dialog's own rect, or an upward/leftward drag could
 	// only ever move it down/right, the same bug properties.Dragging's
 	// own check exists to prevent.
-	if r.searchDragging {
+	if r.search.Dragging {
 		return r.dragSearchMouseCapture(action, event)
 	}
 
 	// A Log entry detail dialog drag in progress — same reasoning as
-	// searchDragging/properties.Dragging above: dragging up/left past
+	// search.Dragging/properties.Dragging above: dragging up/left past
 	// the not-yet-updated rect would otherwise stop reaching
 	// dragLogAuditDetailMouseCapture at all.
 	if r.logAuditDetailDragging {
@@ -3856,7 +3843,7 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	}
 
 	// A Log Audit timeline drag in progress — same reasoning as
-	// searchDragging/properties.Dragging just above: the bar is a
+	// search.Dragging/properties.Dragging just above: the bar is a
 	// single thin row, so a drag that so much as jitters one pixel up
 	// or down off it would otherwise fall through to ordinary
 	// position-based dispatch mid-drag, leaving logAuditTimelineDragging
