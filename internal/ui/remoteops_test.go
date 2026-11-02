@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 
@@ -92,21 +93,35 @@ func TestRemoteInfoFromEntryMapsEachSymlinkTypeCorrectly(t *testing.T) {
 	}
 }
 
-// TestDiskUsageForOnARemotePanelUsesTheClientNotLocalDf pins another
+// TestDiskUsageForOnARemotePanelCachesTheClientsValue pins another
 // previously-broken gap alongside Details' own Stat: the status bar's
 // Disk/Inodes segment used to call the local fsops.FetchDiskUsage
 // (shelling out to `df`) unconditionally, so it silently vanished from
 // the status bar entirely on a remote panel — `df` against a path that
-// only exists on the other end always fails.
-func TestDiskUsageForOnARemotePanelUsesTheClientNotLocalDf(t *testing.T) {
+// only exists on the other end always fails. diskUsageFor itself never
+// calls the remote Client at all any more, synchronously or
+// otherwise — it's a pure cache read (see its own doc comment in
+// bottombar.go on why only StartClock's ticker is allowed to start the
+// real fetch): the first read before any fetch has landed reports
+// not-ok, and the real result only ever reaches the cache through
+// applyPanelDiskUsage — tests never drain QueueUpdateDraw (see this
+// package's own established convention), so that result is applied
+// directly here instead, exactly the already-computed-result shape
+// applyLogAuditRotatedFile's own tests already use.
+func TestDiskUsageForOnARemotePanelCachesTheClientsValue(t *testing.T) {
 	r := newTestRemoteRoot(t)
 	client := r.panel.remote.(*fakeRemoteClient)
 	client.diskUsage = fsops.DiskUsage{UsedBytes: 100, AvailBytes: 900, UsePercent: 10}
 
-	got, ok := diskUsageFor(r.panel)
+	if _, ok := diskUsageFor(r.panel); ok {
+		t.Fatal("diskUsageFor reported ok before any fetch had landed")
+	}
 
+	r.applyPanelDiskUsage(r.panel, client, r.panel.path, client.diskUsage, nil)
+
+	got, ok := diskUsageFor(r.panel)
 	if !ok {
-		t.Fatal("diskUsageFor reported not-ok despite the fake client returning a usable value")
+		t.Fatal("diskUsageFor reported not-ok despite an applied fetch result")
 	}
 	if got != client.diskUsage {
 		t.Errorf("diskUsageFor = %+v, want the remote client's own figure %+v", got, client.diskUsage)
@@ -121,12 +136,65 @@ func TestDiskUsageForOnARemotePanelUsesTheClientNotLocalDf(t *testing.T) {
 func TestDiskUsageForOnARemotePanelFailsGracefullyWhenTheClientErrors(t *testing.T) {
 	r := newTestRemoteRoot(t)
 	client := r.panel.remote.(*fakeRemoteClient)
-	client.diskUsageErr = fmt.Errorf("statvfs@openssh.com not supported")
 
-	_, ok := diskUsageFor(r.panel)
+	r.applyPanelDiskUsage(r.panel, client, r.panel.path, fsops.DiskUsage{}, fmt.Errorf("statvfs@openssh.com not supported"))
 
-	if ok {
-		t.Error("diskUsageFor reported ok despite the client returning an error")
+	if _, ok := diskUsageFor(r.panel); ok {
+		t.Error("diskUsageFor reported ok despite the applied result being an error")
+	}
+}
+
+// TestApplyPanelDiskUsageDiscardsAStaleResultAfterNavigation pins the
+// same "a background answer for a target that's no longer current
+// gets thrown away" rule applyLogAuditRotatedFile's own stale-group
+// guard already establishes: a fetch started for the path the panel
+// was on when it began must never overwrite what's shown for whatever
+// path the panel navigated to while that fetch was still in flight.
+func TestApplyPanelDiskUsageDiscardsAStaleResultAfterNavigation(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	stalePath := r.panel.path
+	r.panel.path = "/remote/elsewhere" // navigated away before the fetch landed
+
+	r.applyPanelDiskUsage(r.panel, client, stalePath, fsops.DiskUsage{UsedBytes: 1}, nil)
+
+	if r.panel.diskUsageOK {
+		t.Error("a result for a path the panel has already navigated away from must not be applied")
+	}
+	if _, ok := diskUsageFor(r.panel); ok {
+		t.Error("diskUsageFor reported ok from a stale, discarded result")
+	}
+}
+
+// TestRefreshPanelDiskUsageSkipsWhileAlreadyFetching pins the first
+// half of refreshPanelDiskUsage's own gate: a request already in
+// flight must not get a second one stacked on top of it on a slow
+// connection.
+func TestRefreshPanelDiskUsageSkipsWhileAlreadyFetching(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	r.panel.diskUsageFetching = true
+	before := r.panel.diskUsageFetchedAt
+
+	r.refreshPanelDiskUsage(r.panel)
+
+	if r.panel.diskUsageFetchedAt != before {
+		t.Error("refreshPanelDiskUsage should not have touched fetchedAt while a fetch is already in flight")
+	}
+}
+
+// TestRefreshPanelDiskUsageSkipsWithinTheCooldown pins the second half
+// of the gate: a fetch that landed less than diskUsageRefreshInterval
+// ago must not be immediately followed by another one — the same
+// roughly-once-a-second cadence the status bar's own ticker already
+// drove this call at before refreshPanelDiskUsage existed.
+func TestRefreshPanelDiskUsageSkipsWithinTheCooldown(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	r.panel.diskUsageFetchedAt = time.Now()
+
+	r.refreshPanelDiskUsage(r.panel)
+
+	if r.panel.diskUsageFetching {
+		t.Error("refreshPanelDiskUsage should not have started a new fetch within diskUsageRefreshInterval")
 	}
 }
 
