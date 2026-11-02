@@ -314,7 +314,7 @@ type Root struct {
 	// apikeydialog.go) — a fixed widget set, built once, whose actual
 	// fields are rebuilt per apiKeyDialogStep (passphrase vs. key),
 	// the same "fixed shell, variable fields" split
-	// cloudRemoteDialogForm already uses.
+	// cloud.RemoteDialogForm already uses.
 	apiKeyDialogProvider        string
 	apiKeyDialogStep            apiKeyDialogStep
 	apiKeyDialogForm            *tview.Form
@@ -1189,30 +1189,19 @@ type Root struct {
 	// open rather than staying fixed.
 	connect connectDialogState
 
-	// cloudMountDialog* is the "New cloud mount" dialog (see
+	// cloud.MountDialog* is the "New cloud mount" dialog (see
 	// cloudmountdialog.go), reached via the "+ New" chooser
 	// (openNewConnectionChooser) rather than its own key, same shape as
 	// connect.Layout above just with a remote picker instead of Host/
 	// Port/User/Password.
-	cloudMountDialogForm            *tview.Form
-	cloudMountDialogRemoteField     *tview.DropDown
-	cloudMountDialogTargetField     *tview.InputField
-	cloudMountDialogIdentifierField *tview.InputField
-	cloudMountDialogTagsField       *tview.InputField
-	cloudMountDialogCancelBtn       *tview.Button
-	cloudMountDialogOKBtn           *tview.Button
-	cloudMountDialogMountBtn        *tview.Button
-	cloudMountDialogDeleteBtn       *tview.Button
-	cloudMountDialogButtons         *tview.Flex
-	cloudMountDialogTitleBar        *tview.TextView
-	cloudMountDialogLayout          *tview.Flex
-	// cloudMountDialogRemotes is the dropdown's own current option
+	//
+	// cloud.MountDialogRemotes is the dropdown's own current option
 	// list (remote names), captured at open time — read back by
 	// cloudMountDialogSyncTargetToSelection to tell "Target still holds
 	// some remote's own unmodified default" apart from "the user typed
 	// something real."
-	cloudMountDialogRemotes []string
-	// cloudMountDialogEditTarget is "" in "new mount" mode; set by
+	//
+	// cloud.MountDialogEditTarget is "" in "new mount" mode; set by
 	// editCloudMountRow to the MountEntry's own (old) Target before
 	// opening the dialog in edit mode — saveCloudMountEntry removes
 	// whatever MountEntry currently has this Target first, which is
@@ -1220,31 +1209,19 @@ type Root struct {
 	// not just appended as a second entry. Reset on every single
 	// openCloudMountCreateDialog call (both "new" and "edit" set it
 	// explicitly, every time), never left stale from a previous open.
-	cloudMountDialogEditTarget string
-
-	// cloudRemoteDialog* is the "New cloud remote" dialog (see
+	//
+	// cloud.RemoteDialog* is the "New cloud remote" dialog (see
 	// cloudremotedialog.go), reached by picking
 	// cloudMountDialogCreateNewOption from the "New cloud mount"
-	// dialog's own Remote dropdown. cloudRemoteDialogForm is rebuilt
+	// dialog's own Remote dropdown. cloud.RemoteDialogForm is rebuilt
 	// from scratch on every backend-type change (see
 	// rebuildCloudRemoteDialogFields) — Fields/BackendField/SubField
 	// are themselves part of what gets rebuilt, so these hold whatever
 	// the current rebuild last created, not a fixed set.
-	cloudRemoteDialogForm         *tview.Form
-	cloudRemoteDialogBackendField *tview.DropDown
-	cloudRemoteDialogBackendIndex int
-	cloudRemoteDialogNameField    *tview.InputField
-	cloudRemoteDialogSubField     *tview.DropDown
-	cloudRemoteDialogFields       []*tview.InputField
-	cloudRemoteDialogCancelBtn    *tview.Button
-	cloudRemoteDialogTestBtn      *tview.Button
-	cloudRemoteDialogOKBtn        *tview.Button
-	cloudRemoteDialogCreateBtn    *tview.Button
-	cloudRemoteDialogStatus       *tview.TextView
-	cloudRemoteDialogButtons      *tview.Flex
-	cloudRemoteDialogTitleBar     *tview.TextView
-	cloudRemoteDialogContent      *tview.Flex
-	cloudRemoteDialogLayout       *tview.Flex
+	//
+	// cloud.MountPending tracks mount points currently being mounted in
+	// the background (see mountCloudRemote), keyed by Target.
+	cloud cloudState
 
 	// connect.PendingSkipHostKey/connect.PendingSkipHostKeyConn back the
 	// "Connect anyway" retry after a HostKeyMismatchError (see
@@ -1344,12 +1321,6 @@ type Root struct {
 	// read back by openNewConnectionChooser to anchor the chooser at
 	// that row's own screen position (see its own doc comment).
 	connectionMenuNewRow int
-	// cloudMountPending maps a MountEntry's own Target to a transient
-	// "mounting…"/"unmounting…" label while toggleCloudMount's own
-	// background Mount/Unmount call is still running — read by
-	// renderConnectionMenu, so a stale "mount"/"unmount" never sits
-	// there unexplained for however long that subprocess takes.
-	cloudMountPending map[string]string
 
 	// sshShellMenuTable/TitleBar/Layout is the "gs" chord's own dropdown
 	// (see sshshell.go) — the same per-cell Table shape
@@ -2963,18 +2934,18 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The "New cloud mount" dialog (see cloudmountdialog.go) — same
 	// "fixed field set, built once" shape as the Connect dialog just
 	// above.
-	r.cloudMountDialogForm = r.newCloudMountDialogForm()
-	r.cloudMountDialogButtons = r.newCloudMountDialogButtons()
-	r.cloudMountDialogLayout = r.newCloudMountDialogLayout()
+	r.cloud.MountDialogForm = r.newCloudMountDialogForm()
+	r.cloud.MountDialogButtons = r.newCloudMountDialogButtons()
+	r.cloud.MountDialogLayout = r.newCloudMountDialogLayout()
 
 	// The "New cloud remote" dialog (see cloudremotedialog.go) — the
 	// form itself starts empty; rebuildCloudRemoteDialogFields fills
 	// it in on first open and every backend-type change after that
 	// (its own field set genuinely depends on that choice, the same
 	// reason resetSedForm rebuilds Sed Replace's own form fresh).
-	r.cloudRemoteDialogForm = r.newCloudRemoteDialogForm()
-	r.cloudRemoteDialogButtons = r.newCloudRemoteDialogButtons()
-	r.cloudRemoteDialogLayout = r.newCloudRemoteDialogLayout()
+	r.cloud.RemoteDialogForm = r.newCloudRemoteDialogForm()
+	r.cloud.RemoteDialogButtons = r.newCloudRemoteDialogButtons()
+	r.cloud.RemoteDialogLayout = r.newCloudRemoteDialogLayout()
 
 	// The connection dropdown (see connectionmenu.go) — rebuilt fresh
 	// on every open (see renderConnectionMenu), the same as the filter
@@ -3331,8 +3302,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
 	r.AddPage(connectDialogPage, r.connect.Layout, false, false)
 	r.AddPage(apiKeyDialogPage, r.apiKeyDialogLayout, false, false)
-	r.AddPage(cloudMountDialogPage, r.cloudMountDialogLayout, false, false)
-	r.AddPage(cloudRemoteDialogPage, r.cloudRemoteDialogLayout, false, false)
+	r.AddPage(cloudMountDialogPage, r.cloud.MountDialogLayout, false, false)
+	r.AddPage(cloudRemoteDialogPage, r.cloud.RemoteDialogLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
 	r.AddPage(sshShellDialogPage, r.sshShellLayout, false, false)

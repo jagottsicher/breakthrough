@@ -16,6 +16,42 @@ import (
 // dialog could do would ever succeed without it.
 var errRcloneNotAvailable = fmt.Errorf("rclone is not installed — cloud mounts need the rclone binary on PATH")
 
+// cloudState holds the "New cloud mount" and "New cloud remote"
+// dialogs' own widgets/form values (see cloudmountdialog.go/
+// cloudremotedialog.go) and the in-flight mount/unmount label map.
+type cloudState struct {
+	MountDialogForm            *tview.Form
+	MountDialogRemoteField     *tview.DropDown
+	MountDialogTargetField     *tview.InputField
+	MountDialogIdentifierField *tview.InputField
+	MountDialogTagsField       *tview.InputField
+	MountDialogCancelBtn       *tview.Button
+	MountDialogOKBtn           *tview.Button
+	MountDialogMountBtn        *tview.Button
+	MountDialogDeleteBtn       *tview.Button
+	MountDialogButtons         *tview.Flex
+	MountDialogTitleBar        *tview.TextView
+	MountDialogLayout          *tview.Flex
+	MountDialogRemotes         []string
+	MountDialogEditTarget      string
+	RemoteDialogForm           *tview.Form
+	RemoteDialogBackendField   *tview.DropDown
+	RemoteDialogBackendIndex   int
+	RemoteDialogNameField      *tview.InputField
+	RemoteDialogSubField       *tview.DropDown
+	RemoteDialogFields         []*tview.InputField
+	RemoteDialogCancelBtn      *tview.Button
+	RemoteDialogTestBtn        *tview.Button
+	RemoteDialogOKBtn          *tview.Button
+	RemoteDialogCreateBtn      *tview.Button
+	RemoteDialogStatus         *tview.TextView
+	RemoteDialogButtons        *tview.Flex
+	RemoteDialogTitleBar       *tview.TextView
+	RemoteDialogContent        *tview.Flex
+	RemoteDialogLayout         *tview.Flex
+	MountPending               map[string]string
+}
+
 // cloudMountDialogCreateNewOption is a synthetic first entry in the
 // Remote dropdown, never a real rclone remote — selecting it opens
 // cloudremotedialog.go's own "New cloud remote" dialog instead of
@@ -78,7 +114,7 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 		return event
 	})
 
-	r.cloudMountDialogRemoteField = tview.NewDropDown().SetLabel("Remote")
+	r.cloud.MountDialogRemoteField = tview.NewDropDown().SetLabel("Remote")
 	// No SetFieldWidth call here — unlike InputField, DropDown.
 	// SetFormAttributes never receives a fieldWidth from the Form at
 	// all (confirmed directly against tview's own dropdown.go, not
@@ -96,30 +132,30 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 	// already set (both write the same internal field, confirmed
 	// against dropdown.go), so a callback set here would never survive
 	// that first call anyway.
-	f.AddFormItem(r.cloudMountDialogRemoteField)
+	f.AddFormItem(r.cloud.MountDialogRemoteField)
 
-	r.cloudMountDialogTargetField = tview.NewInputField().SetLabel("Target")
-	r.cloudMountDialogTargetField.SetPlaceholder("local directory this remote mounts onto")
-	f.AddFormItem(r.cloudMountDialogTargetField)
+	r.cloud.MountDialogTargetField = tview.NewInputField().SetLabel("Target")
+	r.cloud.MountDialogTargetField.SetPlaceholder("local directory this remote mounts onto")
+	f.AddFormItem(r.cloud.MountDialogTargetField)
 
-	r.cloudMountDialogIdentifierField = tview.NewInputField().SetLabel("Identifier")
-	r.cloudMountDialogIdentifierField.SetPlaceholder("optional, a-z/0-9/_/-/space, max 32 chars")
-	r.cloudMountDialogIdentifierField.SetAcceptanceFunc(connectIdentifierAcceptanceFunc)
-	r.cloudMountDialogIdentifierField.SetBlurFunc(func() {
-		r.cloudMountDialogIdentifierField.SetText(normalizeConnectIdentifier(r.cloudMountDialogIdentifierField.GetText()))
+	r.cloud.MountDialogIdentifierField = tview.NewInputField().SetLabel("Identifier")
+	r.cloud.MountDialogIdentifierField.SetPlaceholder("optional, a-z/0-9/_/-/space, max 32 chars")
+	r.cloud.MountDialogIdentifierField.SetAcceptanceFunc(connectIdentifierAcceptanceFunc)
+	r.cloud.MountDialogIdentifierField.SetBlurFunc(func() {
+		r.cloud.MountDialogIdentifierField.SetText(normalizeConnectIdentifier(r.cloud.MountDialogIdentifierField.GetText()))
 	})
-	f.AddFormItem(r.cloudMountDialogIdentifierField)
+	f.AddFormItem(r.cloud.MountDialogIdentifierField)
 
-	r.cloudMountDialogTagsField = tview.NewInputField().SetLabel("Tags")
-	r.cloudMountDialogTagsField.SetPlaceholder("optional, comma-separated, max 10")
-	r.cloudMountDialogTagsField.SetAcceptanceFunc(connectTagsAcceptanceFunc)
-	r.cloudMountDialogTagsField.SetBlurFunc(func() {
-		r.cloudMountDialogTagsField.SetText(strings.Join(remotefs.ParseTags(r.cloudMountDialogTagsField.GetText()), ", "))
+	r.cloud.MountDialogTagsField = tview.NewInputField().SetLabel("Tags")
+	r.cloud.MountDialogTagsField.SetPlaceholder("optional, comma-separated, max 10")
+	r.cloud.MountDialogTagsField.SetAcceptanceFunc(connectTagsAcceptanceFunc)
+	r.cloud.MountDialogTagsField.SetBlurFunc(func() {
+		r.cloud.MountDialogTagsField.SetText(strings.Join(remotefs.ParseTags(r.cloud.MountDialogTagsField.GetText()), ", "))
 	})
-	r.cloudMountDialogTagsField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	r.cloud.MountDialogTagsField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.cloudMountDialogCancelBtn)
+			r.app.SetFocus(r.cloud.MountDialogCancelBtn)
 			return nil
 		case tcell.KeyEnter:
 			// OK, not Mount — the same "OK is the default, Enter in any
@@ -131,14 +167,14 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 		}
 		return event
 	})
-	f.AddFormItem(r.cloudMountDialogTagsField)
+	f.AddFormItem(r.cloud.MountDialogTagsField)
 
 	return f
 }
 
 // styleCloudMountDialogFields applies the current theme to every
 // field individually — styleInput/styleDropDown, not just the Form-
-// level SetFieldBackgroundColor applyTheme's own cloudMountDialogForm
+// level SetFieldBackgroundColor applyTheme's own cloud.MountDialogForm
 // block already sets. A real, reported gap: Form-level colors only
 // ever reach a field without its own placeholder text (tview's own
 // InputField renders a placeholder with a separate placeholderStyle,
@@ -149,7 +185,7 @@ func (r *Root) newCloudMountDialogForm() *tview.Form {
 // (every open) and applyTheme (a live color-scheme switch while
 // already open).
 func (r *Root) styleCloudMountDialogFields() {
-	styleDropDown(r.cloudMountDialogRemoteField, r.theme)
+	styleDropDown(r.cloud.MountDialogRemoteField, r.theme)
 	// Per-field focused/unfocused coloring is not reachable here:
 	// tview.Form.Draw calls every FormItem's own SetFormAttributes with
 	// the Form's single fieldStyle on every single frame (confirmed
@@ -161,9 +197,9 @@ func (r *Root) styleCloudMountDialogFields() {
 	// call), not something specific to this dialog. false still matters
 	// for the parts Form.Draw doesn't touch — placeholder style, and
 	// the label's own background (see styleInput's own doc comment).
-	styleInput(r.cloudMountDialogTargetField, r.theme, false)
-	styleInput(r.cloudMountDialogIdentifierField, r.theme, false)
-	styleInput(r.cloudMountDialogTagsField, r.theme, false)
+	styleInput(r.cloud.MountDialogTargetField, r.theme, false)
+	styleInput(r.cloud.MountDialogIdentifierField, r.theme, false)
+	styleInput(r.cloud.MountDialogTagsField, r.theme, false)
 }
 
 // newCloudMountDialogButtons mirrors newConnectButtons' own shape:
@@ -191,21 +227,21 @@ func (r *Root) styleCloudMountDialogFields() {
 // while that's selected, rather than just disabling it (a real,
 // reported complaint: it used to always be there, even then).
 func (r *Root) newCloudMountDialogButtons() *tview.Flex {
-	r.cloudMountDialogCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
-	r.cloudMountDialogOKBtn = tview.NewButton("OK").SetSelectedFunc(r.runSaveCloudMount)
-	r.cloudMountDialogMountBtn = tview.NewButton("Mount").SetSelectedFunc(r.runSaveAndMountCloudMount)
-	r.cloudMountDialogDeleteBtn = tview.NewButton("Delete").SetSelectedFunc(r.runDeleteSelectedCloudRemote)
-	r.cloudMountDialogCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
-	r.cloudMountDialogOKBtn.SetInputCapture(spaceAlsoActivates(r.runSaveCloudMount))
-	r.cloudMountDialogMountBtn.SetInputCapture(spaceAlsoActivates(r.runSaveAndMountCloudMount))
-	r.cloudMountDialogDeleteBtn.SetInputCapture(spaceAlsoActivates(r.runDeleteSelectedCloudRemote))
+	r.cloud.MountDialogCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
+	r.cloud.MountDialogOKBtn = tview.NewButton("OK").SetSelectedFunc(r.runSaveCloudMount)
+	r.cloud.MountDialogMountBtn = tview.NewButton("Mount").SetSelectedFunc(r.runSaveAndMountCloudMount)
+	r.cloud.MountDialogDeleteBtn = tview.NewButton("Delete").SetSelectedFunc(r.runDeleteSelectedCloudRemote)
+	r.cloud.MountDialogCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
+	r.cloud.MountDialogOKBtn.SetInputCapture(spaceAlsoActivates(r.runSaveCloudMount))
+	r.cloud.MountDialogMountBtn.SetInputCapture(spaceAlsoActivates(r.runSaveAndMountCloudMount))
+	r.cloud.MountDialogDeleteBtn.SetInputCapture(spaceAlsoActivates(r.runDeleteSelectedCloudRemote))
 
-	r.cloudMountDialogButtons = tview.NewFlex().SetDirection(tview.FlexColumn)
+	r.cloud.MountDialogButtons = tview.NewFlex().SetDirection(tview.FlexColumn)
 	r.setCloudMountDialogButtonsMode(false)
-	return r.cloudMountDialogButtons
+	return r.cloud.MountDialogButtons
 }
 
-// setCloudMountDialogButtonsMode rebuilds cloudMountDialogButtons' own
+// setCloudMountDialogButtonsMode rebuilds cloud.MountDialogButtons' own
 // contents and Tab/Backtab wiring for showDelete — called from
 // openCloudMountCreateDialog on every open and from the Remote
 // dropdown's own SetSelectedFunc on every selection change, not just
@@ -218,33 +254,33 @@ func (r *Root) newCloudMountDialogButtons() *tview.Flex {
 // Equal proportion (0, 1) each, nothing else, so however many buttons
 // are present this time fill the whole row edge to edge, split evenly.
 func (r *Root) setCloudMountDialogButtonsMode(showDelete bool) {
-	r.cloudMountDialogButtons.Clear()
-	r.cloudMountDialogButtons.AddItem(r.cloudMountDialogCancelBtn, 0, 1, false)
-	r.cloudMountDialogButtons.AddItem(r.cloudMountDialogOKBtn, 0, 1, false)
-	r.cloudMountDialogButtons.AddItem(r.cloudMountDialogMountBtn, 0, 1, false)
+	r.cloud.MountDialogButtons.Clear()
+	r.cloud.MountDialogButtons.AddItem(r.cloud.MountDialogCancelBtn, 0, 1, false)
+	r.cloud.MountDialogButtons.AddItem(r.cloud.MountDialogOKBtn, 0, 1, false)
+	r.cloud.MountDialogButtons.AddItem(r.cloud.MountDialogMountBtn, 0, 1, false)
 
 	// Escape always cancels, the same as everywhere else in this
 	// dialog, regardless of mode.
-	r.cloudMountDialogCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.cloud.MountDialogCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.cloudMountDialogOKBtn)
+			r.app.SetFocus(r.cloud.MountDialogOKBtn)
 		case tcell.KeyBacktab:
 			if showDelete {
-				r.app.SetFocus(r.cloudMountDialogDeleteBtn)
+				r.app.SetFocus(r.cloud.MountDialogDeleteBtn)
 			} else {
-				r.app.SetFocus(r.cloudMountDialogMountBtn)
+				r.app.SetFocus(r.cloud.MountDialogMountBtn)
 			}
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-	r.cloudMountDialogOKBtn.SetExitFunc(func(key tcell.Key) {
+	r.cloud.MountDialogOKBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.cloudMountDialogMountBtn)
+			r.app.SetFocus(r.cloud.MountDialogMountBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.cloudMountDialogCancelBtn)
+			r.app.SetFocus(r.cloud.MountDialogCancelBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
@@ -256,13 +292,13 @@ func (r *Root) setCloudMountDialogButtonsMode(showDelete bool) {
 		// Tab wraps straight back to the form, the same "last real
 		// stop, wrap to the first field" shape the showDelete case
 		// below gives Delete instead.
-		r.cloudMountDialogMountBtn.SetExitFunc(func(key tcell.Key) {
+		r.cloud.MountDialogMountBtn.SetExitFunc(func(key tcell.Key) {
 			switch key {
 			case tcell.KeyTab:
-				r.cloudMountDialogForm.SetFocus(0)
-				r.app.SetFocus(r.cloudMountDialogForm)
+				r.cloud.MountDialogForm.SetFocus(0)
+				r.app.SetFocus(r.cloud.MountDialogForm)
 			case tcell.KeyBacktab:
-				r.app.SetFocus(r.cloudMountDialogOKBtn)
+				r.app.SetFocus(r.cloud.MountDialogOKBtn)
 			case tcell.KeyEscape:
 				r.hideOverlay()
 			}
@@ -270,31 +306,31 @@ func (r *Root) setCloudMountDialogButtonsMode(showDelete bool) {
 		return
 	}
 
-	r.cloudMountDialogButtons.AddItem(r.cloudMountDialogDeleteBtn, 0, 1, false)
-	r.cloudMountDialogMountBtn.SetExitFunc(func(key tcell.Key) {
+	r.cloud.MountDialogButtons.AddItem(r.cloud.MountDialogDeleteBtn, 0, 1, false)
+	r.cloud.MountDialogMountBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.cloudMountDialogDeleteBtn)
+			r.app.SetFocus(r.cloud.MountDialogDeleteBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.cloudMountDialogOKBtn)
+			r.app.SetFocus(r.cloud.MountDialogOKBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-	r.cloudMountDialogDeleteBtn.SetExitFunc(func(key tcell.Key) {
+	r.cloud.MountDialogDeleteBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			// r.cloudMountDialogForm.SetFocus(0), not
-			// r.app.SetFocus(r.cloudMountDialogRemoteField) — see
+			// r.cloud.MountDialogForm.SetFocus(0), not
+			// r.app.SetFocus(r.cloud.MountDialogRemoteField) — see
 			// connect.ConnectBtn's own identical wrap in connectdialog.go
 			// for the real, user-reported bug (Form.Focus overwrites
 			// SetDoneFunc, so naming a field directly here would leave
 			// the form's own internal focusedElement counter stale)
 			// this works around.
-			r.cloudMountDialogForm.SetFocus(0)
-			r.app.SetFocus(r.cloudMountDialogForm)
+			r.cloud.MountDialogForm.SetFocus(0)
+			r.app.SetFocus(r.cloud.MountDialogForm)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.cloudMountDialogMountBtn)
+			r.app.SetFocus(r.cloud.MountDialogMountBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
@@ -306,12 +342,12 @@ func (r *Root) setCloudMountDialogButtonsMode(showDelete bool) {
 // (tview.Form's own top/bottom border padding) + 4 fields + 3 gaps
 // between them.
 func (r *Root) newCloudMountDialogLayout() *tview.Flex {
-	r.cloudMountDialogTitleBar = newPlainTitleBar("New cloud mount")
+	r.cloud.MountDialogTitleBar = newPlainTitleBar("New cloud mount")
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.cloudMountDialogForm, 9, 0, true).
-		AddItem(r.cloudMountDialogButtons, 1, 0, false)
+		AddItem(r.cloud.MountDialogForm, 9, 0, true).
+		AddItem(r.cloud.MountDialogButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.cloudMountDialogTitleBar, 1, 0, false).
+		AddItem(r.cloud.MountDialogTitleBar, 1, 0, false).
 		AddItem(content, 0, 1, true)
 }
 
@@ -365,15 +401,15 @@ func (r *Root) cloudMountDialogUniqueUnconfiguredTarget() string {
 // touch an unrelated control is exactly the kind of surprise this
 // project's own "no silent surprises" principle exists to prevent.
 func (r *Root) cloudMountDialogSyncTargetToSelection(selectedRemote string) {
-	current := r.cloudMountDialogTargetField.GetText()
-	for _, name := range r.cloudMountDialogRemotes {
+	current := r.cloud.MountDialogTargetField.GetText()
+	for _, name := range r.cloud.MountDialogRemotes {
 		if current == r.cloudMountDialogDefaultTarget(name) {
-			r.cloudMountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(selectedRemote))
+			r.cloud.MountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(selectedRemote))
 			return
 		}
 	}
 	if current == "" {
-		r.cloudMountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(selectedRemote))
+		r.cloud.MountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(selectedRemote))
 	}
 }
 
@@ -429,15 +465,15 @@ func (r *Root) openCloudMountCreateDialog(preselect string, editing *rclone.Moun
 			names = append(names, rem.Name)
 		}
 	}
-	r.cloudMountDialogRemotes = names
+	r.cloud.MountDialogRemotes = names
 
 	if editing != nil {
-		r.cloudMountDialogEditTarget = editing.Target
+		r.cloud.MountDialogEditTarget = editing.Target
 		if preselect == "" {
 			preselect = editing.RemoteName
 		}
 	} else {
-		r.cloudMountDialogEditTarget = ""
+		r.cloud.MountDialogEditTarget = ""
 	}
 
 	// 100, not 64 — Target's own value is a real local filesystem
@@ -461,7 +497,7 @@ func (r *Root) openCloudMountCreateDialog(preselect string, editing *rclone.Moun
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.cloudMountDialogLayout.SetRect(x, y, width, height)
+	r.cloud.MountDialogLayout.SetRect(x, y, width, height)
 
 	// A real, reported complaint: Remote's own closed box fell well
 	// short of where Target/Identifier/Tags end, and the open
@@ -488,7 +524,7 @@ func (r *Root) openCloudMountCreateDialog(preselect string, editing *rclone.Moun
 	if fieldWidth < 10 {
 		fieldWidth = 10
 	}
-	r.cloudMountDialogRemoteField.SetFieldWidth(fieldWidth)
+	r.cloud.MountDialogRemoteField.SetFieldWidth(fieldWidth)
 
 	// Right-padded to fieldWidth, not the bare text — the open
 	// dropdown's own popup list is sized from the options' own string
@@ -498,7 +534,7 @@ func (r *Root) openCloudMountCreateDialog(preselect string, editing *rclone.Moun
 	// whatever the longest real remote name happens to be. Safe to pad
 	// every option this way because the callback below — and both
 	// read sites in saveCloudMountEntry/runDeleteSelectedCloudRemote —
-	// resolve the selected remote by index into r.cloudMountDialogRemotes,
+	// resolve the selected remote by index into r.cloud.MountDialogRemotes,
 	// never by comparing the dropdown's own (now padded) text.
 	rawOptions := append([]string{cloudMountDialogCreateNewOption}, names...)
 	options := make([]string, len(rawOptions))
@@ -508,7 +544,7 @@ func (r *Root) openCloudMountCreateDialog(preselect string, editing *rclone.Moun
 		}
 		options[i] = opt
 	}
-	r.cloudMountDialogRemoteField.SetOptions(options, func(text string, index int) {
+	r.cloud.MountDialogRemoteField.SetOptions(options, func(text string, index int) {
 		// Delete makes no sense for the "+ Create new remote…"
 		// sentinel (nothing real to delete yet) — rebuild the button
 		// row to match, the same "which buttons are in the Flex
@@ -547,19 +583,19 @@ func (r *Root) openCloudMountCreateDialog(preselect string, editing *rclone.Moun
 	} else if len(names) > 0 {
 		selectedIndex = 1
 	}
-	r.cloudMountDialogRemoteField.SetCurrentOption(selectedIndex)
+	r.cloud.MountDialogRemoteField.SetCurrentOption(selectedIndex)
 	switch {
 	case editing != nil:
 		// The entry's own real values, not the computed default — an
 		// edit should show exactly what's already saved, including a
 		// Target that was never the default to begin with.
-		r.cloudMountDialogTargetField.SetText(editing.Target)
-		r.cloudMountDialogIdentifierField.SetText(editing.Identifier)
-		r.cloudMountDialogTagsField.SetText(strings.Join(editing.Tags, ", "))
+		r.cloud.MountDialogTargetField.SetText(editing.Target)
+		r.cloud.MountDialogIdentifierField.SetText(editing.Identifier)
+		r.cloud.MountDialogTagsField.SetText(strings.Join(editing.Tags, ", "))
 	case selectedIndex > 0:
-		r.cloudMountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(names[selectedIndex-1]))
-		r.cloudMountDialogIdentifierField.SetText("")
-		r.cloudMountDialogTagsField.SetText("")
+		r.cloud.MountDialogTargetField.SetText(r.cloudMountDialogDefaultTarget(names[selectedIndex-1]))
+		r.cloud.MountDialogIdentifierField.SetText("")
+		r.cloud.MountDialogTagsField.SetText("")
 	default:
 		// cloudMountDialogUniqueUnconfiguredTarget's own default, not
 		// "" — leaving Target blank here would make OK silently do
@@ -573,14 +609,14 @@ func (r *Root) openCloudMountCreateDialog(preselect string, editing *rclone.Moun
 		// second placeholder was saved without first hand-editing
 		// Target (see cloudMountDialogUniqueUnconfiguredTarget's own
 		// doc comment).
-		r.cloudMountDialogTargetField.SetText(r.cloudMountDialogUniqueUnconfiguredTarget())
-		r.cloudMountDialogIdentifierField.SetText("")
-		r.cloudMountDialogTagsField.SetText("")
+		r.cloud.MountDialogTargetField.SetText(r.cloudMountDialogUniqueUnconfiguredTarget())
+		r.cloud.MountDialogIdentifierField.SetText("")
+		r.cloud.MountDialogTagsField.SetText("")
 	}
 	r.setCloudMountDialogButtonsMode(selectedIndex != 0)
 
 	r.styleCloudMountDialogFields()
-	r.showOverlay(cloudMountDialogPage, r.cloudMountDialogLayout)
+	r.showOverlay(cloudMountDialogPage, r.cloud.MountDialogLayout)
 }
 
 // runAddCloudMount validates the current form, creates the target
@@ -594,7 +630,7 @@ func (r *Root) openCloudMountCreateDialog(preselect string, editing *rclone.Moun
 // comment on why), and toggleCloudMount is right there in the merged
 // list the moment this dialog closes.
 func (r *Root) saveCloudMountEntry() (rclone.MountEntry, bool) {
-	// Resolved by index into r.cloudMountDialogRemotes, not by reading
+	// Resolved by index into r.cloud.MountDialogRemotes, not by reading
 	// the dropdown's own current option text back — that text is now
 	// right-padded to the field's own width (see
 	// openCloudMountCreateDialog's own doc comment on why), which
@@ -607,33 +643,33 @@ func (r *Root) saveCloudMountEntry() (rclone.MountEntry, bool) {
 	// MountEntry whose own RemoteName doesn't resolve to a real rclone
 	// remote (toggleCloudMount's own real Mount call is the one place
 	// that actually finds out, same as it always was).
-	index, _ := r.cloudMountDialogRemoteField.GetCurrentOption()
+	index, _ := r.cloud.MountDialogRemoteField.GetCurrentOption()
 	var remoteName string
-	if index < 1 || index-1 >= len(r.cloudMountDialogRemotes) {
+	if index < 1 || index-1 >= len(r.cloud.MountDialogRemotes) {
 		remoteName = cloudMountDialogUnconfiguredRemoteName
 	} else {
-		remoteName = r.cloudMountDialogRemotes[index-1]
+		remoteName = r.cloud.MountDialogRemotes[index-1]
 	}
-	target := strings.TrimSpace(r.cloudMountDialogTargetField.GetText())
+	target := strings.TrimSpace(r.cloud.MountDialogTargetField.GetText())
 	if target == "" {
 		return rclone.MountEntry{}, false
 	}
-	identifier := normalizeConnectIdentifier(r.cloudMountDialogIdentifierField.GetText())
-	tags := remotefs.ParseTags(r.cloudMountDialogTagsField.GetText())
+	identifier := normalizeConnectIdentifier(r.cloud.MountDialogIdentifierField.GetText())
+	tags := remotefs.ParseTags(r.cloud.MountDialogTagsField.GetText())
 
 	if err := rclone.EnsureMountDir(target); err != nil {
 		r.showError(err)
 		return rclone.MountEntry{}, false
 	}
 	entry := rclone.MountEntry{RemoteName: remoteName, Target: target, Identifier: identifier, Tags: tags}
-	if r.cloudMountDialogEditTarget != "" {
+	if r.cloud.MountDialogEditTarget != "" {
 		// Removed before adding, not updated in place — AddMountEntry's
 		// own duplicate-Target refusal (see internal/rclone/config.go)
 		// would otherwise block saving an edit that leaves Target
 		// unchanged (Identifier/Tags-only edits are the common case).
 		// This same remove-then-add also covers the Target-did-change
 		// case uniformly, with no separate code path needed for it.
-		if err := rclone.RemoveMountEntry(r.cloudMountDialogEditTarget); err != nil {
+		if err := rclone.RemoveMountEntry(r.cloud.MountDialogEditTarget); err != nil {
 			r.showError(err)
 			return rclone.MountEntry{}, false
 		}
@@ -642,7 +678,7 @@ func (r *Root) saveCloudMountEntry() (rclone.MountEntry, bool) {
 		r.showError(err)
 		return rclone.MountEntry{}, false
 	}
-	r.cloudMountDialogEditTarget = ""
+	r.cloud.MountDialogEditTarget = ""
 	return entry, true
 }
 
@@ -693,11 +729,11 @@ func (r *Root) runSaveAndMountCloudMount() {
 func (r *Root) runDeleteSelectedCloudRemote() {
 	// Resolved by index — see saveCloudMountEntry's own identical
 	// comment on why (the dropdown's own text is now right-padded).
-	index, _ := r.cloudMountDialogRemoteField.GetCurrentOption()
-	if index < 1 || index-1 >= len(r.cloudMountDialogRemotes) {
+	index, _ := r.cloud.MountDialogRemoteField.GetCurrentOption()
+	if index < 1 || index-1 >= len(r.cloud.MountDialogRemotes) {
 		return
 	}
-	remoteName := r.cloudMountDialogRemotes[index-1]
+	remoteName := r.cloud.MountDialogRemotes[index-1]
 
 	entries, err := rclone.LoadMountEntries()
 	if err != nil {
