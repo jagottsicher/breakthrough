@@ -2128,15 +2128,15 @@ func TestPasteCancelSpanIsEmptyWithNoPasteRunning(t *testing.T) {
 func TestRsyncCancelSpanClickOpensAConfirmation(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	r.rsyncJob = &rsyncJob{ctx: ctx, cancel: cancel}
+	r.rsync.Job = &rsyncJob{ctx: ctx, cancel: cancel}
 	r.statusBar.SetRect(0, 0, 120, 1)
 	r.refreshStatusBar()
 
-	if r.rsyncCancelSpan.endCol <= r.rsyncCancelSpan.startCol {
-		t.Fatalf("rsyncCancelSpan = %+v, want a real, non-empty column range", r.rsyncCancelSpan)
+	if r.rsync.CancelSpan.endCol <= r.rsync.CancelSpan.startCol {
+		t.Fatalf("rsync.CancelSpan = %+v, want a real, non-empty column range", r.rsync.CancelSpan)
 	}
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
-	x := rectX + (r.rsyncCancelSpan.startCol+r.rsyncCancelSpan.endCol)/2
+	x := rectX + (r.rsync.CancelSpan.startCol+r.rsync.CancelSpan.endCol)/2
 	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
 
 	r.captureStatusBarMouse(tview.MouseLeftClick, event)
@@ -2154,8 +2154,8 @@ func TestRsyncCancelSpanIsEmptyWithNoRsyncRunning(t *testing.T) {
 	r.statusBar.SetRect(0, 0, 80, 1)
 	r.refreshStatusBar()
 
-	if r.rsyncCancelSpan.run != nil {
-		t.Error("rsyncCancelSpan has a run func with no rsync running, want the zero value")
+	if r.rsync.CancelSpan.run != nil {
+		t.Error("rsync.CancelSpan has a run func with no rsync running, want the zero value")
 	}
 }
 

@@ -214,7 +214,7 @@ func TestConfirmingQuitWhilePastingCancelsTheJobThenQuits(t *testing.T) {
 func TestRequestCancelAsksBeforeCancellingRsyncAndCompress(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	rctx, rcancel := context.WithCancel(context.Background())
-	r.rsyncJob = &rsyncJob{ctx: rctx, cancel: rcancel}
+	r.rsync.Job = &rsyncJob{ctx: rctx, cancel: rcancel}
 	cctx, ccancel := context.WithCancel(context.Background())
 	r.compress.Job = &compressJob{ctx: cctx, cancel: ccancel}
 
@@ -223,7 +223,7 @@ func TestRequestCancelAsksBeforeCancellingRsyncAndCompress(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want the confirmation dialog open", r.activePage)
 	}
-	if r.rsyncJob == nil || r.compress.Job == nil {
+	if r.rsync.Job == nil || r.compress.Job == nil {
 		t.Error("neither job should be cancelled yet — only asked about so far")
 	}
 }
@@ -237,8 +237,8 @@ func TestRequestCancelConfirmedCancelsBothRsyncAndCompressAndBothQueues(t *testi
 	r := newTestRootForRsyncJob(t)
 	rctx, rcancel := context.WithCancel(context.Background())
 	rjob := &rsyncJob{ctx: rctx, cancel: rcancel}
-	r.rsyncJob = rjob
-	r.rsyncQueue = []queuedRsync{{label: "queued rsync"}}
+	r.rsync.Job = rjob
+	r.rsync.Queue = []queuedRsync{{label: "queued rsync"}}
 	cctx, ccancel := context.WithCancel(context.Background())
 	cjob := &compressJob{ctx: cctx, cancel: ccancel}
 	r.compress.Job = cjob
@@ -253,7 +253,7 @@ func TestRequestCancelConfirmedCancelsBothRsyncAndCompressAndBothQueues(t *testi
 	if cjob.ctx.Err() == nil {
 		t.Error("the compress job should be cancelled")
 	}
-	if len(r.rsyncQueue) != 0 {
+	if len(r.rsync.Queue) != 0 {
 		t.Error("the rsync queue should have been dropped too")
 	}
 	if len(r.compress.Queue) != 0 {

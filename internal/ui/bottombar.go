@@ -464,13 +464,13 @@ func (r *Root) buildStatusBar() string {
 	// running at the same time (see rsyncjob.go's own package doc
 	// comment): both get their own segment rather than one having to
 	// yield to the other the way paste and the clipboard indicator do.
-	r.rsyncCancelSpan = buttonBarSpan{}
-	if r.rsyncJob != nil {
-		write(rsyncProgressText(r.rsyncJob, len(r.rsyncQueue)))
+	r.rsync.CancelSpan = buttonBarSpan{}
+	if r.rsync.Job != nil {
+		write(rsyncProgressText(r.rsync.Job, len(r.rsync.Queue)))
 		write(" ")
 		rsyncCancelStart := col
 		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
-		r.rsyncCancelSpan = buttonBarSpan{startCol: rsyncCancelStart, endCol: col, run: func(r *Root) { r.confirmCancelCurrentRsync() }}
+		r.rsync.CancelSpan = buttonBarSpan{startCol: rsyncCancelStart, endCol: col, run: func(r *Root) { r.confirmCancelCurrentRsync() }}
 		sep()
 	}
 
@@ -563,7 +563,7 @@ func (r *Root) buildStatusBar() string {
 	}
 	// Stale otherwise — same "zero-value, never matches a click" shape
 	// every other optional segment's own span already follows (see
-	// pasteCancelSpan/rsyncCancelSpan/compress.CancelSpan/
+	// pasteCancelSpan/rsync.CancelSpan/compress.CancelSpan/
 	// labelScanCancelSpan just above): without this, a click at this
 	// segment's last-known column could still fire after Git Status
 	// itself is toggled off or the panel leaves a repo.
@@ -1207,7 +1207,7 @@ func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.Even
 	x, _ := event.Position()
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
 	col := x - rectX
-	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsyncCancelSpan, r.compress.CancelSpan, r.labelScanCancelSpan, r.gitStatusSpan} {
+	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsync.CancelSpan, r.compress.CancelSpan, r.labelScanCancelSpan, r.gitStatusSpan} {
 		if span.run != nil && col >= span.startCol && col < span.endCol {
 			span.run(r)
 			break

@@ -293,7 +293,7 @@ func (r *Root) selectedTransferCenterOperation() (operations.Operation, bool) {
 // selected row's own Operation.ID back to whichever live job it belongs
 // to, if any, and calls that job's own existing cancel function rather
 // than building a second ID→job registry this package would have to
-// keep in sync: Root already knows (r.pasteJob.opID/r.rsyncJob.opID),
+// keep in sync: Root already knows (r.pasteJob.opID/r.rsync.Job.opID),
 // and there's at most one of each live at a time. A row with no live
 // job behind it (already finished, or belongs to neither) is simply
 // left alone.
@@ -305,7 +305,7 @@ func (r *Root) cancelSelectedTransferCenterOperation() {
 	switch {
 	case r.pasteJob != nil && r.pasteJob.opID == op.ID:
 		r.cancelPasteJob()
-	case r.rsyncJob != nil && r.rsyncJob.opID == op.ID:
+	case r.rsync.Job != nil && r.rsync.Job.opID == op.ID:
 		r.cancelRsyncJob()
 	}
 }
