@@ -237,7 +237,7 @@ func TestFinishRsyncJobReloadsTheDestinationPanel(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path}
-	r.rsyncJob = job
+	r.rsync.Job = job
 
 	if err := os.WriteFile(filepath.Join(r.panel.path, "synced.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -254,7 +254,7 @@ func TestFinishRsyncJobReloadsTheDestinationPanel(t *testing.T) {
 	if !found {
 		t.Error("panel was not reloaded after the rsync job finished — synced.txt is missing")
 	}
-	if r.rsyncJob != nil {
+	if r.rsync.Job != nil {
 		t.Error("rsyncJob should be cleared once finished")
 	}
 }
@@ -263,7 +263,7 @@ func TestFinishRsyncJobReportsARealError(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path}
-	r.rsyncJob = job
+	r.rsync.Job = job
 
 	r.finishRsyncJob(job, errors.New("rsync: boom"))
 
@@ -277,7 +277,7 @@ func TestFinishRsyncJobLogsAnAction(t *testing.T) {
 	readLog := attachTestActivityLog(t, r)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
-	r.rsyncJob = job
+	r.rsync.Job = job
 
 	r.finishRsyncJob(job, nil)
 
@@ -292,7 +292,7 @@ func TestFinishRsyncJobLogsAnError(t *testing.T) {
 	readLog := attachTestActivityLog(t, r)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
-	r.rsyncJob = job
+	r.rsync.Job = job
 
 	r.finishRsyncJob(job, errors.New("rsync: boom"))
 
@@ -307,7 +307,7 @@ func TestFinishRsyncJobPushesANotificationOnSuccess(t *testing.T) {
 	readNotify := attachTestNotify(t, r)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
-	r.rsyncJob = job
+	r.rsync.Job = job
 
 	r.finishRsyncJob(job, nil)
 
@@ -328,7 +328,7 @@ func TestFinishRsyncJobPushesANotificationOnError(t *testing.T) {
 	readNotify := attachTestNotify(t, r)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
-	r.rsyncJob = job
+	r.rsync.Job = job
 
 	r.finishRsyncJob(job, errors.New("rsync: boom"))
 
@@ -349,7 +349,7 @@ func TestFinishRsyncJobDoesNotPushANotificationWhenCancelled(t *testing.T) {
 	readNotify := attachTestNotify(t, r)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
-	r.rsyncJob = job
+	r.rsync.Job = job
 
 	cancel()
 	r.finishRsyncJob(job, errors.New("signal: killed"))
@@ -364,7 +364,7 @@ func TestFinishRsyncJobDoesNotLogWhenCancelled(t *testing.T) {
 	readLog := attachTestActivityLog(t, r)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
-	r.rsyncJob = job
+	r.rsync.Job = job
 
 	cancel()
 	r.finishRsyncJob(job, errors.New("signal: killed"))
@@ -383,7 +383,7 @@ func TestFinishRsyncJobSuppressesErrorWhenCancelled(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path}
-	r.rsyncJob = job
+	r.rsync.Job = job
 
 	cancel() // simulate cancelRsyncJob already having run
 	r.finishRsyncJob(job, errors.New("signal: killed"))
@@ -397,19 +397,19 @@ func TestFinishRsyncJobStartsTheNextQueuedRun(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path}
-	r.rsyncJob = job
-	r.rsyncQueue = []queuedRsync{{
+	r.rsync.Job = job
+	r.rsync.Queue = []queuedRsync{{
 		job:   rsync.Job{Source: rsync.Endpoint{Path: filepath.Join(r.panel.path, "a.txt")}, Destination: rsync.Endpoint{Path: t.TempDir()}},
 		label: "queued",
 	}}
 
 	r.finishRsyncJob(job, nil)
 
-	if r.rsyncJob == nil {
+	if r.rsync.Job == nil {
 		t.Fatal("expected the queued run to have started")
 	}
-	if r.rsyncJob.label != "queued" {
-		t.Errorf("started job label = %q, want %q", r.rsyncJob.label, "queued")
+	if r.rsync.Job.label != "queued" {
+		t.Errorf("started job label = %q, want %q", r.rsync.Job.label, "queued")
 	}
 	r.cancelRsyncJob() // don't leave a real rsync process running past this test
 }
@@ -418,16 +418,16 @@ func TestCancelRsyncJobStopsTheProcessAndClearsTheQueue(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel}
-	r.rsyncJob = job
-	r.rsyncQueue = []queuedRsync{{label: "queued"}}
+	r.rsync.Job = job
+	r.rsync.Queue = []queuedRsync{{label: "queued"}}
 
 	r.cancelRsyncJob()
 
 	if job.ctx.Err() == nil {
 		t.Error("job's own context should be cancelled")
 	}
-	if len(r.rsyncQueue) != 0 {
-		t.Error("rsyncQueue should be cleared by a deliberate cancel")
+	if len(r.rsync.Queue) != 0 {
+		t.Error("rsync.Queue should be cleared by a deliberate cancel")
 	}
 }
 
@@ -440,8 +440,8 @@ func TestCancelRsyncKeepQueueStopsOnlyCurrentAndStartsNext(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &rsyncJob{ctx: ctx, cancel: cancel}
-	r.rsyncJob = job
-	r.rsyncQueue = []queuedRsync{{
+	r.rsync.Job = job
+	r.rsync.Queue = []queuedRsync{{
 		job:   rsync.Job{Source: rsync.Endpoint{Path: filepath.Join(r.panel.path, "a.txt")}, Destination: rsync.Endpoint{Path: t.TempDir()}},
 		label: "queued",
 	}}
@@ -451,11 +451,11 @@ func TestCancelRsyncKeepQueueStopsOnlyCurrentAndStartsNext(t *testing.T) {
 	if job.ctx.Err() == nil {
 		t.Error("the cancelled job's own context should report an error")
 	}
-	if len(r.rsyncQueue) != 0 {
+	if len(r.rsync.Queue) != 0 {
 		t.Error("the queued entry should have started, not stayed queued")
 	}
-	if r.rsyncJob == nil || r.rsyncJob.label != "queued" {
-		t.Errorf("r.rsyncJob = %+v, want the queued run started", r.rsyncJob)
+	if r.rsync.Job == nil || r.rsync.Job.label != "queued" {
+		t.Errorf("r.rsync.Job = %+v, want the queued run started", r.rsync.Job)
 	}
 	r.cancelRsyncJob() // don't leave a real rsync process running past this test
 }
@@ -469,23 +469,23 @@ func TestCancelRsyncKeepQueueStopsOnlyCurrentAndStartsNext(t *testing.T) {
 func TestCancelRsyncKeepQueueIsANoOpWhenNothingRunning(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	r.cancelRsyncKeepQueue() // must not panic
-	if r.rsyncJob != nil {
-		t.Error("r.rsyncJob should still be nil")
+	if r.rsync.Job != nil {
+		t.Error("r.rsync.Job should still be nil")
 	}
 }
 
 func TestRunRsyncBackgroundRefusesAnEmptyDestination(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText(r.panel.path)
-	r.rsyncDestinationField.SetText("")
+	r.rsync.SourceField.SetText(r.panel.path)
+	r.rsync.DestinationField.SetText("")
 
 	r.runRsyncBackground()
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want %q for an empty Destination", r.activePage, errorPage)
 	}
-	if r.rsyncJob != nil {
+	if r.rsync.Job != nil {
 		t.Error("no background job should have started")
 	}
 }
@@ -521,14 +521,14 @@ func TestReallyStartRsyncBackgroundNeverChdirsIntoARemotePanelsOwnPath(t *testin
 	}
 
 	r.reallyStartRsyncBackground(job, "test")
-	if r.rsyncJob != nil {
-		defer r.rsyncJob.cancel()
+	if r.rsync.Job != nil {
+		defer r.rsync.Job.cancel()
 	}
 
-	if r.rsyncJob == nil {
+	if r.rsync.Job == nil {
 		t.Fatal("reallyStartRsyncBackground did not start a job — cmd.Start likely failed because of a bad cmd.Dir")
 	}
-	if got := r.rsyncJob.cmd.Dir; got != "" {
+	if got := r.rsync.Job.cmd.Dir; got != "" {
 		t.Errorf("cmd.Dir = %q, want empty — a remote panel's own path is never a real local directory to chdir into", got)
 	}
 }

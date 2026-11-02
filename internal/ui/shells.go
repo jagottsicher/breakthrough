@@ -73,7 +73,7 @@ var startShellSession = termtab.Start
 // openNewShellEmbedded starts a new embedded Shell against conn and
 // switches to it immediately — the Shells-menu's own "+ New shell…"
 // row and (once a connection is actually chosen there, see
-// sshShellSubmit) the dialog it opens both end here.
+// ssh.ShellSubmit) the dialog it opens both end here.
 //
 // A failure to start (bad command, pty allocation failure — not "ssh
 // itself couldn't connect", which Session's own background process
@@ -206,7 +206,7 @@ func TerminalReservedKey(event *tcell.EventKey) bool {
 // openSSHShellDialog itself already has for the "gs" dropdown's own
 // Edit column.
 func (r *Root) openNewTerminalDialog(prefill remotefs.Connection) {
-	r.sshShellSubmit = r.openNewShellEmbedded
+	r.ssh.ShellSubmit = r.openNewShellEmbedded
 	r.openSSHShellDialog(prefill)
 }
 

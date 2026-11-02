@@ -154,8 +154,8 @@ func TestTerminalStripPlusClickOpensTheNewTerminalDialog(t *testing.T) {
 	if r.activePage != sshShellDialogPage {
 		t.Errorf("activePage after clicking the terminal strip's + = %q, want %q", r.activePage, sshShellDialogPage)
 	}
-	if r.sshShellSubmit == nil {
-		t.Error("sshShellSubmit wasn't set — the dialog would fall back to the default ssh launcher")
+	if r.ssh.ShellSubmit == nil {
+		t.Error("ssh.ShellSubmit wasn't set — the dialog would fall back to the default ssh launcher")
 	}
 }
 

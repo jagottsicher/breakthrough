@@ -47,7 +47,29 @@ const (
 	optionsCategoryWidth = 20
 )
 
-// Column indices within optionsTable. Named rather than inline literals
+// optionsState holds the Options screen's widgets and the currently
+// selected category/explanation/editor overlays.
+type optionsState struct {
+	Layout                *tview.Flex
+	TitleBar              *tview.TextView
+	Hint                  *tview.TextView
+	HintSpans             []listHintSpan
+	Categories            *tview.List
+	Table                 *tview.Table
+	Buttons               *tview.Flex
+	ResetCategoryBtn      *tview.Button
+	ResetAllBtn           *tview.Button
+	EditFileBtn           *tview.Button
+	NewSchemeBtn          *tview.Button
+	RemoveOrphanLabelsBtn *tview.Button
+	EditSystemPromptBtn   *tview.Button
+	ResetSystemPromptBtn  *tview.Button
+	Category              int
+	Info                  *tview.TextView
+	Input                 *tview.InputField
+}
+
+// Column indices within options.Table. Named rather than inline literals
 // because captureOptionsTableMouse maps a click's column back to an
 // action through exactly these.
 // The info button deliberately comes before the default hint, even
@@ -105,7 +127,7 @@ func padRight(s string, width int) string {
 // own doc comment.
 func optionsHintEntries() []listHintEntry {
 	change := func(r *Root) {
-		row, _ := r.optionsTable.GetSelection()
+		row, _ := r.options.Table.GetSelection()
 		r.activateOptionRow(row)
 	}
 	return []listHintEntry{
@@ -122,7 +144,7 @@ func optionsHintEntries() []listHintEntry {
 			{"Space", change},
 		}, label: "change"},
 		hintKey("?", "explain", func(r *Root) {
-			row, _ := r.optionsTable.GetSelection()
+			row, _ := r.options.Table.GetSelection()
 			if opt, ok := r.optionAtRow(row); ok {
 				r.showOptionInfo(opt)
 			}
@@ -138,65 +160,65 @@ func optionsHintEntries() []listHintEntry {
 // rebuilt per open (see openOptions/renderOptions); the widgets
 // themselves live for the application's lifetime.
 func (r *Root) newOptionsScreen() {
-	r.optionsCategories = tview.NewList().ShowSecondaryText(false)
-	r.optionsCategories.SetHighlightFullLine(true)
-	r.optionsCategories.SetBorderPadding(1, 0, 1, 1)
+	r.options.Categories = tview.NewList().ShowSecondaryText(false)
+	r.options.Categories.SetHighlightFullLine(true)
+	r.options.Categories.SetBorderPadding(1, 0, 1, 1)
 	// Selecting a category is a pure navigation act, so it happens on
 	// mere cursor movement rather than needing Enter — moving down the
 	// list walks through the categories, which is what someone
 	// exploring the settings expects.
-	r.optionsCategories.SetChangedFunc(func(index int, _, _ string, _ rune) {
-		r.optionsCategory = index
+	r.options.Categories.SetChangedFunc(func(index int, _, _ string, _ rune) {
+		r.options.Category = index
 		r.renderOptions()
 		r.refreshConsigliereModelCacheIfSelected()
 	})
 
-	r.optionsTable = tview.NewTable()
-	r.optionsTable.SetBorders(false)
+	r.options.Table = tview.NewTable()
+	r.options.Table.SetBorders(false)
 	// Top padding of 1 to line the first setting up with the first
 	// category across the divider, and 2 columns of left padding so the
 	// labels don't hug it.
-	r.optionsTable.SetBorderPadding(1, 0, 2, 1)
-	r.optionsTable.SetSelectable(true, false) // whole rows: one setting per row
-	r.optionsTable.SetSelectedFunc(func(row, _ int) { r.activateOptionRow(row) })
-	r.optionsTable.SetMouseCapture(r.captureOptionsTableMouse)
+	r.options.Table.SetBorderPadding(1, 0, 2, 1)
+	r.options.Table.SetSelectable(true, false) // whole rows: one setting per row
+	r.options.Table.SetSelectedFunc(func(row, _ int) { r.activateOptionRow(row) })
+	r.options.Table.SetMouseCapture(r.captureOptionsTableMouse)
 
-	r.optionsTitleBar = tview.NewTextView()
-	r.optionsTitleBar.SetWrap(false)
-	r.optionsTitleBar.SetText(" Options ")
+	r.options.TitleBar = tview.NewTextView()
+	r.options.TitleBar.SetWrap(false)
+	r.options.TitleBar.SetText(" Options ")
 
-	r.optionsHint = tview.NewTextView()
-	r.optionsHint.SetWrap(false)
-	r.optionsHint.SetDynamicColors(true)
-	optionsHintText, optionsHintSpans := buildListHint(r.theme, optionsHintEntries())
-	r.optionsHint.SetText(optionsHintText)
-	r.optionsHintSpans = optionsHintSpans
-	r.optionsHint.SetMouseCapture(r.captureListHintMouse(r.optionsHint, &r.optionsHintSpans))
+	r.options.Hint = tview.NewTextView()
+	r.options.Hint.SetWrap(false)
+	r.options.Hint.SetDynamicColors(true)
+	optionsHintText, hintSpans := buildListHint(r.theme, optionsHintEntries())
+	r.options.Hint.SetText(optionsHintText)
+	r.options.HintSpans = hintSpans
+	r.options.Hint.SetMouseCapture(r.captureListHintMouse(r.options.Hint, &r.options.HintSpans))
 
-	r.optionsButtons = r.newOptionsButtons()
+	r.options.Buttons = r.newOptionsButtons()
 
 	// The right-hand pane: the settings of the selected category, with
 	// the action buttons pinned underneath them.
 	rightPane := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.optionsTable, 0, 1, true).
-		AddItem(r.optionsButtons, 1, 0, false)
+		AddItem(r.options.Table, 0, 1, true).
+		AddItem(r.options.Buttons, 1, 0, false)
 
 	body := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.optionsCategories, optionsCategoryWidth, 0, false).
+		AddItem(r.options.Categories, optionsCategoryWidth, 0, false).
 		AddItem(rightPane, 0, 1, true)
 
-	r.optionsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.optionsTitleBar, 1, 0, false).
+	r.options.Layout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.options.TitleBar, 1, 0, false).
 		AddItem(body, 0, 1, true).
-		AddItem(r.optionsHint, 1, 0, false)
+		AddItem(r.options.Hint, 1, 0, false)
 
 	// The info popup (see showOptionInfo) — a small centered window on
 	// top of the screen, closed by Escape or a click outside it, exactly
 	// like every other overlay layered on another.
-	r.optionsInfo = tview.NewTextView()
-	r.optionsInfo.SetWrap(true)
-	r.optionsInfo.SetWordWrap(true)
-	r.optionsInfo.SetBorderPadding(1, 1, 2, 2)
+	r.options.Info = tview.NewTextView()
+	r.options.Info.SetWrap(true)
+	r.options.Info.SetWordWrap(true)
+	r.options.Info.SetBorderPadding(1, 1, 2, 2)
 	// A real, reported gap: the comment above (and the popup's own
 	// "Escape or a click outside closes this" footer — see
 	// showOptionInfo) claimed Escape already worked, but
@@ -206,20 +228,20 @@ func (r *Root) newOptionsScreen() {
 	// nothing at all, leaving no keyboard way out of this popup
 	// whatsoever (only the mouse-only captureOutsideClick). The same
 	// SetDoneFunc newHelpView/the error popup already have.
-	r.optionsInfo.SetDoneFunc(func(tcell.Key) { r.hideOverlay() })
+	r.options.Info.SetDoneFunc(func(tcell.Key) { r.hideOverlay() })
 
 	// One shared input field for a typed value, repopulated per use —
 	// the same "one widget, reused" pattern r.prompt already follows.
 	// Enum settings need no widget of their own: activating the row
 	// cycles them in place (see cycleOptionChoice).
-	r.optionsInput = tview.NewInputField()
+	r.options.Input = tview.NewInputField()
 
 	// The shared Tab/Escape handling (see captureOptionsKey) goes on the
 	// two list-like stops here; the buttons get theirs in
 	// newOptionsButtons, where their own actions are already in scope.
 	// Both panes additionally get the left/right arrow keys that move
 	// between them (see captureOptionsPaneArrows).
-	r.optionsCategories.SetInputCapture(chainKeyCaptures(r.captureOptionsKey, r.captureOptionsPaneArrows))
+	r.options.Categories.SetInputCapture(chainKeyCaptures(r.captureOptionsKey, r.captureOptionsPaneArrows))
 
 	// Which pane has keyboard focus has to be visible — without it the
 	// two selected rows look identical and there's no telling which one
@@ -234,15 +256,15 @@ func (r *Root) newOptionsScreen() {
 	// clearing the focus flag, so the answer there is wrong, the same
 	// trap Panel.setSelectionStyle documents. Each pane simply states
 	// its own new state, which is never ambiguous.
-	r.optionsCategories.SetFocusFunc(func() { r.setOptionsPaneFocused(r.optionsCategories, true) })
-	r.optionsCategories.SetBlurFunc(func() { r.setOptionsPaneFocused(r.optionsCategories, false) })
-	r.optionsTable.SetFocusFunc(func() { r.setOptionsPaneFocused(r.optionsTable, true) })
-	r.optionsTable.SetBlurFunc(func() { r.setOptionsPaneFocused(r.optionsTable, false) })
+	r.options.Categories.SetFocusFunc(func() { r.setOptionsPaneFocused(r.options.Categories, true) })
+	r.options.Categories.SetBlurFunc(func() { r.setOptionsPaneFocused(r.options.Categories, false) })
+	r.options.Table.SetFocusFunc(func() { r.setOptionsPaneFocused(r.options.Table, true) })
+	r.options.Table.SetBlurFunc(func() { r.setOptionsPaneFocused(r.options.Table, false) })
 	// Neither pane has been focused yet, so start both in the unfocused
 	// look; the first real focus event corrects whichever one gains it.
-	r.setOptionsPaneFocused(r.optionsCategories, false)
-	r.setOptionsPaneFocused(r.optionsTable, false)
-	r.optionsTable.SetInputCapture(chainKeyCaptures(r.captureOptionsKey,
+	r.setOptionsPaneFocused(r.options.Categories, false)
+	r.setOptionsPaneFocused(r.options.Table, false)
+	r.options.Table.SetInputCapture(chainKeyCaptures(r.captureOptionsKey,
 		chainKeyCaptures(r.captureOptionsPaneArrows, r.captureOptionsTableKey)))
 }
 
@@ -274,10 +296,10 @@ func (r *Root) newOptionsButtons() *tview.Flex {
 		action func()
 	}
 	specs := []buttonSpec{
-		{&r.optionsResetCategoryBtn, "Reset category", r.resetCurrentOptionCategory},
-		{&r.optionsResetAllBtn, "Reset all", r.resetAllOptions},
-		{&r.optionsEditFileBtn, "Edit config file", r.editConfigFile},
-		{&r.optionsNewSchemeBtn, "New color scheme", r.duplicateColorScheme},
+		{&r.options.ResetCategoryBtn, "Reset category", r.resetCurrentOptionCategory},
+		{&r.options.ResetAllBtn, "Reset all", r.resetAllOptions},
+		{&r.options.EditFileBtn, "Edit config file", r.editConfigFile},
+		{&r.options.NewSchemeBtn, "New color scheme", r.duplicateColorScheme},
 		// Not tied to whichever category happens to be selected (unlike
 		// every button above, which all act on "the current category"
 		// or the whole screen) — placed here anyway rather than inside
@@ -285,7 +307,7 @@ func (r *Root) newOptionsButtons() *tview.Flex {
 		// there is a typed get/set setting (see optionSpec) and this is
 		// an action, not a value. The whole row of buttons is always
 		// visible regardless of category, the same as the three above.
-		{&r.optionsRemoveOrphanLabelsBtn, "Remove orphaned labels", r.startOrphanLabelScan},
+		{&r.options.RemoveOrphanLabelsBtn, "Remove orphaned labels", r.startOrphanLabelScan},
 		// Same "always visible, acts on one specific category"
 		// reasoning as "New color scheme" above — the AI Consigliere's
 		// own system prompt is a whole file (see
@@ -293,8 +315,8 @@ func (r *Root) newOptionsButtons() *tview.Flex {
 		// setting editOptionValue's own input field could edit, so it
 		// gets its own editor-opening action here instead of a row in
 		// the settings table.
-		{&r.optionsEditSystemPromptBtn, "Edit system prompt", r.editConsigliereSystemPrompt},
-		{&r.optionsResetSystemPromptBtn, "Reset system prompt", r.resetConsigliereSystemPrompt},
+		{&r.options.EditSystemPromptBtn, "Edit system prompt", r.editConsigliereSystemPrompt},
+		{&r.options.ResetSystemPromptBtn, "Reset system prompt", r.resetConsigliereSystemPrompt},
 	}
 
 	row := tview.NewFlex().SetDirection(tview.FlexColumn)
@@ -316,13 +338,13 @@ func (r *Root) newOptionsButtons() *tview.Flex {
 // disagree about which buttons exist.
 func (r *Root) optionsButtonList() []*tview.Button {
 	return []*tview.Button{
-		r.optionsResetCategoryBtn,
-		r.optionsResetAllBtn,
-		r.optionsEditFileBtn,
-		r.optionsNewSchemeBtn,
-		r.optionsRemoveOrphanLabelsBtn,
-		r.optionsEditSystemPromptBtn,
-		r.optionsResetSystemPromptBtn,
+		r.options.ResetCategoryBtn,
+		r.options.ResetAllBtn,
+		r.options.EditFileBtn,
+		r.options.NewSchemeBtn,
+		r.options.RemoveOrphanLabelsBtn,
+		r.options.EditSystemPromptBtn,
+		r.options.ResetSystemPromptBtn,
 	}
 }
 
@@ -334,7 +356,7 @@ func (r *Root) optionsButtonList() []*tview.Button {
 // the order has to be deliberate and stable, and Tab has to wrap rather
 // than dead-end on the last button.
 func (r *Root) optionsFocusRing() []tview.Primitive {
-	ring := []tview.Primitive{r.optionsCategories, r.optionsTable}
+	ring := []tview.Primitive{r.options.Categories, r.options.Table}
 	for _, b := range r.optionsButtonList() {
 		ring = append(ring, b)
 	}
@@ -407,13 +429,13 @@ func (r *Root) captureOptionsKey(event *tcell.EventKey) *tcell.EventKey {
 func (r *Root) captureOptionsPaneArrows(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyRight:
-		if r.optionsCategories.HasFocus() {
-			r.app.SetFocus(r.optionsTable)
+		if r.options.Categories.HasFocus() {
+			r.app.SetFocus(r.options.Table)
 			return nil
 		}
 	case tcell.KeyLeft:
-		if r.optionsTable.HasFocus() {
-			r.app.SetFocus(r.optionsCategories)
+		if r.options.Table.HasFocus() {
+			r.app.SetFocus(r.options.Categories)
 			return nil
 		}
 	}
@@ -423,8 +445,8 @@ func (r *Root) captureOptionsPaneArrows(event *tcell.EventKey) *tcell.EventKey {
 // openOptions shows the Options screen, rebuilt from the settings
 // currently in force.
 func (r *Root) openOptions() {
-	if r.optionsCategory < 0 || r.optionsCategory >= len(optionCategories()) {
-		r.optionsCategory = 0
+	if r.options.Category < 0 || r.options.Category >= len(optionCategories()) {
+		r.options.Category = 0
 	}
 	r.renderOptionCategories()
 	r.renderOptions()
@@ -439,8 +461,8 @@ func (r *Root) openOptions() {
 	// the screen should land on "Appearance" selected on the left, not
 	// already inside its settings on the right, so Right/Tab is what
 	// actually moves you in rather than starting there automatically.
-	r.showOverlayWithRestore(optionsPage, r.optionsLayout, func() {
-		r.app.SetFocus(r.optionsCategories)
+	r.showOverlayWithRestore(optionsPage, r.options.Layout, func() {
+		r.app.SetFocus(r.options.Categories)
 	})
 	r.refreshConsigliereModelCacheIfSelected()
 }
@@ -475,14 +497,14 @@ func (r *Root) renderOptionCategories() {
 	// renderOptions mid-rebuild against a half-populated list — detach
 	// it for the rebuild and restore it after, then set the selection
 	// deliberately.
-	r.optionsCategories.SetChangedFunc(nil)
-	r.optionsCategories.Clear()
+	r.options.Categories.SetChangedFunc(nil)
+	r.options.Categories.Clear()
 	for _, cat := range optionCategories() {
-		r.optionsCategories.AddItem(cat.name, "", 0, nil)
+		r.options.Categories.AddItem(cat.name, "", 0, nil)
 	}
-	r.optionsCategories.SetCurrentItem(r.optionsCategory)
-	r.optionsCategories.SetChangedFunc(func(index int, _, _ string, _ rune) {
-		r.optionsCategory = index
+	r.options.Categories.SetCurrentItem(r.options.Category)
+	r.options.Categories.SetChangedFunc(func(index int, _, _ string, _ rune) {
+		r.options.Category = index
 		r.renderOptions()
 		r.refreshConsigliereModelCacheIfSelected()
 	})
@@ -571,30 +593,30 @@ func optionCategoryDisplayRows(r *Root, cat optionCategory) []optionDisplayRow {
 // of a bare Select(0, 0), rather than risk landing the cursor on a
 // header it can never move off of with the arrow keys alone.
 func (r *Root) renderOptions() {
-	r.optionsTable.Clear()
+	r.options.Table.Clear()
 
 	categories := optionCategories()
-	if r.optionsCategory < 0 || r.optionsCategory >= len(categories) {
+	if r.options.Category < 0 || r.options.Category >= len(categories) {
 		return
 	}
 
-	for row, dr := range optionCategoryDisplayRows(r, categories[r.optionsCategory]) {
+	for row, dr := range optionCategoryDisplayRows(r, categories[r.options.Category]) {
 		if dr.blank {
-			r.optionsTable.SetCell(row, optionsColLabel, tview.NewTableCell("").SetSelectable(false))
-			r.optionsTable.SetCell(row, optionsColValue, tview.NewTableCell("").SetSelectable(false))
-			r.optionsTable.SetCell(row, optionsColDefault, tview.NewTableCell("").SetSelectable(false))
-			r.optionsTable.SetCell(row, optionsColInfo, tview.NewTableCell("").SetSelectable(false))
+			r.options.Table.SetCell(row, optionsColLabel, tview.NewTableCell("").SetSelectable(false))
+			r.options.Table.SetCell(row, optionsColValue, tview.NewTableCell("").SetSelectable(false))
+			r.options.Table.SetCell(row, optionsColDefault, tview.NewTableCell("").SetSelectable(false))
+			r.options.Table.SetCell(row, optionsColInfo, tview.NewTableCell("").SetSelectable(false))
 			continue
 		}
 		if dr.header != "" {
-			r.optionsTable.SetCell(row, optionsColLabel,
+			r.options.Table.SetCell(row, optionsColLabel,
 				tview.NewTableCell(padRight(dr.header, optionsLabelWidth)).
 					SetTextColor(r.theme.PlaceholderText).
 					SetAttributes(tcell.AttrBold).
 					SetSelectable(false))
-			r.optionsTable.SetCell(row, optionsColValue, tview.NewTableCell("").SetSelectable(false))
-			r.optionsTable.SetCell(row, optionsColDefault, tview.NewTableCell("").SetSelectable(false))
-			r.optionsTable.SetCell(row, optionsColInfo, tview.NewTableCell("").SetSelectable(false))
+			r.options.Table.SetCell(row, optionsColValue, tview.NewTableCell("").SetSelectable(false))
+			r.options.Table.SetCell(row, optionsColDefault, tview.NewTableCell("").SetSelectable(false))
+			r.options.Table.SetCell(row, optionsColInfo, tview.NewTableCell("").SetSelectable(false))
 			continue
 		}
 
@@ -618,13 +640,13 @@ func (r *Root) renderOptions() {
 			// the row is still visibly the cursor's.
 			labelCell.SetSelectedStyle(tcell.StyleDefault.Background(bg).Foreground(r.theme.Text))
 		}
-		r.optionsTable.SetCell(row, optionsColLabel, labelCell)
+		r.options.Table.SetCell(row, optionsColLabel, labelCell)
 
 		display := r.optionValueDisplay(opt)
 		if opt.restartHint {
 			display += "  (on next start)"
 		}
-		r.optionsTable.SetCell(row, optionsColValue,
+		r.options.Table.SetCell(row, optionsColValue,
 			tview.NewTableCell(padRight(display, optionsValueWidth)).
 				SetTextColor(r.theme.Text).
 				SetSelectable(true))
@@ -633,12 +655,12 @@ func (r *Root) renderOptions() {
 		// this is context for the value beside it, not a value in its
 		// own right, and a permanent marker on every row would be
 		// noise. See optionDefaultHint.
-		r.optionsTable.SetCell(row, optionsColDefault,
+		r.options.Table.SetCell(row, optionsColDefault,
 			tview.NewTableCell(padRight(r.optionDefaultHint(opt), optionsDefaultWidth)).
 				SetTextColor(r.theme.PlaceholderText).
 				SetSelectable(true))
 
-		r.optionsTable.SetCell(row, optionsColInfo,
+		r.options.Table.SetCell(row, optionsColInfo,
 			tview.NewTableCell(optionsInfoGlyph).
 				SetTextColor(r.theme.PlaceholderText).
 				SetSelectable(true))
@@ -646,8 +668,8 @@ func (r *Root) renderOptions() {
 
 	// Keep the cursor in range after a category switch shortened the
 	// list under it.
-	if row, _ := r.optionsTable.GetSelection(); row >= r.optionsTable.GetRowCount() {
-		r.optionsTable.Select(r.firstSelectableOptionsRow(), 0)
+	if row, _ := r.options.Table.GetSelection(); row >= r.options.Table.GetRowCount() {
+		r.options.Table.Select(r.firstSelectableOptionsRow(), 0)
 	}
 }
 
@@ -754,7 +776,7 @@ func (r *Root) renderOptionValue(opt optionSpec, value string) string {
 // consigliereModelOptionFor/consigliereEffortOptionFor in
 // optioncatalog.go) — optionDefaultHint/showOptionInfo both need to
 // single these out, regardless of which provider's own copy a given
-// row is, to surface consigliereModelFetchErr.
+// row is, to surface consigliere.ModelFetchErr.
 func isConsigliereModelOrEffortKey(key string) bool {
 	for _, provider := range []string{"anthropic", "openai", "deepseek", "gemini", "ollama", "custom"} {
 		if key == consigliereModelEffortKeyFor(provider, "model") || key == consigliereModelEffortKeyFor(provider, "effort") {
@@ -772,11 +794,11 @@ func (r *Root) optionDefaultHint(opt optionSpec) string {
 	// silent, since a failed fetch otherwise looks identical to a
 	// provider that genuinely has nothing beyond its own default: both
 	// show just "(default: ...)"/"(model default)", and nothing else
-	// in this screen ever reads consigliereModelFetchErr (a real,
+	// in this screen ever reads consigliere.ModelFetchErr (a real,
 	// reported case of exactly that silent failure).
 	if isConsigliereModelOrEffortKey(opt.key) {
 		provider := r.settings.ConsigliereProvider
-		if err, ok := r.consigliereModelFetchErr[provider]; ok {
+		if err, ok := r.consigliere.ModelFetchErr[provider]; ok {
 			// Capped — a real provider error can run well past a
 			// normal "default: ..." hint's own length (a real,
 			// reported case: the Default column's own overflow pushed
@@ -790,7 +812,7 @@ func (r *Root) optionDefaultHint(opt optionSpec) string {
 		// silent otherwise: the provider's own response parsed fine
 		// and simply listed nothing, which still leaves Model/Effort
 		// stuck on just their own default with no visible reason why.
-		if cached, ok := r.consigliereModelCache[provider]; ok && len(cached) == 0 {
+		if cached, ok := r.consigliere.ModelCache[provider]; ok && len(cached) == 0 {
 			return "model list came back empty"
 		}
 	}
@@ -815,10 +837,10 @@ func (r *Root) settingOriginLabel(key string) string {
 // has selected.
 func (r *Root) currentOptionCategory() (optionCategory, bool) {
 	categories := optionCategories()
-	if r.optionsCategory < 0 || r.optionsCategory >= len(categories) {
+	if r.options.Category < 0 || r.options.Category >= len(categories) {
 		return optionCategory{}, false
 	}
-	return categories[r.optionsCategory], true
+	return categories[r.options.Category], true
 }
 
 // optionAtRow is the setting shown on one row of the settings table —
@@ -934,17 +956,17 @@ func (r *Root) cycleOptionChoice(opt optionSpec) {
 func (r *Root) editOptionValue(opt optionSpec) {
 	doc, _ := opt.doc()
 
-	r.optionsInput.SetLabel(" " + opt.label + ": ")
-	r.optionsInput.SetText(opt.value(r))
+	r.options.Input.SetLabel(" " + opt.label + ": ")
+	r.options.Input.SetText(opt.value(r))
 	if doc.Kind == config.KindInt {
 		// Rejects a non-digit as it's typed, rather than accepting it
 		// and reporting a parse failure on Enter.
-		r.optionsInput.SetAcceptanceFunc(tview.InputFieldInteger)
+		r.options.Input.SetAcceptanceFunc(tview.InputFieldInteger)
 	} else {
-		r.optionsInput.SetAcceptanceFunc(nil)
+		r.options.Input.SetAcceptanceFunc(nil)
 	}
 
-	r.optionsInput.SetDoneFunc(func(key tcell.Key) {
+	r.options.Input.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyTab && opt.pathCompletion {
 			// Tab's own usual meaning in this dialog — cancel without
 			// applying, same as Escape — is suspended just for the
@@ -954,7 +976,7 @@ func (r *Root) editOptionValue(opt optionSpec) {
 			return
 		}
 		if key == tcell.KeyEnter {
-			value := strings.TrimSpace(r.optionsInput.GetText())
+			value := strings.TrimSpace(r.options.Input.GetText())
 			if opt.pathCompletion {
 				resolved, ok := r.validateOptionsInputPath(value)
 				if !ok {
@@ -977,9 +999,9 @@ func (r *Root) editOptionValue(opt optionSpec) {
 	height := 1
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
-	r.optionsInput.SetRect(x, y, width, height)
+	r.options.Input.SetRect(x, y, width, height)
 
-	r.pushOverlay(optionsInputPage, r.optionsInput, nil)
+	r.pushOverlay(optionsInputPage, r.options.Input, nil)
 }
 
 // validateOptionsInputPath validates value for a pathCompletion row's
@@ -1026,14 +1048,14 @@ func (r *Root) validateOptionsInputPath(value string) (resolved string, ok bool)
 // row/col cursor math, unlike completeBashLine's multi-line case)
 // needs nothing more than the field's current text.
 func (r *Root) completeOptionsInputPath() {
-	word := r.optionsInput.GetText()
+	word := r.options.Input.GetText()
 	matches := r.panel.completions(word)
 	if len(matches) == 0 {
 		return
 	}
 	completed := longestCommonPrefix(matches)
 	if completed != word {
-		r.optionsInput.SetText(completed)
+		r.options.Input.SetText(completed)
 		return
 	}
 	if len(matches) == 1 {
@@ -1044,11 +1066,11 @@ func (r *Root) completeOptionsInputPath() {
 
 // openOptionsInputCompletionPicker is completeOptionsInputPath's own
 // ambiguous-match case — openCompletionPicker's identical shape for
-// r.optionsInput instead of r.bashLine, anchored under the input
+// r.options.Input instead of r.bashLine, anchored under the input
 // field rather than bashLine's own cursor position. A plain
 // pushOverlay, not pushOverlayReturningFocusTo: that one exists for
 // the empty-stack case (see its own doc comment), which doesn't apply
-// here — closing the picker reveals r.optionsInput's own still-open
+// here — closing the picker reveals r.options.Input's own still-open
 // pushOverlay frame underneath, whose default restore already
 // refocuses it without any extra help.
 func (r *Root) openOptionsInputCompletionPicker(matches []string) {
@@ -1057,7 +1079,7 @@ func (r *Root) openOptionsInputCompletionPicker(matches []string) {
 		match := m
 		r.picker.AddItem(completionBasename(match), "", 0, func() {
 			r.hideOverlay()
-			r.optionsInput.SetText(match)
+			r.options.Input.SetText(match)
 		})
 	}
 	r.picker.SetDoneFunc(func() {
@@ -1065,7 +1087,7 @@ func (r *Root) openOptionsInputCompletionPicker(matches []string) {
 	})
 
 	width, height := listSize(r.picker)
-	inputX, inputY, _, inputHeight := r.optionsInput.GetRect()
+	inputX, inputY, _, inputHeight := r.options.Input.GetRect()
 	x, y, width, height := r.clampToScreen(inputX, inputY+inputHeight, width, height)
 	r.picker.SetRect(x, y, width, height)
 	r.picker.SetCurrentItem(0)
@@ -1103,21 +1125,21 @@ func (r *Root) showOptionInfo(opt optionSpec) {
 	// instead, the one place in this screen that already has room for
 	// a long explanation.
 	if isConsigliereModelOrEffortKey(opt.key) {
-		if err, ok := r.consigliereModelFetchErr[r.settings.ConsigliereProvider]; ok {
+		if err, ok := r.consigliere.ModelFetchErr[r.settings.ConsigliereProvider]; ok {
 			fmt.Fprintf(&b, "\n\n[::d]Model list fetch failed:[::-] %s", err.Error())
 		}
 	}
 	b.WriteString("\n\n[::d]Escape or a click outside closes this.[::-]")
 
-	r.optionsInfo.SetText(b.String())
-	r.optionsInfo.SetDynamicColors(true)
+	r.options.Info.SetText(b.String())
+	r.options.Info.SetDynamicColors(true)
 
 	width, height := r.optionsInfoSize(b.String())
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
-	r.optionsInfo.SetRect(x, y, width, height)
+	r.options.Info.SetRect(x, y, width, height)
 
-	r.pushOverlay(optionsInfoPage, r.optionsInfo, nil)
+	r.pushOverlay(optionsInfoPage, r.options.Info, nil)
 }
 
 // optionsInfoSize picks the info window's own size: a fixed, readable
@@ -1146,7 +1168,7 @@ func (r *Root) optionsInfoSize(text string) (width, height int) {
 // "explain this" key in a list like this, and costs nothing the table
 // itself was using.
 func (r *Root) captureOptionsTableKey(event *tcell.EventKey) *tcell.EventKey {
-	row, _ := r.optionsTable.GetSelection()
+	row, _ := r.options.Table.GetSelection()
 
 	// Space changes the selected setting, the same as Enter — per the
 	// user's own explicit request, and matching every other toggle in
@@ -1194,18 +1216,18 @@ func (r *Root) captureOptionsTableMouse(action tview.MouseAction, event *tcell.E
 		return action, event
 	}
 	x, y := event.Position()
-	if !r.optionsTable.InRect(x, y) {
+	if !r.options.Table.InRect(x, y) {
 		return action, event
 	}
 
-	row, column := r.optionsTable.CellAt(x, y)
+	row, column := r.options.Table.CellAt(x, y)
 	opt, ok := r.optionAtRow(row)
 	if !ok {
 		return action, event
 	}
 	// Select the clicked row first either way, so the cursor follows the
 	// mouse the same as it does in the file panel.
-	r.optionsTable.Select(row, 0)
+	r.options.Table.Select(row, 0)
 
 	if column == optionsColInfo {
 		r.showOptionInfo(opt)
@@ -1433,29 +1455,29 @@ func (r *Root) applyThemeOnly(slug string) {
 // applyTheme also runs from NewRoot, before newOptionsScreen has built
 // any of these.
 func (r *Root) applyOptionsTheme(theme config.ResolvedTheme) {
-	if r.optionsCategories == nil {
+	if r.options.Categories == nil {
 		return
 	}
-	styleList(r.optionsCategories, theme)
+	styleList(r.options.Categories, theme)
 
-	r.optionsLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.optionsButtons.SetBackgroundColor(theme.SurfaceBackground)
+	r.options.Layout.SetBackgroundColor(theme.SurfaceBackground)
+	r.options.Buttons.SetBackgroundColor(theme.SurfaceBackground)
 
-	r.optionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.optionsTitleBar.SetTextColor(theme.TextColor)
-	r.optionsHint.SetBackgroundColor(theme.InputBackground)
-	r.optionsHint.SetTextColor(theme.MutedTextColor)
-	optionsHintText, optionsHintSpans := buildListHint(theme, optionsHintEntries())
-	r.optionsHint.SetText(optionsHintText)
-	r.optionsHintSpans = optionsHintSpans
+	r.options.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.options.TitleBar.SetTextColor(theme.TextColor)
+	r.options.Hint.SetBackgroundColor(theme.InputBackground)
+	r.options.Hint.SetTextColor(theme.MutedTextColor)
+	optionsHintText, hintSpans := buildListHint(theme, optionsHintEntries())
+	r.options.Hint.SetText(optionsHintText)
+	r.options.HintSpans = hintSpans
 
-	r.optionsTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.options.Table.SetBackgroundColor(theme.SurfaceBackground)
 
-	r.optionsInfo.SetBackgroundColor(theme.InputBackground)
-	r.optionsInfo.SetTextColor(theme.TextColor)
+	r.options.Info.SetBackgroundColor(theme.InputBackground)
+	r.options.Info.SetTextColor(theme.TextColor)
 
-	styleInput(r.optionsInput, theme, true)
-	r.optionsInput.SetLabelColor(theme.TextColor)
+	styleInput(r.options.Input, theme, true)
+	r.options.Input.SetLabelColor(theme.TextColor)
 
 	for _, b := range r.optionsButtonList() {
 		styleButton(b, theme)
@@ -1469,8 +1491,8 @@ func (r *Root) applyOptionsTheme(theme config.ResolvedTheme) {
 	// screen. Re-derived from each pane's actual focus, which is
 	// trustworthy here: applyTheme is never called from inside a
 	// blur callback, the one place HasFocus lies.
-	r.setOptionsPaneFocused(r.optionsCategories, r.optionsCategories.HasFocus())
-	r.setOptionsPaneFocused(r.optionsTable, r.optionsTable.HasFocus())
+	r.setOptionsPaneFocused(r.options.Categories, r.options.Categories.HasFocus())
+	r.setOptionsPaneFocused(r.options.Table, r.options.Table.HasFocus())
 
 	// Re-render: the table's own cell colors are baked in per cell
 	// (see renderOptions), not looked up live at draw time.

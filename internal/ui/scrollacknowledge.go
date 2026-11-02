@@ -125,7 +125,7 @@ func (r *Root) openScrollAcknowledgeNotice(title, message, confirmLabel string, 
 	})
 	// pushOverlay's own "AI Consigliere sidebar isn't part of
 	// overlayStack" re-float (see its own doc comment in root.go) sends
-	// consiglierePage back to front whenever r.consigliereVisible —
+	// consiglierePage back to front whenever r.consigliere.Visible —
 	// right, for ordinary navigation, but wrong here: this notice can
 	// be opened from Options while the sidebar is still open (it's
 	// non-modal), and the sidebar is docked flush right, overlapping

@@ -171,7 +171,7 @@ func TestFinishRsyncJobRecordsOperation(t *testing.T) {
 			}
 			job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
 			job.opID = r.operations.Start(string(notify.CategoryRsync), "src", r.panel.path)
-			r.rsyncJob = job
+			r.rsync.Job = job
 
 			r.finishRsyncJob(job, c.err)
 

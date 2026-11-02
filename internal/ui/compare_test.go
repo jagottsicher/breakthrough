@@ -163,7 +163,7 @@ func TestRenderCompareFileShowsSizeMismatchAsDifferent(t *testing.T) {
 	}
 	r.openCompareFile(a, b)
 
-	if got := r.compareVerdict.GetText(true); !strings.Contains(got, "Different") || !strings.Contains(got, "sizes") {
+	if got := r.compare.Verdict.GetText(true); !strings.Contains(got, "Different") || !strings.Contains(got, "sizes") {
 		t.Errorf("verdict = %q, want it to name the size mismatch", got)
 	}
 }
@@ -182,7 +182,7 @@ func TestRenderCompareFileShowsSameSizeSameTimeAsProbablyIdentical(t *testing.T)
 	}
 	r.openCompareFile(a, b)
 
-	if got := r.compareVerdict.GetText(true); !strings.Contains(got, "Probably identical") {
+	if got := r.compare.Verdict.GetText(true); !strings.Contains(got, "Probably identical") {
 		t.Errorf("verdict = %q, want the heuristic's own \"probably identical\"", got)
 	}
 }
@@ -201,7 +201,7 @@ func TestRenderCompareFileShowsSameSizeDifferentTimeAsUncertain(t *testing.T) {
 	}
 	r.openCompareFile(a, b)
 
-	if got := r.compareVerdict.GetText(true); !strings.Contains(got, "Uncertain") {
+	if got := r.compare.Verdict.GetText(true); !strings.Contains(got, "Uncertain") {
 		t.Errorf("verdict = %q, want Uncertain for same size, different time", got)
 	}
 }
@@ -225,17 +225,17 @@ func TestRenderCompareFileWithAComputedHashOverridesTheHeuristic(t *testing.T) {
 		}
 	}
 	r.openCompareFile(a, b)
-	if got := r.compareVerdict.GetText(true); !strings.Contains(got, "Probably identical") {
+	if got := r.compare.Verdict.GetText(true); !strings.Contains(got, "Probably identical") {
 		t.Fatalf("verdict before hashing = %q, want the heuristic's false-positive \"Probably identical\"", got)
 	}
 
 	// Bypass computeCompareHash's own goroutine (see properties_test.go's
 	// identical reasoning: QueueUpdateDraw never drains without a
 	// running Application) and just set what it would have produced.
-	r.compareHashes = map[string]string{a: "hash-a", b: "hash-b"}
+	r.compare.Hashes = map[string]string{a: "hash-a", b: "hash-b"}
 	r.renderCompareFile()
 
-	if got := r.compareVerdict.GetText(true); !strings.Contains(got, "Different") || !strings.Contains(got, "SHA-256") {
+	if got := r.compare.Verdict.GetText(true); !strings.Contains(got, "Different") || !strings.Contains(got, "SHA-256") {
 		t.Errorf("verdict after hashing = %q, want the hash result to override the heuristic", got)
 	}
 }
@@ -251,10 +251,10 @@ func TestComputeCompareHashIgnoresReentryWhileRunning(t *testing.T) {
 	}
 	r.openCompareFile(a, b)
 
-	r.compareHashRunning = true
-	firstCancel := r.compareHashCancel
+	r.compare.HashRunning = true
+	firstCancel := r.compare.HashCancel
 	r.computeCompareHash()
-	if r.compareHashCancel != nil && firstCancel == nil {
+	if r.compare.HashCancel != nil && firstCancel == nil {
 		t.Error("computeCompareHash should not start a new computation while one is already running")
 	}
 	r.cancelCompareHashComputation()
@@ -295,8 +295,8 @@ func TestOpenCompareDiffOpensTheSideBySideViewWithColoredLines(t *testing.T) {
 	if r.activePage != compareDiffPage {
 		t.Fatalf("activePage = %q, want the diff view %q", r.activePage, compareDiffPage)
 	}
-	left := r.compareDiffLeft.GetText(false)
-	right := r.compareDiffRight.GetText(false)
+	left := r.compare.DiffLeft.GetText(false)
+	right := r.compare.DiffRight.GetText(false)
 	if !strings.Contains(left, "line one") {
 		t.Errorf("left pane = %q, missing %q", left, "line one")
 	}
@@ -316,7 +316,7 @@ func TestCompareDiffButtonDisabledForABinaryPair(t *testing.T) {
 	}
 	r.openCompareFile(a, b)
 
-	if !r.compareDiffBtn.IsDisabled() {
+	if !r.compare.DiffBtn.IsDisabled() {
 		t.Error("Show diff should be disabled for a binary pair")
 	}
 }
@@ -331,11 +331,11 @@ func TestCloseCompareCancelsAnyRunningHash(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.openCompareFile(a, b)
-	r.compareHashRunning = true
+	r.compare.HashRunning = true
 
 	r.closeCompare()
 
-	if r.compareHashRunning {
+	if r.compare.HashRunning {
 		t.Error("closeCompare should cancel a hash computation still in flight")
 	}
 }
@@ -350,13 +350,13 @@ func TestCloseCompareCancelsAnyRunningHash(t *testing.T) {
 func TestApplyCompareFileThemeColorsTheOverlay(t *testing.T) {
 	r, _ := newCompareRoot(t)
 
-	if got := r.compareLayout.GetBackgroundColor(); got != r.theme.SurfaceBackground {
-		t.Errorf("compareLayout background = %v, want theme.SurfaceBackground %v", got, r.theme.SurfaceBackground)
+	if got := r.compare.Layout.GetBackgroundColor(); got != r.theme.SurfaceBackground {
+		t.Errorf("compare.Layout background = %v, want theme.SurfaceBackground %v", got, r.theme.SurfaceBackground)
 	}
-	if got := r.compareTitleBar.GetBackgroundColor(); got != r.theme.InputFocusedBackground {
-		t.Errorf("compareTitleBar background = %v, want theme.InputFocusedBackground %v", got, r.theme.InputFocusedBackground)
+	if got := r.compare.TitleBar.GetBackgroundColor(); got != r.theme.InputFocusedBackground {
+		t.Errorf("compare.TitleBar background = %v, want theme.InputFocusedBackground %v", got, r.theme.InputFocusedBackground)
 	}
-	if got := r.compareButtons.GetBackgroundColor(); got != r.theme.SurfaceBackground {
-		t.Errorf("compareButtons background = %v, want theme.SurfaceBackground %v", got, r.theme.SurfaceBackground)
+	if got := r.compare.Buttons.GetBackgroundColor(); got != r.theme.SurfaceBackground {
+		t.Errorf("compare.Buttons background = %v, want theme.SurfaceBackground %v", got, r.theme.SurfaceBackground)
 	}
 }

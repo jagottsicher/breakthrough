@@ -180,10 +180,10 @@ func TestToolboxArgEntryPromptsBeforeRunning(t *testing.T) {
 	if r.activePage != toolboxInputPage {
 		t.Fatalf("activePage = %q, want the toolbox input overlay", r.activePage)
 	}
-	if got := r.toolboxInput.GetLabel(); got != " Echo arg: " {
+	if got := r.toolbox.Input.GetLabel(); got != " Echo arg: " {
 		t.Errorf("prompt label = %q, want %q", got, " Echo arg: ")
 	}
-	if got := r.toolboxInput.GetText(); got != "prefilled" {
+	if got := r.toolbox.Input.GetText(); got != "prefilled" {
 		t.Errorf("prompt text = %q, want the configured prefill %q", got, "prefilled")
 	}
 	if len(r.toolWindows) != 0 {
@@ -204,8 +204,8 @@ func TestToolboxArgEntrySubmittingRunsFixedArgsThenTypedText(t *testing.T) {
 	entry := toolboxArgEntry("Test Echo Arg", "help text", "Echo arg:", "", "echo", "fixed1")
 	entry.run(r)
 
-	r.toolboxInput.SetText("typed value")
-	r.toolboxInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.toolbox.Input.SetText("typed value")
+	r.toolbox.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if len(r.toolWindows) != 1 {
 		t.Fatalf("len(toolWindows) = %d, want 1 after submitting the prompt", len(r.toolWindows))
@@ -235,8 +235,8 @@ func TestToolboxArgEntryEmptySubmissionRunsNothing(t *testing.T) {
 	entry := toolboxArgEntry("Test Echo Arg", "help text", "Echo arg:", "", "echo")
 	entry.run(r)
 
-	r.toolboxInput.SetText("   ")
-	r.toolboxInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.toolbox.Input.SetText("   ")
+	r.toolbox.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if len(r.toolWindows) != 0 {
 		t.Errorf("len(toolWindows) = %d, want 0 — an all-whitespace submission should run nothing", len(r.toolWindows))
@@ -254,8 +254,8 @@ func TestToolboxArgEntryEscapeCancelsWithoutRunning(t *testing.T) {
 	entry := toolboxArgEntry("Test Echo Arg", "help text", "Echo arg:", "", "echo")
 	entry.run(r)
 
-	r.toolboxInput.SetText("this should never run")
-	r.toolboxInput.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.toolbox.Input.SetText("this should never run")
+	r.toolbox.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if len(r.toolWindows) != 0 {
 		t.Errorf("len(toolWindows) = %d, want 0 — Escape should cancel, not run", len(r.toolWindows))
@@ -284,10 +284,10 @@ func TestOpenToolboxScreenRendersTheWholeCatalog(t *testing.T) {
 	if r.activePage != toolboxPage {
 		t.Fatalf("activePage = %q, want the Toolbox screen", r.activePage)
 	}
-	if got, want := r.toolboxTable.GetRowCount(), len(toolboxDisplayRows()); got != want {
+	if got, want := r.toolbox.Table.GetRowCount(), len(toolboxDisplayRows()); got != want {
 		t.Errorf("row count = %d, want %d", got, want)
 	}
-	row, _ := r.toolboxTable.GetSelection()
+	row, _ := r.toolbox.Table.GetSelection()
 	if !isToolboxEntryRow(row) {
 		t.Errorf("selected row %d is not a real entry", row)
 	}
@@ -328,14 +328,14 @@ func TestOpenNetworkToolsShowsOnlyTheNetworkingCategory(t *testing.T) {
 	if r.activePage != toolboxPage {
 		t.Fatalf("activePage = %q, want the Toolbox screen", r.activePage)
 	}
-	if got, want := r.toolboxTitleBar.GetText(true), " Network Tools "+string(toolWindowCloseGlyph)+" "; got != want {
+	if got, want := r.toolbox.TitleBar.GetText(true), " Network Tools "+string(toolWindowCloseGlyph)+" "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 	wantRows := toolboxDisplayRowsFor(toolboxCategoriesNamed("Networking"))
-	if got, want := r.toolboxTable.GetRowCount(), len(wantRows); got != want {
+	if got, want := r.toolbox.Table.GetRowCount(), len(wantRows); got != want {
 		t.Errorf("row count = %d, want %d (Networking category alone)", got, want)
 	}
-	for _, dr := range r.toolboxRows {
+	for _, dr := range r.toolbox.Rows {
 		if dr.header == "Hardware" {
 			t.Error("Network Tools screen must not include the Hardware header")
 		}
@@ -356,14 +356,14 @@ func TestOpenHardwareToolsShowsOnlyTheHardwareCategory(t *testing.T) {
 	if r.activePage != toolboxPage {
 		t.Fatalf("activePage = %q, want the Toolbox screen", r.activePage)
 	}
-	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "+string(toolWindowCloseGlyph)+" "; got != want {
+	if got, want := r.toolbox.TitleBar.GetText(true), " Hardware Tools "+string(toolWindowCloseGlyph)+" "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 	wantRows := toolboxDisplayRowsFor(toolboxCategoriesNamed("Hardware"))
-	if got, want := r.toolboxTable.GetRowCount(), len(wantRows); got != want {
+	if got, want := r.toolbox.Table.GetRowCount(), len(wantRows); got != want {
 		t.Errorf("row count = %d, want %d (Hardware category alone)", got, want)
 	}
-	for _, dr := range r.toolboxRows {
+	for _, dr := range r.toolbox.Rows {
 		if dr.header == "Networking" {
 			t.Error("Hardware Tools screen must not include the Networking header")
 		}
@@ -373,7 +373,7 @@ func TestOpenHardwareToolsShowsOnlyTheHardwareCategory(t *testing.T) {
 // TestOpenHardwareToolsAfterNetworkToolsShowsOnlyHardware pins that
 // switching from one filtered screen to the other actually replaces
 // its rows rather than adding to or getting stuck on the previous
-// one's — r.toolboxRows must not stay stuck on "jn"'s own Networking
+// one's — r.toolbox.Rows must not stay stuck on "jn"'s own Networking
 // rows once "jh" opens.
 func TestOpenHardwareToolsAfterNetworkToolsShowsOnlyHardware(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
@@ -385,10 +385,10 @@ func TestOpenHardwareToolsAfterNetworkToolsShowsOnlyHardware(t *testing.T) {
 	r.openHardwareTools()
 
 	wantRows := toolboxDisplayRowsFor(toolboxCategoriesNamed("Hardware"))
-	if got, want := r.toolboxTable.GetRowCount(), len(wantRows); got != want {
+	if got, want := r.toolbox.Table.GetRowCount(), len(wantRows); got != want {
 		t.Errorf("row count after opening jh = %d, want %d (Hardware only)", got, want)
 	}
-	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "+string(toolWindowCloseGlyph)+" "; got != want {
+	if got, want := r.toolbox.TitleBar.GetText(true), " Hardware Tools "+string(toolWindowCloseGlyph)+" "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 }
@@ -464,8 +464,8 @@ func toolboxTestFormEntry() toolboxEntry {
 }
 
 // TestToolboxFormEntryOpensWithDefaultsAndPreview pins toolboxFormEntry's
-// own shape: activating it opens toolboxForm's own overlay (not
-// toolboxInput), prefilled with every field's own default, and the
+// own shape: activating it opens toolbox.Form's own overlay (not
+// toolbox.Input), prefilled with every field's own default, and the
 // preview line already reflects exactly what Run would execute — before
 // anything has been touched at all.
 func TestToolboxFormEntryOpensWithDefaultsAndPreview(t *testing.T) {
@@ -483,7 +483,7 @@ func TestToolboxFormEntryOpensWithDefaultsAndPreview(t *testing.T) {
 	if len(r.toolWindows) != 0 {
 		t.Errorf("len(toolWindows) = %d, want 0 before Run is ever pressed", len(r.toolWindows))
 	}
-	if got := r.toolboxFormPreview.GetText(true); !strings.Contains(got, "echo x") {
+	if got := r.toolbox.FormPreview.GetText(true); !strings.Contains(got, "echo x") {
 		t.Errorf("preview = %q, want it to mention %q", got, "echo x")
 	}
 }
@@ -501,12 +501,12 @@ func TestToolboxFormEntryRunUsesCurrentFieldValues(t *testing.T) {
 	entry := toolboxTestFormEntry()
 	entry.run(r)
 
-	input, ok := r.toolboxFormWidgets["a"].(*tview.InputField)
+	input, ok := r.toolbox.FormWidgets["a"].(*tview.InputField)
 	if !ok {
-		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", "a")
+		t.Fatalf("toolbox.FormWidgets[%q] is not an InputField", "a")
 	}
 	input.SetText("typed")
-	r.toolboxFormToggleState["b"] = true
+	r.toolbox.FormToggleState["b"] = true
 
 	r.runToolboxForm()
 
@@ -535,7 +535,7 @@ func TestToolboxFormEntryCancelRunsNothing(t *testing.T) {
 	entry := toolboxTestFormEntry()
 	entry.run(r)
 
-	r.toolboxFormCancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.toolbox.FormCancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if len(r.toolWindows) != 0 {
 		t.Errorf("len(toolWindows) = %d, want 0 — Cancel should run nothing", len(r.toolWindows))
@@ -561,7 +561,7 @@ func TestToolboxFormEntryRunWithEmptyRequiredFieldRunsNothing(t *testing.T) {
 	entry := toolboxTestFormEntry()
 	entry.run(r)
 
-	fieldA := r.toolboxFormWidgets["a"].(*tview.InputField)
+	fieldA := r.toolbox.FormWidgets["a"].(*tview.InputField)
 	fieldA.SetText("") // required, started out as "x"
 
 	r.runToolboxForm()
@@ -578,7 +578,7 @@ func TestToolboxFormEntryRunWithEmptyRequiredFieldRunsNothing(t *testing.T) {
 // same cross-widget Tab/Backtab chain Sed Replace's own identical test
 // (TestTabFromTheAdvancedFieldReachesTheFlagsAndActions) already proves
 // for its own form/list/actions trio: the form's own last field reaches
-// toolboxFormToggles, which reaches Cancel, which cycles to Run, which
+// toolbox.FormToggles, which reaches Cancel, which cycles to Run, which
 // wraps back to the form's own first field — all the way around and
 // back, never stuck forward-only the way Befund 8's bug once left
 // connectdialog.go/rsync.go/sshshell.go's own button rows.
@@ -595,27 +595,27 @@ func TestTabAroundTheToolboxFormReachesEveryWidgetAndWrapsBack(t *testing.T) {
 	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
 	backtab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop) }
 
-	fieldA, ok := r.toolboxFormWidgets["a"].(*tview.InputField)
+	fieldA, ok := r.toolbox.FormWidgets["a"].(*tview.InputField)
 	if !ok {
-		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", "a")
+		t.Fatalf("toolbox.FormWidgets[%q] is not an InputField", "a")
 	}
 
 	tab(fieldA)
-	if !r.toolboxFormToggles.HasFocus() {
-		t.Fatal("Tab from the form's own last field did not reach toolboxFormToggles")
+	if !r.toolbox.FormToggles.HasFocus() {
+		t.Fatal("Tab from the form's own last field did not reach toolbox.FormToggles")
 	}
 
-	tab(r.toolboxFormToggles)
-	if !r.toolboxFormCancelBtn.HasFocus() {
-		t.Fatal("Tab from toolboxFormToggles did not reach Cancel")
+	tab(r.toolbox.FormToggles)
+	if !r.toolbox.FormCancelBtn.HasFocus() {
+		t.Fatal("Tab from toolbox.FormToggles did not reach Cancel")
 	}
 
-	tab(r.toolboxFormCancelBtn)
-	if !r.toolboxFormRunBtn.HasFocus() {
+	tab(r.toolbox.FormCancelBtn)
+	if !r.toolbox.FormRunBtn.HasFocus() {
 		t.Fatal("Tab from Cancel did not reach Run")
 	}
 
-	tab(r.toolboxFormRunBtn)
+	tab(r.toolbox.FormRunBtn)
 	if !fieldA.HasFocus() {
 		t.Fatal("Tab from Run did not wrap back to the form's own first field")
 	}
@@ -623,7 +623,7 @@ func TestTabAroundTheToolboxFormReachesEveryWidgetAndWrapsBack(t *testing.T) {
 	// Backtab from the form's own first field wraps within the form
 	// itself (fieldA is also its only field here) — the same
 	// "Backtab wraps inside the form, never out to a sibling widget"
-	// convention sedFindField's own Backtab already establishes
+	// convention sed.FindField's own Backtab already establishes
 	// (TestTabFromTheAdvancedFieldReachesTheFlagsAndActions), left to
 	// tview's native Form handling rather than anything wired above.
 	backtab(fieldA)
@@ -634,25 +634,25 @@ func TestTabAroundTheToolboxFormReachesEveryWidgetAndWrapsBack(t *testing.T) {
 	// Back to Run the long way (fieldA -> toggles -> Cancel -> Run), to
 	// check Backtab's own chain starting there.
 	tab(fieldA)
-	tab(r.toolboxFormToggles)
-	tab(r.toolboxFormCancelBtn)
-	if !r.toolboxFormRunBtn.HasFocus() {
+	tab(r.toolbox.FormToggles)
+	tab(r.toolbox.FormCancelBtn)
+	if !r.toolbox.FormRunBtn.HasFocus() {
 		t.Fatal("Tab from Cancel did not reach Run")
 	}
 
-	backtab(r.toolboxFormRunBtn)
-	if !r.toolboxFormCancelBtn.HasFocus() {
+	backtab(r.toolbox.FormRunBtn)
+	if !r.toolbox.FormCancelBtn.HasFocus() {
 		t.Fatal("Backtab from Run did not reach Cancel")
 	}
 
-	backtab(r.toolboxFormCancelBtn)
-	if !r.toolboxFormToggles.HasFocus() {
-		t.Fatal("Backtab from Cancel did not reach toolboxFormToggles")
+	backtab(r.toolbox.FormCancelBtn)
+	if !r.toolbox.FormToggles.HasFocus() {
+		t.Fatal("Backtab from Cancel did not reach toolbox.FormToggles")
 	}
 
-	backtab(r.toolboxFormToggles)
+	backtab(r.toolbox.FormToggles)
 	if !fieldA.HasFocus() {
-		t.Fatal("Backtab from toolboxFormToggles did not reach the form's own last field")
+		t.Fatal("Backtab from toolbox.FormToggles did not reach the form's own last field")
 	}
 }
 
@@ -671,13 +671,13 @@ func TestToolboxCurlEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
 	}
 	entry.run(r)
 
-	urlField, ok := r.toolboxFormWidgets[toolboxCurlFieldURL].(*tview.InputField)
+	urlField, ok := r.toolbox.FormWidgets[toolboxCurlFieldURL].(*tview.InputField)
 	if !ok {
-		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", toolboxCurlFieldURL)
+		t.Fatalf("toolbox.FormWidgets[%q] is not an InputField", toolboxCurlFieldURL)
 	}
 	urlField.SetText("https://example.com")
 
-	if got := r.toolboxFormPreview.GetText(true); got != "curl https://example.com" {
+	if got := r.toolbox.FormPreview.GetText(true); got != "curl https://example.com" {
 		t.Errorf("preview = %q, want exactly %q (GET default and every optional field empty)", got, "curl https://example.com")
 	}
 
@@ -703,24 +703,24 @@ func TestToolboxCurlEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
 	entry := toolboxCurlEntry()
 	entry.run(r)
 
-	urlField := r.toolboxFormWidgets[toolboxCurlFieldURL].(*tview.InputField)
+	urlField := r.toolbox.FormWidgets[toolboxCurlFieldURL].(*tview.InputField)
 	urlField.SetText("https://example.com")
-	headerField := r.toolboxFormWidgets[toolboxCurlFieldHeader].(*tview.InputField)
+	headerField := r.toolbox.FormWidgets[toolboxCurlFieldHeader].(*tview.InputField)
 	headerField.SetText("Accept: text/plain")
-	outputField := r.toolboxFormWidgets[toolboxCurlFieldOutput].(*tview.InputField)
+	outputField := r.toolbox.FormWidgets[toolboxCurlFieldOutput].(*tview.InputField)
 	outputField.SetText("out.txt")
-	methodField := r.toolboxFormWidgets[toolboxCurlFieldMethod].(*tview.DropDown)
+	methodField := r.toolbox.FormWidgets[toolboxCurlFieldMethod].(*tview.DropDown)
 	methodField.SetCurrentOption(1) // POST, per toolboxCurlEntry's own choices order
-	// Set directly rather than through toolboxFormToggles' own selected
+	// Set directly rather than through toolbox.FormToggles' own selected
 	// func (the same direct-state-manipulation style toggleSedFlag's own
 	// tests already use) — updateToolboxFormPreview must be called
 	// explicitly afterwards, since nothing here went through the real
 	// UI event that would normally trigger it.
-	r.toolboxFormToggleState[toolboxCurlFieldFollow] = true
+	r.toolbox.FormToggleState[toolboxCurlFieldFollow] = true
 	r.updateToolboxFormPreview()
 
 	want := `curl -X POST -H Accept: text/plain -L -o out.txt https://example.com`
-	if got := r.toolboxFormPreview.GetText(true); got != want {
+	if got := r.toolbox.FormPreview.GetText(true); got != want {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
@@ -759,13 +759,13 @@ func TestToolboxNmapEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
 	entry := toolboxNmapEntry()
 	entry.run(r)
 
-	targetField, ok := r.toolboxFormWidgets[toolboxNmapFieldTarget].(*tview.InputField)
+	targetField, ok := r.toolbox.FormWidgets[toolboxNmapFieldTarget].(*tview.InputField)
 	if !ok {
-		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", toolboxNmapFieldTarget)
+		t.Fatalf("toolbox.FormWidgets[%q] is not an InputField", toolboxNmapFieldTarget)
 	}
 	targetField.SetText("192.168.1.0/24")
 
-	if got := r.toolboxFormPreview.GetText(true); got != "nmap 192.168.1.0/24" {
+	if got := r.toolbox.FormPreview.GetText(true); got != "nmap 192.168.1.0/24" {
 		t.Errorf("preview = %q, want exactly %q (Default scan/timing, empty Ports)", got, "nmap 192.168.1.0/24")
 	}
 }
@@ -782,17 +782,17 @@ func TestToolboxNmapEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
 	entry := toolboxNmapEntry()
 	entry.run(r)
 
-	targetField := r.toolboxFormWidgets[toolboxNmapFieldTarget].(*tview.InputField)
+	targetField := r.toolbox.FormWidgets[toolboxNmapFieldTarget].(*tview.InputField)
 	targetField.SetText("example.com")
-	portsField := r.toolboxFormWidgets[toolboxNmapFieldPorts].(*tview.InputField)
+	portsField := r.toolbox.FormWidgets[toolboxNmapFieldPorts].(*tview.InputField)
 	portsField.SetText("22,80,443")
-	scanField := r.toolboxFormWidgets[toolboxNmapFieldScan].(*tview.DropDown)
+	scanField := r.toolbox.FormWidgets[toolboxNmapFieldScan].(*tview.DropDown)
 	scanField.SetCurrentOption(1) // SYN scan (-sS), per toolboxNmapScanChoices' own order
-	timingField := r.toolboxFormWidgets[toolboxNmapFieldTiming].(*tview.DropDown)
+	timingField := r.toolbox.FormWidgets[toolboxNmapFieldTiming].(*tview.DropDown)
 	timingField.SetCurrentOption(5) // Aggressive (-T4), per toolboxNmapTimingChoices' own order
 
 	want := "nmap -sS -p 22,80,443 -T4 example.com"
-	if got := r.toolboxFormPreview.GetText(true); got != want {
+	if got := r.toolbox.FormPreview.GetText(true); got != want {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
@@ -812,13 +812,13 @@ func TestToolboxDigEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
 	entry := toolboxDigEntry()
 	entry.run(r)
 
-	domainField, ok := r.toolboxFormWidgets[toolboxDigFieldDomain].(*tview.InputField)
+	domainField, ok := r.toolbox.FormWidgets[toolboxDigFieldDomain].(*tview.InputField)
 	if !ok {
-		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", toolboxDigFieldDomain)
+		t.Fatalf("toolbox.FormWidgets[%q] is not an InputField", toolboxDigFieldDomain)
 	}
 	domainField.SetText("example.com")
 
-	if got := r.toolboxFormPreview.GetText(true); got != "dig example.com" {
+	if got := r.toolbox.FormPreview.GetText(true); got != "dig example.com" {
 		t.Errorf("preview = %q, want exactly %q (Default record type, empty Server)", got, "dig example.com")
 	}
 }
@@ -835,15 +835,15 @@ func TestToolboxDigEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
 	entry := toolboxDigEntry()
 	entry.run(r)
 
-	domainField := r.toolboxFormWidgets[toolboxDigFieldDomain].(*tview.InputField)
+	domainField := r.toolbox.FormWidgets[toolboxDigFieldDomain].(*tview.InputField)
 	domainField.SetText("example.com")
-	serverField := r.toolboxFormWidgets[toolboxDigFieldServer].(*tview.InputField)
+	serverField := r.toolbox.FormWidgets[toolboxDigFieldServer].(*tview.InputField)
 	serverField.SetText("8.8.8.8")
-	typeField := r.toolboxFormWidgets[toolboxDigFieldType].(*tview.DropDown)
+	typeField := r.toolbox.FormWidgets[toolboxDigFieldType].(*tview.DropDown)
 	typeField.SetCurrentOption(3) // MX, per toolboxDigRecordTypeChoices' own order
 
 	want := "dig @8.8.8.8 example.com MX"
-	if got := r.toolboxFormPreview.GetText(true); got != want {
+	if got := r.toolbox.FormPreview.GetText(true); got != want {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
@@ -863,14 +863,14 @@ func TestToolboxWgetEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
 	entry := toolboxWgetEntry()
 	entry.run(r)
 
-	urlField, ok := r.toolboxFormWidgets[toolboxWgetFieldURL].(*tview.InputField)
+	urlField, ok := r.toolbox.FormWidgets[toolboxWgetFieldURL].(*tview.InputField)
 	if !ok {
-		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", toolboxWgetFieldURL)
+		t.Fatalf("toolbox.FormWidgets[%q] is not an InputField", toolboxWgetFieldURL)
 	}
 	urlField.SetText("https://example.com/file.tar.gz")
 
 	want := "wget https://example.com/file.tar.gz"
-	if got := r.toolboxFormPreview.GetText(true); got != want {
+	if got := r.toolbox.FormPreview.GetText(true); got != want {
 		t.Errorf("preview = %q, want exactly %q (unchecked Resume, empty Output path)", got, want)
 	}
 }
@@ -887,21 +887,21 @@ func TestToolboxWgetEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
 	entry := toolboxWgetEntry()
 	entry.run(r)
 
-	urlField := r.toolboxFormWidgets[toolboxWgetFieldURL].(*tview.InputField)
+	urlField := r.toolbox.FormWidgets[toolboxWgetFieldURL].(*tview.InputField)
 	urlField.SetText("https://example.com/file.tar.gz")
-	outputField := r.toolboxFormWidgets[toolboxWgetFieldOutput].(*tview.InputField)
+	outputField := r.toolbox.FormWidgets[toolboxWgetFieldOutput].(*tview.InputField)
 	outputField.SetText("out.tar.gz")
-	// Set directly rather than through toolboxFormToggles' own selected
+	// Set directly rather than through toolbox.FormToggles' own selected
 	// func (the same direct-state-manipulation style
 	// TestToolboxCurlEntryBuildIncludesEveryFieldWhenSet's own comment
 	// explains) — updateToolboxFormPreview must be called explicitly
 	// afterwards, since nothing here went through the real UI event
 	// that would normally trigger it.
-	r.toolboxFormToggleState[toolboxWgetFieldResume] = true
+	r.toolbox.FormToggleState[toolboxWgetFieldResume] = true
 	r.updateToolboxFormPreview()
 
 	want := "wget -c -O out.tar.gz https://example.com/file.tar.gz"
-	if got := r.toolboxFormPreview.GetText(true); got != want {
+	if got := r.toolbox.FormPreview.GetText(true); got != want {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
@@ -921,16 +921,16 @@ func TestToolboxNetcatEntryBuildOmitsEmptyOptionalFields(t *testing.T) {
 	entry := toolboxNetcatEntry()
 	entry.run(r)
 
-	hostField, ok := r.toolboxFormWidgets[toolboxNetcatFieldHost].(*tview.InputField)
+	hostField, ok := r.toolbox.FormWidgets[toolboxNetcatFieldHost].(*tview.InputField)
 	if !ok {
-		t.Fatalf("toolboxFormWidgets[%q] is not an InputField", toolboxNetcatFieldHost)
+		t.Fatalf("toolbox.FormWidgets[%q] is not an InputField", toolboxNetcatFieldHost)
 	}
 	hostField.SetText("example.com")
-	portField := r.toolboxFormWidgets[toolboxNetcatFieldPort].(*tview.InputField)
+	portField := r.toolbox.FormWidgets[toolboxNetcatFieldPort].(*tview.InputField)
 	portField.SetText("22")
 
 	want := "nc example.com 22"
-	if got := r.toolboxFormPreview.GetText(true); got != want {
+	if got := r.toolbox.FormPreview.GetText(true); got != want {
 		t.Errorf("preview = %q, want exactly %q (default Connect mode, UDP unchecked)", got, want)
 	}
 }
@@ -947,17 +947,17 @@ func TestToolboxNetcatEntryBuildIncludesEveryFieldWhenSet(t *testing.T) {
 	entry := toolboxNetcatEntry()
 	entry.run(r)
 
-	hostField := r.toolboxFormWidgets[toolboxNetcatFieldHost].(*tview.InputField)
+	hostField := r.toolbox.FormWidgets[toolboxNetcatFieldHost].(*tview.InputField)
 	hostField.SetText("example.com")
-	portField := r.toolboxFormWidgets[toolboxNetcatFieldPort].(*tview.InputField)
+	portField := r.toolbox.FormWidgets[toolboxNetcatFieldPort].(*tview.InputField)
 	portField.SetText("22")
-	modeField := r.toolboxFormWidgets[toolboxNetcatFieldMode].(*tview.DropDown)
+	modeField := r.toolbox.FormWidgets[toolboxNetcatFieldMode].(*tview.DropDown)
 	modeField.SetCurrentOption(2) // Scan (-zv), per toolboxNetcatEntry's own choices order
-	r.toolboxFormToggleState[toolboxNetcatFieldUDP] = true
+	r.toolbox.FormToggleState[toolboxNetcatFieldUDP] = true
 	r.updateToolboxFormPreview()
 
 	want := "nc -zv -u example.com 22"
-	if got := r.toolboxFormPreview.GetText(true); got != want {
+	if got := r.toolbox.FormPreview.GetText(true); got != want {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
@@ -975,15 +975,15 @@ func TestToolboxNetcatEntryListenModeOmitsHost(t *testing.T) {
 	entry := toolboxNetcatEntry()
 	entry.run(r)
 
-	hostField := r.toolboxFormWidgets[toolboxNetcatFieldHost].(*tview.InputField)
+	hostField := r.toolbox.FormWidgets[toolboxNetcatFieldHost].(*tview.InputField)
 	hostField.SetText("example.com")
-	portField := r.toolboxFormWidgets[toolboxNetcatFieldPort].(*tview.InputField)
+	portField := r.toolbox.FormWidgets[toolboxNetcatFieldPort].(*tview.InputField)
 	portField.SetText("1234")
-	modeField := r.toolboxFormWidgets[toolboxNetcatFieldMode].(*tview.DropDown)
+	modeField := r.toolbox.FormWidgets[toolboxNetcatFieldMode].(*tview.DropDown)
 	modeField.SetCurrentOption(1) // Listen (-l), per toolboxNetcatEntry's own choices order
 
 	want := "nc -l 1234"
-	if got := r.toolboxFormPreview.GetText(true); got != want {
+	if got := r.toolbox.FormPreview.GetText(true); got != want {
 		t.Errorf("preview = %q, want %q (Host dropped in Listen mode)", got, want)
 	}
 }
@@ -1005,7 +1005,7 @@ func TestGCReachesAIConsigliereFromToolbox(t *testing.T) {
 	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
 		t.Fatal("the resolving 'C' should have been consumed")
 	}
-	if !r.consigliereVisible {
+	if !r.consigliere.Visible {
 		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
 	}
 }

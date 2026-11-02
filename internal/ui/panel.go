@@ -1190,7 +1190,7 @@ func (p *Panel) paintStaticChrome() {
 	p.header.SetBackgroundColor(p.theme.SurfaceBackground)
 
 	// InputFocusedBackground/TextColor — the same close-glyph-title-bar
-	// pair sshShellTitleBar and the other dialog title bars in this app
+	// pair ssh.ShellTitleBar and the other dialog title bars in this app
 	// already use, since this reads the same way: a one-line label
 	// sitting above real content (formerly shellTab.header's own
 	// styleShellHeader, folded in here once that became one of
@@ -1207,8 +1207,8 @@ func (p *Panel) paintStaticChrome() {
 	// beside it.
 	p.filterMenuBtn.SetBackgroundColor(p.theme.SurfaceBackground)
 
-	// FocusedBackground, not AccentBackground: like propertiesEditField/
-	// chmodEditField/searchEditField, headerEdit only ever exists on
+	// FocusedBackground, not AccentBackground: like properties.EditField/
+	// chmodEditField/search.EditField, headerEdit only ever exists on
 	// screen while it's the thing actually accepting keystrokes (see
 	// openEdit/finishEdit's own headerPages.SwitchToPage calls) — there's
 	// no "visible but not focused" state for it to distinguish from, so

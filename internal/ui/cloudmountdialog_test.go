@@ -76,7 +76,7 @@ func TestOpenCloudMountCreateDialogAlwaysOffersCreateNewRemote(t *testing.T) {
 	// TrimSpace — the dropdown's own options are right-padded to the
 	// field's own width now (see openCloudMountCreateDialog's own doc
 	// comment on why), so the raw text carries trailing spaces.
-	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != cloudMountDialogCreateNewOption {
+	if _, text := r.cloud.MountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != cloudMountDialogCreateNewOption {
 		t.Errorf("selected option = %q, want %q (the only choice with zero real remotes)", strings.TrimRight(text, " "), cloudMountDialogCreateNewOption)
 	}
 }
@@ -93,7 +93,7 @@ func TestCloudMountDialogButtonsHideDeleteForCreateNewSentinel(t *testing.T) {
 	r := newTestRootForCloudMount(t)
 
 	r.openCloudMountCreateDialog("", nil)
-	if hasFlexItem(r.cloudMountDialogButtons, r.cloudMountDialogDeleteBtn) {
+	if hasFlexItem(r.cloud.MountDialogButtons, r.cloud.MountDialogDeleteBtn) {
 		t.Error("Delete should not be in the button row while the \"+ Create new remote…\" sentinel is selected")
 	}
 
@@ -101,7 +101,7 @@ func TestCloudMountDialogButtonsHideDeleteForCreateNewSentinel(t *testing.T) {
 		t.Fatalf("CreateStaticRemote: %v", err)
 	}
 	r.openCloudMountCreateDialog("real", nil)
-	if !hasFlexItem(r.cloudMountDialogButtons, r.cloudMountDialogDeleteBtn) {
+	if !hasFlexItem(r.cloud.MountDialogButtons, r.cloud.MountDialogDeleteBtn) {
 		t.Error("Delete should be in the button row once a real remote is selected")
 	}
 }
@@ -135,7 +135,7 @@ func TestOpenCloudMountCreateDialogPreselectsByName(t *testing.T) {
 
 	r.openCloudMountCreateDialog("beta", nil)
 
-	if _, text := r.cloudMountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != "beta" {
+	if _, text := r.cloud.MountDialogRemoteField.GetCurrentOption(); strings.TrimRight(text, " ") != "beta" {
 		t.Errorf("selected option = %q, want %q", strings.TrimRight(text, " "), "beta")
 	}
 }
@@ -283,7 +283,7 @@ func TestRunAddCloudMountRefusesDuplicateTarget(t *testing.T) {
 	firstTarget := entries[0].Target
 
 	r.openCloudMountCreateDialog("second", nil)
-	r.cloudMountDialogTargetField.SetText(firstTarget)
+	r.cloud.MountDialogTargetField.SetText(firstTarget)
 	r.runSaveCloudMount()
 
 	entries, err = rclone.LoadMountEntries()
@@ -311,15 +311,15 @@ func TestCloudMountDialogSyncTargetToSelectionOnlyWhileStillDefault(t *testing.T
 	// Still the unmodified default for "alpha" — switching to "beta"
 	// should follow.
 	r.cloudMountDialogSyncTargetToSelection("beta")
-	if got, want := r.cloudMountDialogTargetField.GetText(), r.cloudMountDialogDefaultTarget("beta"); got != want {
+	if got, want := r.cloud.MountDialogTargetField.GetText(), r.cloudMountDialogDefaultTarget("beta"); got != want {
 		t.Errorf("Target = %q, want %q (should follow the selection)", got, want)
 	}
 
 	// Now the user types something real — a further selection change
 	// must leave it alone.
-	r.cloudMountDialogTargetField.SetText("/my/own/custom/path")
+	r.cloud.MountDialogTargetField.SetText("/my/own/custom/path")
 	r.cloudMountDialogSyncTargetToSelection("alpha")
-	if got := r.cloudMountDialogTargetField.GetText(); got != "/my/own/custom/path" {
+	if got := r.cloud.MountDialogTargetField.GetText(); got != "/my/own/custom/path" {
 		t.Errorf("Target = %q, want it left untouched once the user typed something real", got)
 	}
 }

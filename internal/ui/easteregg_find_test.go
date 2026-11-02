@@ -19,7 +19,7 @@ func TestRunSearchAppendsEasterEggResultForExactTerm(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "easteregg"
+	r.search.FilenameValue = "easteregg"
 	r.runSearch()
 
 	found := false
@@ -51,7 +51,7 @@ func TestRunSearchEasterEggTermIsCaseInsensitiveAndTrimmed(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "  EasterEgg  "
+	r.search.FilenameValue = "  EasterEgg  "
 	r.runSearch()
 
 	found := false
@@ -75,7 +75,7 @@ func TestRunSearchDoesNotAppendEasterEggResultForOtherTerms(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchFilenameValue = "*.go"
+	r.search.FilenameValue = "*.go"
 	r.runSearch()
 
 	for _, e := range r.panel.searchEntries {
@@ -96,7 +96,7 @@ func TestRunSearchDoesNotTriggerOnAContentOnlySearchForTheTerm(t *testing.T) {
 	})
 
 	r.openSearch()
-	r.searchContentValue = "easteregg" // Content, not Filename
+	r.search.ContentValue = "easteregg" // Content, not Filename
 	r.runSearch()
 
 	for _, e := range r.panel.searchEntries {
