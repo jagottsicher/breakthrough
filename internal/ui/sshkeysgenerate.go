@@ -47,10 +47,10 @@ var sshKeysGenerateAlgorithmChoices = []string{"ed25519", "rsa", "ecdsa"}
 // same layering firewalladdrule.go's own openFirewallAddRule uses over
 // the Firewall screen).
 func (r *Root) openSSHKeysGenerate() {
-	r.sshKeysGenerateAlgorithm = "ed25519"
-	r.sshKeysGenerateBits = RSABitsChoices[len(RSABitsChoices)-1]
-	r.sshKeysGenerateFilenameText = defaultSSHKeysGenerateFilename(r.sshKeysGenerateAlgorithm)
-	r.sshKeysGenerateCommentText = defaultSSHKeysComment()
+	r.ssh.KeysGenerateAlgorithm = "ed25519"
+	r.ssh.KeysGenerateBits = RSABitsChoices[len(RSABitsChoices)-1]
+	r.ssh.KeysGenerateFilenameText = defaultSSHKeysGenerateFilename(r.ssh.KeysGenerateAlgorithm)
+	r.ssh.KeysGenerateCommentText = defaultSSHKeysComment()
 	r.setSSHKeysGenerateStatus("", r.theme.Text)
 	r.renderSSHKeysGenerateForm()
 
@@ -64,8 +64,8 @@ func (r *Root) openSSHKeysGenerate() {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.sshKeysGenerateLayout.SetRect(x, y, width, height)
-	r.pushOverlay(sshKeysGeneratePage, r.sshKeysGenerateLayout, nil)
+	r.ssh.KeysGenerateLayout.SetRect(x, y, width, height)
+	r.pushOverlay(sshKeysGeneratePage, r.ssh.KeysGenerateLayout, nil)
 }
 
 // defaultSSHKeysComment mirrors `ssh-keygen`'s own default comment
@@ -121,18 +121,18 @@ func (r *Root) newSSHKeysGenerateForm() *tview.Form {
 	return f
 }
 
-// renderSSHKeysGenerateForm (re)builds sshKeysGenerateForm's own items:
+// renderSSHKeysGenerateForm (re)builds ssh.KeysGenerateForm's own items:
 // Algorithm (a dropdown that rebuilds this whole form on change, the
 // same guarded-against-the-synthetic-initial-call shape
 // renderDuplicateForm's own Strategy dropdown already establishes, since
 // only rsa/ecdsa carry a Bits field at all), Bits/curve (rsa/ecdsa only),
 // Filename, and Comment.
 func (r *Root) renderSSHKeysGenerateForm() {
-	r.sshKeysGenerateForm.Clear(true)
+	r.ssh.KeysGenerateForm.Clear(true)
 
 	algoCurrent := 0
 	for i, a := range sshKeysGenerateAlgorithmChoices {
-		if a == r.sshKeysGenerateAlgorithm {
+		if a == r.ssh.KeysGenerateAlgorithm {
 			algoCurrent = i
 		}
 	}
@@ -141,33 +141,33 @@ func (r *Root) renderSSHKeysGenerateForm() {
 			return
 		}
 		algorithm := sshKeysGenerateAlgorithmChoices[index]
-		if algorithm == r.sshKeysGenerateAlgorithm {
+		if algorithm == r.ssh.KeysGenerateAlgorithm {
 			return
 		}
 		// Only follows the algorithm change if the filename still is
 		// this form's own untouched default for the algorithm it's
 		// leaving — a filename the user already typed themselves is
 		// never silently overwritten out from under them.
-		if r.sshKeysGenerateFilenameText == defaultSSHKeysGenerateFilename(r.sshKeysGenerateAlgorithm) {
-			r.sshKeysGenerateFilenameText = defaultSSHKeysGenerateFilename(algorithm)
+		if r.ssh.KeysGenerateFilenameText == defaultSSHKeysGenerateFilename(r.ssh.KeysGenerateAlgorithm) {
+			r.ssh.KeysGenerateFilenameText = defaultSSHKeysGenerateFilename(algorithm)
 		}
-		r.sshKeysGenerateAlgorithm = algorithm
+		r.ssh.KeysGenerateAlgorithm = algorithm
 		switch algorithm {
 		case "rsa":
-			r.sshKeysGenerateBits = RSABitsChoices[len(RSABitsChoices)-1]
+			r.ssh.KeysGenerateBits = RSABitsChoices[len(RSABitsChoices)-1]
 		case "ecdsa":
-			r.sshKeysGenerateBits = ECDSABitsChoices[0]
+			r.ssh.KeysGenerateBits = ECDSABitsChoices[0]
 		}
 		r.renderSSHKeysGenerateForm()
 	})
 	algoField.SetCurrentOption(algoCurrent)
 	styleDropDown(algoField, r.theme)
-	r.sshKeysGenerateForm.AddFormItem(algoField)
+	r.ssh.KeysGenerateForm.AddFormItem(algoField)
 
-	if r.sshKeysGenerateAlgorithm == "rsa" || r.sshKeysGenerateAlgorithm == "ecdsa" {
+	if r.ssh.KeysGenerateAlgorithm == "rsa" || r.ssh.KeysGenerateAlgorithm == "ecdsa" {
 		choices := RSABitsChoices
 		label := "Key size"
-		if r.sshKeysGenerateAlgorithm == "ecdsa" {
+		if r.ssh.KeysGenerateAlgorithm == "ecdsa" {
 			choices = ECDSABitsChoices
 			label = "Curve size"
 		}
@@ -175,7 +175,7 @@ func (r *Root) renderSSHKeysGenerateForm() {
 		current := 0
 		for i, c := range choices {
 			labels[i] = strconv.Itoa(c)
-			if c == r.sshKeysGenerateBits {
+			if c == r.ssh.KeysGenerateBits {
 				current = i
 			}
 		}
@@ -183,23 +183,23 @@ func (r *Root) renderSSHKeysGenerateForm() {
 			if index < 0 || index >= len(choices) {
 				return
 			}
-			r.sshKeysGenerateBits = choices[index]
+			r.ssh.KeysGenerateBits = choices[index]
 		})
 		bitsField.SetCurrentOption(current)
 		styleDropDown(bitsField, r.theme)
-		r.sshKeysGenerateForm.AddFormItem(bitsField)
+		r.ssh.KeysGenerateForm.AddFormItem(bitsField)
 	}
 
-	filenameField := tview.NewInputField().SetLabel("Filename (in ~/.ssh)").SetText(r.sshKeysGenerateFilenameText)
-	filenameField.SetChangedFunc(func(v string) { r.sshKeysGenerateFilenameText = v })
-	r.sshKeysGenerateForm.AddFormItem(filenameField)
+	filenameField := tview.NewInputField().SetLabel("Filename (in ~/.ssh)").SetText(r.ssh.KeysGenerateFilenameText)
+	filenameField.SetChangedFunc(func(v string) { r.ssh.KeysGenerateFilenameText = v })
+	r.ssh.KeysGenerateForm.AddFormItem(filenameField)
 
-	commentField := tview.NewInputField().SetLabel("Comment (optional)").SetText(r.sshKeysGenerateCommentText)
-	commentField.SetChangedFunc(func(v string) { r.sshKeysGenerateCommentText = v })
+	commentField := tview.NewInputField().SetLabel("Comment (optional)").SetText(r.ssh.KeysGenerateCommentText)
+	commentField.SetChangedFunc(func(v string) { r.ssh.KeysGenerateCommentText = v })
 	commentField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sshKeysGenerateCancelBtn)
+			r.app.SetFocus(r.ssh.KeysGenerateCancelBtn)
 			return nil
 		case tcell.KeyEnter:
 			r.submitSSHKeysGenerate()
@@ -207,63 +207,63 @@ func (r *Root) renderSSHKeysGenerateForm() {
 		}
 		return event
 	})
-	r.sshKeysGenerateForm.AddFormItem(commentField)
+	r.ssh.KeysGenerateForm.AddFormItem(commentField)
 }
 
-// newSSHKeysGenerateButtons builds sshKeysGenerateForm's own action row
+// newSSHKeysGenerateButtons builds ssh.KeysGenerateForm's own action row
 // once, from NewRoot — the same Cancel/action button pair
 // newFirewallAddRuleButtons already establishes, Tab/Backtab cycling
 // included.
 func (r *Root) newSSHKeysGenerateButtons() *tview.Flex {
-	r.sshKeysGenerateCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelSSHKeysGenerate)
-	r.sshKeysGenerateGenerateBtn = tview.NewButton("Generate key").SetSelectedFunc(r.submitSSHKeysGenerate)
-	r.sshKeysGenerateCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelSSHKeysGenerate))
-	r.sshKeysGenerateGenerateBtn.SetInputCapture(spaceAlsoActivates(r.submitSSHKeysGenerate))
+	r.ssh.KeysGenerateCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelSSHKeysGenerate)
+	r.ssh.KeysGenerateGenerateBtn = tview.NewButton("Generate key").SetSelectedFunc(r.submitSSHKeysGenerate)
+	r.ssh.KeysGenerateCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelSSHKeysGenerate))
+	r.ssh.KeysGenerateGenerateBtn.SetInputCapture(spaceAlsoActivates(r.submitSSHKeysGenerate))
 
-	r.sshKeysGenerateCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.ssh.KeysGenerateCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sshKeysGenerateGenerateBtn)
+			r.app.SetFocus(r.ssh.KeysGenerateGenerateBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.sshKeysGenerateForm)
+			r.app.SetFocus(r.ssh.KeysGenerateForm)
 		case tcell.KeyEscape:
 			r.cancelSSHKeysGenerate()
 		}
 	})
-	r.sshKeysGenerateGenerateBtn.SetExitFunc(func(key tcell.Key) {
+	r.ssh.KeysGenerateGenerateBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sshKeysGenerateForm)
+			r.app.SetFocus(r.ssh.KeysGenerateForm)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.sshKeysGenerateCancelBtn)
+			r.app.SetFocus(r.ssh.KeysGenerateCancelBtn)
 		case tcell.KeyEscape:
 			r.cancelSSHKeysGenerate()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.sshKeysGenerateCancelBtn, 0, 1, false).
-		AddItem(r.sshKeysGenerateGenerateBtn, 0, 1, false)
+		AddItem(r.ssh.KeysGenerateCancelBtn, 0, 1, false).
+		AddItem(r.ssh.KeysGenerateGenerateBtn, 0, 1, false)
 }
 
-// newSSHKeysGenerateLayout wraps sshKeysGenerateTitleBar over the form,
+// newSSHKeysGenerateLayout wraps ssh.KeysGenerateTitleBar over the form,
 // a one-line status area, and the Cancel/Generate key buttons — the
 // same shape newFirewallAddRuleLayout already establishes.
 func (r *Root) newSSHKeysGenerateLayout() *tview.Flex {
-	r.sshKeysGenerateTitleBar = newPlainTitleBar("Generate key")
-	r.sshKeysGenerateStatus = tview.NewTextView().SetDynamicColors(true)
+	r.ssh.KeysGenerateTitleBar = newPlainTitleBar("Generate key")
+	r.ssh.KeysGenerateStatus = tview.NewTextView().SetDynamicColors(true)
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.sshKeysGenerateForm, 8, 0, true).
-		AddItem(r.sshKeysGenerateStatus, 1, 0, false).
-		AddItem(r.sshKeysGenerateButtons, 1, 0, false)
+		AddItem(r.ssh.KeysGenerateForm, 8, 0, true).
+		AddItem(r.ssh.KeysGenerateStatus, 1, 0, false).
+		AddItem(r.ssh.KeysGenerateButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.sshKeysGenerateTitleBar, 1, 0, false).
+		AddItem(r.ssh.KeysGenerateTitleBar, 1, 0, false).
 		AddItem(content, 0, 1, true)
 }
 
 func (r *Root) setSSHKeysGenerateStatus(text string, color tcell.Color) {
-	r.sshKeysGenerateStatus.SetTextColor(color)
-	r.sshKeysGenerateStatus.SetText(text)
+	r.ssh.KeysGenerateStatus.SetTextColor(color)
+	r.ssh.KeysGenerateStatus.SetText(text)
 }
 
 func (r *Root) cancelSSHKeysGenerate() {
@@ -274,10 +274,10 @@ func (r *Root) cancelSSHKeysGenerate() {
 // into an sshkeys.GenerateSpec.
 func (r *Root) buildSSHKeysGenerateSpec() sshkeys.GenerateSpec {
 	return sshkeys.GenerateSpec{
-		Algorithm: r.sshKeysGenerateAlgorithm,
-		Bits:      r.sshKeysGenerateBits,
-		Filename:  r.sshKeysGenerateFilenameText,
-		Comment:   r.sshKeysGenerateCommentText,
+		Algorithm: r.ssh.KeysGenerateAlgorithm,
+		Bits:      r.ssh.KeysGenerateBits,
+		Filename:  r.ssh.KeysGenerateFilenameText,
+		Comment:   r.ssh.KeysGenerateCommentText,
 	}
 }
 
@@ -287,7 +287,7 @@ func (r *Root) buildSSHKeysGenerateSpec() sshkeys.GenerateSpec {
 // `ssh-keygen` command that would create it, and asks for explicit
 // confirmation showing that literal command — never running anything
 // before the user has seen and accepted exactly what will run. Any
-// failure is reported in place, in sshKeysGenerateStatus, without
+// failure is reported in place, in ssh.KeysGenerateStatus, without
 // closing the form, so it can be fixed and resubmitted immediately.
 func (r *Root) submitSSHKeysGenerate() {
 	spec := r.buildSSHKeysGenerateSpec()
@@ -360,19 +360,19 @@ func (r *Root) runSSHKeysGenerateCommandFullScreen(command string) error {
 }
 
 // applySSHKeysGenerateTheme themes the "Generate key" form — split out
-// of applySSHKeysTheme so that function's own guard (nil sshKeysTable)
+// of applySSHKeysTheme so that function's own guard (nil ssh.KeysTable)
 // doesn't gate this dialog's theming too, the same reasoning
 // applyFirewallTheme's own trailing, unconditional block already gives
 // for its own three secondary dialogs.
 func (r *Root) applySSHKeysGenerateTheme(theme config.ResolvedTheme) {
-	r.sshKeysGenerateForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.sshKeysGenerateForm.SetLabelColor(theme.TextColor)
-	r.sshKeysGenerateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.sshKeysGenerateForm.SetFieldTextColor(theme.TextColor)
-	r.sshKeysGenerateStatus.SetBackgroundColor(theme.SurfaceBackground)
-	r.sshKeysGenerateButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.sshKeysGenerateCancelBtn, theme)
-	styleButton(r.sshKeysGenerateGenerateBtn, theme)
-	r.sshKeysGenerateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.sshKeysGenerateTitleBar.SetTextColor(theme.TextColor)
+	r.ssh.KeysGenerateForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.ssh.KeysGenerateForm.SetLabelColor(theme.TextColor)
+	r.ssh.KeysGenerateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.ssh.KeysGenerateForm.SetFieldTextColor(theme.TextColor)
+	r.ssh.KeysGenerateStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.ssh.KeysGenerateButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.ssh.KeysGenerateCancelBtn, theme)
+	styleButton(r.ssh.KeysGenerateGenerateBtn, theme)
+	r.ssh.KeysGenerateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.ssh.KeysGenerateTitleBar.SetTextColor(theme.TextColor)
 }

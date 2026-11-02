@@ -47,30 +47,30 @@ const sshKeysCopyPage = "sshkeys-copy"
 // refusing outright rather than opening a form that could only ever
 // fail.
 func (r *Root) openSSHKeysCopy() {
-	row, _ := r.sshKeysTable.GetSelection()
+	row, _ := r.ssh.KeysTable.GetSelection()
 	index := row - 1 // header row occupies row 0
-	if index < 0 || index >= len(r.sshKeysPairs) {
+	if index < 0 || index >= len(r.ssh.KeysPairs) {
 		r.showError(errors.New("ssh keys: select a key pair first"))
 		return
 	}
-	kp := r.sshKeysPairs[index]
+	kp := r.ssh.KeysPairs[index]
 	if !kp.HasPublic {
 		r.showError(fmt.Errorf("ssh keys: %s has no public key file to copy", kp.Name))
 		return
 	}
 
-	r.sshKeysCopyKeyName = kp.Name
-	r.sshKeysCopyHostText = ""
-	r.sshKeysCopyPortText = strconv.Itoa(sshkeys.DefaultPort)
-	r.sshKeysCopyUserText = os.Getenv("USER")
+	r.ssh.KeysCopyKeyName = kp.Name
+	r.ssh.KeysCopyHostText = ""
+	r.ssh.KeysCopyPortText = strconv.Itoa(sshkeys.DefaultPort)
+	r.ssh.KeysCopyUserText = os.Getenv("USER")
 	// Prefills from the active panel's own already-open connection, the
 	// same "reuse what's already there" shape defaultRsyncSource's own
 	// doc comment establishes for Rsync — never guessed when the active
 	// panel is local, since there is nothing to reuse.
 	if r.panel.remote != nil {
-		r.sshKeysCopyHostText = r.panel.remoteConn.Host
-		r.sshKeysCopyPortText = strconv.Itoa(r.panel.remoteConn.Port22IfZero())
-		r.sshKeysCopyUserText = r.panel.remoteConn.User
+		r.ssh.KeysCopyHostText = r.panel.remoteConn.Host
+		r.ssh.KeysCopyPortText = strconv.Itoa(r.panel.remoteConn.Port22IfZero())
+		r.ssh.KeysCopyUserText = r.panel.remoteConn.User
 	}
 	r.setSSHKeysCopyStatus("", r.theme.Text)
 	r.renderSSHKeysCopyForm()
@@ -85,8 +85,8 @@ func (r *Root) openSSHKeysCopy() {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.sshKeysCopyLayout.SetRect(x, y, width, height)
-	r.pushOverlay(sshKeysCopyPage, r.sshKeysCopyLayout, nil)
+	r.ssh.KeysCopyLayout.SetRect(x, y, width, height)
+	r.pushOverlay(sshKeysCopyPage, r.ssh.KeysCopyLayout, nil)
 }
 
 // newSSHKeysCopyForm builds the (initially empty) "Copy to server"
@@ -105,30 +105,30 @@ func (r *Root) newSSHKeysCopyForm() *tview.Form {
 	return f
 }
 
-// renderSSHKeysCopyForm (re)builds sshKeysCopyForm's own items: a
+// renderSSHKeysCopyForm (re)builds ssh.KeysCopyForm's own items: a
 // read-only line naming which key pair is being copied, then Host,
 // Port, and User — each one just writes straight back into its own
 // sshKeysCopyXxx mirror field, the same "value mirror kept in sync
 // live" shape resetDuplicateForm's own fields already use.
 func (r *Root) renderSSHKeysCopyForm() {
-	r.sshKeysCopyForm.Clear(true)
+	r.ssh.KeysCopyForm.Clear(true)
 
-	r.sshKeysCopyForm.AddTextView("Key", r.sshKeysCopyKeyName+".pub", 0, 1, true, false)
+	r.ssh.KeysCopyForm.AddTextView("Key", r.ssh.KeysCopyKeyName+".pub", 0, 1, true, false)
 
-	hostField := tview.NewInputField().SetLabel("Host").SetText(r.sshKeysCopyHostText)
-	hostField.SetChangedFunc(func(v string) { r.sshKeysCopyHostText = v })
-	r.sshKeysCopyForm.AddFormItem(hostField)
+	hostField := tview.NewInputField().SetLabel("Host").SetText(r.ssh.KeysCopyHostText)
+	hostField.SetChangedFunc(func(v string) { r.ssh.KeysCopyHostText = v })
+	r.ssh.KeysCopyForm.AddFormItem(hostField)
 
-	portField := tview.NewInputField().SetLabel("Port").SetText(r.sshKeysCopyPortText)
-	portField.SetChangedFunc(func(v string) { r.sshKeysCopyPortText = v })
-	r.sshKeysCopyForm.AddFormItem(portField)
+	portField := tview.NewInputField().SetLabel("Port").SetText(r.ssh.KeysCopyPortText)
+	portField.SetChangedFunc(func(v string) { r.ssh.KeysCopyPortText = v })
+	r.ssh.KeysCopyForm.AddFormItem(portField)
 
-	userField := tview.NewInputField().SetLabel("User").SetText(r.sshKeysCopyUserText)
-	userField.SetChangedFunc(func(v string) { r.sshKeysCopyUserText = v })
+	userField := tview.NewInputField().SetLabel("User").SetText(r.ssh.KeysCopyUserText)
+	userField.SetChangedFunc(func(v string) { r.ssh.KeysCopyUserText = v })
 	userField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sshKeysCopyPickBtn)
+			r.app.SetFocus(r.ssh.KeysCopyPickBtn)
 			return nil
 		case tcell.KeyEnter:
 			r.submitSSHKeysCopy()
@@ -136,28 +136,28 @@ func (r *Root) renderSSHKeysCopyForm() {
 		}
 		return event
 	})
-	r.sshKeysCopyForm.AddFormItem(userField)
+	r.ssh.KeysCopyForm.AddFormItem(userField)
 }
 
-// newSSHKeysCopyPickButton builds sshKeysCopyPickBtn once, from
+// newSSHKeysCopyPickButton builds ssh.KeysCopyPickBtn once, from
 // NewRoot — opens openSSHKeysCopyTabPicker, the same "a real button,
 // not a new keybinding" shape newRsyncPickButtons' own doc comment
 // explains for Rsync's identical pair.
 func (r *Root) newSSHKeysCopyPickButton() *tview.Button {
 	pick := func() { r.openSSHKeysCopyTabPicker() }
-	r.sshKeysCopyPickBtn = tview.NewButton("Pick tab…").SetSelectedFunc(pick)
-	r.sshKeysCopyPickBtn.SetInputCapture(spaceAlsoActivates(pick))
-	r.sshKeysCopyPickBtn.SetExitFunc(func(key tcell.Key) {
+	r.ssh.KeysCopyPickBtn = tview.NewButton("Pick tab…").SetSelectedFunc(pick)
+	r.ssh.KeysCopyPickBtn.SetInputCapture(spaceAlsoActivates(pick))
+	r.ssh.KeysCopyPickBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sshKeysCopyCancelBtn)
+			r.app.SetFocus(r.ssh.KeysCopyCancelBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.sshKeysCopyForm)
+			r.app.SetFocus(r.ssh.KeysCopyForm)
 		case tcell.KeyEscape:
 			r.cancelSSHKeysCopy()
 		}
 	})
-	return r.sshKeysCopyPickBtn
+	return r.ssh.KeysCopyPickBtn
 }
 
 // openSSHKeysCopyTabPicker lists every currently connected remote tab
@@ -184,9 +184,9 @@ func (r *Root) openSSHKeysCopyTabPicker() {
 		label := fmt.Sprintf("%2d  %s@%s:%d", i+1, conn.User, conn.Host, conn.Port22IfZero())
 		r.picker.AddItem(label, "", 0, func() {
 			r.hideOverlay()
-			r.sshKeysCopyHostText = conn.Host
-			r.sshKeysCopyPortText = strconv.Itoa(conn.Port22IfZero())
-			r.sshKeysCopyUserText = conn.User
+			r.ssh.KeysCopyHostText = conn.Host
+			r.ssh.KeysCopyPortText = strconv.Itoa(conn.Port22IfZero())
+			r.ssh.KeysCopyUserText = conn.User
 			r.renderSSHKeysCopyForm()
 		})
 	}
@@ -205,62 +205,62 @@ func (r *Root) openSSHKeysCopyTabPicker() {
 	r.pushOverlay(pickerPage, r.picker, nil)
 }
 
-// newSSHKeysCopyButtons builds sshKeysCopyForm's own action row once,
+// newSSHKeysCopyButtons builds ssh.KeysCopyForm's own action row once,
 // from NewRoot — the same Cancel/action button pair
 // newFirewallAddRuleButtons already establishes.
 func (r *Root) newSSHKeysCopyButtons() *tview.Flex {
-	r.sshKeysCopyCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelSSHKeysCopy)
-	r.sshKeysCopyGoBtn = tview.NewButton("Copy key").SetSelectedFunc(r.submitSSHKeysCopy)
-	r.sshKeysCopyCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelSSHKeysCopy))
-	r.sshKeysCopyGoBtn.SetInputCapture(spaceAlsoActivates(r.submitSSHKeysCopy))
+	r.ssh.KeysCopyCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelSSHKeysCopy)
+	r.ssh.KeysCopyGoBtn = tview.NewButton("Copy key").SetSelectedFunc(r.submitSSHKeysCopy)
+	r.ssh.KeysCopyCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelSSHKeysCopy))
+	r.ssh.KeysCopyGoBtn.SetInputCapture(spaceAlsoActivates(r.submitSSHKeysCopy))
 
-	r.sshKeysCopyCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.ssh.KeysCopyCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sshKeysCopyGoBtn)
+			r.app.SetFocus(r.ssh.KeysCopyGoBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.sshKeysCopyPickBtn)
+			r.app.SetFocus(r.ssh.KeysCopyPickBtn)
 		case tcell.KeyEscape:
 			r.cancelSSHKeysCopy()
 		}
 	})
-	r.sshKeysCopyGoBtn.SetExitFunc(func(key tcell.Key) {
+	r.ssh.KeysCopyGoBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sshKeysCopyForm)
+			r.app.SetFocus(r.ssh.KeysCopyForm)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.sshKeysCopyCancelBtn)
+			r.app.SetFocus(r.ssh.KeysCopyCancelBtn)
 		case tcell.KeyEscape:
 			r.cancelSSHKeysCopy()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.sshKeysCopyCancelBtn, 0, 1, false).
-		AddItem(r.sshKeysCopyGoBtn, 0, 1, false)
+		AddItem(r.ssh.KeysCopyCancelBtn, 0, 1, false).
+		AddItem(r.ssh.KeysCopyGoBtn, 0, 1, false)
 }
 
-// newSSHKeysCopyLayout wraps sshKeysCopyTitleBar over the form, the
+// newSSHKeysCopyLayout wraps ssh.KeysCopyTitleBar over the form, the
 // Pick tab… button, a one-line status area, and the Cancel/Copy key
 // buttons — the same shape newFirewallAddRuleLayout already
 // establishes, with the Pick button as its own row in between, the
 // same position newRsyncPickButtons' own row occupies for Rsync.
 func (r *Root) newSSHKeysCopyLayout() *tview.Flex {
-	r.sshKeysCopyTitleBar = newPlainTitleBar("Copy key to server")
-	r.sshKeysCopyStatus = tview.NewTextView().SetDynamicColors(true)
+	r.ssh.KeysCopyTitleBar = newPlainTitleBar("Copy key to server")
+	r.ssh.KeysCopyStatus = tview.NewTextView().SetDynamicColors(true)
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.sshKeysCopyForm, 8, 0, true).
-		AddItem(r.sshKeysCopyPickBtn, 1, 0, false).
-		AddItem(r.sshKeysCopyStatus, 1, 0, false).
-		AddItem(r.sshKeysCopyButtons, 1, 0, false)
+		AddItem(r.ssh.KeysCopyForm, 8, 0, true).
+		AddItem(r.ssh.KeysCopyPickBtn, 1, 0, false).
+		AddItem(r.ssh.KeysCopyStatus, 1, 0, false).
+		AddItem(r.ssh.KeysCopyButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.sshKeysCopyTitleBar, 1, 0, false).
+		AddItem(r.ssh.KeysCopyTitleBar, 1, 0, false).
 		AddItem(content, 0, 1, true)
 }
 
 func (r *Root) setSSHKeysCopyStatus(text string, color tcell.Color) {
-	r.sshKeysCopyStatus.SetTextColor(color)
-	r.sshKeysCopyStatus.SetText(text)
+	r.ssh.KeysCopyStatus.SetTextColor(color)
+	r.ssh.KeysCopyStatus.SetText(text)
 }
 
 func (r *Root) cancelSSHKeysCopy() {
@@ -274,22 +274,22 @@ func (r *Root) cancelSSHKeysCopy() {
 // command that would install it, and asks for explicit confirmation
 // showing that literal command — never running anything before the
 // user has seen and accepted exactly what will run. Any failure is
-// reported in place, in sshKeysCopyStatus, without closing the form.
+// reported in place, in ssh.KeysCopyStatus, without closing the form.
 func (r *Root) submitSSHKeysCopy() {
-	port, err := strconv.Atoi(strings.TrimSpace(r.sshKeysCopyPortText))
+	port, err := strconv.Atoi(strings.TrimSpace(r.ssh.KeysCopyPortText))
 	if err != nil || port <= 0 {
-		r.setSSHKeysCopyStatus(fmt.Sprintf("invalid port %q", r.sshKeysCopyPortText), r.theme.CriticalText)
+		r.setSSHKeysCopyStatus(fmt.Sprintf("invalid port %q", r.ssh.KeysCopyPortText), r.theme.CriticalText)
 		return
 	}
-	host := strings.TrimSpace(r.sshKeysCopyHostText)
-	user := strings.TrimSpace(r.sshKeysCopyUserText)
+	host := strings.TrimSpace(r.ssh.KeysCopyHostText)
+	user := strings.TrimSpace(r.ssh.KeysCopyUserText)
 
 	dir := sshkeys.DefaultDir()
 	if dir == "" {
 		r.setSSHKeysCopyStatus("could not determine the current user's home directory", r.theme.CriticalText)
 		return
 	}
-	pubKeyLine, err := sshkeys.ReadPublicKeyLine(dir, r.sshKeysCopyKeyName)
+	pubKeyLine, err := sshkeys.ReadPublicKeyLine(dir, r.ssh.KeysCopyKeyName)
 	if err != nil {
 		r.setSSHKeysCopyStatus(err.Error(), r.theme.CriticalText)
 		return
@@ -302,7 +302,7 @@ func (r *Root) submitSSHKeysCopy() {
 	}
 	privateKeyPath := ""
 	if info, statErr := os.Stat(dir); statErr == nil && info.IsDir() {
-		privateKeyPath = dir + "/" + r.sshKeysCopyKeyName
+		privateKeyPath = dir + "/" + r.ssh.KeysCopyKeyName
 	}
 
 	message := fmt.Sprintf("Run this exact command now? %s", command)
@@ -401,15 +401,15 @@ func (r *Root) runSSHKeysCommandFullScreen(command string) error {
 // applySSHKeysTheme, the same reasoning applySSHKeysGenerateTheme's own
 // doc comment gives.
 func (r *Root) applySSHKeysCopyTheme(theme config.ResolvedTheme) {
-	r.sshKeysCopyForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.sshKeysCopyForm.SetLabelColor(theme.TextColor)
-	r.sshKeysCopyForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.sshKeysCopyForm.SetFieldTextColor(theme.TextColor)
-	r.sshKeysCopyStatus.SetBackgroundColor(theme.SurfaceBackground)
-	r.sshKeysCopyButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.sshKeysCopyPickBtn, theme)
-	styleButton(r.sshKeysCopyCancelBtn, theme)
-	styleButton(r.sshKeysCopyGoBtn, theme)
-	r.sshKeysCopyTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.sshKeysCopyTitleBar.SetTextColor(theme.TextColor)
+	r.ssh.KeysCopyForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.ssh.KeysCopyForm.SetLabelColor(theme.TextColor)
+	r.ssh.KeysCopyForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.ssh.KeysCopyForm.SetFieldTextColor(theme.TextColor)
+	r.ssh.KeysCopyStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.ssh.KeysCopyButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.ssh.KeysCopyPickBtn, theme)
+	styleButton(r.ssh.KeysCopyCancelBtn, theme)
+	styleButton(r.ssh.KeysCopyGoBtn, theme)
+	r.ssh.KeysCopyTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.ssh.KeysCopyTitleBar.SetTextColor(theme.TextColor)
 }

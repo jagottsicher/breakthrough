@@ -383,7 +383,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		// Without this, tview's own default selected-cell style just
 		// reverses each cell's own foreground into a background instead
 		// of using one consistent selection bar — the same fix already
-		// applied to sshKeysTable/connectionMenuTable/sed.PreviewTable/
+		// applied to ssh.KeysTable/connectionMenuTable/sed.PreviewTable/
 		// tabSwitcher/gitBreach's tables, for the identical reason.
 		r.compare.TreeTable.SetSelectedStyle(tcell.StyleDefault.
 			Background(theme.SelectionBackground).
@@ -630,26 +630,26 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// TitleBar. Every new widget in this app needs its own explicit
 	// line here — nothing above or below gets colored automatically
 	// just by existing.
-	r.sshShellForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.sshShellForm.SetLabelColor(theme.TextColor)
-	r.sshShellForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.sshShellForm.SetFieldTextColor(theme.TextColor)
+	r.ssh.ShellForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.ssh.ShellForm.SetLabelColor(theme.TextColor)
+	r.ssh.ShellForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.ssh.ShellForm.SetFieldTextColor(theme.TextColor)
 	// The four checkboxes' own dot/label colors — repainted explicitly,
 	// not left to Form's own generic pass above: see plainFormCheckbox's
 	// own doc comment (sshshell.go) for why that pass must never be
 	// allowed to reach them the way it does every ordinary field.
-	r.sshShellAgentCheckbox.paint(theme)
-	r.sshShellCompressionCheckbox.paint(theme)
-	r.sshShellVerboseCheckbox.paint(theme)
-	r.sshShellX11Checkbox.paint(theme)
-	r.sshShellStatus.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.sshShellCancelBtn, theme)
-	styleButton(r.sshShellOpenBtn, theme)
-	r.sshShellTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.sshShellTitleBar.SetTextColor(theme.TextColor)
+	r.ssh.ShellAgentCheckbox.paint(theme)
+	r.ssh.ShellCompressionCheckbox.paint(theme)
+	r.ssh.ShellVerboseCheckbox.paint(theme)
+	r.ssh.ShellX11Checkbox.paint(theme)
+	r.ssh.ShellStatus.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.ssh.ShellCancelBtn, theme)
+	styleButton(r.ssh.ShellOpenBtn, theme)
+	r.ssh.ShellTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.ssh.ShellTitleBar.SetTextColor(theme.TextColor)
 
-	r.sshShellMenuTable.SetBackgroundColor(theme.SurfaceBackground)
-	r.sshShellMenuTable.SetSelectedStyle(tcell.StyleDefault.
+	r.ssh.ShellMenuTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.ssh.ShellMenuTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
 	// InputFocusedBackground, not SurfaceBackground: the user's own
@@ -663,12 +663,12 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// glyph at all — see its own doc comment) that this one's own first
 	// draft wrongly copied along with the close-glyph padding logic it
 	// borrowed from renderHelpTitleBar instead.
-	r.sshShellMenuTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.ssh.ShellMenuTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	// TextColor, not Text — see this block's own doc comment just above:
 	// every close-glyph title bar in this app (properties.TitleBar,
 	// search.TitleBar, ...) paints with TextColor, not connectionMenu-
 	// TitleBar's own Text.
-	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)
+	r.ssh.ShellMenuTitleBar.SetTextColor(theme.TextColor)
 
 	// The Terminal switcher (terminalswitcher.go) — the identical
 	// plain-title-bar treatment tabSwitcherTitleBar below uses (no

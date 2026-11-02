@@ -1190,7 +1190,7 @@ func (p *Panel) paintStaticChrome() {
 	p.header.SetBackgroundColor(p.theme.SurfaceBackground)
 
 	// InputFocusedBackground/TextColor — the same close-glyph-title-bar
-	// pair sshShellTitleBar and the other dialog title bars in this app
+	// pair ssh.ShellTitleBar and the other dialog title bars in this app
 	// already use, since this reads the same way: a one-line label
 	// sitting above real content (formerly shellTab.header's own
 	// styleShellHeader, folded in here once that became one of

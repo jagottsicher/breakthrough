@@ -434,7 +434,7 @@ func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
-	// to sshKeysTable/connectionMenuTable/sed.PreviewTable/tabSwitcher/
+	// to ssh.KeysTable/connectionMenuTable/sed.PreviewTable/tabSwitcher/
 	// gitBreach's tables, for the identical reason.
 	r.activity.Table.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
