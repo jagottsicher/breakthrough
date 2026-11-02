@@ -410,7 +410,7 @@ func TestFilterPersistsAcrossNavigationByDefault(t *testing.T) {
 	r.panel.filterExcludeDirs = true
 
 	sub := filepath.Join(dir, "app-data")
-	if err := r.panel.navigate(sub); err != nil {
+	if err := syncNavigate(r.panel, sub); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 	if r.panel.filterText != "ap*" {
@@ -476,7 +476,7 @@ func TestFilterResetsOnNavigationWhenNotPersistent(t *testing.T) {
 	// Navigating to a different directory must clear it, since
 	// filterPersistent is false here.
 	sub := filepath.Join(dir, "app-data")
-	if err := r.panel.navigate(sub); err != nil {
+	if err := syncNavigate(r.panel, sub); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 	if r.panel.filterText != "" {

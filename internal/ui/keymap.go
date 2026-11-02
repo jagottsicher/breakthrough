@@ -325,12 +325,12 @@ func chordFamilies() []chordFamily {
 		// gr/gb — jumps to a fixed, unrelated place — close it out.
 		{prefix: 'g', name: "goto", quick: true, members: []chordMember{
 			{'g', "Top", func(r *Root) { r.panel.focusRow(0) }},
-			{'h', "Home", func(r *Root) { r.showError(r.panel.navigate(userHomeDir())) }},
+			{'h', "Home", func(r *Root) { r.panel.navigate(userHomeDir(), r.showError) }},
 			// Mirrors actionUp's own filepath.Dir(p.path) — see its own
 			// doc comment on why filepath.Dir("/") == "/" (a harmless
 			// no-op at the filesystem root) needs no special-casing here
 			// either.
-			{'u', "Up", func(r *Root) { r.showError(r.panel.navigate(filepath.Dir(r.panel.path))) }},
+			{'u', "Up", func(r *Root) { r.panel.navigate(filepath.Dir(r.panel.path), r.showError) }},
 			// "p"/"n" (previous/next), not "b"/"f" — "b" was already
 			// spoken for by Trash below, and "back"/"forward" as
 			// abbreviations read no more naturally than "previous"/
@@ -348,7 +348,7 @@ func chordFamilies() []chordFamily {
 			// a bare separator space, so there's nothing for it to be
 			// mistaken for. Matches the help text's own existing phrasing
 			// ("gr / (root)" — see help.go).
-			{'r', "/ (root)", func(r *Root) { r.showError(r.panel.navigate("/")) }},
+			{'r', "/ (root)", func(r *Root) { r.panel.navigate("/", r.showError) }},
 			{'b', "Trashbin", func(r *Root) { r.openTrash() }},
 			// "Connect…" closes the family out, after gr/gb rather than
 			// among gh/gu/gp/gn: it doesn't navigate anywhere by itself,

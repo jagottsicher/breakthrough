@@ -174,7 +174,7 @@ func TestDetailsAtRootShowsSystemInfoAndTitleSwitchesOnNavigation(t *testing.T) 
 
 	// Navigate into a real subdirectory that definitely exists — /etc
 	// is universal on every Linux system this could plausibly run on.
-	if err := r.panel.navigate("/etc"); err != nil {
+	if err := syncNavigate(r.panel, "/etc"); err != nil {
 		t.Fatalf("navigate(/etc): %v", err)
 	}
 	if r.showingSystemInfo() {
@@ -184,7 +184,7 @@ func TestDetailsAtRootShowsSystemInfoAndTitleSwitchesOnNavigation(t *testing.T) 
 		t.Errorf("title bar = %q, should have reverted to \"Details\" after leaving \"/\"", got)
 	}
 
-	if err := r.panel.navigate("/"); err != nil {
+	if err := syncNavigate(r.panel, "/"); err != nil {
 		t.Fatalf("navigate(/): %v", err)
 	}
 	if got := r.detailsTitleBar.GetText(true); !strings.Contains(got, "System Info") {

@@ -329,7 +329,14 @@ func (r *Root) RestoreSavedTabs() {
 			break
 		}
 		if i == 0 {
-			if err := r.tabs[0].navigate(path); err != nil {
+			// navigate's callback runs synchronously here: a restored
+			// session's own tab 0 is always local at this point (fresh
+			// off NewRoot, never yet connected to anything remote — see
+			// NewPanel's own doc comment on why its initial navigate is
+			// always synchronous for the same reason).
+			var err error
+			r.tabs[0].navigate(path, func(e error) { err = e })
+			if err != nil {
 				continue // stale path — leave tab 0 where NewRoot put it
 			}
 			savedToLive[i] = 0
