@@ -1671,7 +1671,7 @@ func (r *Root) applySearchTheme(theme config.ResolvedTheme) {
 	styleButton(r.searchSearchBtn, theme)
 	// FocusedBackground, fixed — Search is a single-layer, always-modal
 	// dialog nothing else ever stacks on top of, the same reasoning
-	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
+	// confirmDialogTitleBar/chmodTitleBar/sed.TitleBar already follow.
 	r.searchTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.searchTitleBar.SetTextColor(theme.TextColor)
 	r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme

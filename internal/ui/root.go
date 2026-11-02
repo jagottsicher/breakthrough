@@ -31,7 +31,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/operations"
 	"github.com/jagottsicher/breakthrough/internal/rclone"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
-	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/sshkeys"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
@@ -1108,7 +1107,7 @@ type Root struct {
 	// theme.ErrorBackground every other error already uses (see
 	// showError), a blank row, the "Don't show this again" toggle
 	// (checkboxText-prefixed, List-based for the same reason
-	// sedFlagsList already is — tview.Form.AddCheckbox can't keep a
+	// sed.FlagsList already is — tview.Form.AddCheckbox can't keep a
 	// background different from a real field's, see newSedForm's own
 	// doc comment), another blank row, then Cancel and OK side by side
 	// — the one place in this dialog two real buttons share a single
@@ -1130,66 +1129,46 @@ type Root struct {
 	activityLogNoticeSpacer1 *tview.Box
 	activityLogNoticeSpacer2 *tview.Box
 
-	// sedForm/sedFlagsList/sedActions/sedLayout together make up the
+	// sed.Form/sed.FlagsList/sed.Actions/sed.Layout together make up the
 	// "Sed Replace" dialog (see sedreplace.go, especially newSedForm's
 	// own doc comment on why the five flag toggles are a separate List
 	// rather than Form checkboxes: tview.Form re-applies one uniform
 	// field background to every item it owns on every Draw call, which
 	// would force a checkbox into the same "editable text field"
-	// highlight real fields get). sedLayout stacks the other three and
-	// is what sedReplacePage actually shows. All three (plus sedFlags)
+	// highlight real fields get). sed.Layout stacks the other three and
+	// is what sedReplacePage actually shows. All three (plus sed.Flags)
 	// are rebuilt fresh on every open (see resetSedForm), unlike
 	// confirmDialog's shared, repopulated single widget, since Form has
 	// no equivalent of List's SetItemText to reset one in place.
-	// sedFindField/sedReplaceField/sedAdvancedField are kept directly
+	// sed.FindField/sed.ReplaceField/sed.AdvancedField are kept directly
 	// (their typed text values are read back in runSedPreview);
-	// sedFlags holds the five toggles' current state, keyed by their
-	// label constants. sedTargets is the file(s) this open is for (see
+	// sed.Flags holds the five toggles' current state, keyed by their
+	// label constants. sed.Targets is the file(s) this open is for (see
 	// selectedOrCurrentPaths).
-	sedForm          *tview.Form
-	sedFindField     *tview.InputField
-	sedReplaceField  *tview.InputField
-	sedAdvancedField *tview.InputField
-	sedFlags         map[string]bool
-	sedFlagsList     *tview.List
-	sedActions       *tview.List
-	// sedTitleBar/sedContentLayout are the "Sed Replace" title bar and
+	//
+	// sed.TitleBar/sed.ContentLayout are the "Sed Replace" title bar and
 	// the Flex it's stacked above (see newSedContentLayout for what that
-	// one already was on its own) — sedLayout, the outer wrapper of the
+	// one already was on its own) — sed.Layout, the outer wrapper of the
 	// two, is what sedReplacePage actually shows/positions instead (the
 	// same widget/layout split menu/menuTitleBar/menuLayout already
-	// established — focus still cascades all the way down to sedForm via
+	// established — focus still cascades all the way down to sed.Form via
 	// tview.Flex.Focus's own delegate chain, verified directly against
 	// tview's own flex.go/application.go, not assumed).
-	sedTitleBar      *tview.TextView
-	sedContentLayout *tview.Flex
-	sedLayout        *tview.Flex
-	sedTargets       []string
-
-	// sedPreviewStatus/sedPreviewTable/sedPreviewActions/sedPreviewLayout
+	//
+	// sed.PreviewStatus/sed.PreviewTable/sed.PreviewActions/sed.PreviewLayout
 	// show Preview's own dry-run result (runSedPreview): a one-line
 	// status (progress while running, a summary once done), the actual
 	// Name/Line/Excerpt table (see sedPreviewRows), and Apply/Back/
 	// Cancel — the same three-choice shape confirmDialog already has.
-	// sedPendingChanges is what confirmApplySed actually writes if the
+	// sed.PendingChanges is what confirmApplySed actually writes if the
 	// user goes on to confirm.
 	//
-	// sedPreviewCancel/sedPreviewAnimFrame/sedPreviewProcessed/
-	// sedPreviewTotal/sedPreviewCurrentPos back the live progress
+	// sed.PreviewCancel/sed.PreviewAnimFrame/sed.PreviewProcessed/
+	// sed.PreviewTotal/sed.PreviewCurrentPos back the live progress
 	// animation (see animateSedPreviewProgress/renderSedPreviewStatus) —
 	// the same shape searchCancel/searchAnimFrame and friends already
 	// have for a live search.
-	sedPreviewStatus     *tview.TextView
-	sedPreviewTable      *tview.Table
-	sedPreviewActions    *tview.List
-	sedPreviewTitleBar   *tview.TextView // " Sed Preview " — see newSedPreviewLayout, the same wrapping sedTitleBar/sedLayout already establish for the dialog it returns to
-	sedPreviewLayout     *tview.Flex
-	sedPendingChanges    []replace.FileChange
-	sedPreviewCancel     context.CancelFunc
-	sedPreviewAnimFrame  int
-	sedPreviewProcessed  int
-	sedPreviewTotal      int
-	sedPreviewCurrentPos string
+	sed sedState
 
 	// connect.Form/connect.Buttons/connect.Layout make up the "Connect"
 	// dialog (see connectdialog.go) — a fixed field set (Host/Port/
@@ -2928,15 +2907,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		AddItem(r.bgJobCancelDialog, 0, 1, true)
 
 	// The "Sed Replace" dialog and its own Preview screen (see
-	// sedreplace.go) — sedForm/sedFlagsList/sedActions are rebuilt fresh
-	// on every open (see resetSedForm), but sedLayout (which stacks all
-	// three) and sedPreviewLayout (and the view/actions it wraps) are
+	// sedreplace.go) — sed.Form/sed.FlagsList/sed.Actions are rebuilt fresh
+	// on every open (see resetSedForm), but sed.Layout (which stacks all
+	// three) and sed.PreviewLayout (and the view/actions it wraps) are
 	// built once here, the same as everything else on this page.
-	r.sedForm = r.newSedForm()
-	r.sedFlagsList = r.newSedFlagsList()
-	r.sedActions = r.newSedActions()
-	r.sedLayout = r.newSedLayout()
-	r.sedPreviewLayout = r.newSedPreviewLayout()
+	r.sed.Form = r.newSedForm()
+	r.sed.FlagsList = r.newSedFlagsList()
+	r.sed.Actions = r.newSedActions()
+	r.sed.Layout = r.newSedLayout()
+	r.sed.PreviewLayout = r.newSedPreviewLayout()
 
 	// The "Multiply" dialog (see duplicate.go) — same "built once here,
 	// contents rebuilt fresh per open" shape as Sed Replace just above.
@@ -3263,8 +3242,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
 	r.AddPage(pastePausePage, r.pastePauseDialogLayout, false, false)
 	r.AddPage(bgJobCancelPage, r.bgJobCancelDialogLayout, false, false)
-	r.AddPage(sedReplacePage, r.sedLayout, false, false)
-	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
+	r.AddPage(sedReplacePage, r.sed.Layout, false, false)
+	r.AddPage(sedPreviewPage, r.sed.PreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
 	r.AddPage(compressPage, r.compress.Layout, false, false)
 	r.AddPage(rsyncPage, r.rsyncLayout, false, false)

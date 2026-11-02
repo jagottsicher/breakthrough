@@ -623,7 +623,7 @@ func TestTabAroundTheToolboxFormReachesEveryWidgetAndWrapsBack(t *testing.T) {
 	// Backtab from the form's own first field wraps within the form
 	// itself (fieldA is also its only field here) — the same
 	// "Backtab wraps inside the form, never out to a sibling widget"
-	// convention sedFindField's own Backtab already establishes
+	// convention sed.FindField's own Backtab already establishes
 	// (TestTabFromTheAdvancedFieldReachesTheFlagsAndActions), left to
 	// tview's native Form handling rather than anything wired above.
 	backtab(fieldA)

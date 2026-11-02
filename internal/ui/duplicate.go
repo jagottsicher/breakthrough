@@ -464,7 +464,7 @@ func (r *Root) newDuplicateButtons() *tview.Flex {
 // newDuplicateLayout wraps duplicateTitleBar (" Multiply ") above
 // duplicateContentLayout — the same widget/layout split
 // menu/menuTitleBar/menuLayout already established, mirrored exactly
-// by sedLayout/sedTitleBar/sedContentLayout for Sed Replace.
+// by sed.Layout/sed.TitleBar/sed.ContentLayout for Sed Replace.
 func (r *Root) newDuplicateLayout() *tview.Flex {
 	r.duplicateTitleBar = newPlainTitleBar("Multiply")
 	r.duplicateContentLayout = r.newDuplicateContentLayout()
@@ -791,7 +791,7 @@ func (r *Root) applyDuplicateTheme(theme config.ResolvedTheme) {
 	styleButton(r.duplicateApplyBtn, theme)
 	// FocusedBackground, fixed — Multiply is a single-layer, always-modal
 	// dialog nothing else ever stacks on top of, the same reasoning
-	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
+	// confirmDialogTitleBar/chmodTitleBar/sed.TitleBar already follow.
 	r.duplicateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.duplicateTitleBar.SetTextColor(theme.TextColor)
 }

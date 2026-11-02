@@ -383,7 +383,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		// Without this, tview's own default selected-cell style just
 		// reverses each cell's own foreground into a background instead
 		// of using one consistent selection bar — the same fix already
-		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
+		// applied to sshKeysTable/connectionMenuTable/sed.PreviewTable/
 		// tabSwitcher/gitBreach's tables, for the identical reason.
 		r.compareTreeTable.SetSelectedStyle(tcell.StyleDefault.
 			Background(theme.SelectionBackground).
@@ -732,15 +732,15 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.rsyncTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.rsyncTitleBar.SetTextColor(theme.TextColor)
 
-	r.sedPreviewStatus.SetBackgroundColor(theme.SurfaceBackground)
-	r.sedPreviewStatus.SetTextColor(theme.TextColor)
-	r.sedPreviewTable.SetBackgroundColor(theme.SurfaceBackground)
-	r.sedPreviewTable.SetSelectedStyle(tcell.StyleDefault.
+	r.sed.PreviewStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.sed.PreviewStatus.SetTextColor(theme.TextColor)
+	r.sed.PreviewTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.sed.PreviewTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
-	styleList(r.sedPreviewActions, theme)
-	r.sedPreviewTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.sedPreviewTitleBar.SetTextColor(theme.TextColor)
+	styleList(r.sed.PreviewActions, theme)
+	r.sed.PreviewTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.sed.PreviewTitleBar.SetTextColor(theme.TextColor)
 
 	r.tabSwitcher.SetBackgroundColor(theme.SurfaceBackground)
 	r.tabSwitcher.SetSelectedStyle(tcell.StyleDefault.

@@ -389,7 +389,7 @@ func (r *Root) applySSHKeysTheme(theme config.ResolvedTheme) {
 	// text, warning orange) that then paints the highlighted row in
 	// mismatched patches instead of one consistent selection bar, live-
 	// confirmed against a real run. The same fix connectionMenuTable/
-	// sedPreviewTable/tabSwitcher already apply for the identical reason.
+	// sed.PreviewTable/tabSwitcher already apply for the identical reason.
 	r.sshKeysTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
