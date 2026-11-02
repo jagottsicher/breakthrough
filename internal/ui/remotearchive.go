@@ -10,6 +10,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"strings"
@@ -66,23 +67,92 @@ func needsRemoteArchiveConfirm(size, threshold int64) bool {
 }
 
 // startRemoteArchiveDownload runs in the background (see safeGo) so a
-// slow network transfer never freezes the rest of the app — the same
-// "genuinely async, no visible progress indicator yet, just a result
-// once it's done" scope remotepaste.go's own transfer engine already
-// accepts for the identical reason (see its own package doc comment).
-// Only once the download has actually landed does it stash the local
-// temp copy on panel itself (archiveLocalPath/archiveRemoteClient) and
-// navigate in — load()'s own resolveRemoteArchiveState is what
-// recognizes this exact hand-off (see its own doc comment on why
-// archivePath being "" going into that first call is expected, not a
-// bug).
+// slow network transfer never freezes the rest of the app, with a
+// visible "Downloading <name>…" status-bar segment and a click-to-
+// cancel "✕" for however long it's in flight (see
+// archiveDownloadCancelSpan's own doc comment on the Root struct) —
+// the same independent-progress-segment shape rsync/Compress already
+// establish. Cancelling only ever stops waiting on the result; the
+// transfer itself keeps running in the background regardless (see
+// cancelRemoteArchiveDownload's own doc comment on why).
+//
+// Only once the download has actually landed, uncancelled, does it
+// stash the local temp copy on panel itself (archiveLocalPath/
+// archiveRemoteClient) and navigate in — load()'s own
+// resolveRemoteArchiveState is what recognizes this exact hand-off
+// (see its own doc comment on why archivePath being "" going into that
+// first call is expected, not a bug).
 func (r *Root) startRemoteArchiveDownload(panel *Panel, remote remotefs.Client, archivePath string) {
+	// At most one in-flight download's own progress segment at a time
+	// — a second Look/open on another archive while one is still
+	// downloading simply replaces it, the same "newer request
+	// supersedes the older one" rule openRemoteLook's own stale-result
+	// discard follows (viewer.go) — no queue to manage here, unlike
+	// rsync/Compress's own.
+	r.cancelRemoteArchiveDownload()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r.archiveDownloadPanel = panel
+	r.archiveDownloadPath = archivePath
+	r.archiveDownloadCancel = cancel
+	r.refreshStatusBar()
+
 	r.safeGo("remote archive download", nil, func() {
 		localPath, cleanup, err := downloadRemoteToTemp(remote, archivePath)
 		r.app.QueueUpdateDraw(func() {
+			cancelled := ctx.Err() != nil
+			r.clearRemoteArchiveDownloadState(panel, archivePath)
+			if cancelled {
+				cleanup()
+				return
+			}
 			r.finishRemoteArchiveDownload(panel, remote, archivePath, localPath, cleanup, err)
 		})
 	})
+}
+
+// clearRemoteArchiveDownloadState resets the in-flight download
+// fields, repainting the status bar so the "Downloading…" segment
+// disappears — called from startRemoteArchiveDownload's own
+// QueueUpdateDraw callback regardless of outcome (landed, errored, or
+// cancelled), and from cancelRemoteArchiveDownload itself. The
+// panel/archivePath guard is the same stale-result discard rule
+// applyPanelDiskUsage/applyLogAuditRotatedFile already follow: a
+// *different* download may have started (and be the one the segment
+// should keep describing) between this one beginning and this callback
+// running, in which case clearing these fields here would wrongly
+// erase that newer one's own in-flight state instead.
+func (r *Root) clearRemoteArchiveDownloadState(panel *Panel, archivePath string) {
+	if r.archiveDownloadPanel != panel || r.archiveDownloadPath != archivePath {
+		return
+	}
+	r.archiveDownloadPanel = nil
+	r.archiveDownloadPath = ""
+	r.archiveDownloadCancel = nil
+	r.refreshStatusBar()
+}
+
+// cancelRemoteArchiveDownload stops waiting on whatever remote archive
+// download is currently in flight, if any — bound to
+// archiveDownloadCancelSpan's own "✕" (bottombar.go). The real transfer
+// can't be interrupted mid-read: remotefs.Client has no context.Context
+// anywhere in its own interface (see refreshPanelDiskUsage's own doc
+// comment in bottombar.go for the identical constraint), so this only
+// ever discards the result once it lands instead (see
+// startRemoteArchiveDownload's own ctx.Err() check) — the same
+// "goroutine runs to completion regardless, only the result is
+// discardable" shape every background fetch in this app already
+// follows. Safe to call even when nothing is running (a no-op then),
+// the same contract stopLogAuditProgressiveLoad/stopLogAuditFollow
+// already establish for the identical reason.
+func (r *Root) cancelRemoteArchiveDownload() {
+	if r.archiveDownloadCancel != nil {
+		r.archiveDownloadCancel()
+	}
+	r.archiveDownloadPanel = nil
+	r.archiveDownloadPath = ""
+	r.archiveDownloadCancel = nil
+	r.refreshStatusBar()
 }
 
 // finishRemoteArchiveDownload is startRemoteArchiveDownload's own

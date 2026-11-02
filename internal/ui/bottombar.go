@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -486,6 +487,24 @@ func (r *Root) buildStatusBar() string {
 		compressCancelStart := col
 		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
 		r.compress.CancelSpan = buttonBarSpan{startCol: compressCancelStart, endCol: col, run: func(r *Root) { r.confirmCancelCurrentCompress() }}
+		sep()
+	}
+
+	// A remote archive's own in-flight download (see
+	// startRemoteArchiveDownload/remotearchive.go) — the same
+	// independent-segment treatment as rsync/Compress just above, for
+	// the same reason: nothing here shares state with either. Unlike
+	// those two, cancelling this one doesn't ask first (see
+	// archiveDownloadCancelSpan's own run func) — a download has
+	// nothing destructive riding on it the way a running rsync/Compress
+	// does, just a local temp file this app discards either way.
+	r.archiveDownloadCancelSpan = buttonBarSpan{}
+	if r.archiveDownloadCancel != nil {
+		write(fmt.Sprintf("Downloading %s…", path.Base(r.archiveDownloadPath)))
+		write(" ")
+		archiveDownloadCancelStart := col
+		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
+		r.archiveDownloadCancelSpan = buttonBarSpan{startCol: archiveDownloadCancelStart, endCol: col, run: func(r *Root) { r.cancelRemoteArchiveDownload() }}
 		sep()
 	}
 
@@ -1207,7 +1226,7 @@ func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.Even
 	x, _ := event.Position()
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
 	col := x - rectX
-	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsync.CancelSpan, r.compress.CancelSpan, r.labelScanCancelSpan, r.gitStatusSpan} {
+	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsync.CancelSpan, r.compress.CancelSpan, r.archiveDownloadCancelSpan, r.labelScanCancelSpan, r.gitStatusSpan} {
 		if span.run != nil && col >= span.startCol && col < span.endCol {
 			span.run(r)
 			break
