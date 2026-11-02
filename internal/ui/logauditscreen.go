@@ -900,6 +900,96 @@ func (r *Root) renderLogAuditFocusIndicator(focused bool) {
 	r.logAuditFocusIndicator.SetBackgroundColor(background)
 }
 
+// logAuditLoadGlyphPlaceholder stands in for the animated glyph inside
+// logAuditViewerTitleTemplate — buildLogAuditViewerTitle writes it,
+// resolveLogAuditLoadGlyph/tickLogAuditLoadAnimation substitute the
+// real glyph in later, so neither needs to rebuild the rest of the
+// title string around it.
+const logAuditLoadGlyphPlaceholder = "\x00"
+
+// buildLogAuditViewerTitle builds the viewer's own title-bar text from
+// shown/errCount/warnCount (see logAuditVisibleEntries) and whatever
+// Root fields renderLogAuditViewer already keeps current — factored
+// out so it can be built once per real data change and reused as-is
+// by the animation-only tick (see tickLogAuditLoadAnimation), instead
+// of every one of several-times-a-second ticks re-scanning every
+// entry just to redraw a single moving glyph.
+func (r *Root) buildLogAuditViewerTitle(shown []logview.Entry, errCount, warnCount int) string {
+	filesText := fmt.Sprintf("%d files", r.logAuditFiles)
+	if r.logAuditLoadingMore {
+		// The glyph itself is filled in by resolveLogAuditLoadGlyph (a
+		// fresh render) or tickLogAuditLoadAnimation (the ticker, no
+		// rescan) — never baked in here, so both can share this exact
+		// same template string.
+		filesText = fmt.Sprintf("%s %d/%d files", logAuditLoadGlyphPlaceholder, r.logAuditFiles, r.logAuditTotalFiles)
+	}
+
+	title := fmt.Sprintf(" Log Holepunch — %d events │ %s │ %d skipped │ %d errors │ %d warnings",
+		len(r.logAuditAllEntries), filesText, r.logAuditSkipped, errCount, warnCount)
+	if len(shown) != len(r.logAuditAllEntries) {
+		title += fmt.Sprintf(" │ %d matching", len(shown))
+	}
+	if len(shown) > logAuditMaxRenderedRows {
+		// Without this, a file past the cap silently showed only a
+		// fraction of what the counts above claim — a real, user-
+		// reported point of confusion ("es werden doch auch alle logs
+		// ... richtig angezeigt", i.e. the file counts looked complete,
+		// so the missing rows read as a bug rather than a documented
+		// limit). Shortened to "showing x/y" (was "showing first x (of
+		// y — narrow the filter to see the rest)") per the user's own
+		// explicit request, now that the files segment above can
+		// itself grow a second, similarly-shaped count while loading.
+		title += fmt.Sprintf(" │ showing %d/%d", logAuditMaxRenderedRows, len(shown))
+	}
+	if r.logAuditFollowing {
+		title += " │ ● following"
+	}
+	// A parse error only blocks the whole view when there is nothing
+	// else to show — readLogAuditFile/logaudit.go keeps every entry
+	// that DID parse from a group's other files even when one of them
+	// failed (a corrupted .gz, a permission error on an older
+	// rotation, ...), so showing just the error page here used to
+	// silently hide all of those too, a real, independently-discovered
+	// bug directly on point for "nicht alle Logeinträge sichtbar": an
+	// unrelated problem with one rotation of a file could erase every
+	// entry from the whole family, successfully-read ones included.
+	if r.logAuditParseErr != nil && len(r.logAuditAllEntries) > 0 {
+		title += fmt.Sprintf(" │ 1 file failed: %s", r.logAuditParseErr.Error())
+	}
+	// One general note instead of repeating it on every affected hint
+	// — see logAuditViewerHintEntries' own doc comment for why.
+	title += " │ e/w/Enter/r/f/s need the list focused"
+	return title
+}
+
+// resolveLogAuditLoadGlyph substitutes the current animation frame's
+// own glyph into template (see logAuditLoadGlyphPlaceholder) — a plain
+// pass-through when nothing is loading, since buildLogAuditViewerTitle
+// never writes the placeholder in that case.
+func (r *Root) resolveLogAuditLoadGlyph(template string) string {
+	if !r.logAuditLoadingMore {
+		return template
+	}
+	glyph := hashAnimationFrames[r.logAuditLoadAnimFrame%len(hashAnimationFrames)]
+	return strings.Replace(template, logAuditLoadGlyphPlaceholder, glyph, 1)
+}
+
+// tickLogAuditLoadAnimation repaints only the viewer's own title bar
+// with the next animation frame — see animateLogAuditLoad's own doc
+// comment (logaudit.go) for why this never calls renderLogAuditViewer
+// itself. A no-op once logAuditViewerTitleTemplate has been cleared
+// (stopLogAuditProgressiveLoad already ran) — a tick that was already
+// queued when that happened lands here, finds nothing to do, and
+// simply returns.
+func (r *Root) tickLogAuditLoadAnimation() {
+	r.logAuditLoadAnimFrame++
+	if r.logAuditViewerTitleTemplate == "" {
+		return
+	}
+	title := r.resolveLogAuditLoadGlyph(r.logAuditViewerTitleTemplate)
+	renderReloadCloseTitleBar(r.logAuditViewerTitle, title+" ", r.lastScreenWidth)
+}
+
 // logAuditVisibleEntries filters r.logAuditAllEntries down to whatever
 // currently matches the Keyword/Time/Level fields — factored out of
 // renderLogAuditViewer so consigliereLogAuditMatchedLines (Machiavelli
@@ -978,39 +1068,13 @@ func (r *Root) renderLogAuditViewer() {
 
 	shown, errCount, warnCount := r.logAuditVisibleEntries()
 
-	title := fmt.Sprintf(" Log Holepunch — %d events │ %d files │ %d skipped │ %d errors │ %d warnings",
-		len(r.logAuditAllEntries), r.logAuditFiles, r.logAuditSkipped, errCount, warnCount)
-	if len(shown) != len(r.logAuditAllEntries) {
-		title += fmt.Sprintf(" │ %d matching", len(shown))
+	title := r.buildLogAuditViewerTitle(shown, errCount, warnCount)
+	if r.logAuditLoadingMore {
+		r.logAuditViewerTitleTemplate = title
+	} else {
+		r.logAuditViewerTitleTemplate = ""
 	}
-	if len(shown) > logAuditMaxRenderedRows {
-		// Without this, a file past the cap silently showed only a
-		// fraction of what the counts above claim — a real, user-
-		// reported point of confusion ("es werden doch auch alle logs
-		// ... richtig angezeigt", i.e. the file counts looked complete,
-		// so the missing rows read as a bug rather than a documented
-		// limit).
-		title += fmt.Sprintf(" │ showing first %d (of %d — narrow the filter to see the rest)", logAuditMaxRenderedRows, len(shown))
-	}
-	if r.logAuditFollowing {
-		title += " │ ● following"
-	}
-	// A parse error only blocks the whole view when there is nothing
-	// else to show — readLogAuditGroup/logaudit.go keeps every entry
-	// that DID parse from a group's other files even when one of them
-	// failed (a corrupted .gz, a permission error on an older
-	// rotation, ...), so showing just the error page here used to
-	// silently hide all of those too, a real, independently-discovered
-	// bug directly on point for "nicht alle Logeinträge sichtbar": an
-	// unrelated problem with one rotation of a file could erase every
-	// entry from the whole family, successfully-read ones included.
-	if r.logAuditParseErr != nil && len(r.logAuditAllEntries) > 0 {
-		title += fmt.Sprintf(" │ 1 file failed: %s", r.logAuditParseErr.Error())
-	}
-	// One general note instead of repeating it on every affected hint
-	// — see logAuditViewerHintEntries' own doc comment for why.
-	title += " │ e/w/Enter/r/f/s need the list focused"
-	renderReloadCloseTitleBar(r.logAuditViewerTitle, title+" ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.logAuditViewerTitle, r.resolveLogAuditLoadGlyph(title)+" ", r.lastScreenWidth)
 
 	r.renderLogAuditTimeline(shown)
 

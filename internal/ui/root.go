@@ -773,6 +773,59 @@ type Root struct {
 	logAuditSkipped         int
 	logAuditParseErr        error
 
+	// logAuditCurrentEntries/Files/Skipped/Err hold logAuditGroupOpen's
+	// own current (first, unrotated) file's last read result —
+	// refreshLogAuditCurrentFile's own output, re-run on open and on
+	// "r". logAuditRotatedEntries/Files/Skipped/Err are the same for
+	// every rotated file (Files[1:]) read so far — filled in once,
+	// progressively, by startLogAuditProgressiveLoad, and never
+	// touched by a refresh, since a rotated file never changes once
+	// logrotate has renamed it away from the family's own bare name.
+	// recomputeLogAuditCombined merges both halves into
+	// logAuditAllEntries/Files/Skipped/ParseErr above, the same fields
+	// every other reader (filtering, the title bar, Machiavelli Mode's
+	// own context snapshot, ...) already uses without needing to know
+	// this split exists at all.
+	logAuditCurrentEntries []logview.Entry
+	logAuditCurrentFiles   int
+	logAuditCurrentSkipped int
+	logAuditCurrentErr     error
+	logAuditRotatedEntries []logview.Entry
+	logAuditRotatedFiles   int
+	logAuditRotatedSkipped int
+	logAuditRotatedErr     error
+	// logAuditRotatedCache is session-only (per explicit request —
+	// never written to disk, cleared only by the app exiting), keyed by
+	// logAuditCacheKey — a rotated file never changes once written, so
+	// a cache hit is always correct. Read and written only on the UI
+	// goroutine (the pre-pass in startLogAuditProgressiveLoad, and
+	// applyLogAuditRotatedFile's own QueueUpdateDraw callback) — the
+	// background loader goroutine itself never touches this map, the
+	// same "never touch a Root field concurrently with the UI
+	// goroutine" rule startLogAuditFollow's own doc comment already
+	// states for the identical reason.
+	logAuditRotatedCache map[string][]logview.Entry
+	// logAuditTotalFiles is len(group.Files) as Discover found it when
+	// the viewer opened — known upfront, never changes for this one
+	// open, used only for the "x/y files" loading segment in the title
+	// bar (see renderLogAuditViewer).
+	logAuditTotalFiles int
+	// logAuditLoadingMore/LoadCancel/LoadAnimFrame back
+	// startLogAuditProgressiveLoad's own in-progress state — the same
+	// three-field shape logAuditFollowing/FollowCancel plus
+	// hashInProgress/hashCancel/hashAnimFrame already establish for an
+	// equivalent cancelable background job with its own animation.
+	// logAuditViewerTitleTemplate is the last full title string built
+	// by renderLogAuditViewer, with logAuditLoadGlyphPlaceholder still
+	// in place of the animated glyph — empty whenever nothing is
+	// loading — so animateLogAuditLoad's own ticker can repaint just
+	// the glyph every tick without re-scanning every entry the way a
+	// full renderLogAuditViewer call would (see its own doc comment).
+	logAuditLoadingMore         bool
+	logAuditLoadCancel          context.CancelFunc
+	logAuditLoadAnimFrame       int
+	logAuditViewerTitleTemplate string
+
 	// The Git breach dashboard (see gitbreach.go/gitbreachscreen.go) —
 	// "jg", this app's first genuine multi-pane screen rather than one
 	// full-screen list: several boxes (Status, Files, Branches, Commits,

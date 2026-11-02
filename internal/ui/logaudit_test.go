@@ -312,7 +312,7 @@ func TestRenderLogAuditViewerNotesTruncationInTitle(t *testing.T) {
 	r.openLogAuditViewer()
 
 	title := r.logAuditViewerTitle.GetText(true)
-	if !strings.Contains(title, fmt.Sprintf("showing first %d", logAuditMaxRenderedRows)) {
+	if !strings.Contains(title, fmt.Sprintf("showing %d/", logAuditMaxRenderedRows)) {
 		t.Errorf("title = %q, want an explicit truncation notice", title)
 	}
 	if got := r.logAuditViewerTable.GetRowCount(); got != logAuditMaxRenderedRows+1 { // +1 header
@@ -324,9 +324,16 @@ func TestRenderLogAuditViewerNotesTruncationInTitle(t *testing.T) {
 // independently-discovered bug directly on point for the user's own
 // "nicht alle Logeinträge sichtbar" report: a parse error from just
 // one rotation of a logrotate family (here, a corrupted .gz) used to
-// blank out the whole merged view, hiding every entry readLogAuditGroup
-// had already successfully read from the family's other, perfectly
-// fine files.
+// blank out the whole merged view, hiding every entry already
+// successfully read from the family's other, perfectly fine files.
+//
+// app.log.1.gz is a rotated file, read progressively in the
+// background (see startLogAuditProgressiveLoad) — nothing here drains
+// r.app.QueueUpdateDraw (see TestComputeHashesUpdatesPropertiesText's
+// own identical reasoning in properties_test.go), so its own result is
+// applied directly via applyLogAuditRotatedFile instead, the same
+// already-computed-result shape the real background loader's own
+// QueueUpdateDraw callback uses.
 func TestRenderLogAuditViewerKeepsGoodEntriesWhenOneFileFails(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "app.log"), []byte("just some unstructured text\n"), 0o644); err != nil {
@@ -343,11 +350,28 @@ func TestRenderLogAuditViewerKeepsGoodEntriesWhenOneFileFails(t *testing.T) {
 	r.logAuditTable.Select(1, 0)
 	r.openLogAuditViewer()
 
-	if r.logAuditParseErr == nil {
-		t.Fatal("setup: expected app.log.1.gz to fail to parse")
+	// Synchronous part: only app.log (the current, unrotated file) has
+	// been read so far.
+	if r.logAuditParseErr != nil {
+		t.Fatalf("setup: logAuditParseErr = %v, want nil before the rotated file has even been attempted", r.logAuditParseErr)
 	}
 	if len(r.logAuditAllEntries) != 1 {
-		t.Fatalf("len(logAuditAllEntries) = %d, want 1 (app.log's own entry, kept despite the other file's error)", len(r.logAuditAllEntries))
+		t.Fatalf("len(logAuditAllEntries) = %d, want 1 (app.log's own entry) before the rotated file has been attempted", len(r.logAuditAllEntries))
+	}
+
+	group := r.logAuditGroupOpen
+	if len(group.Files) != 2 {
+		t.Fatalf("setup: want 2 files in the family, got %d", len(group.Files))
+	}
+	rotated := group.Files[1]
+	entries, err := readLogAuditFile(r.currentLogAuditSource(), rotated)
+	if err == nil {
+		t.Fatal("setup: expected app.log.1.gz to fail to parse")
+	}
+	r.applyLogAuditRotatedFile(rotated, entries, false, err)
+
+	if len(r.logAuditAllEntries) != 1 {
+		t.Fatalf("len(logAuditAllEntries) = %d, want 1 (app.log's own entry, kept despite the rotated file's own error)", len(r.logAuditAllEntries))
 	}
 	if got := r.logAuditViewerTable.GetRowCount(); got != 2 { // header + the one good entry
 		t.Errorf("GetRowCount() = %d, want 2 (header + 1 entry) — the error must not blank the whole table", got)

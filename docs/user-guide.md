@@ -2791,8 +2791,12 @@ format is detected automatically from a sample of its own lines
 (`internal/logview.Detect`) — JSON Lines (including Docker's
 `json-file` log driver), syslog RFC 3164, syslog RFC 5424, a generic
 "timestamp level message" line, or plain text as a fallback — and
-gzip-compressed files are decompressed transparently. The title bar
-shows running counts (events/files/skipped/errors/warnings).
+gzip-compressed files are decompressed transparently. The current
+(most recent) file's own lines show first, immediately — a logrotate
+family's older, rotated files stream in afterward in the background,
+an animated glyph in front of the files count in the title bar for as
+long as that is still happening. The title bar shows running counts
+(events/files/skipped/errors/warnings).
 
 A mini-timeline above the table shows the matching entries' own
 density over time — one block per time bucket, colored red if that
