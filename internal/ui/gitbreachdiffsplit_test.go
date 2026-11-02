@@ -20,12 +20,12 @@ func openGitBreachFilesDiff(t *testing.T, dir, path string) *Root {
 	t.Helper()
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.app.SetFocus(r.gitBreachFilesTable)
+	r.app.SetFocus(r.gitBreach.FilesTable)
 	row := gitBreachTableRowForPath(r, path)
 	if row < 0 {
 		t.Fatalf("path %q not found in Files table", path)
 	}
-	r.gitBreachFilesTable.Select(row, 0)
+	r.gitBreach.FilesTable.Select(row, 0)
 	r.startGitBreachFilesDiffIfOwner()
 	return r
 }
@@ -43,7 +43,7 @@ func TestToggleGitBreachDiffSplitSwitchesViewAndFocus(t *testing.T) {
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 
 	// startGitBreachFilesDiffIfOwner's own fetch runs on a background
 	// goroutine, landing via QueueUpdateDraw — which blocks forever
@@ -61,14 +61,14 @@ func TestToggleGitBreachDiffSplitSwitchesViewAndFocus(t *testing.T) {
 	r.gitBreachSetDiffText("test", gitBreachColorizeDiff(rawDiff, "a.txt", r.theme), rawDiff)
 
 	r.toggleGitBreachDiffSplit()
-	if !r.gitBreachDiffSplit {
-		t.Error("gitBreachDiffSplit = false after toggling, want true")
+	if !r.gitBreach.DiffSplit {
+		t.Error("gitBreach.DiffSplit = false after toggling, want true")
 	}
-	if !r.gitBreachDiffSplitLeft.HasFocus() {
-		t.Error("focus did not move to gitBreachDiffSplitLeft after toggling into split mode")
+	if !r.gitBreach.DiffSplitLeft.HasFocus() {
+		t.Error("focus did not move to gitBreach.DiffSplitLeft after toggling into split mode")
 	}
-	left := r.gitBreachDiffSplitLeft.GetText(true)
-	right := r.gitBreachDiffSplitRight.GetText(true)
+	left := r.gitBreach.DiffSplitLeft.GetText(true)
+	right := r.gitBreach.DiffSplitRight.GetText(true)
 	if !strings.Contains(left, "two") {
 		t.Errorf("split left pane = %q, missing %q", left, "two")
 	}
@@ -77,18 +77,18 @@ func TestToggleGitBreachDiffSplitSwitchesViewAndFocus(t *testing.T) {
 	}
 
 	r.toggleGitBreachDiffSplit()
-	if r.gitBreachDiffSplit {
-		t.Error("gitBreachDiffSplit = true after toggling back, want false")
+	if r.gitBreach.DiffSplit {
+		t.Error("gitBreach.DiffSplit = true after toggling back, want false")
 	}
-	if !r.gitBreachDiffView.HasFocus() {
-		t.Error("focus did not move back to gitBreachDiffView after toggling out of split mode")
+	if !r.gitBreach.DiffView.HasFocus() {
+		t.Error("focus did not move back to gitBreach.DiffView after toggling out of split mode")
 	}
 }
 
 // TestGitBreachDiffSplitScrollbarMovesBothPanes pins the split view's
 // own scrollbar: clicking its down arrow must advance both panes by
-// the same amount, through the real dispatch chain (gitBreachLayout's
-// own MouseHandler, not gitBreachDiffSplitScrollbar.captureMouse
+// the same amount, through the real dispatch chain (gitBreach.Layout's
+// own MouseHandler, not gitBreach.DiffSplitScrollbar.captureMouse
 // directly) — the same "don't trust a direct call, the bug lives in
 // dispatch" lesson TestGitBreachCommitsScrollbarMouseClickThroughRealDispatch
 // already pins for the catalog tables.
@@ -110,7 +110,7 @@ func TestGitBreachDiffSplitScrollbarMovesBothPanes(t *testing.T) {
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 	rawDiff, err := git.Diff(context.Background(), dir, "a.txt", false)
 	if err != nil {
 		t.Fatalf("git.Diff: %v", err)
@@ -119,32 +119,32 @@ func TestGitBreachDiffSplitScrollbarMovesBothPanes(t *testing.T) {
 	r.toggleGitBreachDiffSplit()
 
 	r.SetRect(0, 0, 100, 20)
-	r.gitBreachLayout.SetRect(0, 0, 100, 20)
+	r.gitBreach.Layout.SetRect(0, 0, 100, 20)
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	defer screen.Fini()
 	screen.SetSize(100, 20)
-	r.gitBreachLayout.Draw(screen)
+	r.gitBreach.Layout.Draw(screen)
 
-	sb := r.gitBreachDiffSplitScrollbar
+	sb := r.gitBreach.DiffSplitScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow for 60 changed lines on a 20-row screen", sb.maxOffset())
 	}
 	sbx, sby, _, sbh := sb.GetRect()
 
-	leftBefore, _ := r.gitBreachDiffSplitLeft.GetScrollOffset()
-	rightBefore, _ := r.gitBreachDiffSplitRight.GetScrollOffset()
+	leftBefore, _ := r.gitBreach.DiffSplitLeft.GetScrollOffset()
+	rightBefore, _ := r.gitBreach.DiffSplitRight.GetScrollOffset()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.gitBreachLayout.MouseHandler()
+	handler := r.gitBreach.Layout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
 
-	leftAfter, _ := r.gitBreachDiffSplitLeft.GetScrollOffset()
-	rightAfter, _ := r.gitBreachDiffSplitRight.GetScrollOffset()
+	leftAfter, _ := r.gitBreach.DiffSplitLeft.GetScrollOffset()
+	rightAfter, _ := r.gitBreach.DiffSplitRight.GetScrollOffset()
 	if leftAfter != leftBefore+1 {
 		t.Errorf("left pane offset = %d, want %d (before=%d)", leftAfter, leftBefore+1, leftBefore)
 	}
@@ -159,12 +159,12 @@ func TestGitBreachDiffSplitScrollbarMovesBothPanes(t *testing.T) {
 // TestGitBreachDiffUnifiedScrollbarMouseClickThroughRealDispatch is the
 // unified pager's own counterpart to
 // TestGitBreachDiffSplitScrollbarMovesBothPanes — a real, user-reported
-// regression: the Main box's own header (gitBreachDiffHeader)
+// regression: the Main box's own header (gitBreach.DiffHeader)
 // swallowed every MouseLeftDown anywhere in the whole box, header or
 // not, the same bug class gitBreachFocus{Files,Branches,Commits,Stash}OnClick
-// already had (see gitBreachDiffHeader's own SetMouseCapture doc
+// already had (see gitBreach.DiffHeader's own SetMouseCapture doc
 // comment). Affected both the unified and split pages identically,
-// since the header sits above gitBreachDiffPages itself, a shared
+// since the header sits above gitBreach.DiffPages itself, a shared
 // ancestor for both.
 func TestGitBreachDiffUnifiedScrollbarMouseClickThroughRealDispatch(t *testing.T) {
 	requireGitForBreach(t)
@@ -184,7 +184,7 @@ func TestGitBreachDiffUnifiedScrollbarMouseClickThroughRealDispatch(t *testing.T
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 	rawDiff, err := git.Diff(context.Background(), dir, "a.txt", false)
 	if err != nil {
 		t.Fatalf("git.Diff: %v", err)
@@ -192,31 +192,31 @@ func TestGitBreachDiffUnifiedScrollbarMouseClickThroughRealDispatch(t *testing.T
 	r.gitBreachSetDiffText("test", gitBreachColorizeDiff(rawDiff, "a.txt", r.theme), rawDiff)
 
 	r.SetRect(0, 0, 100, 20)
-	r.gitBreachLayout.SetRect(0, 0, 100, 20)
+	r.gitBreach.Layout.SetRect(0, 0, 100, 20)
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	defer screen.Fini()
 	screen.SetSize(100, 20)
-	r.gitBreachLayout.Draw(screen)
+	r.gitBreach.Layout.Draw(screen)
 
-	sb := r.gitBreachDiffScrollbar
+	sb := r.gitBreach.DiffScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow for 60 changed lines on a 20-row screen", sb.maxOffset())
 	}
 	sbx, sby, _, sbh := sb.GetRect()
-	before, _ := r.gitBreachDiffView.GetScrollOffset()
+	before, _ := r.gitBreach.DiffView.GetScrollOffset()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.gitBreachLayout.MouseHandler()
+	handler := r.gitBreach.Layout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
 
-	after, _ := r.gitBreachDiffView.GetScrollOffset()
+	after, _ := r.gitBreach.DiffView.GetScrollOffset()
 	if after != before+1 {
-		t.Errorf("gitBreachDiffView offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
+		t.Errorf("gitBreach.DiffView offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
 	}
 }
 
@@ -240,7 +240,7 @@ func gitBreachDiffWithWideLine(t *testing.T) *Root {
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 	rawDiff, err := git.Diff(context.Background(), dir, "a.txt", false)
 	if err != nil {
 		t.Fatalf("git.Diff: %v", err)
@@ -255,31 +255,31 @@ func gitBreachDiffWithWideLine(t *testing.T) *Root {
 func TestGitBreachDiffUnifiedHScrollbarMouseClickThroughRealDispatch(t *testing.T) {
 	r := gitBreachDiffWithWideLine(t)
 	r.SetRect(0, 0, 60, 20)
-	r.gitBreachLayout.SetRect(0, 0, 60, 20)
+	r.gitBreach.Layout.SetRect(0, 0, 60, 20)
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	defer screen.Fini()
 	screen.SetSize(60, 20)
-	r.gitBreachLayout.Draw(screen)
+	r.gitBreach.Layout.Draw(screen)
 
-	sb := r.gitBreachDiffHScrollbar
+	sb := r.gitBreach.DiffHScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow for a 200-column line on a 60-column screen", sb.maxOffset())
 	}
 	sbx, sby, _, _ := sb.GetRect()
-	_, before := r.gitBreachDiffView.GetScrollOffset()
+	_, before := r.gitBreach.DiffView.GetScrollOffset()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.gitBreachLayout.MouseHandler()
+	handler := r.gitBreach.Layout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
 
-	_, after := r.gitBreachDiffView.GetScrollOffset()
+	_, after := r.gitBreach.DiffView.GetScrollOffset()
 	if after != before+1 {
-		t.Errorf("gitBreachDiffView column offset after clicking the right arrow = %d, want %d (before=%d)", after, before+1, before)
+		t.Errorf("gitBreach.DiffView column offset after clicking the right arrow = %d, want %d (before=%d)", after, before+1, before)
 	}
 }
 
@@ -289,31 +289,31 @@ func TestGitBreachDiffSplitHScrollbarMovesBothPanes(t *testing.T) {
 	r := gitBreachDiffWithWideLine(t)
 	r.toggleGitBreachDiffSplit()
 	r.SetRect(0, 0, 60, 20)
-	r.gitBreachLayout.SetRect(0, 0, 60, 20)
+	r.gitBreach.Layout.SetRect(0, 0, 60, 20)
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	defer screen.Fini()
 	screen.SetSize(60, 20)
-	r.gitBreachLayout.Draw(screen)
+	r.gitBreach.Layout.Draw(screen)
 
-	sb := r.gitBreachDiffSplitHScrollbar
+	sb := r.gitBreach.DiffSplitHScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow for a 200-column line on a 60-column screen", sb.maxOffset())
 	}
 	sbx, sby, _, _ := sb.GetRect()
-	_, leftBefore := r.gitBreachDiffSplitLeft.GetScrollOffset()
-	_, rightBefore := r.gitBreachDiffSplitRight.GetScrollOffset()
+	_, leftBefore := r.gitBreach.DiffSplitLeft.GetScrollOffset()
+	_, rightBefore := r.gitBreach.DiffSplitRight.GetScrollOffset()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.gitBreachLayout.MouseHandler()
+	handler := r.gitBreach.Layout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
 
-	_, leftAfter := r.gitBreachDiffSplitLeft.GetScrollOffset()
-	_, rightAfter := r.gitBreachDiffSplitRight.GetScrollOffset()
+	_, leftAfter := r.gitBreach.DiffSplitLeft.GetScrollOffset()
+	_, rightAfter := r.gitBreach.DiffSplitRight.GetScrollOffset()
 	if leftAfter != leftBefore+1 {
 		t.Errorf("left pane column offset = %d, want %d (before=%d)", leftAfter, leftBefore+1, leftBefore)
 	}
@@ -355,32 +355,32 @@ func TestGitBreachDiffSplitHScrollReconcilesNarrowerPane(t *testing.T) {
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 	rawDiff, err := git.Diff(context.Background(), dir, "a.txt", false)
 	if err != nil {
 		t.Fatalf("git.Diff: %v", err)
 	}
 	r.gitBreachSetDiffText("test", gitBreachColorizeDiff(rawDiff, "a.txt", r.theme), rawDiff)
 	r.toggleGitBreachDiffSplit()
-	r.app.SetFocus(r.gitBreachDiffSplitLeft)
+	r.app.SetFocus(r.gitBreach.DiffSplitLeft)
 
 	r.SetRect(0, 0, 60, 20)
-	r.gitBreachLayout.SetRect(0, 0, 60, 20)
+	r.gitBreach.Layout.SetRect(0, 0, 60, 20)
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	defer screen.Fini()
 	screen.SetSize(60, 20)
-	r.gitBreachLayout.Draw(screen)
+	r.gitBreach.Layout.Draw(screen)
 
 	// The left pane ("short") is the narrower of the two — scroll well
 	// past its own longest line, as the wider right pane ("x"*200)
 	// legitimately allows.
 	r.scrollGitBreachDiffSplit(0, 30)
-	r.gitBreachLayout.Draw(screen)
+	r.gitBreach.Layout.Draw(screen)
 
-	_, gotLeft := r.gitBreachDiffSplitLeft.GetScrollOffset()
+	_, gotLeft := r.gitBreach.DiffSplitLeft.GetScrollOffset()
 	if gotLeft >= 30 {
 		t.Fatalf("left pane's own column offset = %d, want it clamped below 30 by tview itself (that's the precondition this test exercises)", gotLeft)
 	}
@@ -393,7 +393,7 @@ func TestGitBreachDiffSplitHScrollReconcilesNarrowerPane(t *testing.T) {
 		t.Errorf("gitBreachDiffSplitScrollOffset row = %d, want 0", row)
 	}
 
-	sb := r.gitBreachDiffSplitHScrollbar
+	sb := r.gitBreach.DiffSplitHScrollbar
 	const trackCols = 20
 	gotThumbCols, gotThumbStart := sb.thumbGeometry(trackCols)
 	wantThumbCols, wantThumbStart := scrollbarThumbGeometry(trackCols, sb.content.totalCols(), sb.viewportCols(), 30)
@@ -408,7 +408,7 @@ func TestGitBreachDiffSplitHScrollReconcilesNarrowerPane(t *testing.T) {
 	if got := r.captureGitBreachDiffSplitKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone)); got != nil {
 		t.Errorf("captureGitBreachDiffSplitKey(Left) at the real column 30 = %v, want nil (consumed, scrolls)", got)
 	}
-	if !r.gitBreachDiffSplitLeft.HasFocus() {
+	if !r.gitBreach.DiffSplitLeft.HasFocus() {
 		t.Error("Left while the reconciled column is still > 0 should scroll, not leave Main")
 	}
 }
@@ -419,25 +419,25 @@ func TestGitBreachDiffSplitHScrollReconcilesNarrowerPane(t *testing.T) {
 func TestGitBreachDiffScrollbarsDoNotShareTheCornerCell(t *testing.T) {
 	r := gitBreachDiffWithWideLine(t)
 	r.SetRect(0, 0, 100, 20)
-	r.gitBreachLayout.SetRect(0, 0, 100, 20)
+	r.gitBreach.Layout.SetRect(0, 0, 100, 20)
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	defer screen.Fini()
 	screen.SetSize(100, 20)
-	r.gitBreachLayout.Draw(screen)
+	r.gitBreach.Layout.Draw(screen)
 
-	vx, _, _, _ := r.gitBreachDiffScrollbar.GetRect()
-	hx, _, hw, _ := r.gitBreachDiffHScrollbar.GetRect()
+	vx, _, _, _ := r.gitBreach.DiffScrollbar.GetRect()
+	hx, _, hw, _ := r.gitBreach.DiffHScrollbar.GetRect()
 	if hx+hw > vx {
 		t.Errorf("unified horizontal bar (x=%d width=%d) reaches into the vertical bar's own column (x=%d)", hx, hw, vx)
 	}
 
 	r.toggleGitBreachDiffSplit()
-	r.gitBreachLayout.Draw(screen)
-	vx, _, _, _ = r.gitBreachDiffSplitScrollbar.GetRect()
-	hx, _, hw, _ = r.gitBreachDiffSplitHScrollbar.GetRect()
+	r.gitBreach.Layout.Draw(screen)
+	vx, _, _, _ = r.gitBreach.DiffSplitScrollbar.GetRect()
+	hx, _, hw, _ = r.gitBreach.DiffSplitHScrollbar.GetRect()
 	if hx+hw > vx {
 		t.Errorf("split horizontal bar (x=%d width=%d) reaches into the vertical bar's own column (x=%d)", hx, hw, vx)
 	}
@@ -456,12 +456,12 @@ func TestCaptureGitBreachMainKeyVEntersSplitMode(t *testing.T) {
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 
 	if got := r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyRune, 'v', tcell.ModNone)); got != nil {
 		t.Errorf("captureGitBreachMainKey('v') = %v, want nil (consumed)", got)
 	}
-	if !r.gitBreachDiffSplit {
+	if !r.gitBreach.DiffSplit {
 		t.Error("'v' from the unified view did not enter split mode")
 	}
 }
@@ -479,9 +479,9 @@ func TestCaptureGitBreachDiffSplitKeyLeftAtColumnZeroLeavesMain(t *testing.T) {
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 	r.toggleGitBreachDiffSplit()
-	r.app.SetFocus(r.gitBreachDiffSplitLeft)
+	r.app.SetFocus(r.gitBreach.DiffSplitLeft)
 
 	// At column 0 (ScrollTo(0, 0) is openGitBreachFilesDiff's own
 	// implicit starting state): Left leaves back to Files, the same
@@ -489,7 +489,7 @@ func TestCaptureGitBreachDiffSplitKeyLeftAtColumnZeroLeavesMain(t *testing.T) {
 	if got := r.captureGitBreachDiffSplitKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone)); got != nil {
 		t.Errorf("captureGitBreachDiffSplitKey(Left) at column 0 = %v, want nil (consumed)", got)
 	}
-	if !r.gitBreachFilesTable.HasFocus() {
+	if !r.gitBreach.FilesTable.HasFocus() {
 		t.Error("Left at column 0 did not return focus to Files")
 	}
 }
@@ -507,18 +507,18 @@ func TestCaptureGitBreachDiffSplitKeyLeftScrollsWhenNotAtColumnZero(t *testing.T
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 	r.toggleGitBreachDiffSplit()
-	r.app.SetFocus(r.gitBreachDiffSplitLeft)
-	r.gitBreachDiffSplitLeft.ScrollTo(0, 5)
+	r.app.SetFocus(r.gitBreach.DiffSplitLeft)
+	r.gitBreach.DiffSplitLeft.ScrollTo(0, 5)
 
 	if got := r.captureGitBreachDiffSplitKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone)); got != nil {
 		t.Errorf("captureGitBreachDiffSplitKey(Left) at column 5 = %v, want nil (consumed)", got)
 	}
-	if !r.gitBreachDiffSplitLeft.HasFocus() {
+	if !r.gitBreach.DiffSplitLeft.HasFocus() {
 		t.Error("Left while not at column 0 should scroll, not leave Main")
 	}
-	_, col := r.gitBreachDiffSplitLeft.GetScrollOffset()
+	_, col := r.gitBreach.DiffSplitLeft.GetScrollOffset()
 	if col != 4 {
 		t.Errorf("left pane column = %d, want 4 (scrolled left by one)", col)
 	}
@@ -537,12 +537,12 @@ func TestScrollGitBreachDiffSplitAlwaysMirrorsBothPanes(t *testing.T) {
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 	r.toggleGitBreachDiffSplit()
 
 	r.scrollGitBreachDiffSplit(2, 3)
-	leftRow, leftCol := r.gitBreachDiffSplitLeft.GetScrollOffset()
-	rightRow, rightCol := r.gitBreachDiffSplitRight.GetScrollOffset()
+	leftRow, leftCol := r.gitBreach.DiffSplitLeft.GetScrollOffset()
+	rightRow, rightCol := r.gitBreach.DiffSplitRight.GetScrollOffset()
 	if leftRow != rightRow || leftCol != rightCol {
 		t.Errorf("left=%d/%d right=%d/%d, want identical scroll offsets (no unlinked mode here)", leftRow, leftCol, rightRow, rightCol)
 	}
@@ -554,8 +554,8 @@ func TestScrollGitBreachDiffSplitAlwaysMirrorsBothPanes(t *testing.T) {
 	// fix): scrolling only the pane under the cursor even though
 	// there is no unlinked mode to opt into here at all.
 	_, _ = r.captureGitBreachDiffSplitRightMouse(tview.MouseScrollDown, nil)
-	leftRow2, _ := r.gitBreachDiffSplitLeft.GetScrollOffset()
-	rightRow2, _ := r.gitBreachDiffSplitRight.GetScrollOffset()
+	leftRow2, _ := r.gitBreach.DiffSplitLeft.GetScrollOffset()
+	rightRow2, _ := r.gitBreach.DiffSplitRight.GetScrollOffset()
 	if leftRow2 != rightRow2 {
 		t.Errorf("after wheel on the right pane: left row=%d right row=%d, want identical", leftRow2, rightRow2)
 	}
@@ -577,24 +577,24 @@ func TestGitBreachDiffSplitRightMouseLeftDownRedirectsFocusToLeft(t *testing.T) 
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 	r.toggleGitBreachDiffSplit()
 
 	_, event := r.captureGitBreachDiffSplitRightMouse(tview.MouseLeftDown, nil)
 	if event != nil {
 		t.Errorf("captureGitBreachDiffSplitRightMouse(MouseLeftDown) event = %v, want nil (consumed)", event)
 	}
-	if !r.gitBreachDiffSplitLeft.HasFocus() {
+	if !r.gitBreach.DiffSplitLeft.HasFocus() {
 		t.Error("a click on the right pane must redirect focus to the left pane, never hold it itself")
 	}
 }
 
 // TestGitBreachDiffSplitLeftDrawReRendersTheHeader is the real bug the
 // user reported: "Page 1/20" sticking around regardless of the actual
-// commit's own size, never advancing while scrolling. gitBreachDiffView's
+// commit's own size, never advancing while scrolling. gitBreach.DiffView's
 // own SetDrawFunc (gitbreachscreen.go) only fires while the unified
 // page is the one tview.Pages is actually drawing — never while split
-// mode's own pane is the visible one — so without gitBreachDiffSplitLeft
+// mode's own pane is the visible one — so without gitBreach.DiffSplitLeft
 // getting the identical SetDrawFunc, the header froze at whatever it
 // last showed before switching into split (here: the short diff's own
 // "Page 1/1") and never updated to the longer one actually on screen.
@@ -611,7 +611,7 @@ func TestGitBreachDiffSplitLeftDrawReRendersTheHeader(t *testing.T) {
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 	r.toggleGitBreachDiffSplit()
 
 	screen := tcell.NewSimulationScreen("")
@@ -620,8 +620,8 @@ func TestGitBreachDiffSplitLeftDrawReRendersTheHeader(t *testing.T) {
 	}
 	defer screen.Fini()
 	screen.SetSize(80, 4)
-	r.gitBreachDiffHeader.SetRect(0, 0, 80, 1)
-	r.gitBreachDiffSplitLeft.SetRect(0, 1, 39, 3)
+	r.gitBreach.DiffHeader.SetRect(0, 0, 80, 1)
+	r.gitBreach.DiffSplitLeft.SetRect(0, 1, 39, 3)
 
 	// A much longer file than the short "Page 1/1" diff this already
 	// showed before toggling into split — set directly, the same
@@ -631,17 +631,17 @@ func TestGitBreachDiffSplitLeftDrawReRendersTheHeader(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		long.WriteString("line\n")
 	}
-	r.gitBreachDiffSplitLeft.SetText(long.String())
-	r.gitBreachDiffSplitRight.SetText(long.String())
+	r.gitBreach.DiffSplitLeft.SetText(long.String())
+	r.gitBreach.DiffSplitRight.SetText(long.String())
 
-	r.gitBreachDiffSplitLeft.Draw(screen)
+	r.gitBreach.DiffSplitLeft.Draw(screen)
 
 	// 50 lines over a 2-row body (height 3, minus nothing borrowed here)
 	// is 17 pages — the exact count, not just "not stale", so a
 	// substring check can't be fooled by "Page 1/1" being a prefix of
 	// the correct "Page 1/17" the way an earlier version of this
 	// assertion was.
-	header := r.gitBreachDiffHeader.GetText(true)
+	header := r.gitBreach.DiffHeader.GetText(true)
 	if !strings.Contains(header, "Page 1/17 ") {
 		t.Errorf("header = %q, want \"Page 1/17\" for 50 lines over a 3-row body — the stale pre-toggle count never updated if this fails", header)
 	}
@@ -669,14 +669,14 @@ func TestRenderGitBreachDiffHeaderUsesTheLongerSplitPane(t *testing.T) {
 	}
 
 	r := openGitBreachFilesDiff(t, dir, "a.txt")
-	r.app.SetFocus(r.gitBreachDiffView)
+	r.app.SetFocus(r.gitBreach.DiffView)
 	r.toggleGitBreachDiffSplit()
 
-	r.gitBreachDiffSplitLeft.SetText("one\ntwo")
-	r.gitBreachDiffSplitRight.SetText("one\ntwo\nthree\nfour\nfive\nsix")
+	r.gitBreach.DiffSplitLeft.SetText("one\ntwo")
+	r.gitBreach.DiffSplitRight.SetText("one\ntwo\nthree\nfour\nfive\nsix")
 
 	r.renderGitBreachDiffHeader(60, 2)
-	header := r.gitBreachDiffHeader.GetText(true)
+	header := r.gitBreach.DiffHeader.GetText(true)
 	if !strings.Contains(header, "Page 1/3") {
 		t.Errorf("header = %q, want it to report 3 pages (6 lines / 2 rows), the longer (right) pane's own count, not the shorter left one", header)
 	}

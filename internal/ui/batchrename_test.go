@@ -39,7 +39,7 @@ func selectBatchRenameStep(t *testing.T, r *Root, name string) {
 	t.Helper()
 	for i, step := range batchRenameSteps() {
 		if step.name == name {
-			r.batchRenameStepsList.SetCurrentItem(i)
+			r.batch.StepsList.SetCurrentItem(i)
 			return
 		}
 	}
@@ -49,23 +49,23 @@ func selectBatchRenameStep(t *testing.T, r *Root, name string) {
 func TestOpenBatchRenamePopulatesStepsAndTargets(t *testing.T) {
 	r, dir := newBatchRenameRoot(t)
 
-	if got, want := r.batchRenameStepsList.GetItemCount(), len(batchRenameSteps()); got != want {
+	if got, want := r.batch.StepsList.GetItemCount(), len(batchRenameSteps()); got != want {
 		t.Errorf("steps list has %d items, want %d", got, want)
 	}
 	want := []string{filepath.Join(dir, "apple.txt"), filepath.Join(dir, "apricot.txt")}
-	if len(r.batchRenameTargets) != len(want) {
-		t.Fatalf("targets = %v, want %v", r.batchRenameTargets, want)
+	if len(r.batch.Targets) != len(want) {
+		t.Fatalf("targets = %v, want %v", r.batch.Targets, want)
 	}
 }
 
 func TestOpenBatchRenameAlwaysStartsFromAFreshRules(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
-	r.batchRenameRules.Find = "leftover"
+	r.batch.Rules.Find = "leftover"
 
 	r.openBatchRename()
 
-	if r.batchRenameRules.Find != "" {
-		t.Errorf("Find = %q, want a fresh Rules on every open", r.batchRenameRules.Find)
+	if r.batch.Rules.Find != "" {
+		t.Errorf("Find = %q, want a fresh Rules on every open", r.batch.Rules.Find)
 	}
 }
 
@@ -73,11 +73,11 @@ func TestBatchRenameBoolFieldTogglesInPlace(t *testing.T) {
 	r, _ := newBatchRenameRoot(t) // default step is "Search & Replace"
 
 	r.activateBatchRenameFieldRow(2) // Find, Replace with, Regex
-	if !r.batchRenameRules.Regex {
+	if !r.batch.Rules.Regex {
 		t.Error("Regex should be true after activating its row once")
 	}
 	r.activateBatchRenameFieldRow(2)
-	if r.batchRenameRules.Regex {
+	if r.batch.Rules.Regex {
 		t.Error("Regex should be false after activating its row twice")
 	}
 }
@@ -86,12 +86,12 @@ func TestBatchRenameEnumFieldCyclesImmediately(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
 	selectBatchRenameStep(t, r, "Case")
 
-	if r.batchRenameRules.Case != batchrename.CaseNone {
-		t.Fatalf("expected CaseNone initially, got %v", r.batchRenameRules.Case)
+	if r.batch.Rules.Case != batchrename.CaseNone {
+		t.Fatalf("expected CaseNone initially, got %v", r.batch.Rules.Case)
 	}
 	r.activateBatchRenameFieldRow(0)
-	if r.batchRenameRules.Case != batchrename.CaseUpper {
-		t.Errorf("expected CaseUpper after one activation, got %v", r.batchRenameRules.Case)
+	if r.batch.Rules.Case != batchrename.CaseUpper {
+		t.Errorf("expected CaseUpper after one activation, got %v", r.batch.Rules.Case)
 	}
 }
 
@@ -104,11 +104,11 @@ func TestBatchRenameIntFieldOpensAnEditorThatCommitsOnEnter(t *testing.T) {
 		t.Fatalf("activePage = %q, want the input editor %q", r.activePage, batchRenameInputPage)
 	}
 
-	r.batchRenameInput.SetText("3")
-	r.batchRenameInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.batch.Input.SetText("3")
+	r.batch.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
-	if r.batchRenameRules.TrimFront != 3 {
-		t.Errorf("TrimFront = %d, want 3", r.batchRenameRules.TrimFront)
+	if r.batch.Rules.TrimFront != 3 {
+		t.Errorf("TrimFront = %d, want 3", r.batch.Rules.TrimFront)
 	}
 	if r.activePage != batchRenamePage {
 		t.Errorf("activePage = %q, want back to the screen %q", r.activePage, batchRenamePage)
@@ -120,25 +120,25 @@ func TestBatchRenameIntFieldEditorDiscardsOnEscape(t *testing.T) {
 	selectBatchRenameStep(t, r, "Trim")
 
 	r.activateBatchRenameFieldRow(0)
-	r.batchRenameInput.SetText("9")
-	r.batchRenameInput.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.batch.Input.SetText("9")
+	r.batch.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
 
-	if r.batchRenameRules.TrimFront != 0 {
-		t.Errorf("TrimFront = %d, want 0 (Escape should discard)", r.batchRenameRules.TrimFront)
+	if r.batch.Rules.TrimFront != 0 {
+		t.Errorf("TrimFront = %d, want 0 (Escape should discard)", r.batch.Rules.TrimFront)
 	}
 }
 
 func TestBatchRenamePreviewShowsChangesAndUnchanged(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
 
-	r.batchRenameRules.Find = "apple"
-	r.batchRenameRules.Replace = "pear"
+	r.batch.Rules.Find = "apple"
+	r.batch.Rules.Replace = "pear"
 	r.renderBatchRenamePreview()
 
-	if len(r.batchRenamePendingChanges) != 1 {
-		t.Fatalf("pending changes = %+v, want exactly one", r.batchRenamePendingChanges)
+	if len(r.batch.PendingChanges) != 1 {
+		t.Fatalf("pending changes = %+v, want exactly one", r.batch.PendingChanges)
 	}
-	if got := filepath.Base(r.batchRenamePendingChanges[0].To); got != "pear.txt" {
+	if got := filepath.Base(r.batch.PendingChanges[0].To); got != "pear.txt" {
 		t.Errorf("planned new name = %q, want %q", got, "pear.txt")
 	}
 }
@@ -147,11 +147,11 @@ func TestBatchRenamePreviewFlagsAConflict(t *testing.T) {
 	r, dir := newBatchRenameRoot(t)
 	// apple.txt -> banana.txt collides with the fixture's own,
 	// unselected banana.txt already sitting in dir.
-	r.batchRenameRules.Find = "apple"
-	r.batchRenameRules.Replace = "banana"
+	r.batch.Rules.Find = "apple"
+	r.batch.Rules.Replace = "banana"
 	r.renderBatchRenamePreview()
 
-	result := batchrename.Plan(r.batchRenameTargets, r.batchRenameRules)
+	result := batchrename.Plan(r.batch.Targets, r.batch.Rules)
 	if len(result.Problems) != 1 || filepath.Dir(result.Problems[0].Path) != dir {
 		t.Fatalf("expected exactly one conflict under %s, got %+v", dir, result.Problems)
 	}
@@ -162,14 +162,14 @@ func TestBatchRenamePaneArrowsMoveBetweenStepsAndFields(t *testing.T) {
 	app := tview.NewApplication()
 	r.app = app
 
-	app.SetFocus(r.batchRenameStepsList)
+	app.SetFocus(r.batch.StepsList)
 	r.captureBatchRenamePaneArrows(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
-	if !r.batchRenameFieldsTable.HasFocus() {
+	if !r.batch.FieldsTable.HasFocus() {
 		t.Error("Right from the steps list should move focus to the fields table")
 	}
 
 	r.captureBatchRenamePaneArrows(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
-	if !r.batchRenameStepsList.HasFocus() {
+	if !r.batch.StepsList.HasFocus() {
 		t.Error("Left from the fields table should move focus back to the steps list")
 	}
 }
@@ -177,7 +177,7 @@ func TestBatchRenamePaneArrowsMoveBetweenStepsAndFields(t *testing.T) {
 func TestClickingABatchRenameStepDoesNotCloseTheScreen(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
 
-	x, y, w, h := r.batchRenameStepsList.GetRect()
+	x, y, w, h := r.batch.StepsList.GetRect()
 	if w == 0 || h == 0 {
 		t.Fatal("steps list has no rect yet")
 	}
@@ -192,19 +192,19 @@ func TestClickingABatchRenameStepDoesNotCloseTheScreen(t *testing.T) {
 
 func TestResetBatchRenameStepsClearsEveryField(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
-	r.batchRenameRules = batchrename.Rules{Find: "x", Case: batchrename.CaseUpper, TrimFront: 2}
+	r.batch.Rules = batchrename.Rules{Find: "x", Case: batchrename.CaseUpper, TrimFront: 2}
 
 	r.resetBatchRenameSteps()
 
-	if r.batchRenameRules != (batchrename.Rules{}) {
-		t.Errorf("Rules = %+v, want the zero value after reset", r.batchRenameRules)
+	if r.batch.Rules != (batchrename.Rules{}) {
+		t.Errorf("Rules = %+v, want the zero value after reset", r.batch.Rules)
 	}
 }
 
 func TestBatchRenameEscapeClosesWithoutTouchingDisk(t *testing.T) {
 	r, dir := newBatchRenameRoot(t)
-	r.batchRenameRules.Find = "apple"
-	r.batchRenameRules.Replace = "pear"
+	r.batch.Rules.Find = "apple"
+	r.batch.Rules.Replace = "pear"
 
 	r.captureBatchRenameKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 
@@ -218,8 +218,8 @@ func TestBatchRenameEscapeClosesWithoutTouchingDisk(t *testing.T) {
 
 func TestConfirmApplyBatchRenameRenamesAndReloadsThePanel(t *testing.T) {
 	r, dir := newBatchRenameRoot(t)
-	r.batchRenameRules.Find = "apple"
-	r.batchRenameRules.Replace = "pear"
+	r.batch.Rules.Find = "apple"
+	r.batch.Rules.Replace = "pear"
 
 	r.confirmApplyBatchRename()
 	if r.activePage != confirmPage {
@@ -234,15 +234,15 @@ func TestConfirmApplyBatchRenameRenamesAndReloadsThePanel(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "apple.txt")); !os.IsNotExist(err) {
 		t.Errorf("apple.txt should be gone, stat err = %v", err)
 	}
-	if len(r.batchRenameUndo) != 1 {
-		t.Errorf("batchRenameUndo = %+v, want exactly one recorded change", r.batchRenameUndo)
+	if len(r.batch.Undo) != 1 {
+		t.Errorf("batch.Undo = %+v, want exactly one recorded change", r.batch.Undo)
 	}
 }
 
 func TestConfirmApplyBatchRenameLogsAnAction(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
-	r.batchRenameRules.Find = "apple"
-	r.batchRenameRules.Replace = "pear"
+	r.batch.Rules.Find = "apple"
+	r.batch.Rules.Replace = "pear"
 	readLog := attachTestActivityLog(t, r)
 
 	r.confirmApplyBatchRename()
@@ -267,8 +267,8 @@ func TestConfirmApplyBatchRenameWithNoChangesDoesNothing(t *testing.T) {
 
 func TestUndoLastBatchRenameReversesTheLastApply(t *testing.T) {
 	r, dir := newBatchRenameRoot(t)
-	r.batchRenameRules.Find = "apple"
-	r.batchRenameRules.Replace = "pear"
+	r.batch.Rules.Find = "apple"
+	r.batch.Rules.Replace = "pear"
 	r.confirmApplyBatchRename()
 	r.confirmDialog.SetCurrentItem(0)
 	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
@@ -278,15 +278,15 @@ func TestUndoLastBatchRenameReversesTheLastApply(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "apple.txt")); err != nil {
 		t.Errorf("apple.txt should exist again after undo: %v", err)
 	}
-	if len(r.batchRenameUndo) != 0 {
-		t.Errorf("batchRenameUndo should be cleared after use, got %+v", r.batchRenameUndo)
+	if len(r.batch.Undo) != 0 {
+		t.Errorf("batch.Undo should be cleared after use, got %+v", r.batch.Undo)
 	}
 }
 
 func TestUndoLastBatchRenameLogsAnAction(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
-	r.batchRenameRules.Find = "apple"
-	r.batchRenameRules.Replace = "pear"
+	r.batch.Rules.Find = "apple"
+	r.batch.Rules.Replace = "pear"
 	r.confirmApplyBatchRename()
 	r.confirmDialog.SetCurrentItem(0)
 	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
@@ -322,7 +322,7 @@ func tcellMouseEventAt(x, y int) *tcell.EventMouse {
 func TestBatchRenameStepMarksFollowTheRules(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
 
-	main, _ := r.batchRenameStepsList.GetItemText(0)
+	main, _ := r.batch.StepsList.GetItemText(0)
 	if main != batchRenameInactiveMark+"Search & Replace" {
 		t.Fatalf("fresh Search & Replace item = %q, want it unmarked", main)
 	}
@@ -332,16 +332,16 @@ func TestBatchRenameStepMarksFollowTheRules(t *testing.T) {
 	f, _ := r.batchRenameFieldAtRow(0)
 	f.apply(r, "apple")
 
-	main, _ = r.batchRenameStepsList.GetItemText(0)
+	main, _ = r.batch.StepsList.GetItemText(0)
 	if main != batchRenameActiveMark+"Search & Replace" {
 		t.Errorf("Search & Replace item after Find set = %q, want it marked active", main)
 	}
-	if cur := r.batchRenameStepsList.GetCurrentItem(); cur != 0 {
+	if cur := r.batch.StepsList.GetCurrentItem(); cur != 0 {
 		t.Errorf("re-marking moved the list selection to %d", cur)
 	}
 
 	r.resetBatchRenameSteps()
-	main, _ = r.batchRenameStepsList.GetItemText(0)
+	main, _ = r.batch.StepsList.GetItemText(0)
 	if main != batchRenameInactiveMark+"Search & Replace" {
 		t.Errorf("Search & Replace item after reset = %q, want it unmarked again", main)
 	}
@@ -351,18 +351,18 @@ func TestBatchRenameFieldHelpFollowsTheSelectedRow(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
 
 	fields := batchRenameSteps()[0].fields
-	if got := r.batchRenameFieldHelp.GetText(true); got != fields[0].help {
+	if got := r.batch.FieldHelp.GetText(true); got != fields[0].help {
 		t.Errorf("help on open = %q, want the first field's own %q", got, fields[0].help)
 	}
 
-	r.batchRenameFieldsTable.Select(2, 0) // Regex
-	if got := r.batchRenameFieldHelp.GetText(true); got != fields[2].help {
+	r.batch.FieldsTable.Select(2, 0) // Regex
+	if got := r.batch.FieldHelp.GetText(true); got != fields[2].help {
 		t.Errorf("help after selecting row 2 = %q, want %q", got, fields[2].help)
 	}
 
 	selectBatchRenameStep(t, r, "Trim")
 	trim := batchRenameSteps()[2].fields
-	if got := r.batchRenameFieldHelp.GetText(true); got != trim[0].help && got != trim[1].help {
+	if got := r.batch.FieldHelp.GetText(true); got != trim[0].help && got != trim[1].help {
 		t.Errorf("help after switching to Trim = %q, want one of Trim's own field helps", got)
 	}
 }
@@ -385,21 +385,21 @@ func TestBatchRenamePreviewLeavesAFolderExtensionAloneUnlessAsked(t *testing.T) 
 	if err := os.Mkdir(filepath.Join(dir, "my.project"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	r.batchRenameTargets = []string{filepath.Join(dir, "my.project"), filepath.Join(dir, "apple.txt")}
-	r.batchRenameRules.ExtensionMode = batchrename.ExtensionUpper
+	r.batch.Targets = []string{filepath.Join(dir, "my.project"), filepath.Join(dir, "apple.txt")}
+	r.batch.Rules.ExtensionMode = batchrename.ExtensionUpper
 	r.renderBatchRenamePreview()
 
-	if len(r.batchRenamePendingChanges) != 1 || filepath.Base(r.batchRenamePendingChanges[0].To) != "apple.TXT" {
-		t.Fatalf("pending = %+v, want only apple.txt -> apple.TXT", r.batchRenamePendingChanges)
+	if len(r.batch.PendingChanges) != 1 || filepath.Base(r.batch.PendingChanges[0].To) != "apple.TXT" {
+		t.Fatalf("pending = %+v, want only apple.txt -> apple.TXT", r.batch.PendingChanges)
 	}
 
 	selectBatchRenameStep(t, r, "Extension")
 	r.activateBatchRenameFieldRow(2) // "Treat folder names as having extensions too"
-	if !r.batchRenameRules.ExtensionOnDirs {
+	if !r.batch.Rules.ExtensionOnDirs {
 		t.Fatal("ExtensionOnDirs should be on after toggling its row")
 	}
 	names := make(map[string]bool)
-	for _, c := range r.batchRenamePendingChanges {
+	for _, c := range r.batch.PendingChanges {
 		names[filepath.Base(c.To)] = true
 	}
 	if !names["my.PROJECT"] || !names["apple.TXT"] {
@@ -434,111 +434,111 @@ func TestBatchRenameTargetsFollowThePanelDisplayOrder(t *testing.T) {
 	r.openBatchRename()
 
 	want := []string{filepath.Join(dir, "banana.txt"), filepath.Join(dir, "apricot.txt"), filepath.Join(dir, "apple.txt")}
-	if len(r.batchRenameTargets) != len(want) {
-		t.Fatalf("targets = %v, want %v", r.batchRenameTargets, want)
+	if len(r.batch.Targets) != len(want) {
+		t.Fatalf("targets = %v, want %v", r.batch.Targets, want)
 	}
 	for i := range want {
-		if r.batchRenameTargets[i] != want[i] {
-			t.Fatalf("targets = %v, want the panel's own top-to-bottom order %v", r.batchRenameTargets, want)
+		if r.batch.Targets[i] != want[i] {
+			t.Fatalf("targets = %v, want the panel's own top-to-bottom order %v", r.batch.Targets, want)
 		}
 	}
 }
 
 func TestBatchRenamePreviewSpaceSkipsARowAndItsNumber(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
-	r.batchRenameRules.NumberPosition = batchrename.NumberPrefix
-	r.batchRenameRules.NumberStart = 1
+	r.batch.Rules.NumberPosition = batchrename.NumberPrefix
+	r.batch.Rules.NumberStart = 1
 	r.renderBatchRenamePreview()
 
-	r.batchRenamePreviewTable.Select(1, 0) // apple.txt
-	key(r.batchRenamePreviewTable, tcell.KeyRune, ' ')
+	r.batch.PreviewTable.Select(1, 0) // apple.txt
+	key(r.batch.PreviewTable, tcell.KeyRune, ' ')
 
-	if len(r.batchRenamePendingChanges) != 1 || filepath.Base(r.batchRenamePendingChanges[0].To) != "1-apricot.txt" {
-		t.Errorf("pending after skipping apple = %+v, want only apricot, numbered 1 (not 2)", r.batchRenamePendingChanges)
+	if len(r.batch.PendingChanges) != 1 || filepath.Base(r.batch.PendingChanges[0].To) != "1-apricot.txt" {
+		t.Errorf("pending after skipping apple = %+v, want only apricot, numbered 1 (not 2)", r.batch.PendingChanges)
 	}
-	if got := r.batchRenamePreviewTable.GetCell(1, 3).Text; got != "(skipped)" {
+	if got := r.batch.PreviewTable.GetCell(1, 3).Text; got != "(skipped)" {
 		t.Errorf("row 1 note = %q, want (skipped)", got)
 	}
-	if got := r.batchRenameStatus.GetText(false); !strings.Contains(got, "1 skipped") {
+	if got := r.batch.Status.GetText(false); !strings.Contains(got, "1 skipped") {
 		t.Errorf("status = %q, want it to count 1 skipped", got)
 	}
 
-	key(r.batchRenamePreviewTable, tcell.KeyRune, ' ')
-	if len(r.batchRenamePendingChanges) != 2 {
-		t.Errorf("pending after ticking apple back = %+v, want both again", r.batchRenamePendingChanges)
+	key(r.batch.PreviewTable, tcell.KeyRune, ' ')
+	if len(r.batch.PendingChanges) != 2 {
+		t.Errorf("pending after ticking apple back = %+v, want both again", r.batch.PendingChanges)
 	}
 }
 
 func TestBatchRenamePreviewMoveRowFreezesOrderAsListed(t *testing.T) {
 	r, dir := newBatchRenameRoot(t)
-	r.batchRenameRules.NumberOrder = batchrename.OrderByName
-	r.batchRenameRules.NumberReversed = true // shown: apricot, apple
+	r.batch.Rules.NumberOrder = batchrename.OrderByName
+	r.batch.Rules.NumberReversed = true // shown: apricot, apple
 	r.renderBatchRenamePreview()
-	if got := r.batchRenamePreviewTable.GetCell(1, 1).Text; got != "apricot.txt" {
+	if got := r.batch.PreviewTable.GetCell(1, 1).Text; got != "apricot.txt" {
 		t.Fatalf("row 1 under by-name reversed = %q, want apricot.txt", got)
 	}
 
-	r.batchRenamePreviewTable.Select(1, 0)
-	key(r.batchRenamePreviewTable, tcell.KeyRune, 'd')
+	r.batch.PreviewTable.Select(1, 0)
+	key(r.batch.PreviewTable, tcell.KeyRune, 'd')
 
-	if r.batchRenameRules.NumberOrder != batchrename.OrderAsListed || r.batchRenameRules.NumberReversed {
-		t.Errorf("moving a row should switch to as-listed, unreversed; got %v reversed=%v", r.batchRenameRules.NumberOrder, r.batchRenameRules.NumberReversed)
+	if r.batch.Rules.NumberOrder != batchrename.OrderAsListed || r.batch.Rules.NumberReversed {
+		t.Errorf("moving a row should switch to as-listed, unreversed; got %v reversed=%v", r.batch.Rules.NumberOrder, r.batch.Rules.NumberReversed)
 	}
 	want := []string{filepath.Join(dir, "apple.txt"), filepath.Join(dir, "apricot.txt")}
 	for i := range want {
-		if r.batchRenameTargets[i] != want[i] {
-			t.Fatalf("targets after moving apricot down = %v, want %v", r.batchRenameTargets, want)
+		if r.batch.Targets[i] != want[i] {
+			t.Fatalf("targets after moving apricot down = %v, want %v", r.batch.Targets, want)
 		}
 	}
-	if row, _ := r.batchRenamePreviewTable.GetSelection(); row != 2 {
+	if row, _ := r.batch.PreviewTable.GetSelection(); row != 2 {
 		t.Errorf("cursor should follow the moved row to 2, got %d", row)
 	}
 }
 
 func TestBatchRenamePreviewJumpKeysFindChangesAndConflicts(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
-	r.batchRenameRules.Find = "apricot"
-	r.batchRenameRules.Replace = "banana" // collides with the unselected banana.txt on disk
+	r.batch.Rules.Find = "apricot"
+	r.batch.Rules.Replace = "banana" // collides with the unselected banana.txt on disk
 	r.renderBatchRenamePreview()
 
-	r.batchRenamePreviewTable.Select(1, 0) // apple: unchanged
-	key(r.batchRenamePreviewTable, tcell.KeyRune, 'c')
-	if row, _ := r.batchRenamePreviewTable.GetSelection(); row != 2 {
+	r.batch.PreviewTable.Select(1, 0) // apple: unchanged
+	key(r.batch.PreviewTable, tcell.KeyRune, 'c')
+	if row, _ := r.batch.PreviewTable.GetSelection(); row != 2 {
 		t.Errorf("c should jump to the conflict on row 2, got %d", row)
 	}
 
-	r.batchRenameRules.Replace = "cherry"
+	r.batch.Rules.Replace = "cherry"
 	r.renderBatchRenamePreview()
-	r.batchRenamePreviewTable.Select(2, 0)
-	key(r.batchRenamePreviewTable, tcell.KeyRune, 'n')
-	if row, _ := r.batchRenamePreviewTable.GetSelection(); row != 2 {
+	r.batch.PreviewTable.Select(2, 0)
+	key(r.batch.PreviewTable, tcell.KeyRune, 'n')
+	if row, _ := r.batch.PreviewTable.GetSelection(); row != 2 {
 		t.Errorf("n from the only change should wrap back to itself (row 2), got %d", row)
 	}
-	r.batchRenamePreviewTable.Select(1, 0)
-	key(r.batchRenamePreviewTable, tcell.KeyRune, 'p')
-	if row, _ := r.batchRenamePreviewTable.GetSelection(); row != 2 {
+	r.batch.PreviewTable.Select(1, 0)
+	key(r.batch.PreviewTable, tcell.KeyRune, 'p')
+	if row, _ := r.batch.PreviewTable.GetSelection(); row != 2 {
 		t.Errorf("p from row 1 should wrap to the change on row 2, got %d", row)
 	}
 }
 
 func TestBatchRenameSavePresetThenLoadRestoresTheRules(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
-	r.batchRenamePresetDir = filepath.Join(t.TempDir(), "rename-presets")
-	r.batchRenameRules.Find = "IMG_"
-	r.batchRenameRules.Case = batchrename.CaseLower
-	r.batchRenameRules.NumberOrder = batchrename.OrderByModTime
+	r.batch.PresetDir = filepath.Join(t.TempDir(), "rename-presets")
+	r.batch.Rules.Find = "IMG_"
+	r.batch.Rules.Case = batchrename.CaseLower
+	r.batch.Rules.NumberOrder = batchrename.OrderByModTime
 
 	r.openBatchRenameSavePreset()
 	if r.activePage != batchRenameInputPage {
 		t.Fatalf("activePage = %q, want the name input", r.activePage)
 	}
-	r.batchRenameInput.SetText("camera")
-	key(r.batchRenameInput, tcell.KeyEnter, 0)
+	r.batch.Input.SetText("camera")
+	key(r.batch.Input, tcell.KeyEnter, 0)
 
-	if !batchrename.PresetExists(r.batchRenamePresetDir, "camera") {
+	if !batchrename.PresetExists(r.batch.PresetDir, "camera") {
 		t.Fatal("preset file should exist after saving")
 	}
-	if got := r.batchRenameStatus.GetText(false); !strings.Contains(got, `"camera" saved`) {
+	if got := r.batch.Status.GetText(false); !strings.Contains(got, `"camera" saved`) {
 		t.Errorf("status = %q, want a saved notice", got)
 	}
 
@@ -547,13 +547,13 @@ func TestBatchRenameSavePresetThenLoadRestoresTheRules(t *testing.T) {
 	if r.activePage != batchRenamePresetPage {
 		t.Fatalf("activePage = %q, want the preset picker", r.activePage)
 	}
-	if name, _ := r.batchRenamePresetList.GetItemText(0); name != "camera" {
+	if name, _ := r.batch.PresetList.GetItemText(0); name != "camera" {
 		t.Fatalf("picker item 0 = %q, want camera", name)
 	}
-	key(r.batchRenamePresetList, tcell.KeyEnter, 0)
+	key(r.batch.PresetList, tcell.KeyEnter, 0)
 
-	if r.batchRenameRules.Find != "IMG_" || r.batchRenameRules.Case != batchrename.CaseLower || r.batchRenameRules.NumberOrder != batchrename.OrderByModTime {
-		t.Errorf("rules after loading = %+v, want the saved ones back", r.batchRenameRules)
+	if r.batch.Rules.Find != "IMG_" || r.batch.Rules.Case != batchrename.CaseLower || r.batch.Rules.NumberOrder != batchrename.OrderByModTime {
+		t.Errorf("rules after loading = %+v, want the saved ones back", r.batch.Rules)
 	}
 	if r.activePage != batchRenamePage {
 		t.Errorf("activePage = %q, want back on the screen", r.activePage)
@@ -562,26 +562,26 @@ func TestBatchRenameSavePresetThenLoadRestoresTheRules(t *testing.T) {
 
 func TestBatchRenameSavePresetOverAnExistingNameAsksFirst(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
-	r.batchRenamePresetDir = t.TempDir()
-	if err := batchrename.SavePreset(r.batchRenamePresetDir, "old", batchrename.Rules{Find: "before"}); err != nil {
+	r.batch.PresetDir = t.TempDir()
+	if err := batchrename.SavePreset(r.batch.PresetDir, "old", batchrename.Rules{Find: "before"}); err != nil {
 		t.Fatal(err)
 	}
-	r.batchRenameRules.Find = "after"
+	r.batch.Rules.Find = "after"
 
 	r.openBatchRenameSavePreset()
-	r.batchRenameInput.SetText("old")
-	key(r.batchRenameInput, tcell.KeyEnter, 0)
+	r.batch.Input.SetText("old")
+	key(r.batch.Input, tcell.KeyEnter, 0)
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want the replace confirmation", r.activePage)
 	}
-	presets, _ := batchrename.LoadPresets(r.batchRenamePresetDir)
+	presets, _ := batchrename.LoadPresets(r.batch.PresetDir)
 	if presets[0].Rules.Find != "before" {
 		t.Fatal("preset was replaced before the question was answered")
 	}
 
 	r.confirmDialog.SetCurrentItem(0)
 	key(r.confirmDialog, tcell.KeyEnter, 0)
-	presets, _ = batchrename.LoadPresets(r.batchRenamePresetDir)
+	presets, _ = batchrename.LoadPresets(r.batch.PresetDir)
 	if presets[0].Rules.Find != "after" {
 		t.Errorf("preset after confirming = %+v, want Find=after", presets[0].Rules)
 	}
@@ -589,26 +589,26 @@ func TestBatchRenameSavePresetOverAnExistingNameAsksFirst(t *testing.T) {
 
 func TestBatchRenamePresetPickerDeletesAfterAsking(t *testing.T) {
 	r, _ := newBatchRenameRoot(t)
-	r.batchRenamePresetDir = t.TempDir()
-	if err := batchrename.SavePreset(r.batchRenamePresetDir, "gone", batchrename.Rules{}); err != nil {
+	r.batch.PresetDir = t.TempDir()
+	if err := batchrename.SavePreset(r.batch.PresetDir, "gone", batchrename.Rules{}); err != nil {
 		t.Fatal(err)
 	}
 
 	r.openBatchRenamePresetPicker()
-	key(r.batchRenamePresetList, tcell.KeyRune, 'd')
+	key(r.batch.PresetList, tcell.KeyRune, 'd')
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want the delete confirmation", r.activePage)
 	}
 	r.confirmDialog.SetCurrentItem(0)
 	key(r.confirmDialog, tcell.KeyEnter, 0)
 
-	if batchrename.PresetExists(r.batchRenamePresetDir, "gone") {
+	if batchrename.PresetExists(r.batch.PresetDir, "gone") {
 		t.Error("preset should be deleted after confirming")
 	}
 	if r.activePage != batchRenamePresetPage {
 		t.Errorf("activePage = %q, want the picker still open (rebuilt)", r.activePage)
 	}
-	if name, _ := r.batchRenamePresetList.GetItemText(0); name != "(no presets saved yet)" {
+	if name, _ := r.batch.PresetList.GetItemText(0); name != "(no presets saved yet)" {
 		t.Errorf("picker item 0 after deleting = %q, want the empty placeholder", name)
 	}
 }
@@ -623,14 +623,14 @@ func TestBatchRenameTemplateStepRebuildsNamesLive(t *testing.T) {
 	}
 	f.apply(r, "{parent}_{counter}_{name}")
 
-	if len(r.batchRenamePendingChanges) != 2 {
-		t.Fatalf("pending = %+v, want both files rebuilt", r.batchRenamePendingChanges)
+	if len(r.batch.PendingChanges) != 2 {
+		t.Fatalf("pending = %+v, want both files rebuilt", r.batch.PendingChanges)
 	}
 	want := filepath.Base(dir) + "_0_apple.txt"
-	if got := filepath.Base(r.batchRenamePendingChanges[0].To); got != want {
+	if got := filepath.Base(r.batch.PendingChanges[0].To); got != want {
 		t.Errorf("first new name = %q, want %q", got, want)
 	}
-	if main, _ := r.batchRenameStepsList.GetItemText(3); main != batchRenameActiveMark+"Template" {
+	if main, _ := r.batch.StepsList.GetItemText(3); main != batchRenameActiveMark+"Template" {
 		t.Errorf("Template item = %q, want it marked active", main)
 	}
 }
@@ -654,8 +654,8 @@ func TestOpenBatchRenameOnALoneFolderExpandsToItsContents(t *testing.T) {
 	r.openBatchRename()
 
 	want := []string{filepath.Join(dir, "app-data", "inner.txt")}
-	if len(r.batchRenameTargets) != len(want) || r.batchRenameTargets[0] != want[0] {
-		t.Fatalf("targets = %v, want %v (the folder's own contents)", r.batchRenameTargets, want)
+	if len(r.batch.Targets) != len(want) || r.batch.Targets[0] != want[0] {
+		t.Fatalf("targets = %v, want %v (the folder's own contents)", r.batch.Targets, want)
 	}
 }
 
@@ -701,8 +701,8 @@ func TestOpenBatchRenameOnMultipleFoldersLeavesThemAsTargets(t *testing.T) {
 	r.openBatchRename()
 
 	want := []string{filepath.Join(dir, "app-data"), filepath.Join(dir, "banana-data")}
-	if len(r.batchRenameTargets) != len(want) {
-		t.Fatalf("targets = %v, want the two folders themselves %v", r.batchRenameTargets, want)
+	if len(r.batch.Targets) != len(want) {
+		t.Fatalf("targets = %v, want the two folders themselves %v", r.batch.Targets, want)
 	}
 }
 
@@ -727,8 +727,8 @@ func TestOpenBatchRenameWithCursorOnDotDotExpandsCurrentDirectory(t *testing.T) 
 		filepath.Join(dir, "apricot.txt"),
 		filepath.Join(dir, "banana.txt"),
 	}
-	if len(r.batchRenameTargets) != len(want) {
-		t.Fatalf("targets = %v, want the current directory's own contents %v", r.batchRenameTargets, want)
+	if len(r.batch.Targets) != len(want) {
+		t.Fatalf("targets = %v, want the current directory's own contents %v", r.batch.Targets, want)
 	}
 }
 
@@ -753,7 +753,7 @@ func TestOpenBatchRenameOnAFolderRespectsShowHidden(t *testing.T) {
 	r.openBatchRename()
 
 	want := []string{filepath.Join(dir, "app-data", "inner.txt")}
-	if len(r.batchRenameTargets) != len(want) || r.batchRenameTargets[0] != want[0] {
-		t.Fatalf("targets = %v, want only the visible entry %v", r.batchRenameTargets, want)
+	if len(r.batch.Targets) != len(want) || r.batch.Targets[0] != want[0] {
+		t.Fatalf("targets = %v, want only the visible entry %v", r.batch.Targets, want)
 	}
 }

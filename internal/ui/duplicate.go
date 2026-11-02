@@ -16,15 +16,45 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
-// duplicateDateTimeFormatType values, and the choices the "Date/time
+// duplicate.DateTimeFormatType values, and the choices the "Date/time
 // format type" dropdown offers — a second, Date/time-only dropdown
 // that replaced an earlier pair of Form checkboxes entirely (see
-// root.go's own doc comment on duplicateDateTimeTypeField for why).
+// root.go's own doc comment on duplicate.DateTimeTypeField for why).
 const (
 	duplicateDateTimeTypeGo       = "go"
 	duplicateDateTimeTypeStrftime = "strftime"
 	duplicateDateTimeTypeUnix     = "unix"
 )
+
+// duplicateState holds the "Multiply" (Duplicate) dialog's widgets,
+// current form values, and the targets this open is for.
+type duplicateState struct {
+	Form                        *tview.Form
+	StrategyField               *tview.DropDown
+	SeparatorField              *tview.InputField
+	SuffixTextField             *tview.InputField
+	NumberPaddingField          *tview.InputField
+	DateTimeTypeField           *tview.DropDown
+	DateTimeFormatField         *tview.InputField
+	CountField                  *tview.InputField
+	SeparatorValue              string
+	Strategy                    string
+	SuffixTextValue             string
+	NumberPaddingValue          string
+	DateTimeFormatType          string
+	DateTimeFormatGoValue       string
+	DateTimeFormatStrftimeValue string
+	CountValue                  string
+	PreviewView                 *tview.TextView
+	Spacer                      *tview.Box
+	CancelBtn                   *tview.Button
+	ApplyBtn                    *tview.Button
+	Buttons                     *tview.Flex
+	TitleBar                    *tview.TextView
+	ContentLayout               *tview.Flex
+	Layout                      *tview.Flex
+	Targets                     []string
+}
 
 var duplicateDateTimeFormatTypeChoices = []struct{ value, label string }{
 	{duplicateDateTimeTypeGo, "Go format string"},
@@ -33,8 +63,8 @@ var duplicateDateTimeFormatTypeChoices = []struct{ value, label string }{
 }
 
 // duplicateDefaultGoFormat/duplicateDefaultStrftimeFormat are the
-// example strings duplicateDateTimeFormatGoValue/
-// duplicateDateTimeFormatStrftimeValue fall back to the first time
+// example strings duplicate.DateTimeFormatGoValue/
+// duplicate.DateTimeFormatStrftimeValue fall back to the first time
 // their own format type is selected without a matching sticky default
 // already saved for it (see resetDuplicateForm) — the same moment in
 // time ("2006-01-02_15-04-05"), just spelled in each syntax's own
@@ -60,14 +90,14 @@ func (r *Root) openDuplicate() {
 	if len(targets) == 0 {
 		return
 	}
-	r.duplicateTargets = targets
+	r.duplicate.Targets = targets
 	r.resetDuplicateForm()
 
-	// height fits duplicateTitleBar's own row (1) plus
-	// duplicateContentLayout's four stacked widgets (duplicateForm's own
+	// height fits duplicate.TitleBar's own row (1) plus
+	// duplicate.ContentLayout's four stacked widgets (duplicate.Form's own
 	// worst case — see newDuplicateContentLayout's own doc comment for
-	// the exact derivation — duplicatePreviewView's single row,
-	// duplicateSpacer's single row, and duplicateButtons' single row) —
+	// the exact derivation — duplicate.PreviewView's single row,
+	// duplicate.Spacer's single row, and duplicate.Buttons' single row) —
 	// checked against a real render, not guessed; a shorter value
 	// silently clipped the bottom rows, the same lesson
 	// openSedReplace's own doc comment records.
@@ -81,8 +111,8 @@ func (r *Root) openDuplicate() {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.duplicateLayout.SetRect(x, y, width, height)
-	r.showOverlay(duplicatePage, r.duplicateLayout)
+	r.duplicate.Layout.SetRect(x, y, width, height)
+	r.showOverlay(duplicatePage, r.duplicate.Layout)
 }
 
 // newDuplicateForm builds the (initially empty) "Multiply" form — called
@@ -112,7 +142,7 @@ func (r *Root) newDuplicateForm() *tview.Form {
 // then builds the Form for the first time this open (see
 // renderDuplicateForm).
 //
-// duplicateDateTimeFormatGoValue/duplicateDateTimeFormatStrftimeValue
+// duplicate.DateTimeFormatGoValue/duplicate.DateTimeFormatStrftimeValue
 // each start at their own generic example (duplicateDefaultGoFormat/
 // duplicateDefaultStrftimeFormat), then whichever one actually matches
 // today's sticky duplicate_datetime_strftime/duplicate_datetime_use_unix
@@ -122,34 +152,34 @@ func (r *Root) newDuplicateForm() *tview.Form {
 // saved one "duplicate_datetime_format" value, whichever syntax was
 // last actually used).
 func (r *Root) resetDuplicateForm() {
-	r.duplicateSeparatorValue = r.settings.DuplicateSeparator
-	r.duplicateStrategy = r.settings.DuplicateStrategy
-	r.duplicateSuffixTextValue = r.settings.DuplicateSuffixText
-	r.duplicateNumberPaddingValue = strconv.Itoa(r.settings.DuplicateNumberPadding)
-	r.duplicateCountValue = strconv.Itoa(r.settings.DuplicateCount)
+	r.duplicate.SeparatorValue = r.settings.DuplicateSeparator
+	r.duplicate.Strategy = r.settings.DuplicateStrategy
+	r.duplicate.SuffixTextValue = r.settings.DuplicateSuffixText
+	r.duplicate.NumberPaddingValue = strconv.Itoa(r.settings.DuplicateNumberPadding)
+	r.duplicate.CountValue = strconv.Itoa(r.settings.DuplicateCount)
 
 	switch {
 	case r.settings.DuplicateDateTimeUseUnix:
-		r.duplicateDateTimeFormatType = duplicateDateTimeTypeUnix
+		r.duplicate.DateTimeFormatType = duplicateDateTimeTypeUnix
 	case r.settings.DuplicateDateTimeStrftime:
-		r.duplicateDateTimeFormatType = duplicateDateTimeTypeStrftime
+		r.duplicate.DateTimeFormatType = duplicateDateTimeTypeStrftime
 	default:
-		r.duplicateDateTimeFormatType = duplicateDateTimeTypeGo
+		r.duplicate.DateTimeFormatType = duplicateDateTimeTypeGo
 	}
-	r.duplicateDateTimeFormatGoValue = duplicateDefaultGoFormat
-	r.duplicateDateTimeFormatStrftimeValue = duplicateDefaultStrftimeFormat
-	switch r.duplicateDateTimeFormatType {
+	r.duplicate.DateTimeFormatGoValue = duplicateDefaultGoFormat
+	r.duplicate.DateTimeFormatStrftimeValue = duplicateDefaultStrftimeFormat
+	switch r.duplicate.DateTimeFormatType {
 	case duplicateDateTimeTypeGo:
-		r.duplicateDateTimeFormatGoValue = r.settings.DuplicateDateTimeFormat
+		r.duplicate.DateTimeFormatGoValue = r.settings.DuplicateDateTimeFormat
 	case duplicateDateTimeTypeStrftime:
-		r.duplicateDateTimeFormatStrftimeValue = r.settings.DuplicateDateTimeFormat
+		r.duplicate.DateTimeFormatStrftimeValue = r.settings.DuplicateDateTimeFormat
 	}
 
 	r.renderDuplicateForm()
 	r.renderDuplicatePreview()
 }
 
-// renderDuplicateForm (re)builds duplicateForm's own items from
+// renderDuplicateForm (re)builds duplicate.Form's own items from
 // scratch: Target, the Strategy dropdown, Separator (used by every
 // strategy, so always shown), then — and only then — whichever fields
 // the CURRENTLY selected strategy actually uses, and finally Number of
@@ -167,7 +197,7 @@ func (r *Root) resetDuplicateForm() {
 // open too, just triggered more often here.
 //
 // Every field this builds is seeded from, and writes straight back
-// into, its own plain-string mirror (duplicateSeparatorValue and
+// into, its own plain-string mirror (duplicate.SeparatorValue and
 // friends — see their own doc comment on root.go) rather than reading
 // back a widget that may not exist a moment from now: switching
 // strategy (or format type) destroys and recreates every one of these
@@ -185,13 +215,13 @@ func (r *Root) resetDuplicateForm() {
 // its first line — a real trade-off, chosen per the user's own
 // explicit request for exactly one blank row above Strategy, not two.
 func (r *Root) renderDuplicateForm() {
-	r.duplicateForm.Clear(true)
-	r.duplicateSuffixTextField = nil
-	r.duplicateNumberPaddingField = nil
-	r.duplicateDateTimeTypeField = nil
-	r.duplicateDateTimeFormatField = nil
+	r.duplicate.Form.Clear(true)
+	r.duplicate.SuffixTextField = nil
+	r.duplicate.NumberPaddingField = nil
+	r.duplicate.DateTimeTypeField = nil
+	r.duplicate.DateTimeFormatField = nil
 
-	r.duplicateForm.AddTextView("Target", duplicateTargetsLabel(r.duplicateTargets), 0, 1, true, false)
+	r.duplicate.Form.AddTextView("Target", duplicateTargetsLabel(r.duplicate.Targets), 0, 1, true, false)
 
 	opt, ok := optionSpecByKey("duplicate_strategy")
 	var choices []optionChoice
@@ -202,11 +232,11 @@ func (r *Root) renderDuplicateForm() {
 	currentIndex := 0
 	for i, c := range choices {
 		labels[i] = c.label
-		if c.value == r.duplicateStrategy {
+		if c.value == r.duplicate.Strategy {
 			currentIndex = i
 		}
 	}
-	r.duplicateStrategyField = tview.NewDropDown().SetLabel("Strategy").SetOptions(labels, func(_ string, index int) {
+	r.duplicate.StrategyField = tview.NewDropDown().SetLabel("Strategy").SetOptions(labels, func(_ string, index int) {
 		if index < 0 || index >= len(choices) {
 			return
 		}
@@ -218,83 +248,83 @@ func (r *Root) renderDuplicateForm() {
 		// would rebuild the form again, which recreates this same
 		// dropdown again, which fires the callback again — an infinite
 		// recursion, not just a wasted rebuild.
-		if choices[index].value == r.duplicateStrategy {
+		if choices[index].value == r.duplicate.Strategy {
 			return
 		}
-		r.duplicateStrategy = choices[index].value
+		r.duplicate.Strategy = choices[index].value
 		r.renderDuplicateForm()
 		r.renderDuplicatePreview()
 	})
-	r.duplicateStrategyField.SetCurrentOption(currentIndex)
-	r.themeDuplicateDropDown(r.duplicateStrategyField)
-	r.duplicateForm.AddFormItem(r.duplicateStrategyField)
+	r.duplicate.StrategyField.SetCurrentOption(currentIndex)
+	r.themeDuplicateDropDown(r.duplicate.StrategyField)
+	r.duplicate.Form.AddFormItem(r.duplicate.StrategyField)
 
-	r.duplicateSeparatorField = tview.NewInputField().SetLabel("Separator").SetText(r.duplicateSeparatorValue)
-	r.duplicateSeparatorField.SetChangedFunc(func(v string) {
-		r.duplicateSeparatorValue = v
+	r.duplicate.SeparatorField = tview.NewInputField().SetLabel("Separator").SetText(r.duplicate.SeparatorValue)
+	r.duplicate.SeparatorField.SetChangedFunc(func(v string) {
+		r.duplicate.SeparatorValue = v
 		r.renderDuplicatePreview()
 	})
-	r.duplicateForm.AddFormItem(r.duplicateSeparatorField)
+	r.duplicate.Form.AddFormItem(r.duplicate.SeparatorField)
 
-	switch r.duplicateStrategy {
+	switch r.duplicate.Strategy {
 	case "suffix_text":
-		r.duplicateSuffixTextField = tview.NewInputField().SetLabel("Suffix text").SetText(r.duplicateSuffixTextValue)
-		r.duplicateSuffixTextField.SetChangedFunc(func(v string) {
-			r.duplicateSuffixTextValue = v
+		r.duplicate.SuffixTextField = tview.NewInputField().SetLabel("Suffix text").SetText(r.duplicate.SuffixTextValue)
+		r.duplicate.SuffixTextField.SetChangedFunc(func(v string) {
+			r.duplicate.SuffixTextValue = v
 			r.renderDuplicatePreview()
 		})
-		r.duplicateForm.AddFormItem(r.duplicateSuffixTextField)
+		r.duplicate.Form.AddFormItem(r.duplicate.SuffixTextField)
 	case "datetime":
 		r.renderDuplicateDateTimeFields()
 	default: // "numbered", and any unrecognized value (see cycleOptionChoice's own equivalent fallback)
-		r.duplicateNumberPaddingField = tview.NewInputField().
+		r.duplicate.NumberPaddingField = tview.NewInputField().
 			SetLabel("Number padding (digits)").
-			SetText(r.duplicateNumberPaddingValue).
+			SetText(r.duplicate.NumberPaddingValue).
 			SetAcceptanceFunc(tview.InputFieldInteger)
-		r.duplicateNumberPaddingField.SetChangedFunc(func(v string) {
-			r.duplicateNumberPaddingValue = v
+		r.duplicate.NumberPaddingField.SetChangedFunc(func(v string) {
+			r.duplicate.NumberPaddingValue = v
 			r.renderDuplicatePreview()
 		})
-		r.duplicateForm.AddFormItem(r.duplicateNumberPaddingField)
+		r.duplicate.Form.AddFormItem(r.duplicate.NumberPaddingField)
 	}
 
-	r.duplicateCountField = tview.NewInputField().
+	r.duplicate.CountField = tview.NewInputField().
 		SetLabel("Number of duplicates").
-		SetText(r.duplicateCountValue).
+		SetText(r.duplicate.CountValue).
 		SetAcceptanceFunc(tview.InputFieldInteger)
-	r.duplicateCountField.SetChangedFunc(func(v string) {
-		r.duplicateCountValue = v
+	r.duplicate.CountField.SetChangedFunc(func(v string) {
+		r.duplicate.CountValue = v
 		r.renderDuplicatePreview()
 	})
 	// Tab on the form's own last field (always this one, regardless of
 	// strategy — added unconditionally after the switch above) would
 	// otherwise just wrap back to Strategy instead of ever reaching
-	// duplicateCancelBtn/duplicateApplyBtn — the identical, real,
+	// duplicate.CancelBtn/duplicate.ApplyBtn — the identical, real,
 	// previously-unfixed gap newConnectForm's own doc comment already
 	// found and fixed for the Connect dialog: without this, the whole
 	// button row was reachable only by mouse (feature_upgrades.txt
 	// Befund 8's own "compress.go/duplicate.go" follow-up note).
-	r.duplicateCountField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	r.duplicate.CountField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.duplicateCancelBtn)
+			r.app.SetFocus(r.duplicate.CancelBtn)
 			return nil
 		}
 		return event
 	})
-	r.duplicateForm.AddFormItem(r.duplicateCountField)
+	r.duplicate.Form.AddFormItem(r.duplicate.CountField)
 }
 
 // renderDuplicateDateTimeFields adds the Date/time strategy's own two
-// fields to duplicateForm: "Date/time format type" (a second dropdown,
+// fields to duplicate.Form: "Date/time format type" (a second dropdown,
 // the same "activating it is the change" shape Strategy's own already
 // has) and "Date/time format" itself, whose behavior depends entirely
 // on the type just chosen — per the user's own explicit design:
 //
 //   - Go format string (the default): the field holds
-//     duplicateDateTimeFormatGoValue, editable, interpreted as Go's own
+//     duplicate.DateTimeFormatGoValue, editable, interpreted as Go's own
 //     reference-time layout.
 //   - Strftime-style Format: the field holds
-//     duplicateDateTimeFormatStrftimeValue instead — a genuinely
+//     duplicate.DateTimeFormatStrftimeValue instead — a genuinely
 //     different example string in strftime's own syntax, not the same
 //     text reinterpreted — also editable.
 //   - Unix timestamp: the field is disabled (SetDisabled — read-only,
@@ -309,48 +339,48 @@ func (r *Root) renderDuplicateDateTimeFields() {
 	typeCurrentIndex := 0
 	for i, c := range duplicateDateTimeFormatTypeChoices {
 		typeLabels[i] = c.label
-		if c.value == r.duplicateDateTimeFormatType {
+		if c.value == r.duplicate.DateTimeFormatType {
 			typeCurrentIndex = i
 		}
 	}
-	r.duplicateDateTimeTypeField = tview.NewDropDown().SetLabel("Date/time format type").SetOptions(typeLabels, func(_ string, index int) {
+	r.duplicate.DateTimeTypeField = tview.NewDropDown().SetLabel("Date/time format type").SetOptions(typeLabels, func(_ string, index int) {
 		if index < 0 || index >= len(duplicateDateTimeFormatTypeChoices) {
 			return
 		}
 		// See the Strategy dropdown's own identical guard above for why
 		// this is needed at all, not just a wasted rebuild.
 		newType := duplicateDateTimeFormatTypeChoices[index].value
-		if newType == r.duplicateDateTimeFormatType {
+		if newType == r.duplicate.DateTimeFormatType {
 			return
 		}
-		r.duplicateDateTimeFormatType = newType
+		r.duplicate.DateTimeFormatType = newType
 		r.renderDuplicateForm()
 		r.renderDuplicatePreview()
 	})
-	r.duplicateDateTimeTypeField.SetCurrentOption(typeCurrentIndex)
-	r.themeDuplicateDropDown(r.duplicateDateTimeTypeField)
-	r.duplicateForm.AddFormItem(r.duplicateDateTimeTypeField)
+	r.duplicate.DateTimeTypeField.SetCurrentOption(typeCurrentIndex)
+	r.themeDuplicateDropDown(r.duplicate.DateTimeTypeField)
+	r.duplicate.Form.AddFormItem(r.duplicate.DateTimeTypeField)
 
-	r.duplicateDateTimeFormatField = tview.NewInputField().SetLabel("Date/time format")
-	switch r.duplicateDateTimeFormatType {
+	r.duplicate.DateTimeFormatField = tview.NewInputField().SetLabel("Date/time format")
+	switch r.duplicate.DateTimeFormatType {
 	case duplicateDateTimeTypeUnix:
-		r.duplicateDateTimeFormatField.SetText(strconv.FormatInt(time.Now().Unix(), 10))
-		r.duplicateDateTimeFormatField.SetDisabled(true)
-		styleDisabledInput(r.duplicateDateTimeFormatField, r.theme)
+		r.duplicate.DateTimeFormatField.SetText(strconv.FormatInt(time.Now().Unix(), 10))
+		r.duplicate.DateTimeFormatField.SetDisabled(true)
+		styleDisabledInput(r.duplicate.DateTimeFormatField, r.theme)
 	case duplicateDateTimeTypeStrftime:
-		r.duplicateDateTimeFormatField.SetText(r.duplicateDateTimeFormatStrftimeValue)
-		r.duplicateDateTimeFormatField.SetChangedFunc(func(v string) {
-			r.duplicateDateTimeFormatStrftimeValue = v
+		r.duplicate.DateTimeFormatField.SetText(r.duplicate.DateTimeFormatStrftimeValue)
+		r.duplicate.DateTimeFormatField.SetChangedFunc(func(v string) {
+			r.duplicate.DateTimeFormatStrftimeValue = v
 			r.renderDuplicatePreview()
 		})
 	default: // duplicateDateTimeTypeGo, and any unrecognized value
-		r.duplicateDateTimeFormatField.SetText(r.duplicateDateTimeFormatGoValue)
-		r.duplicateDateTimeFormatField.SetChangedFunc(func(v string) {
-			r.duplicateDateTimeFormatGoValue = v
+		r.duplicate.DateTimeFormatField.SetText(r.duplicate.DateTimeFormatGoValue)
+		r.duplicate.DateTimeFormatField.SetChangedFunc(func(v string) {
+			r.duplicate.DateTimeFormatGoValue = v
 			r.renderDuplicatePreview()
 		})
 	}
-	r.duplicateForm.AddFormItem(r.duplicateDateTimeFormatField)
+	r.duplicate.Form.AddFormItem(r.duplicate.DateTimeFormatField)
 }
 
 // themeDuplicateDropDownField applies this app's own field/List colors
@@ -385,8 +415,8 @@ func duplicateTargetsLabel(targets []string) string {
 	return fmt.Sprintf("%d selected items", len(targets))
 }
 
-// newDuplicatePreviewView builds duplicatePreviewView once, from
-// NewRoot — a plain, read-only TextView sibling of duplicateForm, not
+// newDuplicatePreviewView builds duplicate.PreviewView once, from
+// NewRoot — a plain, read-only TextView sibling of duplicate.Form, not
 // one of its items (see its own doc comment on root.go for why: a
 // TextView added as a Form item needs an explicit height or tview
 // substitutes a 5-row default, a real bug this shape rules out
@@ -394,7 +424,7 @@ func duplicateTargetsLabel(targets []string) string {
 // fresh by renderDuplicatePreview, not here — there is nothing
 // meaningful to show before a real target exists.
 //
-// One column of left padding, matching duplicateForm's own left inset
+// One column of left padding, matching duplicate.Form's own left inset
 // (Box's default BorderPadding(1,1,1,1) — see Form.GetInnerRect), so
 // "Preview" lines up directly under every field's own label above it
 // instead of sitting flush against the dialog's raw left edge — a
@@ -405,7 +435,7 @@ func (r *Root) newDuplicatePreviewView() *tview.TextView {
 	return v
 }
 
-// newDuplicateButtons builds duplicateForm's own action row once, from
+// newDuplicateButtons builds duplicate.Form's own action row once, from
 // NewRoot — a real Cancel/Duplicate button pair, bottom-left/
 // bottom-right, the same shape newChmodButtons/newSearchButtons/
 // newPropertiesButtons already establish for their own dialogs,
@@ -413,40 +443,40 @@ func (r *Root) newDuplicatePreviewView() *tview.TextView {
 // that established look rather than Sed Replace's own vertical
 // two-item List.
 func (r *Root) newDuplicateButtons() *tview.Flex {
-	r.duplicateCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
-	r.duplicateApplyBtn = tview.NewButton("Duplicate").SetSelectedFunc(r.runDuplicate)
-	r.duplicateCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
-	r.duplicateApplyBtn.SetInputCapture(spaceAlsoActivates(r.runDuplicate))
+	r.duplicate.CancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
+	r.duplicate.ApplyBtn = tview.NewButton("Duplicate").SetSelectedFunc(r.runDuplicate)
+	r.duplicate.CancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
+	r.duplicate.ApplyBtn.SetInputCapture(spaceAlsoActivates(r.runDuplicate))
 
 	// Tab/Backtab cycle between the two buttons and back into the form
-	// (duplicateCountField's own forward Tab is the other half of
+	// (duplicate.CountField's own forward Tab is the other half of
 	// this — see renderDuplicateForm's own doc comment, right after
 	// the strategy-specific switch); Escape always cancels. Wrapping
 	// forward goes through
-	// duplicateForm.SetFocus(0) then r.app.SetFocus(r.duplicateForm),
-	// not a direct r.app.SetFocus(r.duplicateStrategyField) — naming
-	// the field directly would leave duplicateForm's own internal
+	// duplicate.Form.SetFocus(0) then r.app.SetFocus(r.duplicate.Form),
+	// not a direct r.app.SetFocus(r.duplicate.StrategyField) — naming
+	// the field directly would leave duplicate.Form's own internal
 	// focusedElement counter stale, the same real bug
-	// connectdialog.go's own connectConnectBtn.SetExitFunc found and
+	// connectdialog.go's own connect.ConnectBtn.SetExitFunc found and
 	// fixed first (see its own doc comment for the full tview.Form
 	// internals).
-	r.duplicateCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.duplicate.CancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.duplicateApplyBtn)
+			r.app.SetFocus(r.duplicate.ApplyBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.duplicateCountField)
+			r.app.SetFocus(r.duplicate.CountField)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-	r.duplicateApplyBtn.SetExitFunc(func(key tcell.Key) {
+	r.duplicate.ApplyBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.duplicateForm.SetFocus(0)
-			r.app.SetFocus(r.duplicateForm)
+			r.duplicate.Form.SetFocus(0)
+			r.app.SetFocus(r.duplicate.Form)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.duplicateCancelBtn)
+			r.app.SetFocus(r.duplicate.CancelBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
@@ -457,33 +487,33 @@ func (r *Root) newDuplicateButtons() *tview.Flex {
 	// shape newChmodButtons/newSearchButtons/newPropertiesButtons all
 	// already use.
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.duplicateCancelBtn, 0, 1, false).
-		AddItem(r.duplicateApplyBtn, 0, 1, false)
+		AddItem(r.duplicate.CancelBtn, 0, 1, false).
+		AddItem(r.duplicate.ApplyBtn, 0, 1, false)
 }
 
-// newDuplicateLayout wraps duplicateTitleBar (" Multiply ") above
-// duplicateContentLayout — the same widget/layout split
+// newDuplicateLayout wraps duplicate.TitleBar (" Multiply ") above
+// duplicate.ContentLayout — the same widget/layout split
 // menu/menuTitleBar/menuLayout already established, mirrored exactly
-// by sedLayout/sedTitleBar/sedContentLayout for Sed Replace.
+// by sed.Layout/sed.TitleBar/sed.ContentLayout for Sed Replace.
 func (r *Root) newDuplicateLayout() *tview.Flex {
-	r.duplicateTitleBar = newPlainTitleBar("Multiply")
-	r.duplicateContentLayout = r.newDuplicateContentLayout()
+	r.duplicate.TitleBar = newPlainTitleBar("Multiply")
+	r.duplicate.ContentLayout = r.newDuplicateContentLayout()
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.duplicateTitleBar, 1, 0, false).
-		AddItem(r.duplicateContentLayout, 0, 1, true)
+		AddItem(r.duplicate.TitleBar, 1, 0, false).
+		AddItem(r.duplicate.ContentLayout, 0, 1, true)
 }
 
-// newDuplicateContentLayout stacks duplicateForm, duplicatePreviewView
+// newDuplicateContentLayout stacks duplicate.Form, duplicate.PreviewView
 // (its own always-visible row, never a Form item — see its own doc
 // comment on root.go for the real bug that shape rules out),
-// duplicateSpacer (one blank row, per the user's own explicit request
-// for one between the preview and the buttons), and duplicateButtons —
+// duplicate.Spacer (one blank row, per the user's own explicit request
+// for one between the preview and the buttons), and duplicate.Buttons —
 // the same four-widget-stack shape newSedContentLayout's own three-
 // widget stack establishes for Sed Replace, just with a plain preview
 // row, a spacer, and a button pair instead of a flags list and an
 // actions list.
 //
-// 13 rows for duplicateForm: its own worst case (the Date/time
+// 13 rows for duplicate.Form: its own worst case (the Date/time
 // strategy's six items, all height 1) sums to 6 rows of content, plus
 // itemPadding (1 row between every pair of items, i.e. 5 for six
 // items) plus 2 rows of the Form's own top/bottom border padding —
@@ -493,10 +523,10 @@ func (r *Root) newDuplicateLayout() *tview.Flex {
 // about for its own dialog).
 func (r *Root) newDuplicateContentLayout() *tview.Flex {
 	layout := tview.NewFlex().SetDirection(tview.FlexRow)
-	layout.AddItem(r.duplicateForm, 13, 0, true)
-	layout.AddItem(r.duplicatePreviewView, 1, 0, false)
-	layout.AddItem(r.duplicateSpacer, 1, 0, false)
-	layout.AddItem(r.duplicateButtons, 1, 0, false)
+	layout.AddItem(r.duplicate.Form, 13, 0, true)
+	layout.AddItem(r.duplicate.PreviewView, 1, 0, false)
+	layout.AddItem(r.duplicate.Spacer, 1, 0, false)
+	layout.AddItem(r.duplicate.Buttons, 1, 0, false)
 	return layout
 }
 
@@ -510,31 +540,31 @@ func (r *Root) newDuplicateContentLayout() *tview.Flex {
 // touches r.settings at all) has a chance to make it the new default.
 func (r *Root) currentDuplicateOptions(padding int) fsops.DuplicateOptions {
 	strategy := fsops.DuplicateNumbered
-	switch r.duplicateStrategy {
+	switch r.duplicate.Strategy {
 	case "suffix_text":
 		strategy = fsops.DuplicateSuffixText
 	case "datetime":
 		strategy = fsops.DuplicateDateTime
 	}
 	opts := fsops.DuplicateOptions{
-		Separator:     r.duplicateSeparatorValue,
+		Separator:     r.duplicate.SeparatorValue,
 		Strategy:      strategy,
-		SuffixText:    r.duplicateSuffixTextValue,
+		SuffixText:    r.duplicate.SuffixTextValue,
 		NumberPadding: padding,
 	}
-	switch r.duplicateDateTimeFormatType {
+	switch r.duplicate.DateTimeFormatType {
 	case duplicateDateTimeTypeUnix:
 		opts.DateTimeUseUnix = true
 	case duplicateDateTimeTypeStrftime:
-		opts.DateTimeFormat = r.duplicateDateTimeFormatStrftimeValue
+		opts.DateTimeFormat = r.duplicate.DateTimeFormatStrftimeValue
 		opts.DateTimeStrftime = true
 	default:
-		opts.DateTimeFormat = r.duplicateDateTimeFormatGoValue
+		opts.DateTimeFormat = r.duplicate.DateTimeFormatGoValue
 	}
 	return opts
 }
 
-// duplicateNumberPadding parses duplicateNumberPaddingValue — a real,
+// duplicateNumberPadding parses duplicate.NumberPaddingValue — a real,
 // negative value can't occur (the field's own
 // SetAcceptanceFunc(tview.InputFieldInteger) never lets a "-" through
 // at all while it exists, and it's simply absent while some other
@@ -543,14 +573,14 @@ func (r *Root) currentDuplicateOptions(padding int) fsops.DuplicateOptions {
 // an error the user would have to clear before the live preview
 // updates at all.
 func (r *Root) duplicateNumberPadding() int {
-	padding, err := strconv.Atoi(strings.TrimSpace(r.duplicateNumberPaddingValue))
+	padding, err := strconv.Atoi(strings.TrimSpace(r.duplicate.NumberPaddingValue))
 	if err != nil || padding < 0 {
 		return 0
 	}
 	return padding
 }
 
-// renderDuplicatePreview updates duplicatePreviewView with the name
+// renderDuplicatePreview updates duplicate.PreviewView with the name
 // the *first* target's own duplicate would actually get right now,
 // given every current mirror value — recomputed on every keystroke and
 // every Strategy/format-type change, so a typo or an unexpected format
@@ -575,28 +605,28 @@ func (r *Root) duplicateNumberPadding() int {
 // summarized by count instead (see the "+N more"/"M in total" text
 // below), which is honest about what it's actually showing.
 func (r *Root) renderDuplicatePreview() {
-	if r.duplicatePreviewView == nil || len(r.duplicateTargets) == 0 {
+	if r.duplicate.PreviewView == nil || len(r.duplicate.Targets) == 0 {
 		return
 	}
-	if r.duplicateDateTimeFormatType == duplicateDateTimeTypeUnix && r.duplicateDateTimeFormatField != nil {
-		r.duplicateDateTimeFormatField.SetText(strconv.FormatInt(time.Now().Unix(), 10))
+	if r.duplicate.DateTimeFormatType == duplicateDateTimeTypeUnix && r.duplicate.DateTimeFormatField != nil {
+		r.duplicate.DateTimeFormatField.SetText(strconv.FormatInt(time.Now().Unix(), 10))
 	}
 	opts := r.currentDuplicateOptions(r.duplicateNumberPadding())
 
-	name, err := fsops.ComputeDuplicateName(r.duplicateTargets[0], opts)
+	name, err := fsops.ComputeDuplicateName(r.duplicate.Targets[0], opts)
 	if err != nil {
-		r.duplicatePreviewView.SetText("Preview: (" + err.Error() + ")")
+		r.duplicate.PreviewView.SetText("Preview: (" + err.Error() + ")")
 		return
 	}
 
 	text := "Preview: " + filepath.Base(name)
-	if len(r.duplicateTargets) > 1 {
-		text += fmt.Sprintf(" (+%d more targets)", len(r.duplicateTargets)-1)
+	if len(r.duplicate.Targets) > 1 {
+		text += fmt.Sprintf(" (+%d more targets)", len(r.duplicate.Targets)-1)
 	}
-	if count, err := strconv.Atoi(strings.TrimSpace(r.duplicateCountValue)); err == nil && count > 1 {
+	if count, err := strconv.Atoi(strings.TrimSpace(r.duplicate.CountValue)); err == nil && count > 1 {
 		text += fmt.Sprintf(", %d in total per target", count)
 	}
-	r.duplicatePreviewView.SetText(text)
+	r.duplicate.PreviewView.SetText(text)
 }
 
 // applyDuplicateSelection writes the dialog's own current mirror
@@ -627,27 +657,27 @@ func (r *Root) applyDuplicateSelection(padding, count int) {
 			opt.apply(r, value)
 		}
 	}
-	apply("duplicate_separator", r.duplicateSeparatorValue)
-	apply("duplicate_strategy", r.duplicateStrategy)
-	apply("duplicate_suffix_text", r.duplicateSuffixTextValue)
+	apply("duplicate_separator", r.duplicate.SeparatorValue)
+	apply("duplicate_strategy", r.duplicate.Strategy)
+	apply("duplicate_suffix_text", r.duplicate.SuffixTextValue)
 	apply("duplicate_number_padding", strconv.Itoa(padding))
-	switch r.duplicateDateTimeFormatType {
+	switch r.duplicate.DateTimeFormatType {
 	case duplicateDateTimeTypeUnix:
 		apply("duplicate_datetime_strftime", "false")
 		apply("duplicate_datetime_use_unix", "true")
 	case duplicateDateTimeTypeStrftime:
 		apply("duplicate_datetime_strftime", "true")
 		apply("duplicate_datetime_use_unix", "false")
-		apply("duplicate_datetime_format", r.duplicateDateTimeFormatStrftimeValue)
+		apply("duplicate_datetime_format", r.duplicate.DateTimeFormatStrftimeValue)
 	default:
 		apply("duplicate_datetime_strftime", "false")
 		apply("duplicate_datetime_use_unix", "false")
-		apply("duplicate_datetime_format", r.duplicateDateTimeFormatGoValue)
+		apply("duplicate_datetime_format", r.duplicate.DateTimeFormatGoValue)
 	}
 	apply("duplicate_count", strconv.Itoa(count))
 }
 
-// runDuplicate is duplicateButtons' own "Duplicate": validates the
+// runDuplicate is duplicate.Buttons' own "Duplicate": validates the
 // count against "duplicate_count_max" (the dialog's own one guard rail
 // — see its own optionSpec help text), writes every field back as the
 // new sticky default (see applyDuplicateSelection), then actually
@@ -669,7 +699,7 @@ func (r *Root) applyDuplicateSelection(padding, count int) {
 // large file or a big count never blocks the UI thread, the same
 // reasoning every other background job in this app already follows.
 func (r *Root) runDuplicate() {
-	count, err := strconv.Atoi(strings.TrimSpace(r.duplicateCountValue))
+	count, err := strconv.Atoi(strings.TrimSpace(r.duplicate.CountValue))
 	if err != nil || count < 1 {
 		r.showError(fmt.Errorf("duplicate: \"Number of duplicates\" must be a positive whole number"))
 		return
@@ -687,7 +717,7 @@ func (r *Root) runDuplicate() {
 	// which could otherwise race against whatever the user does next
 	// once this dialog has already closed.
 	opts := r.currentDuplicateOptions(padding)
-	targets := append([]string(nil), r.duplicateTargets...)
+	targets := append([]string(nil), r.duplicate.Targets...)
 	copyOpts := fsops.CopyOptions{
 		FollowSymlinks: r.settings.CopyFollowSymlinks,
 		SkipAttributes: !r.settings.CopyPreserveAttributes,
@@ -711,12 +741,12 @@ func (r *Root) runDuplicate() {
 func (r *Root) finishDuplicate(created int, err error, targetCount int) {
 	r.reloadPanel(nil)
 	if err != nil {
-		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("duplicate: created %d, then: %v", created, err))
+		r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("duplicate: created %d, then: %v", created, err))
 		r.showError(fmt.Errorf("duplicate: created %d, then: %w", created, err))
 		return
 	}
 	if created > 0 {
-		r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("duplicated %d item(s) from %d target(s)", created, targetCount))
+		r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("duplicated %d item(s) from %d target(s)", created, targetCount))
 	}
 }
 
@@ -748,15 +778,15 @@ func performDuplicate(targets []string, opts fsops.DuplicateOptions, copyOpts fs
 }
 
 // applyDuplicateTheme themes the Duplicate/Multiply dialog.
-// duplicateForm and its siblings are built unconditionally during
+// duplicate.Form and its siblings are built unconditionally during
 // NewRoot, so no nil guard is needed on them — only the optional
 // sub-fields that depend on the currently selected strategy keep
 // their own existing nil checks.
 func (r *Root) applyDuplicateTheme(theme config.ResolvedTheme) {
-	r.duplicateForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.duplicateForm.SetLabelColor(theme.TextColor)
-	r.duplicateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.duplicateForm.SetFieldTextColor(theme.TextColor)
+	r.duplicate.Form.SetBackgroundColor(theme.SurfaceBackground)
+	r.duplicate.Form.SetLabelColor(theme.TextColor)
+	r.duplicate.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.duplicate.Form.SetFieldTextColor(theme.TextColor)
 	// See themeDuplicateDropDown's own doc comment (duplicate.go) for why
 	// both dropdowns need this explicit call at all: SetFormAttributes
 	// (what the two lines above actually drive, applied fresh every
@@ -765,13 +795,13 @@ func (r *Root) applyDuplicateTheme(theme config.ResolvedTheme) {
 	// either — a color-scheme switch while Multiply happens to be open
 	// would otherwise leave either dropdown showing stale colors, or the
 	// popup showing tview's own stock palette, indefinitely.
-	// duplicateDateTimeTypeField only exists while the Date/time
+	// duplicate.DateTimeTypeField only exists while the Date/time
 	// strategy is the one currently selected (see renderDuplicateForm).
-	if r.duplicateStrategyField != nil {
-		r.themeDuplicateDropDown(r.duplicateStrategyField)
+	if r.duplicate.StrategyField != nil {
+		r.themeDuplicateDropDown(r.duplicate.StrategyField)
 	}
-	if r.duplicateDateTimeTypeField != nil {
-		r.themeDuplicateDropDown(r.duplicateDateTimeTypeField)
+	if r.duplicate.DateTimeTypeField != nil {
+		r.themeDuplicateDropDown(r.duplicate.DateTimeTypeField)
 	}
 	// The Date/time format field's own disabled ("Unix timestamp") look
 	// is set directly in renderDuplicateDateTimeFields, not by Form's
@@ -780,18 +810,18 @@ func (r *Root) applyDuplicateTheme(theme config.ResolvedTheme) {
 	// same reason the other two dropdowns are: a color-scheme switch
 	// while it's showing must not leave it in the previous scheme's dim
 	// color indefinitely.
-	if r.duplicateDateTimeFormatField != nil && r.duplicateDateTimeFormatType == duplicateDateTimeTypeUnix {
-		styleDisabledInput(r.duplicateDateTimeFormatField, theme)
+	if r.duplicate.DateTimeFormatField != nil && r.duplicate.DateTimeFormatType == duplicateDateTimeTypeUnix {
+		styleDisabledInput(r.duplicate.DateTimeFormatField, theme)
 	}
-	r.duplicatePreviewView.SetBackgroundColor(theme.SurfaceBackground)
-	r.duplicatePreviewView.SetTextColor(theme.TextColor)
-	r.duplicateSpacer.SetBackgroundColor(theme.SurfaceBackground)
-	r.duplicateButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.duplicateCancelBtn, theme)
-	styleButton(r.duplicateApplyBtn, theme)
+	r.duplicate.PreviewView.SetBackgroundColor(theme.SurfaceBackground)
+	r.duplicate.PreviewView.SetTextColor(theme.TextColor)
+	r.duplicate.Spacer.SetBackgroundColor(theme.SurfaceBackground)
+	r.duplicate.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.duplicate.CancelBtn, theme)
+	styleButton(r.duplicate.ApplyBtn, theme)
 	// FocusedBackground, fixed — Multiply is a single-layer, always-modal
 	// dialog nothing else ever stacks on top of, the same reasoning
-	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
-	r.duplicateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.duplicateTitleBar.SetTextColor(theme.TextColor)
+	// confirmDialogTitleBar/chmodTitleBar/sed.TitleBar already follow.
+	r.duplicate.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.duplicate.TitleBar.SetTextColor(theme.TextColor)
 }

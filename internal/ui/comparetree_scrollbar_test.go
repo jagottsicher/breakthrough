@@ -14,7 +14,7 @@ import (
 // same regression test shape used for every other table-backed
 // scrollbar in this rollout (Mounts, Firewall, ...): a click on the
 // scrollbar's own down arrow must actually scroll, driven through the
-// real dispatch chain (compareTreeLayout's own MouseHandler), not the
+// real dispatch chain (compare.TreeLayout's own MouseHandler), not the
 // scrollbar's captureMouse directly.
 func TestCompareTreeScrollbarMouseClickThroughRealDispatch(t *testing.T) {
 	r, _ := newCompareRoot(t)
@@ -24,10 +24,10 @@ func TestCompareTreeScrollbarMouseClickThroughRealDispatch(t *testing.T) {
 	for i := range entries {
 		entries[i] = compare.Entry{RelPath: fmt.Sprintf("file%02d.txt", i), Verdict: compare.Differs}
 	}
-	r.compareTreeEntries = entries
+	r.compare.TreeEntries = entries
 	r.renderCompareTree()
 	r.resetCompareTreeScrollPosition()
-	r.showOverlay(compareTreePage, r.compareTreeLayout)
+	r.showOverlay(compareTreePage, r.compare.TreeLayout)
 
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
@@ -35,23 +35,23 @@ func TestCompareTreeScrollbarMouseClickThroughRealDispatch(t *testing.T) {
 	}
 	defer screen.Fini()
 	screen.SetSize(100, 20)
-	r.compareTreeLayout.Draw(screen)
+	r.compare.TreeLayout.Draw(screen)
 
-	sb := r.compareTreeScrollbar
+	sb := r.compare.TreeScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow for 50 entries on a 20-row screen", sb.maxOffset())
 	}
 	sbx, sby, _, sbh := sb.GetRect()
-	before, _ := r.compareTreeTable.GetOffset()
+	before, _ := r.compare.TreeTable.GetOffset()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.compareTreeLayout.MouseHandler()
+	handler := r.compare.TreeLayout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
 
-	after, _ := r.compareTreeTable.GetOffset()
+	after, _ := r.compare.TreeTable.GetOffset()
 	if after != before+1 {
-		t.Errorf("compareTreeTable offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
+		t.Errorf("compare.TreeTable offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
 	}
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 )
 
-// attachTestActivityLog points r.activityLog at a real, freshly opened
+// attachTestActivityLog points r.activity.Logger at a real, freshly opened
 // log file — LevelDebug, every category on, so nothing this package's
 // own instrumentation logs is ever filtered out here — and returns a
 // function that rereads its current contents. Used throughout this
@@ -31,7 +31,7 @@ func attachTestActivityLog(t *testing.T, r *Root) func() string {
 	for _, c := range activitylog.Categories() {
 		categories[c] = true
 	}
-	r.activityLog = activitylog.New(activitylog.LevelDebug, categories, w)
+	r.activity.Logger = activitylog.New(activitylog.LevelDebug, categories, w)
 	return func() string {
 		got, err := os.ReadFile(path)
 		if err != nil {
@@ -129,9 +129,9 @@ func TestReopenActivityLogAppliesUpdatedSettings(t *testing.T) {
 	r, _, _ := newTestRootWithFile(t)
 	r.settings.LogLevel = "errors"
 	r.settings.LogCategoryFileOps = true
-	r.activityLog, _, _ = r.newActivityLogger()
+	r.activity.Logger, _, _ = r.newActivityLogger()
 
-	r.activityLog.Action(activitylog.CategoryFileOps, "should be dropped at LevelErrors")
+	r.activity.Logger.Action(activitylog.CategoryFileOps, "should be dropped at LevelErrors")
 	// OpenWriter's own os.O_CREATE already creates the file the moment
 	// the Writer opens, empty or not — checking its length, not mere
 	// existence, is what actually proves LevelErrors dropped this
@@ -142,7 +142,7 @@ func TestReopenActivityLogAppliesUpdatedSettings(t *testing.T) {
 
 	r.settings.LogLevel = "actions"
 	r.reopenActivityLog()
-	r.activityLog.Action(activitylog.CategoryFileOps, "should now be kept")
+	r.activity.Logger.Action(activitylog.CategoryFileOps, "should now be kept")
 
 	got, err := os.ReadFile(filepath.Join(activitylog.SystemLogDir, "breakthrough.log"))
 	if err != nil {
@@ -235,7 +235,7 @@ func TestOpenActivityLogFallbackNoticeShowsTheMessage(t *testing.T) {
 
 	r.openActivityLogFallbackNotice("activity log: /var/log/breakthrough isn't writable — logging to /tmp/x instead")
 
-	got := r.activityLogNoticeMessageView.GetText(true)
+	got := r.activity.NoticeMessageView.GetText(true)
 	// wrapText wraps at r.errorWidth(), which at this point in a test
 	// (no real terminal size yet) can be narrow enough to insert a line
 	// break where the original message had a plain space — so compare
@@ -244,7 +244,7 @@ func TestOpenActivityLogFallbackNoticeShowsTheMessage(t *testing.T) {
 	if !strings.Contains(strings.Join(strings.Fields(got), " "), "isn't writable") {
 		t.Errorf("message view = %q, want it to contain the notice message", got)
 	}
-	header := r.activityLogNoticeTitleBar.GetText(true)
+	header := r.activity.NoticeTitleBar.GetText(true)
 	if !strings.Contains(header, "Important note") {
 		t.Errorf("title bar = %q, want it to contain %q", header, "Important note")
 	}
@@ -263,31 +263,31 @@ func TestOpenActivityLogFallbackNoticeShowsTheMessage(t *testing.T) {
 // the checkboxText-prefixed List item (see this file's own
 // activityLogNoticeCheckboxText) actually flips both the stored bool
 // and the rendered glyph, the same ●/○ pair checkboxText already uses
-// elsewhere in this package (sedFlagsList).
+// elsewhere in this package (sed.FlagsList).
 func TestToggleActivityLogNoticeDontShowAgainFlipsTheCheckboxGlyph(t *testing.T) {
 	r, _, _ := newTestRootWithFile(t)
 	r.openActivityLogFallbackNotice("activity log: fallback")
 
-	if r.activityLogNoticeDontShowAgain {
+	if r.activity.NoticeDontShowAgain {
 		t.Fatal("setup: should start unchecked")
 	}
-	text, _ := r.activityLogNoticeList.GetItemText(0)
+	text, _ := r.activity.NoticeList.GetItemText(0)
 	if !strings.Contains(text, "○") {
 		t.Errorf("checkbox item text = %q, want the unchecked ○ glyph", text)
 	}
 
 	r.toggleActivityLogNoticeDontShowAgain()
 
-	if !r.activityLogNoticeDontShowAgain {
+	if !r.activity.NoticeDontShowAgain {
 		t.Error("toggling once should check the box")
 	}
-	text, _ = r.activityLogNoticeList.GetItemText(0)
+	text, _ = r.activity.NoticeList.GetItemText(0)
 	if !strings.Contains(text, "●") {
 		t.Errorf("checkbox item text = %q, want the checked ● glyph after toggling", text)
 	}
 
 	r.toggleActivityLogNoticeDontShowAgain()
-	if r.activityLogNoticeDontShowAgain {
+	if r.activity.NoticeDontShowAgain {
 		t.Error("toggling twice should uncheck the box again")
 	}
 }
@@ -354,7 +354,7 @@ func TestActivityLogNoticeTitleBarMouseCaptureClickingTheXCancels(t *testing.T) 
 	r.openActivityLogFallbackNotice("activity log: fallback")
 	r.toggleActivityLogNoticeDontShowAgain()
 
-	x, y, width, _ := r.activityLogNoticeTitleBar.GetRect()
+	x, y, width, _ := r.activity.NoticeTitleBar.GetRect()
 	event := tcell.NewEventMouse(x+width-2, y, tcell.ButtonNone, tcell.ModNone)
 	action, _ := r.activityLogNoticeTitleBarMouseCapture(tview.MouseLeftDown, event)
 
@@ -376,7 +376,7 @@ func TestActivityLogNoticeTitleBarMouseCaptureIgnoresClicksElsewhere(t *testing.
 	r, _, _ := newTestRootWithFile(t)
 	r.openActivityLogFallbackNotice("activity log: fallback")
 
-	x, y, _, _ := r.activityLogNoticeTitleBar.GetRect()
+	x, y, _, _ := r.activity.NoticeTitleBar.GetRect()
 	event := tcell.NewEventMouse(x, y, tcell.ButtonNone, tcell.ModNone)
 	action, _ := r.activityLogNoticeTitleBarMouseCapture(tview.MouseLeftDown, event)
 
@@ -401,21 +401,21 @@ func TestActivityLogNoticeTabCyclesThroughAllThreeFocusTargets(t *testing.T) {
 	if result := r.captureActivityLogNoticeListKey(tab); result != nil {
 		t.Error("Tab from the checkbox should be consumed")
 	}
-	if r.app.GetFocus() != r.activityLogNoticeCancelButton {
+	if r.app.GetFocus() != r.activity.NoticeCancelButton {
 		t.Error("Tab from the checkbox should move focus to Cancel")
 	}
 
-	if result := r.captureActivityLogNoticeButtonKey(r.activityLogNoticeOKButton, r.activityLogNoticeList)(tab); result != nil {
+	if result := r.captureActivityLogNoticeButtonKey(r.activity.NoticeOKButton, r.activity.NoticeList)(tab); result != nil {
 		t.Error("Tab from Cancel should be consumed")
 	}
-	if r.app.GetFocus() != r.activityLogNoticeOKButton {
+	if r.app.GetFocus() != r.activity.NoticeOKButton {
 		t.Error("Tab from Cancel should move focus to OK")
 	}
 
-	if result := r.captureActivityLogNoticeButtonKey(r.activityLogNoticeList, r.activityLogNoticeCancelButton)(tab); result != nil {
+	if result := r.captureActivityLogNoticeButtonKey(r.activity.NoticeList, r.activity.NoticeCancelButton)(tab); result != nil {
 		t.Error("Tab from OK should be consumed")
 	}
-	if r.app.GetFocus() != r.activityLogNoticeList {
+	if r.app.GetFocus() != r.activity.NoticeList {
 		t.Error("Tab from OK should move focus back to the checkbox")
 	}
 
@@ -423,7 +423,7 @@ func TestActivityLogNoticeTabCyclesThroughAllThreeFocusTargets(t *testing.T) {
 	if result := r.captureActivityLogNoticeListKey(backtab); result != nil {
 		t.Error("Backtab from the checkbox should be consumed")
 	}
-	if r.app.GetFocus() != r.activityLogNoticeOKButton {
+	if r.app.GetFocus() != r.activity.NoticeOKButton {
 		t.Error("Backtab from the checkbox should move focus to OK")
 	}
 }
@@ -448,7 +448,7 @@ func TestActivityLogNoticeEscapeCancelsFromTheCheckboxOrEitherButton(t *testing.
 	t.Run("from Cancel", func(t *testing.T) {
 		r, _, _ := newTestRootWithFile(t)
 		r.openActivityLogFallbackNotice("activity log: fallback")
-		capture := r.captureActivityLogNoticeButtonKey(r.activityLogNoticeOKButton, r.activityLogNoticeList)
+		capture := r.captureActivityLogNoticeButtonKey(r.activity.NoticeOKButton, r.activity.NoticeList)
 		if result := capture(escape); result != nil {
 			t.Error("Escape should be consumed")
 		}
@@ -460,7 +460,7 @@ func TestActivityLogNoticeEscapeCancelsFromTheCheckboxOrEitherButton(t *testing.
 	t.Run("from OK", func(t *testing.T) {
 		r, _, _ := newTestRootWithFile(t)
 		r.openActivityLogFallbackNotice("activity log: fallback")
-		capture := r.captureActivityLogNoticeButtonKey(r.activityLogNoticeList, r.activityLogNoticeCancelButton)
+		capture := r.captureActivityLogNoticeButtonKey(r.activity.NoticeList, r.activity.NoticeCancelButton)
 		if result := capture(escape); result != nil {
 			t.Error("Escape should be consumed")
 		}

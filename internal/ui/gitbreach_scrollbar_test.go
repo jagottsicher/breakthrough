@@ -22,7 +22,7 @@ import (
 // function's own doc comment). The scrollbar's own captureMouse was
 // never reached as a result.
 //
-// Exercises the real dispatch chain (gitBreachLayout's own
+// Exercises the real dispatch chain (gitBreach.Layout's own
 // MouseHandler, as Application.fireMouseActions would actually call
 // it), not captureMouse directly — a direct call already worked and
 // would not have caught this.
@@ -48,27 +48,27 @@ func TestGitBreachCommitsScrollbarMouseClickThroughRealDispatch(t *testing.T) {
 	}
 	defer screen.Fini()
 	screen.SetSize(100, 40)
-	r.gitBreachLayout.SetRect(0, 0, 100, 40)
-	r.gitBreachLayout.Draw(screen)
+	r.gitBreach.Layout.SetRect(0, 0, 100, 40)
+	r.gitBreach.Layout.Draw(screen)
 
-	sb := r.gitBreachCommitsScrollbar
+	sb := r.gitBreach.CommitsScrollbar
 	if sb == nil {
-		t.Fatal("gitBreachCommitsScrollbar is nil")
+		t.Fatal("gitBreach.CommitsScrollbar is nil")
 	}
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow to scroll through for 40 commits", sb.maxOffset())
 	}
 	sbx, sby, _, sbh := sb.GetRect()
 
-	before, _ := r.gitBreachCommitsTable.GetOffset()
+	before, _ := r.gitBreach.CommitsTable.GetOffset()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.gitBreachLayout.MouseHandler()
+	handler := r.gitBreach.Layout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
 
-	after, _ := r.gitBreachCommitsTable.GetOffset()
+	after, _ := r.gitBreach.CommitsTable.GetOffset()
 	if after != before+1 {
 		t.Errorf("commits table offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
 	}
@@ -91,11 +91,11 @@ func TestGitBreachHeaderClickCapturesOnlyOwnRow(t *testing.T) {
 	}
 	defer screen.Fini()
 	screen.SetSize(100, 40)
-	r.gitBreachLayout.SetRect(0, 0, 100, 40)
-	r.gitBreachLayout.Draw(screen)
+	r.gitBreach.Layout.SetRect(0, 0, 100, 40)
+	r.gitBreach.Layout.Draw(screen)
 
-	hx, hy, _, _ := r.gitBreachCommitsHeader.GetRect()
-	tx, ty, _, th := r.gitBreachCommitsTable.GetRect()
+	hx, hy, _, _ := r.gitBreach.CommitsHeader.GetRect()
+	tx, ty, _, th := r.gitBreach.CommitsTable.GetRect()
 
 	// A click below the header, within the table's own body, must not
 	// be claimed by the header's capture.

@@ -418,7 +418,7 @@ func (r *Root) runAPIKeyDialogSetKey() {
 		return
 	}
 
-	r.activityLog.Action(activitylog.CategoryConsigliere, fmt.Sprintf("stored API key for %s", r.apiKeyDialogProvider))
+	r.activity.Logger.Action(activitylog.CategoryConsigliere, fmt.Sprintf("stored API key for %s", r.apiKeyDialogProvider))
 	r.apiKeyDialogKeyField.SetText("")
 	r.hideOverlay()
 	r.renderOptions()

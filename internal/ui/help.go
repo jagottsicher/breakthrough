@@ -940,7 +940,11 @@ var helpText = strings.TrimLeft(`
   A parse error in one file of the family (a corrupted rotation, say)
   only blanks the view when every file failed — otherwise the entries
   that did read fine still show, with the error noted in the title bar
-  instead. The title bar shows running counts (events/files/skipped/
+  instead. The current (most recent) file's own lines show first,
+  immediately — a logrotate family's older, rotated files stream in
+  afterward in the background, an animated glyph in front of the
+  files count in the title bar for as long as that is still happening.
+  The title bar shows running counts (events/files/skipped/
   errors/warnings, plus how many entries currently match if the filters
   narrow it, and "● following" while follow is on). Clicking the Time
   column header reverses the list between newest-first (the default,

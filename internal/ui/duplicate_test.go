@@ -49,7 +49,7 @@ func selectDuplicateStrategy(t *testing.T, r *Root, value string) {
 	}
 	for i, c := range opt.choices(r) {
 		if c.value == value {
-			r.duplicateStrategyField.SetCurrentOption(i)
+			r.duplicate.StrategyField.SetCurrentOption(i)
 			return
 		}
 	}
@@ -60,16 +60,16 @@ func selectDuplicateStrategy(t *testing.T, r *Root, value string) {
 // own "Date/time format type" dropdown to value ("go"/"strftime"/
 // "unix") — same "exercise the real callback" reasoning
 // selectDuplicateStrategy's own doc comment gives. Only valid while
-// the Date/time strategy is actually selected (duplicateDateTimeTypeField
+// the Date/time strategy is actually selected (duplicate.DateTimeTypeField
 // is nil otherwise — see renderDuplicateForm).
 func selectDuplicateDateTimeFormatType(t *testing.T, r *Root, value string) {
 	t.Helper()
-	if r.duplicateDateTimeTypeField == nil {
-		t.Fatal("duplicateDateTimeTypeField is nil — select the datetime strategy first")
+	if r.duplicate.DateTimeTypeField == nil {
+		t.Fatal("duplicate.DateTimeTypeField is nil — select the datetime strategy first")
 	}
 	for i, c := range duplicateDateTimeFormatTypeChoices {
 		if c.value == value {
-			r.duplicateDateTimeTypeField.SetCurrentOption(i)
+			r.duplicate.DateTimeTypeField.SetCurrentOption(i)
 			return
 		}
 	}
@@ -84,11 +84,11 @@ func TestOpenDuplicatePopulatesTargetsAndOpensForm(t *testing.T) {
 	if r.activePage != duplicatePage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, duplicatePage)
 	}
-	if len(r.duplicateTargets) != 1 || r.duplicateTargets[0] != file {
-		t.Fatalf("duplicateTargets = %v, want [%s]", r.duplicateTargets, file)
+	if len(r.duplicate.Targets) != 1 || r.duplicate.Targets[0] != file {
+		t.Fatalf("duplicate.Targets = %v, want [%s]", r.duplicate.Targets, file)
 	}
 	for _, label := range []string{"Target", "Strategy", "Separator", "Number padding (digits)", "Number of duplicates"} {
-		if r.duplicateForm.GetFormItemByLabel(label) == nil {
+		if r.duplicate.Form.GetFormItemByLabel(label) == nil {
 			t.Errorf("form is missing an item labeled %q", label)
 		}
 	}
@@ -99,11 +99,11 @@ func TestOpenDuplicateHasATitleBar(t *testing.T) {
 
 	r.openDuplicate()
 
-	if got, want := r.duplicateTitleBar.GetText(true), " Multiply "; got != want {
-		t.Errorf("duplicateTitleBar text = %q, want %q", got, want)
+	if got, want := r.duplicate.TitleBar.GetText(true), " Multiply "; got != want {
+		t.Errorf("duplicate.TitleBar text = %q, want %q", got, want)
 	}
-	if _, _, w, h := r.duplicateLayout.GetRect(); w <= 0 || h <= 0 {
-		t.Errorf("duplicateLayout rect = %dx%d, want a real, positioned size", w, h)
+	if _, _, w, h := r.duplicate.Layout.GetRect(); w <= 0 || h <= 0 {
+		t.Errorf("duplicate.Layout rect = %dx%d, want a real, positioned size", w, h)
 	}
 }
 
@@ -175,20 +175,20 @@ func TestResetDuplicateFormPrefillsFromSettings(t *testing.T) {
 
 	r.openDuplicate()
 
-	if r.duplicateSeparatorValue != "-" {
-		t.Errorf("duplicateSeparatorValue = %q, want %q", r.duplicateSeparatorValue, "-")
+	if r.duplicate.SeparatorValue != "-" {
+		t.Errorf("duplicate.SeparatorValue = %q, want %q", r.duplicate.SeparatorValue, "-")
 	}
-	if r.duplicateSuffixTextValue != "bak" {
-		t.Errorf("duplicateSuffixTextValue = %q, want %q", r.duplicateSuffixTextValue, "bak")
+	if r.duplicate.SuffixTextValue != "bak" {
+		t.Errorf("duplicate.SuffixTextValue = %q, want %q", r.duplicate.SuffixTextValue, "bak")
 	}
-	if r.duplicateNumberPaddingValue != "3" {
-		t.Errorf("duplicateNumberPaddingValue = %q, want %q", r.duplicateNumberPaddingValue, "3")
+	if r.duplicate.NumberPaddingValue != "3" {
+		t.Errorf("duplicate.NumberPaddingValue = %q, want %q", r.duplicate.NumberPaddingValue, "3")
 	}
-	if got := r.duplicateCountField.GetText(); got != "2" {
+	if got := r.duplicate.CountField.GetText(); got != "2" {
 		t.Errorf("Number of duplicates = %q, want %q", got, "2")
 	}
-	if r.duplicateStrategy != "suffix_text" {
-		t.Errorf("duplicateStrategy = %q, want %q", r.duplicateStrategy, "suffix_text")
+	if r.duplicate.Strategy != "suffix_text" {
+		t.Errorf("duplicate.Strategy = %q, want %q", r.duplicate.Strategy, "suffix_text")
 	}
 }
 
@@ -221,14 +221,14 @@ func TestResetDuplicateFormSeedsDateTimeFormatTypeFromSettings(t *testing.T) {
 
 			r.openDuplicate()
 
-			if r.duplicateDateTimeFormatType != c.wantType {
-				t.Errorf("duplicateDateTimeFormatType = %q, want %q", r.duplicateDateTimeFormatType, c.wantType)
+			if r.duplicate.DateTimeFormatType != c.wantType {
+				t.Errorf("duplicate.DateTimeFormatType = %q, want %q", r.duplicate.DateTimeFormatType, c.wantType)
 			}
-			if r.duplicateDateTimeFormatGoValue != c.wantGo {
-				t.Errorf("duplicateDateTimeFormatGoValue = %q, want %q", r.duplicateDateTimeFormatGoValue, c.wantGo)
+			if r.duplicate.DateTimeFormatGoValue != c.wantGo {
+				t.Errorf("duplicate.DateTimeFormatGoValue = %q, want %q", r.duplicate.DateTimeFormatGoValue, c.wantGo)
 			}
-			if r.duplicateDateTimeFormatStrftimeValue != c.wantStrf {
-				t.Errorf("duplicateDateTimeFormatStrftimeValue = %q, want %q", r.duplicateDateTimeFormatStrftimeValue, c.wantStrf)
+			if r.duplicate.DateTimeFormatStrftimeValue != c.wantStrf {
+				t.Errorf("duplicate.DateTimeFormatStrftimeValue = %q, want %q", r.duplicate.DateTimeFormatStrftimeValue, c.wantStrf)
 			}
 		})
 	}
@@ -255,12 +255,12 @@ func TestRenderDuplicateFormShowsOnlyRelevantFieldsPerStrategy(t *testing.T) {
 	for _, c := range cases {
 		selectDuplicateStrategy(t, r, c.strategy)
 		for _, label := range c.want {
-			if r.duplicateForm.GetFormItemByLabel(label) == nil {
+			if r.duplicate.Form.GetFormItemByLabel(label) == nil {
 				t.Errorf("strategy %q: form is missing %q", c.strategy, label)
 			}
 		}
 		for _, label := range c.wantNot {
-			if r.duplicateForm.GetFormItemByLabel(label) != nil {
+			if r.duplicate.Form.GetFormItemByLabel(label) != nil {
 				t.Errorf("strategy %q: form should not show %q", c.strategy, label)
 			}
 		}
@@ -276,15 +276,15 @@ func TestRenderDuplicateFormPreservesValuesAcrossStrategySwitch(t *testing.T) {
 	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
 	r.openDuplicate()
 
-	r.duplicateSeparatorField.SetText("~")
-	r.duplicateCountField.SetText("4")
+	r.duplicate.SeparatorField.SetText("~")
+	r.duplicate.CountField.SetText("4")
 
 	selectDuplicateStrategy(t, r, "datetime")
 
-	if got := r.duplicateSeparatorField.GetText(); got != "~" {
+	if got := r.duplicate.SeparatorField.GetText(); got != "~" {
 		t.Errorf("Separator after switching strategy = %q, want %q (preserved)", got, "~")
 	}
-	if got := r.duplicateCountField.GetText(); got != "4" {
+	if got := r.duplicate.CountField.GetText(); got != "4" {
 		t.Errorf("Number of duplicates after switching strategy = %q, want %q (preserved)", got, "4")
 	}
 }
@@ -299,7 +299,7 @@ func TestRenderDuplicatePreviewShowsComputedName(t *testing.T) {
 	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
 	r.openDuplicate()
 
-	if got, want := r.duplicatePreviewView.GetText(true), "Preview: report.txt_1"; got != want {
+	if got, want := r.duplicate.PreviewView.GetText(true), "Preview: report.txt_1"; got != want {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
@@ -311,9 +311,9 @@ func TestRenderDuplicatePreviewReactsToSeparatorEdits(t *testing.T) {
 	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
 	r.openDuplicate()
 
-	r.duplicateSeparatorField.SetText("-")
+	r.duplicate.SeparatorField.SetText("-")
 
-	if got, want := r.duplicatePreviewView.GetText(true), "Preview: report.txt-1"; got != want {
+	if got, want := r.duplicate.PreviewView.GetText(true), "Preview: report.txt-1"; got != want {
 		t.Errorf("preview after editing Separator = %q, want %q", got, want)
 	}
 }
@@ -329,7 +329,7 @@ func TestRenderDuplicatePreviewReactsToStrategyChange(t *testing.T) {
 
 	selectDuplicateStrategy(t, r, "suffix_text")
 
-	if got, want := r.duplicatePreviewView.GetText(true), "Preview: report.txt_copy"; got != want {
+	if got, want := r.duplicate.PreviewView.GetText(true), "Preview: report.txt_copy"; got != want {
 		t.Errorf("preview after switching to suffix_text = %q, want %q", got, want)
 	}
 }
@@ -346,28 +346,28 @@ func TestDuplicateDateTimeFormatTypeSwapsExampleAndEditability(t *testing.T) {
 	selectDuplicateStrategy(t, r, "datetime")
 
 	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeGo)
-	if got := r.duplicateDateTimeFormatField.GetText(); got != duplicateDefaultGoFormat {
+	if got := r.duplicate.DateTimeFormatField.GetText(); got != duplicateDefaultGoFormat {
 		t.Errorf("go: field text = %q, want the default %q", got, duplicateDefaultGoFormat)
 	}
-	r.duplicateDateTimeFormatField.SetText("2006-01-02")
-	if r.duplicateDateTimeFormatGoValue != "2006-01-02" {
-		t.Errorf("go: editing the field should update duplicateDateTimeFormatGoValue, got %q", r.duplicateDateTimeFormatGoValue)
+	r.duplicate.DateTimeFormatField.SetText("2006-01-02")
+	if r.duplicate.DateTimeFormatGoValue != "2006-01-02" {
+		t.Errorf("go: editing the field should update duplicate.DateTimeFormatGoValue, got %q", r.duplicate.DateTimeFormatGoValue)
 	}
 
 	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeStrftime)
-	if got := r.duplicateDateTimeFormatField.GetText(); got != duplicateDefaultStrftimeFormat {
+	if got := r.duplicate.DateTimeFormatField.GetText(); got != duplicateDefaultStrftimeFormat {
 		t.Errorf("strftime: field text = %q, want the default %q", got, duplicateDefaultStrftimeFormat)
 	}
-	r.duplicateDateTimeFormatField.SetText("%Y-%m-%d")
-	if r.duplicateDateTimeFormatStrftimeValue != "%Y-%m-%d" {
-		t.Errorf("strftime: editing the field should update duplicateDateTimeFormatStrftimeValue, got %q", r.duplicateDateTimeFormatStrftimeValue)
+	r.duplicate.DateTimeFormatField.SetText("%Y-%m-%d")
+	if r.duplicate.DateTimeFormatStrftimeValue != "%Y-%m-%d" {
+		t.Errorf("strftime: editing the field should update duplicate.DateTimeFormatStrftimeValue, got %q", r.duplicate.DateTimeFormatStrftimeValue)
 	}
 
 	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeUnix)
 	now := time.Now().Unix()
-	got, err := strconv.ParseInt(r.duplicateDateTimeFormatField.GetText(), 10, 64)
+	got, err := strconv.ParseInt(r.duplicate.DateTimeFormatField.GetText(), 10, 64)
 	if err != nil {
-		t.Fatalf("unix: field text = %q, want a parseable Unix timestamp: %v", r.duplicateDateTimeFormatField.GetText(), err)
+		t.Fatalf("unix: field text = %q, want a parseable Unix timestamp: %v", r.duplicate.DateTimeFormatField.GetText(), err)
 	}
 	if got < now-2 || got > now+2 {
 		t.Errorf("unix: field text = %d, want something within a couple seconds of %d", got, now)
@@ -376,7 +376,7 @@ func TestDuplicateDateTimeFormatTypeSwapsExampleAndEditability(t *testing.T) {
 	// own doc comment — is the actually testable stand-in for
 	// "disabled" here: InputField has no public GetDisabled() of its
 	// own to assert against directly.
-	if _, bg, _ := r.duplicateDateTimeFormatField.GetFieldStyle().Decompose(); bg != r.theme.InputDisabledBackground {
+	if _, bg, _ := r.duplicate.DateTimeFormatField.GetFieldStyle().Decompose(); bg != r.theme.InputDisabledBackground {
 		t.Errorf("unix: field background = %v, want theme.InputDisabledBackground %v", bg, r.theme.InputDisabledBackground)
 	}
 }
@@ -391,17 +391,17 @@ func TestDuplicateDateTimeFormatTypePreservesEachSyntaxOwnValue(t *testing.T) {
 	r.openDuplicate()
 	selectDuplicateStrategy(t, r, "datetime")
 
-	r.duplicateDateTimeFormatField.SetText("2006-1-2")
+	r.duplicate.DateTimeFormatField.SetText("2006-1-2")
 	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeStrftime)
-	r.duplicateDateTimeFormatField.SetText("%Y-%-m-%-d")
+	r.duplicate.DateTimeFormatField.SetText("%Y-%-m-%-d")
 	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeUnix)
 	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeGo)
 
-	if got := r.duplicateDateTimeFormatField.GetText(); got != "2006-1-2" {
+	if got := r.duplicate.DateTimeFormatField.GetText(); got != "2006-1-2" {
 		t.Errorf("go value after round-tripping through strftime/unix = %q, want %q", got, "2006-1-2")
 	}
 	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeStrftime)
-	if got := r.duplicateDateTimeFormatField.GetText(); got != "%Y-%-m-%-d" {
+	if got := r.duplicate.DateTimeFormatField.GetText(); got != "%Y-%-m-%-d" {
 		t.Errorf("strftime value after round-tripping through unix/go = %q, want %q", got, "%Y-%-m-%-d")
 	}
 }
@@ -435,7 +435,7 @@ func TestApplyDuplicateSelectionPersistsDateTimeFormatType(t *testing.T) {
 			selectDuplicateStrategy(t, r, "datetime")
 			selectDuplicateDateTimeFormatType(t, r, c.formatType)
 			if c.formatType != duplicateDateTimeTypeUnix {
-				r.duplicateDateTimeFormatField.SetText("edited-format")
+				r.duplicate.DateTimeFormatField.SetText("edited-format")
 			}
 
 			r.applyDuplicateSelection(0, 1)
@@ -470,7 +470,7 @@ func TestDuplicateDateTimeTypeFieldUsesThemeColors(t *testing.T) {
 	r.app.SetScreen(screen)
 	screen.SetSize(100, 40)
 	r.SetRect(0, 0, 100, 40)
-	r.app.SetFocus(r.duplicateDateTimeTypeField)
+	r.app.SetFocus(r.duplicate.DateTimeTypeField)
 	screen.Clear()
 	r.Draw(screen)
 
@@ -518,7 +518,7 @@ func TestDuplicateDropDownPopupUsesThemeColors(t *testing.T) {
 	screen.SetSize(100, 40)
 	r.SetRect(0, 0, 100, 40)
 
-	r.app.SetFocus(r.duplicateStrategyField)
+	r.app.SetFocus(r.duplicate.StrategyField)
 	// Open the dropdown's own popup the same way Enter would — passing
 	// r.app.SetFocus itself as the setFocus callback, not a no-op:
 	// DropDown.Draw only actually renders the popup while
@@ -526,7 +526,7 @@ func TestDuplicateDropDownPopupUsesThemeColors(t *testing.T) {
 	// own internal list via exactly this callback — a no-op here would
 	// leave Application's own focus pointer never actually updated, so
 	// HasFocus() reports false and the popup silently never draws.
-	if handler := r.duplicateStrategyField.InputHandler(); handler != nil {
+	if handler := r.duplicate.StrategyField.InputHandler(); handler != nil {
 		handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(p tview.Primitive) { r.app.SetFocus(p) })
 	}
 	screen.Clear()
@@ -569,10 +569,10 @@ func TestRenderDuplicatePreviewNeverSplitsOffAnyExtension(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.openDuplicate()
-	r.duplicateTargets = []string{archive}
+	r.duplicate.Targets = []string{archive}
 	r.renderDuplicatePreview()
 
-	if got, want := r.duplicatePreviewView.GetText(true), "Preview: archive.tar.gz_1"; got != want {
+	if got, want := r.duplicate.PreviewView.GetText(true), "Preview: archive.tar.gz_1"; got != want {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
@@ -589,10 +589,10 @@ func TestRenderDuplicatePreviewSummarizesMultipleTargetsAndCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.openDuplicate()
-	r.duplicateTargets = []string{file, other}
-	r.duplicateCountField.SetText("3")
+	r.duplicate.Targets = []string{file, other}
+	r.duplicate.CountField.SetText("3")
 
-	got := r.duplicatePreviewView.GetText(true)
+	got := r.duplicate.PreviewView.GetText(true)
 	if !strings.Contains(got, "report.txt_1") {
 		t.Errorf("preview = %q, want it to mention the first target's own computed name", got)
 	}
@@ -616,9 +616,9 @@ func TestApplyDuplicateSelectionWritesBackSettingsButNotCountMax(t *testing.T) {
 	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
 	r.openDuplicate()
 
-	r.duplicateSeparatorField.SetText(".")
+	r.duplicate.SeparatorField.SetText(".")
 	selectDuplicateStrategy(t, r, "suffix_text")
-	r.duplicateSuffixTextField.SetText("bak")
+	r.duplicate.SuffixTextField.SetText("bak")
 
 	r.applyDuplicateSelection(3, 2)
 
@@ -659,7 +659,7 @@ func TestApplyDuplicateSelectionNeverRunsOnCancel(t *testing.T) {
 	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
 	r.openDuplicate()
 
-	r.duplicateSeparatorField.SetText("!!!")
+	r.duplicate.SeparatorField.SetText("!!!")
 	r.hideOverlay() // Cancel's own action
 
 	if r.settings.DuplicateSeparator == "!!!" {
@@ -765,7 +765,7 @@ func TestPerformDuplicateStopsAtFirstErrorAndReportsCountSoFar(t *testing.T) {
 func TestRunDuplicateRejectsNonPositiveCount(t *testing.T) {
 	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
 	r.openDuplicate()
-	r.duplicateCountField.SetText("0")
+	r.duplicate.CountField.SetText("0")
 	before := r.settings.DuplicateSeparator
 
 	r.runDuplicate()
@@ -782,7 +782,7 @@ func TestRunDuplicateRejectsCountAboveMax(t *testing.T) {
 	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
 	r.settings.DuplicateCountMax = 2
 	r.openDuplicate()
-	r.duplicateCountField.SetText("5")
+	r.duplicate.CountField.SetText("5")
 	before := r.settings.DuplicateSeparator
 
 	r.runDuplicate()
@@ -855,8 +855,8 @@ func TestRunDuplicateAppliesSelectionClosesDialogAndCopiesInBackground(t *testin
 	r, dir, _ := newTestRootWithDuplicateFile(t, "hello\n")
 	done := isolateDuplicateIO(t)
 	r.openDuplicate()
-	r.duplicateSeparatorField.SetText("-")
-	r.duplicateCountField.SetText("2")
+	r.duplicate.SeparatorField.SetText("-")
+	r.duplicate.CountField.SetText("2")
 
 	r.runDuplicate()
 
@@ -899,10 +899,10 @@ func TestContextMenuMnemonicMOpensDuplicate(t *testing.T) {
 
 // TestTabFromTheCountFieldReachesTheButtons pins a real,
 // previously-unfixed gap (feature_upgrades.txt Befund 8's own
-// compress.go/duplicate.go follow-up): duplicateForm and its own
+// compress.go/duplicate.go follow-up): duplicate.Form and its own
 // Cancel/Duplicate buttons are two independent widgets, and there used
 // to be no Tab path between them at all — reachable only by mouse.
-// duplicateCountField is always the form's own last field, regardless
+// duplicate.CountField is always the form's own last field, regardless
 // of which strategy is selected (renderDuplicateForm adds it
 // unconditionally, right after the strategy-specific switch) — the
 // default "numbered" strategy is exercised here, not guessed to be
@@ -913,21 +913,21 @@ func TestTabFromTheCountFieldReachesTheButtons(t *testing.T) {
 	noop := func(tview.Primitive) {}
 	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
 
-	tab(r.duplicateStrategyField)
-	tab(r.duplicateSeparatorField)
-	tab(r.duplicateNumberPaddingField)
-	tab(r.duplicateCountField)
-	if !r.duplicateCancelBtn.HasFocus() {
-		t.Fatal("Tab from the Count field did not reach duplicateCancelBtn")
+	tab(r.duplicate.StrategyField)
+	tab(r.duplicate.SeparatorField)
+	tab(r.duplicate.NumberPaddingField)
+	tab(r.duplicate.CountField)
+	if !r.duplicate.CancelBtn.HasFocus() {
+		t.Fatal("Tab from the Count field did not reach duplicate.CancelBtn")
 	}
 
-	tab(r.duplicateCancelBtn)
-	if !r.duplicateApplyBtn.HasFocus() {
+	tab(r.duplicate.CancelBtn)
+	if !r.duplicate.ApplyBtn.HasFocus() {
 		t.Fatal("Tab from Cancel did not reach Duplicate")
 	}
 
-	tab(r.duplicateApplyBtn)
-	if !r.duplicateStrategyField.HasFocus() {
+	tab(r.duplicate.ApplyBtn)
+	if !r.duplicate.StrategyField.HasFocus() {
 		t.Error("Tab from Duplicate did not wrap back to Strategy")
 	}
 }

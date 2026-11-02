@@ -35,13 +35,13 @@ const firewallSimulatePage = "firewall-simulate"
 // on every open — the same "never sticky from a previous fill-in"
 // reasoning openFirewallAddRule's own doc comment gives.
 func (r *Root) openFirewallSimulate() {
-	r.firewallSimulateDirection = firewall.DirectionIn
-	r.firewallSimulateProtocol = ""
-	r.firewallSimulatePortText = ""
-	r.firewallSimulateSourceText = ""
-	r.firewallSimulateDestText = ""
-	r.firewallSimulateIfaceText = ""
-	r.firewallSimulateResult.SetText("")
+	r.firewall.SimulateDirection = firewall.DirectionIn
+	r.firewall.SimulateProtocol = ""
+	r.firewall.SimulatePortText = ""
+	r.firewall.SimulateSourceText = ""
+	r.firewall.SimulateDestText = ""
+	r.firewall.SimulateIfaceText = ""
+	r.firewall.SimulateResult.SetText("")
 	r.renderFirewallSimulateForm()
 
 	// height: title bar (1) + the form's own 13 (tview.Form's own vertical
@@ -63,11 +63,11 @@ func (r *Root) openFirewallSimulate() {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.firewallSimulateLayout.SetRect(x, y, width, height)
+	r.firewall.SimulateLayout.SetRect(x, y, width, height)
 	// pushOverlay, not showOverlay: opens on top of the still-open
 	// Firewall screen, the same layering openFirewallAddRule already
 	// uses.
-	r.pushOverlay(firewallSimulatePage, r.firewallSimulateLayout, nil)
+	r.pushOverlay(firewallSimulatePage, r.firewall.SimulateLayout, nil)
 }
 
 // newFirewallSimulateForm builds the (initially empty) "Simulate" form —
@@ -86,20 +86,20 @@ func (r *Root) newFirewallSimulateForm() *tview.Form {
 	return f
 }
 
-// renderFirewallSimulateForm (re)builds firewallSimulateForm's own
+// renderFirewallSimulateForm (re)builds firewall.SimulateForm's own
 // items: a Direction/Protocol dropdown pair, then Port/Source/
 // Destination/Interface plain text fields — the same "value mirror kept
 // in sync live" shape renderFirewallAddRuleForm's own identical fields
 // already establish, minus Action (see this file's own doc comment for
 // why a hypothetical request has none of its own).
 func (r *Root) renderFirewallSimulateForm() {
-	r.firewallSimulateForm.Clear(true)
+	r.firewall.SimulateForm.Clear(true)
 
 	dirLabels := make([]string, len(firewallDirectionChoices))
 	dirCurrent := 0
 	for i, c := range firewallDirectionChoices {
 		dirLabels[i] = c.label
-		if c.value == r.firewallSimulateDirection {
+		if c.value == r.firewall.SimulateDirection {
 			dirCurrent = i
 		}
 	}
@@ -107,17 +107,17 @@ func (r *Root) renderFirewallSimulateForm() {
 		if index < 0 || index >= len(firewallDirectionChoices) {
 			return
 		}
-		r.firewallSimulateDirection = firewallDirectionChoices[index].value
+		r.firewall.SimulateDirection = firewallDirectionChoices[index].value
 	})
 	dirField.SetCurrentOption(dirCurrent)
 	styleDropDown(dirField, r.theme)
-	r.firewallSimulateForm.AddFormItem(dirField)
+	r.firewall.SimulateForm.AddFormItem(dirField)
 
 	protoLabels := make([]string, len(firewallProtocolChoices))
 	protoCurrent := 0
 	for i, c := range firewallProtocolChoices {
 		protoLabels[i] = c.label
-		if c.value == r.firewallSimulateProtocol {
+		if c.value == r.firewall.SimulateProtocol {
 			protoCurrent = i
 		}
 	}
@@ -125,30 +125,30 @@ func (r *Root) renderFirewallSimulateForm() {
 		if index < 0 || index >= len(firewallProtocolChoices) {
 			return
 		}
-		r.firewallSimulateProtocol = firewallProtocolChoices[index].value
+		r.firewall.SimulateProtocol = firewallProtocolChoices[index].value
 	})
 	protoField.SetCurrentOption(protoCurrent)
 	styleDropDown(protoField, r.theme)
-	r.firewallSimulateForm.AddFormItem(protoField)
+	r.firewall.SimulateForm.AddFormItem(protoField)
 
-	portField := tview.NewInputField().SetLabel("Port (blank = any, e.g. 22 or 6000-6063)").SetText(r.firewallSimulatePortText)
-	portField.SetChangedFunc(func(v string) { r.firewallSimulatePortText = v })
-	r.firewallSimulateForm.AddFormItem(portField)
+	portField := tview.NewInputField().SetLabel("Port (blank = any, e.g. 22 or 6000-6063)").SetText(r.firewall.SimulatePortText)
+	portField.SetChangedFunc(func(v string) { r.firewall.SimulatePortText = v })
+	r.firewall.SimulateForm.AddFormItem(portField)
 
-	sourceField := tview.NewInputField().SetLabel("Source (blank = any)").SetText(r.firewallSimulateSourceText)
-	sourceField.SetChangedFunc(func(v string) { r.firewallSimulateSourceText = v })
-	r.firewallSimulateForm.AddFormItem(sourceField)
+	sourceField := tview.NewInputField().SetLabel("Source (blank = any)").SetText(r.firewall.SimulateSourceText)
+	sourceField.SetChangedFunc(func(v string) { r.firewall.SimulateSourceText = v })
+	r.firewall.SimulateForm.AddFormItem(sourceField)
 
-	destField := tview.NewInputField().SetLabel("Destination (blank = any)").SetText(r.firewallSimulateDestText)
-	destField.SetChangedFunc(func(v string) { r.firewallSimulateDestText = v })
-	r.firewallSimulateForm.AddFormItem(destField)
+	destField := tview.NewInputField().SetLabel("Destination (blank = any)").SetText(r.firewall.SimulateDestText)
+	destField.SetChangedFunc(func(v string) { r.firewall.SimulateDestText = v })
+	r.firewall.SimulateForm.AddFormItem(destField)
 
-	ifaceField := tview.NewInputField().SetLabel("Interface (blank = any)").SetText(r.firewallSimulateIfaceText)
-	ifaceField.SetChangedFunc(func(v string) { r.firewallSimulateIfaceText = v })
+	ifaceField := tview.NewInputField().SetLabel("Interface (blank = any)").SetText(r.firewall.SimulateIfaceText)
+	ifaceField.SetChangedFunc(func(v string) { r.firewall.SimulateIfaceText = v })
 	ifaceField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.firewallSimulateCloseBtn)
+			r.app.SetFocus(r.firewall.SimulateCloseBtn)
 			return nil
 		case tcell.KeyEnter:
 			r.runFirewallSimulate()
@@ -156,46 +156,46 @@ func (r *Root) renderFirewallSimulateForm() {
 		}
 		return event
 	})
-	r.firewallSimulateForm.AddFormItem(ifaceField)
+	r.firewall.SimulateForm.AddFormItem(ifaceField)
 }
 
-// newFirewallSimulateButtons builds firewallSimulateForm's own action
+// newFirewallSimulateButtons builds firewall.SimulateForm's own action
 // row once, from NewRoot — a "Close"/"Run" pair, the same Tab/Backtab
 // cycling shape newFirewallAddRuleButtons already establishes for its
 // own Cancel/Add rule pair.
 func (r *Root) newFirewallSimulateButtons() *tview.Flex {
-	r.firewallSimulateCloseBtn = tview.NewButton("Close").SetSelectedFunc(r.closeFirewallSimulate)
-	r.firewallSimulateRunBtn = tview.NewButton("Run").SetSelectedFunc(r.runFirewallSimulate)
-	r.firewallSimulateCloseBtn.SetInputCapture(spaceAlsoActivates(r.closeFirewallSimulate))
-	r.firewallSimulateRunBtn.SetInputCapture(spaceAlsoActivates(r.runFirewallSimulate))
+	r.firewall.SimulateCloseBtn = tview.NewButton("Close").SetSelectedFunc(r.closeFirewallSimulate)
+	r.firewall.SimulateRunBtn = tview.NewButton("Run").SetSelectedFunc(r.runFirewallSimulate)
+	r.firewall.SimulateCloseBtn.SetInputCapture(spaceAlsoActivates(r.closeFirewallSimulate))
+	r.firewall.SimulateRunBtn.SetInputCapture(spaceAlsoActivates(r.runFirewallSimulate))
 
-	r.firewallSimulateCloseBtn.SetExitFunc(func(key tcell.Key) {
+	r.firewall.SimulateCloseBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.firewallSimulateRunBtn)
+			r.app.SetFocus(r.firewall.SimulateRunBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.firewallSimulateForm)
+			r.app.SetFocus(r.firewall.SimulateForm)
 		case tcell.KeyEscape:
 			r.closeFirewallSimulate()
 		}
 	})
-	r.firewallSimulateRunBtn.SetExitFunc(func(key tcell.Key) {
+	r.firewall.SimulateRunBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.firewallSimulateForm)
+			r.app.SetFocus(r.firewall.SimulateForm)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.firewallSimulateCloseBtn)
+			r.app.SetFocus(r.firewall.SimulateCloseBtn)
 		case tcell.KeyEscape:
 			r.closeFirewallSimulate()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.firewallSimulateCloseBtn, 0, 1, false).
-		AddItem(r.firewallSimulateRunBtn, 0, 1, false)
+		AddItem(r.firewall.SimulateCloseBtn, 0, 1, false).
+		AddItem(r.firewall.SimulateRunBtn, 0, 1, false)
 }
 
-// newFirewallSimulateLayout wraps firewallSimulateTitleBar over the
+// newFirewallSimulateLayout wraps firewall.SimulateTitleBar over the
 // form, a multi-line result area (blank until "Run" has something to
 // say), and the Close/Run buttons — the same title-bar-over-content-
 // over-status-over-buttons shape newFirewallAddRuleLayout already
@@ -203,14 +203,14 @@ func (r *Root) newFirewallSimulateButtons() *tview.Flex {
 // one-line validation status, since a matched rule's own summary needs
 // more than one line.
 func (r *Root) newFirewallSimulateLayout() *tview.Flex {
-	r.firewallSimulateTitleBar = newPlainTitleBar("Simulate")
-	r.firewallSimulateResult = tview.NewTextView().SetDynamicColors(true).SetWrap(true)
+	r.firewall.SimulateTitleBar = newPlainTitleBar("Simulate")
+	r.firewall.SimulateResult = tview.NewTextView().SetDynamicColors(true).SetWrap(true)
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.firewallSimulateForm, 13, 0, true).
-		AddItem(r.firewallSimulateResult, 3, 0, false).
-		AddItem(r.firewallSimulateButtons, 1, 0, false)
+		AddItem(r.firewall.SimulateForm, 13, 0, true).
+		AddItem(r.firewall.SimulateResult, 3, 0, false).
+		AddItem(r.firewall.SimulateButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.firewallSimulateTitleBar, 1, 0, false).
+		AddItem(r.firewall.SimulateTitleBar, 1, 0, false).
 		AddItem(content, 0, 1, true)
 }
 
@@ -224,25 +224,25 @@ func (r *Root) closeFirewallSimulate() {
 // uses; its own Action field is left at its zero value (ActionAllow)
 // since firewall.Simulate ignores it entirely.
 func (r *Root) buildFirewallSimulateSpec() (firewall.NewRuleSpec, error) {
-	from, to, err := parseFirewallPortField(r.firewallSimulatePortText)
+	from, to, err := parseFirewallPortField(r.firewall.SimulatePortText)
 	if err != nil {
 		return firewall.NewRuleSpec{}, err
 	}
 	return firewall.NewRuleSpec{
-		Direction:   r.firewallSimulateDirection,
-		Protocol:    r.firewallSimulateProtocol,
+		Direction:   r.firewall.SimulateDirection,
+		Protocol:    r.firewall.SimulateProtocol,
 		PortFrom:    from,
 		PortTo:      to,
-		Source:      strings.TrimSpace(r.firewallSimulateSourceText),
-		Destination: strings.TrimSpace(r.firewallSimulateDestText),
-		Interface:   strings.TrimSpace(r.firewallSimulateIfaceText),
+		Source:      strings.TrimSpace(r.firewall.SimulateSourceText),
+		Destination: strings.TrimSpace(r.firewall.SimulateDestText),
+		Interface:   strings.TrimSpace(r.firewall.SimulateIfaceText),
 	}, nil
 }
 
 // runFirewallSimulate is the form's own "Run" action (button, or Enter
 // on the last field — see renderFirewallSimulateForm): validates the
 // form into a NewRuleSpec, then reports which rule from the Firewall
-// screen's own already-read snapshot (r.firewallSnapshot) — never a
+// screen's own already-read snapshot (r.firewall.Snapshot) — never a
 // fresh read of its own, so a simulated request is always judged
 // against exactly the rules currently on screen — actually decides it.
 // A malformed port is reported in place, the same as
@@ -251,34 +251,34 @@ func (r *Root) buildFirewallSimulateSpec() (firewall.NewRuleSpec, error) {
 func (r *Root) runFirewallSimulate() {
 	spec, err := r.buildFirewallSimulateSpec()
 	if err != nil {
-		r.firewallSimulateResult.SetTextColor(r.theme.CriticalText)
-		r.firewallSimulateResult.SetText(err.Error())
+		r.firewall.SimulateResult.SetTextColor(r.theme.CriticalText)
+		r.firewall.SimulateResult.SetText(err.Error())
 		return
 	}
 	if err := spec.Validate(); err != nil {
-		r.firewallSimulateResult.SetTextColor(r.theme.CriticalText)
-		r.firewallSimulateResult.SetText(err.Error())
+		r.firewall.SimulateResult.SetTextColor(r.theme.CriticalText)
+		r.firewall.SimulateResult.SetText(err.Error())
 		return
 	}
 
-	rule, ok := firewall.Simulate(r.firewallSnapshot.Rules, spec)
+	rule, ok := firewall.Simulate(r.firewall.Snapshot.Rules, spec)
 	if !ok {
-		r.firewallSimulateResult.SetTextColor(r.theme.PlaceholderText)
-		if r.firewallSnapshot.Backend == firewall.BackendNone {
-			r.firewallSimulateResult.SetText("No active firewall backend, so no rule decides this request.")
+		r.firewall.SimulateResult.SetTextColor(r.theme.PlaceholderText)
+		if r.firewall.Snapshot.Backend == firewall.BackendNone {
+			r.firewall.SimulateResult.SetText("No active firewall backend, so no rule decides this request.")
 		} else {
-			r.firewallSimulateResult.SetText(fmt.Sprintf(
+			r.firewall.SimulateResult.SetText(fmt.Sprintf(
 				"No rule matches — falls through to %s's own default policy (not read by this app).",
-				r.firewallSnapshot.Backend))
+				r.firewall.Snapshot.Backend))
 		}
 		return
 	}
 
-	r.firewallSimulateResult.SetTextColor(r.actionColor(rule.Action))
-	r.firewallSimulateResult.SetText(fmt.Sprintf(
+	r.firewall.SimulateResult.SetTextColor(r.actionColor(rule.Action))
+	r.firewall.SimulateResult.SetText(fmt.Sprintf(
 		"Rule #%d: %s %s — proto %s, port %s, source %s\n(%s, chain %s)",
 		rule.Order, rule.Action, rule.Direction,
-		orAnyProtocol(rule.Protocol), rule.PortLabel(r.firewallServices), rule.SourceLabel(),
+		orAnyProtocol(rule.Protocol), rule.PortLabel(r.firewall.Services), rule.SourceLabel(),
 		rule.Backend, rule.Chain))
 }
 

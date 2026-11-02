@@ -208,21 +208,21 @@ func TestRenderLogAuditTimelineIgnoresUnlaidOutDefaultWidth(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 	r.SetRect(0, 0, 200, 50)
-	r.logAuditTable.Select(1, 0)
+	r.log.Table.Select(1, 0)
 
-	// logAuditTimelineView has never been drawn at this point — still
+	// log.TimelineView has never been drawn at this point — still
 	// at tview's own NewBox default (0,0,15,10) — the exact state a
 	// freshly-opened group's first render actually runs under (see
 	// openLogAuditViewer: renderLogAuditViewer runs before pushOverlay,
 	// and pushOverlay alone never cascades a real rect to a child —
 	// only a real Draw() does).
-	if _, _, w, _ := r.logAuditTimelineView.GetRect(); w != 15 {
-		t.Fatalf("setup: logAuditTimelineView width = %d, want tview's own un-laid-out default 15", w)
+	if _, _, w, _ := r.log.TimelineView.GetRect(); w != 15 {
+		t.Fatalf("setup: log.TimelineView width = %d, want tview's own un-laid-out default 15", w)
 	}
 
 	r.openLogAuditViewer()
 
-	got := r.logAuditTimelineView.GetText(true)
+	got := r.log.TimelineView.GetText(true)
 	if got == "" {
 		t.Fatal("expected a non-empty timeline for two distinct timestamps")
 	}
@@ -287,7 +287,7 @@ func openLogAuditStatsOverflowing(t *testing.T, width, height int) *Root {
 	for _, lvl := range logAuditLevelOrder {
 		entries = append(entries, logview.Entry{Level: lvl, Source: strings.Repeat("x", 100)})
 	}
-	r.logAuditAllEntries = entries
+	r.log.AllEntries = entries
 	r.openLogAuditStats()
 	return r
 }
@@ -300,35 +300,35 @@ func drawLogAuditStats(t *testing.T, r *Root, width, height int) {
 	}
 	t.Cleanup(screen.Fini)
 	screen.SetSize(width, height)
-	r.logAuditStatsLayout.Draw(screen)
+	r.log.StatsLayout.Draw(screen)
 }
 
 // TestLogAuditStatsScrollbarMouseClickThroughRealDispatch mirrors the
 // same regression test shape used for every other scrollbar in this
 // rollout: a click on the scrollbar's own down arrow must actually
 // scroll the Statistics modal's own content, driven through the real
-// dispatch chain (logAuditStatsLayout's own MouseHandler), not
+// dispatch chain (log.StatsLayout's own MouseHandler), not
 // captureMouse directly.
 func TestLogAuditStatsScrollbarMouseClickThroughRealDispatch(t *testing.T) {
 	r := openLogAuditStatsOverflowing(t, 100, 10)
 	drawLogAuditStats(t, r, 100, 10)
 
-	sb := r.logAuditStatsScrollbar
+	sb := r.log.StatsScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow on a 10-row screen", sb.maxOffset())
 	}
 	sbx, sby, _, sbh := sb.GetRect()
-	before, _ := r.logAuditStatsView.GetScrollOffset()
+	before, _ := r.log.StatsView.GetScrollOffset()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.logAuditStatsLayout.MouseHandler()
+	handler := r.log.StatsLayout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
 
-	after, _ := r.logAuditStatsView.GetScrollOffset()
+	after, _ := r.log.StatsView.GetScrollOffset()
 	if after != before+1 {
-		t.Errorf("logAuditStatsView offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
+		t.Errorf("log.StatsView offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
 	}
 }
 
@@ -340,22 +340,22 @@ func TestLogAuditStatsHScrollbarMouseClickThroughRealDispatch(t *testing.T) {
 	r := openLogAuditStatsOverflowing(t, 40, 30)
 	drawLogAuditStats(t, r, 40, 30)
 
-	sb := r.logAuditStatsHScrollbar
+	sb := r.log.StatsHScrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatalf("maxOffset = %d, want real overflow for a 100-character source name on a 40-column screen", sb.maxOffset())
 	}
 	sbx, sby, _, _ := sb.GetRect()
-	_, before := r.logAuditStatsView.GetScrollOffset()
+	_, before := r.log.StatsView.GetScrollOffset()
 
 	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
-	handler := r.logAuditStatsLayout.MouseHandler()
+	handler := r.log.StatsLayout.MouseHandler()
 	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx+1, sby, tcell.Button1, 0), setFocus)
 	sb.stopRepeat()
 	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx+1, sby, tcell.ButtonNone, 0), setFocus)
 
-	_, after := r.logAuditStatsView.GetScrollOffset()
+	_, after := r.log.StatsView.GetScrollOffset()
 	if after != before+1 {
-		t.Errorf("logAuditStatsView column offset after clicking the right arrow = %d, want %d (before=%d)", after, before+1, before)
+		t.Errorf("log.StatsView column offset after clicking the right arrow = %d, want %d (before=%d)", after, before+1, before)
 	}
 }
 
@@ -366,8 +366,8 @@ func TestLogAuditStatsScrollbarsDoNotShareTheCornerCell(t *testing.T) {
 	r := openLogAuditStatsOverflowing(t, 100, 10)
 	drawLogAuditStats(t, r, 100, 10)
 
-	vx, _, _, _ := r.logAuditStatsScrollbar.GetRect()
-	hx, _, hw, _ := r.logAuditStatsHScrollbar.GetRect()
+	vx, _, _, _ := r.log.StatsScrollbar.GetRect()
+	hx, _, hw, _ := r.log.StatsHScrollbar.GetRect()
 	if hx+hw > vx {
 		t.Errorf("horizontal bar (x=%d width=%d) reaches into the vertical bar's own column (x=%d)", hx, hw, vx)
 	}

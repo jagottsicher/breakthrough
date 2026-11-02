@@ -34,16 +34,16 @@ func newTestRootWithSedFile(t *testing.T, content string) (r *Root, dir, file st
 	return r, dir, file
 }
 
-// sedSetFlag sets one of sedFlagsList's toggles directly by label — the
+// sedSetFlag sets one of sed.FlagsList's toggles directly by label — the
 // map itself, not simulating a click, since these tests are about what
 // buildSedScript/Apply do with a given flag state, not the click/toggle
 // mechanism (see TestToggleSedFlagUpdatesStateAndLabel for that).
 func sedSetFlag(t *testing.T, r *Root, label string, checked bool) {
 	t.Helper()
-	if _, ok := r.sedFlags[label]; !ok {
+	if _, ok := r.sed.Flags[label]; !ok {
 		t.Fatalf("no such sed flag %q", label)
 	}
-	r.sedFlags[label] = checked
+	r.sed.Flags[label] = checked
 }
 
 // blockingSedPreviewFunc is a sedPreviewFunc replacement that never
@@ -52,7 +52,7 @@ func sedSetFlag(t *testing.T, r *Root, label string, checked bool) {
 // goroutine would otherwise reach r.app.QueueUpdateDraw, which blocks
 // forever with nothing here running the real Application event loop to
 // drain it. Tests using this only ever care about runSedPreview's own
-// synchronous setup (activePage, sedPreviewTotal, sedPreviewCancel) —
+// synchronous setup (activePage, sed.PreviewTotal, sed.PreviewCancel) —
 // never anything that depends on a preview actually finishing (see
 // TestShowSedPreviewResult* below for that, called directly instead).
 func blockingSedPreviewFunc(_ []string, _ string, _ bool, _ func(string)) ([]replace.FileChange, map[string]string, error) {
@@ -76,11 +76,11 @@ func TestOpenSedReplacePopulatesTargetAndOpensForm(t *testing.T) {
 	if r.activePage != sedReplacePage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, sedReplacePage)
 	}
-	if len(r.sedTargets) != 1 || r.sedTargets[0] != file {
-		t.Fatalf("sedTargets = %v, want [%s]", r.sedTargets, file)
+	if len(r.sed.Targets) != 1 || r.sed.Targets[0] != file {
+		t.Fatalf("sed.Targets = %v, want [%s]", r.sed.Targets, file)
 	}
 	for _, label := range []string{"Find", "Replace with", "Advanced sed script (overrides Find/Replace above)"} {
-		if r.sedForm.GetFormItemByLabel(label) == nil {
+		if r.sed.Form.GetFormItemByLabel(label) == nil {
 			t.Errorf("form is missing an item labeled %q", label)
 		}
 	}
@@ -95,11 +95,11 @@ func TestOpenSedReplaceHasATitleBar(t *testing.T) {
 
 	r.openSedReplace()
 
-	if got, want := r.sedTitleBar.GetText(true), " Sed Replace "; got != want {
-		t.Errorf("sedTitleBar text = %q, want %q", got, want)
+	if got, want := r.sed.TitleBar.GetText(true), " Sed Replace "; got != want {
+		t.Errorf("sed.TitleBar text = %q, want %q", got, want)
 	}
-	if _, _, w, h := r.sedLayout.GetRect(); w <= 0 || h <= 0 {
-		t.Errorf("sedLayout rect = %dx%d, want a real, positioned size", w, h)
+	if _, _, w, h := r.sed.Layout.GetRect(); w <= 0 || h <= 0 {
+		t.Errorf("sed.Layout rect = %dx%d, want a real, positioned size", w, h)
 	}
 }
 
@@ -107,12 +107,12 @@ func TestToggleSedFlagUpdatesStateAndLabel(t *testing.T) {
 	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
 	r.openSedReplace()
 
-	if r.sedFlags[sedLabelRegex] {
+	if r.sed.Flags[sedLabelRegex] {
 		t.Fatal("setup: Regex should default to false")
 	}
 
 	r.toggleSedFlag(sedLabelRegex)
-	if !r.sedFlags[sedLabelRegex] {
+	if !r.sed.Flags[sedLabelRegex] {
 		t.Error("toggleSedFlag should have flipped Regex to true")
 	}
 	idx := -1
@@ -121,13 +121,13 @@ func TestToggleSedFlagUpdatesStateAndLabel(t *testing.T) {
 			idx = i
 		}
 	}
-	main, _ := r.sedFlagsList.GetItemText(idx)
+	main, _ := r.sed.FlagsList.GetItemText(idx)
 	if main != sedFlagItemText(sedLabelRegex, true) {
 		t.Errorf("list item text = %q, want %q", main, sedFlagItemText(sedLabelRegex, true))
 	}
 
 	r.toggleSedFlag(sedLabelRegex)
-	if r.sedFlags[sedLabelRegex] {
+	if r.sed.Flags[sedLabelRegex] {
 		t.Error("toggleSedFlag should have flipped Regex back to false")
 	}
 }
@@ -135,8 +135,8 @@ func TestToggleSedFlagUpdatesStateAndLabel(t *testing.T) {
 func TestBuildSedScriptGuidedMode(t *testing.T) {
 	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
 	r.openSedReplace()
-	r.sedFindField.SetText("hello")
-	r.sedReplaceField.SetText("goodbye")
+	r.sed.FindField.SetText("hello")
+	r.sed.ReplaceField.SetText("goodbye")
 
 	script, extendedRegex, err := r.buildSedScript()
 	if err != nil {
@@ -157,9 +157,9 @@ func TestBuildSedScriptGuidedMode(t *testing.T) {
 func TestBuildSedScriptAdvancedFieldOverridesGuidedFields(t *testing.T) {
 	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
 	r.openSedReplace()
-	r.sedFindField.SetText("hello")
-	r.sedReplaceField.SetText("goodbye")
-	r.sedAdvancedField.SetText("s/world/there/")
+	r.sed.FindField.SetText("hello")
+	r.sed.ReplaceField.SetText("goodbye")
+	r.sed.AdvancedField.SetText("s/world/there/")
 	sedSetFlag(t, r, sedLabelExtendedRegex, true)
 
 	script, extendedRegex, err := r.buildSedScript()
@@ -177,8 +177,8 @@ func TestBuildSedScriptAdvancedFieldOverridesGuidedFields(t *testing.T) {
 func TestRunSedPreviewOpensPreviewPageWithProgressState(t *testing.T) {
 	r, _, file := newTestRootWithSedFile(t, "hello world\n")
 	r.openSedReplace()
-	r.sedFindField.SetText("hello")
-	r.sedReplaceField.SetText("goodbye")
+	r.sed.FindField.SetText("hello")
+	r.sed.ReplaceField.SetText("goodbye")
 
 	isolateSedPreviewFunc(t, blockingSedPreviewFunc)
 	r.runSedPreview()
@@ -190,14 +190,14 @@ func TestRunSedPreviewOpensPreviewPageWithProgressState(t *testing.T) {
 	if r.activePage != sedPreviewPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, sedPreviewPage)
 	}
-	if r.sedPreviewTotal != 1 {
-		t.Errorf("sedPreviewTotal = %d, want 1 (len(sedTargets))", r.sedPreviewTotal)
+	if r.sed.PreviewTotal != 1 {
+		t.Errorf("sed.PreviewTotal = %d, want 1 (len(sed.Targets))", r.sed.PreviewTotal)
 	}
-	if r.sedPreviewCancel == nil {
-		t.Error("sedPreviewCancel should be set while a preview is in flight")
+	if r.sed.PreviewCancel == nil {
+		t.Error("sed.PreviewCancel should be set while a preview is in flight")
 	}
-	if got, want := r.sedPreviewTitleBar.GetText(true), " Sed Preview "; got != want {
-		t.Errorf("sedPreviewTitleBar text = %q, want %q", got, want)
+	if got, want := r.sed.PreviewTitleBar.GetText(true), " Sed Preview "; got != want {
+		t.Errorf("sed.PreviewTitleBar text = %q, want %q", got, want)
 	}
 	_ = file
 }
@@ -209,17 +209,17 @@ func TestShowSedPreviewResultPopulatesChangesAndTable(t *testing.T) {
 	changes := []replace.FileChange{{Path: file, Before: []byte("hello world\n"), After: []byte("goodbye world\n")}}
 	r.showSedPreviewResult(changes, nil, nil)
 
-	if len(r.sedPendingChanges) != 1 || r.sedPendingChanges[0].Path != file {
-		t.Fatalf("sedPendingChanges = %+v, want exactly one change for %s", r.sedPendingChanges, file)
+	if len(r.sed.PendingChanges) != 1 || r.sed.PendingChanges[0].Path != file {
+		t.Fatalf("sed.PendingChanges = %+v, want exactly one change for %s", r.sed.PendingChanges, file)
 	}
-	if r.sedPreviewTable.GetRowCount() < 2 { // header + at least one data row
-		t.Errorf("sedPreviewTable has %d rows, want a header plus at least one change", r.sedPreviewTable.GetRowCount())
+	if r.sed.PreviewTable.GetRowCount() < 2 { // header + at least one data row
+		t.Errorf("sed.PreviewTable has %d rows, want a header plus at least one change", r.sed.PreviewTable.GetRowCount())
 	}
-	name := r.sedPreviewTable.GetCell(1, 0).Text
+	name := r.sed.PreviewTable.GetCell(1, 0).Text
 	if name != filepath.Base(file) {
 		t.Errorf("row 1 name cell = %q, want %q", name, filepath.Base(file))
 	}
-	excerpt := r.sedPreviewTable.GetCell(1, 2).Text
+	excerpt := r.sed.PreviewTable.GetCell(1, 2).Text
 	if excerpt != "goodbye world" {
 		t.Errorf("row 1 excerpt cell = %q, want %q", excerpt, "goodbye world")
 	}
@@ -302,8 +302,8 @@ func TestConfirmApplySedConfirmedWritesChanges(t *testing.T) {
 	if err != nil || string(data) != "goodbye world\n" {
 		t.Fatalf("file content = %q, %v, want %q", data, err, "goodbye world\n")
 	}
-	if len(r.sedPendingChanges) != 0 {
-		t.Error("sedPendingChanges should be cleared after applying")
+	if len(r.sed.PendingChanges) != 0 {
+		t.Error("sed.PendingChanges should be cleared after applying")
 	}
 	if r.activePage == sedPreviewPage || r.activePage == confirmPage {
 		t.Errorf("activePage = %q, want the dialog closed", r.activePage)
@@ -345,11 +345,11 @@ func TestConfirmApplySedWithBackupKeepsOriginal(t *testing.T) {
 func TestBackToSedFormPreservesFieldValuesAndCancelsPreview(t *testing.T) {
 	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
 	r.openSedReplace()
-	r.sedFindField.SetText("hello")
+	r.sed.FindField.SetText("hello")
 
 	isolateSedPreviewFunc(t, blockingSedPreviewFunc)
 	r.runSedPreview()
-	if r.sedPreviewCancel == nil {
+	if r.sed.PreviewCancel == nil {
 		t.Fatal("setup: expected a preview in flight")
 	}
 
@@ -358,10 +358,10 @@ func TestBackToSedFormPreservesFieldValuesAndCancelsPreview(t *testing.T) {
 	if r.activePage != sedReplacePage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, sedReplacePage)
 	}
-	if got := r.sedFindField.GetText(); got != "hello" {
+	if got := r.sed.FindField.GetText(); got != "hello" {
 		t.Errorf("Find field = %q after Back, want it preserved as %q", got, "hello")
 	}
-	if r.sedPreviewCancel != nil {
+	if r.sed.PreviewCancel != nil {
 		t.Error("backToSedForm should have cancelled the in-flight preview")
 	}
 }
@@ -395,16 +395,16 @@ func TestResetSedFormSeedsFlagsFromSettings(t *testing.T) {
 	r.openSedReplace()
 
 	switch {
-	case !r.sedFlags[sedLabelRegex]:
-		t.Error("sedFlags[Regex] = false, want it seeded true from settings")
-	case !r.sedFlags[sedLabelExtendedRegex]:
-		t.Error("sedFlags[ExtendedRegex] = false, want it seeded true from settings")
-	case !r.sedFlags[sedLabelCaseInsensitive]:
-		t.Error("sedFlags[CaseInsensitive] = false, want it seeded true from settings")
-	case r.sedFlags[sedLabelGlobal]:
-		t.Error("sedFlags[Global] = true, want it seeded false from settings")
-	case !r.sedFlags[sedLabelBackup]:
-		t.Error("sedFlags[Backup] = false, want it seeded true from settings")
+	case !r.sed.Flags[sedLabelRegex]:
+		t.Error("sed.Flags[Regex] = false, want it seeded true from settings")
+	case !r.sed.Flags[sedLabelExtendedRegex]:
+		t.Error("sed.Flags[ExtendedRegex] = false, want it seeded true from settings")
+	case !r.sed.Flags[sedLabelCaseInsensitive]:
+		t.Error("sed.Flags[CaseInsensitive] = false, want it seeded true from settings")
+	case r.sed.Flags[sedLabelGlobal]:
+		t.Error("sed.Flags[Global] = true, want it seeded false from settings")
+	case !r.sed.Flags[sedLabelBackup]:
+		t.Error("sed.Flags[Backup] = false, want it seeded true from settings")
 	}
 }
 
@@ -418,8 +418,8 @@ func TestRunSedPreviewWritesBackTheChosenFlagsAsTheNewDefault(t *testing.T) {
 	configPath := isolateUserConfigFile(t)
 	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
 	r.openSedReplace()
-	r.sedFindField.SetText("hello")
-	r.sedReplaceField.SetText("goodbye")
+	r.sed.FindField.SetText("hello")
+	r.sed.ReplaceField.SetText("goodbye")
 	sedSetFlag(t, r, sedLabelCaseInsensitive, true)
 	sedSetFlag(t, r, sedLabelBackup, true)
 
@@ -453,8 +453,8 @@ func TestRunSedPreviewNeverPersistsOnABuildScriptError(t *testing.T) {
 	configPath := isolateUserConfigFile(t)
 	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
 	r.openSedReplace()
-	r.sedFindField.SetText("/#|~^@%") // every delimiter candidate at once
-	r.sedReplaceField.SetText("x")
+	r.sed.FindField.SetText("/#|~^@%") // every delimiter candidate at once
+	r.sed.ReplaceField.SetText("x")
 	sedSetFlag(t, r, sedLabelBackup, true)
 
 	r.runSedPreview()
@@ -471,8 +471,8 @@ func TestRunSedPreviewNeverPersistsOnABuildScriptError(t *testing.T) {
 }
 
 // TestTabFromTheAdvancedFieldReachesTheFlagsAndActions pins a real,
-// previously-unfixed gap (feature_upgrades.txt Befund 7): sedForm,
-// sedFlagsList, and sedActions are three independent widgets, and Tab
+// previously-unfixed gap (feature_upgrades.txt Befund 7): sed.Form,
+// sed.FlagsList, and sed.Actions are three independent widgets, and Tab
 // off the form's own last field used to just wrap back to Find
 // instead of ever reaching the flags or Preview/Cancel — reachable
 // only by mouse. Tab the whole way around the loop and back.
@@ -482,30 +482,30 @@ func TestTabFromTheAdvancedFieldReachesTheFlagsAndActions(t *testing.T) {
 	noop := func(tview.Primitive) {}
 	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
 
-	tab(r.sedFindField)
-	tab(r.sedReplaceField)
-	tab(r.sedAdvancedField)
-	if !r.sedFlagsList.HasFocus() {
-		t.Fatal("Tab from Advanced script did not reach sedFlagsList")
+	tab(r.sed.FindField)
+	tab(r.sed.ReplaceField)
+	tab(r.sed.AdvancedField)
+	if !r.sed.FlagsList.HasFocus() {
+		t.Fatal("Tab from Advanced script did not reach sed.FlagsList")
 	}
 
-	tab(r.sedFlagsList)
-	if !r.sedActions.HasFocus() {
-		t.Fatal("Tab from sedFlagsList did not reach sedActions")
+	tab(r.sed.FlagsList)
+	if !r.sed.Actions.HasFocus() {
+		t.Fatal("Tab from sed.FlagsList did not reach sed.Actions")
 	}
 
-	tab(r.sedActions)
-	if !r.sedFindField.HasFocus() {
-		t.Fatal("Tab from sedActions did not wrap back to Find")
+	tab(r.sed.Actions)
+	if !r.sed.FindField.HasFocus() {
+		t.Fatal("Tab from sed.Actions did not wrap back to Find")
 	}
 
 	// Backtab from Find wraps within the form itself, to its own last
 	// field (Advanced script) — the same in-form wrap
 	// connectdialog.go's own Host/Tags pair already establishes, not
-	// a jump out to sedActions (which lives in a separate widget
+	// a jump out to sed.Actions (which lives in a separate widget
 	// entirely).
-	r.sedFindField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
-	if !r.sedAdvancedField.HasFocus() {
+	r.sed.FindField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	if !r.sed.AdvancedField.HasFocus() {
 		t.Error("Backtab from Find did not wrap back to Advanced script")
 	}
 }
