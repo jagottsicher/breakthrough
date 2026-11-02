@@ -394,8 +394,8 @@ func (r *Root) captureActivityLogTableKey(event *tcell.EventKey) *tcell.EventKey
 		// Table), so wrapping back to Keyword (the ordinary case) is
 		// what gives way to it instead, the same shape
 		// captureLogAuditViewerTableKey already establishes.
-		if r.consigliereVisible {
-			r.app.SetFocus(r.consigliereInput)
+		if r.consigliere.Visible {
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		r.app.SetFocus(r.activity.KeywordField)
@@ -427,7 +427,7 @@ func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
 	if r.activity.Table == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.activity.Layout.SetBackgroundColor(theme.PanelBackground)
 	r.activity.Table.SetBackgroundColor(theme.PanelBackground)
@@ -443,7 +443,7 @@ func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
 	r.activity.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.activity.TitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.activity.Hint.SetBackgroundColor(theme.SurfaceBackground)
 	r.activity.Hint.SetTextColor(theme.TextColor)
 	activityLogHintText, hintSpans := buildListHint(theme, activityLogHintEntries())

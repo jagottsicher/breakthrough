@@ -35,6 +35,18 @@ import (
 
 const sessionsPage = "sessions"
 
+// sessionsState holds the Sessions screen's widgets and last read result.
+type sessionsState struct {
+	Layout    *tview.Flex
+	TitleBar  *tview.TextView
+	Hint      *tview.TextView
+	HintSpans []listHintSpan
+	Table     *tview.Table
+	Scrollbar *verticalScrollbar
+	List      []multiplex.Session
+	Err       error
+}
+
 // listMultiplexSessions is a package-level swappable var — the same
 // mockable idiom readFirewallSnapshot already establishes — so this
 // screen's own render logic can be exercised without ever touching a
@@ -54,7 +66,7 @@ var runMultiplexCommand = func(argv []string) error {
 	return exec.Command(argv[0], argv[1:]...).Run()
 }
 
-// Column indices within sessionsTable — the same label/action-cell
+// Column indices within sessions.Table — the same label/action-cell
 // shape connectionmenu.go's own connectionMenuCol* constants establish,
 // just with three action cells instead of two: a session has Attach,
 // Attach in new window, and Close, all independent of each other.
@@ -170,7 +182,7 @@ func sessionsColumnWidth(col int) int {
 // own doc comment.
 func sessionsHintEntries() []listHintEntry {
 	activate := func(r *Root) {
-		row, col := r.sessionsTable.GetSelection()
+		row, col := r.sessions.Table.GetSelection()
 		r.activateSessionsCell(row, col)
 	}
 	return []listHintEntry{
@@ -197,29 +209,29 @@ func sessionsHintEntries() []listHintEntry {
 // independently reachable targets, the same reason
 // newConnectionMenuTable/newTabSwitcher both need it too.
 func (r *Root) newSessionsScreen() {
-	r.sessionsTable = tview.NewTable()
-	r.sessionsTable.SetBorders(false)
-	r.sessionsTable.SetBorderPadding(1, 0, 2, 1)
-	r.sessionsTable.SetSelectable(true, true)
-	r.sessionsTable.SetFixed(1, 0)
-	r.sessionsTable.SetInputCapture(r.captureSessionsKey)
-	r.sessionsTable.SetSelectedFunc(func(row, column int) { r.activateSessionsCell(row, column) })
+	r.sessions.Table = tview.NewTable()
+	r.sessions.Table.SetBorders(false)
+	r.sessions.Table.SetBorderPadding(1, 0, 2, 1)
+	r.sessions.Table.SetSelectable(true, true)
+	r.sessions.Table.SetFixed(1, 0)
+	r.sessions.Table.SetInputCapture(r.captureSessionsKey)
+	r.sessions.Table.SetSelectedFunc(func(row, column int) { r.activateSessionsCell(row, column) })
 
-	r.sessionsTitleBar = newPlainTitleBar("Sessions")
-	r.sessionsTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.sessionsTitleBar, r.reloadSessions, r.closeSessions))
+	r.sessions.TitleBar = newPlainTitleBar("Sessions")
+	r.sessions.TitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.sessions.TitleBar, r.reloadSessions, r.closeSessions))
 
-	r.sessionsHint = tview.NewTextView()
-	r.sessionsHint.SetWrap(false)
-	r.sessionsHint.SetDynamicColors(true)
-	sessionsHintText, sessionsHintSpans := buildListHint(r.theme, sessionsHintEntries())
-	r.sessionsHint.SetText(sessionsHintText)
-	r.sessionsHintSpans = sessionsHintSpans
-	r.sessionsHint.SetMouseCapture(r.captureListHintMouse(r.sessionsHint, &r.sessionsHintSpans))
+	r.sessions.Hint = tview.NewTextView()
+	r.sessions.Hint.SetWrap(false)
+	r.sessions.Hint.SetDynamicColors(true)
+	sessionsHintText, hintSpans := buildListHint(r.theme, sessionsHintEntries())
+	r.sessions.Hint.SetText(sessionsHintText)
+	r.sessions.HintSpans = hintSpans
+	r.sessions.Hint.SetMouseCapture(r.captureListHintMouse(r.sessions.Hint, &r.sessions.HintSpans))
 
-	r.sessionsScrollbar = newVerticalScrollbarForTable(r, r.sessionsTable)
+	r.sessions.Scrollbar = newVerticalScrollbarForTable(r, r.sessions.Table)
 	sessionsTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.sessionsTable, 0, 1, true).
-		AddItem(r.sessionsScrollbar, 1, 0, false)
+		AddItem(r.sessions.Table, 0, 1, true).
+		AddItem(r.sessions.Scrollbar, 1, 0, false)
 	// chainTableDoubleClick (logauditscreen.go) — activateSessionsCell's
 	// own default column (attachSession) suspends the whole app
 	// first, so a stray second click mostly lands on the external
@@ -227,12 +239,12 @@ func (r *Root) newSessionsScreen() {
 	// than the other screens this same fix now covers), but adding it
 	// here too removes the ambiguity entirely rather than leaving one
 	// table's own fast-double-click behavior unverified.
-	sessionsTableRow.SetMouseCapture(chainTableDoubleClick(r.sessionsTable, r.sessionsScrollbar.captureMouse))
+	sessionsTableRow.SetMouseCapture(chainTableDoubleClick(r.sessions.Table, r.sessions.Scrollbar.captureMouse))
 
-	r.sessionsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.sessionsTitleBar, 1, 0, false).
+	r.sessions.Layout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.sessions.TitleBar, 1, 0, false).
 		AddItem(sessionsTableRow, 0, 1, true).
-		AddItem(r.sessionsHint, 1, 0, false)
+		AddItem(r.sessions.Hint, 1, 0, false)
 }
 
 // openSessions shows the Sessions screen, freshly read every time —
@@ -241,7 +253,7 @@ func (r *Root) newSessionsScreen() {
 // entirely while this screen isn't open.
 func (r *Root) openSessions() {
 	r.reloadSessions()
-	r.showOverlay(sessionsPage, r.sessionsLayout)
+	r.showOverlay(sessionsPage, r.sessions.Layout)
 }
 
 func (r *Root) closeSessions() {
@@ -259,8 +271,8 @@ func (r *Root) reloadSessions() {
 		}
 		return sessions[i].Name < sessions[j].Name
 	})
-	r.sessionsList = sessions
-	r.sessionsErr = err
+	r.sessions.List = sessions
+	r.sessions.Err = err
 	r.renderSessions()
 }
 
@@ -270,10 +282,10 @@ func (r *Root) reloadSessions() {
 // doc comment for why every one of this app's full-screen catalogs
 // goes through it rather than a bare SetCell.
 func (r *Root) renderSessions() {
-	r.sessionsTable.Clear()
+	r.sessions.Table.Clear()
 
 	header := func(col int, text string) {
-		r.sessionsTable.SetCell(0, col,
+		r.sessions.Table.SetCell(0, col,
 			tview.NewTableCell(padRight(text, sessionsColumnWidth(col))).
 				SetTextColor(r.theme.Text).
 				SetAttributes(tcell.AttrBold).
@@ -286,18 +298,18 @@ func (r *Root) renderSessions() {
 	header(sessionsColNewWindow, "")
 	header(sessionsColClose, "")
 
-	renderReloadCloseTitleBar(r.sessionsTitleBar, " "+sessionsTitle(r.sessionsList, r.sessionsErr)+" ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.sessions.TitleBar, " "+sessionsTitle(r.sessions.List, r.sessions.Err)+" ", r.lastScreenWidth)
 
-	if r.sessionsErr != nil {
-		showTablePlaceholder(r.sessionsTable, r.sessionsErr.Error(), r.theme.EntryError)
+	if r.sessions.Err != nil {
+		showTablePlaceholder(r.sessions.Table, r.sessions.Err.Error(), r.theme.EntryError)
 		return
 	}
-	if len(r.sessionsList) == 0 {
-		showTablePlaceholder(r.sessionsTable, "No screen or tmux sessions found.", r.theme.PlaceholderText)
+	if len(r.sessions.List) == 0 {
+		showTablePlaceholder(r.sessions.Table, "No screen or tmux sessions found.", r.theme.PlaceholderText)
 		return
 	}
 
-	for i, s := range r.sessionsList {
+	for i, s := range r.sessions.List {
 		r.renderSessionsRow(i+1, s)
 	}
 	// Not enableTableSelection (SetSelectable(true, false), rows only) —
@@ -309,10 +321,10 @@ func (r *Root) renderSessions() {
 	// horizontal-scroll-offset handling instead of moving the cell
 	// selection at all — invisible on a table narrow enough to need no
 	// scrolling, which reads as "Left/Right do nothing whatsoever".
-	r.sessionsTable.SetSelectable(true, true)
+	r.sessions.Table.SetSelectable(true, true)
 
-	if cur, _ := r.sessionsTable.GetSelection(); cur < 1 || cur > len(r.sessionsList) {
-		r.sessionsTable.Select(1, sessionsColName)
+	if cur, _ := r.sessions.Table.GetSelection(); cur < 1 || cur > len(r.sessions.List) {
+		r.sessions.Table.Select(1, sessionsColName)
 	}
 }
 
@@ -341,7 +353,7 @@ func (r *Root) renderSessionsRow(row int, s multiplex.Session) {
 	// next one that isn't — see its own Table.go forward/backwards —
 	// which is exactly "treat the three as one" from the keyboard).
 	cell := func(col int, text string, color tcell.Color, selectable bool) {
-		r.sessionsTable.SetCell(row, col,
+		r.sessions.Table.SetCell(row, col,
 			tview.NewTableCell(padRight(text, sessionsColumnWidth(col))).
 				SetTextColor(color).
 				SetSelectable(selectable).
@@ -352,7 +364,7 @@ func (r *Root) renderSessionsRow(row int, s multiplex.Session) {
 	cell(sessionsColStatus, sessionsStatusGlyph(s.Status), sessionsStatusColor(s.Status, r.theme), false)
 
 	action := func(col int, glyph string) {
-		r.sessionsTable.SetCell(row, col,
+		r.sessions.Table.SetCell(row, col,
 			tview.NewTableCell(" "+glyph+" ").
 				SetTextColor(r.theme.MutedTextColor).
 				SetSelectable(true).
@@ -369,10 +381,10 @@ func (r *Root) renderSessionsRow(row int, s multiplex.Session) {
 // same defensiveness activateConnectionMenuCell's own map lookup gives).
 func (r *Root) sessionAt(row int) (multiplex.Session, bool) {
 	i := row - 1
-	if i < 0 || i >= len(r.sessionsList) {
+	if i < 0 || i >= len(r.sessions.List) {
 		return multiplex.Session{}, false
 	}
-	return r.sessionsList[i], true
+	return r.sessions.List[i], true
 }
 
 // activateSessionsCell is Enter, Space, or a click on one cell — the
@@ -423,17 +435,17 @@ func (r *Root) captureSessionsKey(event *tcell.EventKey) *tcell.EventKey {
 	// Tab/Backtab reach the AI Consigliere sidebar — see
 	// startConsigliereChord's own doc comment in consigliere.go and
 	// captureLogAuditSelectionTableKey's own identical shape.
-	// sessionsTable is this screen's only real focus target.
-	if r.consigliereVisible {
+	// sessions.Table is this screen's only real focus target.
+	if r.consigliere.Visible {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.consigliereInput)
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		if event.Key() == tcell.KeyBacktab {
-			if r.consigliereScrollbar.maxOffset() > 0 {
-				r.app.SetFocus(r.consigliereHistory)
+			if r.consigliere.Scrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliere.History)
 			} else {
-				r.app.SetFocus(r.consigliereInput)
+				r.app.SetFocus(r.consigliere.Input)
 			}
 			return nil
 		}
@@ -444,7 +456,7 @@ func (r *Root) captureSessionsKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 	isCloseKey := (event.Key() == tcell.KeyRune && event.Rune() == 'x') || event.Key() == tcell.KeyDelete
 	if isCloseKey {
-		row, _ := r.sessionsTable.GetSelection()
+		row, _ := r.sessions.Table.GetSelection()
 		if s, ok := r.sessionAt(row); ok {
 			r.confirmCloseSession(s)
 			return nil
@@ -515,31 +527,31 @@ func (r *Root) runCloseSession(s multiplex.Session) {
 // applyTheme (see its own doc comment). Guarded the same way
 // applyOptionsTheme is.
 func (r *Root) applySessionsTheme(theme config.ResolvedTheme) {
-	if r.sessionsTable == nil {
+	if r.sessions.Table == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
-	r.sessionsLayout.SetBackgroundColor(theme.PanelBackground)
-	r.sessionsTable.SetBackgroundColor(theme.PanelBackground)
+	r.sessions.Layout.SetBackgroundColor(theme.PanelBackground)
+	r.sessions.Table.SetBackgroundColor(theme.PanelBackground)
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
 	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
 	// gitBreach's tables, for the identical reason.
-	r.sessionsTable.SetSelectedStyle(tcell.StyleDefault.
+	r.sessions.Table.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
 
-	r.sessionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.sessionsTitleBar.SetTextColor(theme.TextColor)
+	r.sessions.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.sessions.TitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
-	r.sessionsHint.SetBackgroundColor(theme.SurfaceBackground)
-	r.sessionsHint.SetTextColor(theme.TextColor)
-	sessionsHintText, sessionsHintSpans := buildListHint(theme, sessionsHintEntries())
-	r.sessionsHint.SetText(sessionsHintText)
-	r.sessionsHintSpans = sessionsHintSpans
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
+	r.sessions.Hint.SetBackgroundColor(theme.SurfaceBackground)
+	r.sessions.Hint.SetTextColor(theme.TextColor)
+	sessionsHintText, hintSpans := buildListHint(theme, sessionsHintEntries())
+	r.sessions.Hint.SetText(sessionsHintText)
+	r.sessions.HintSpans = hintSpans
 
 	r.renderSessions() // cell colors are baked in per cell, not looked up live at draw time
 }

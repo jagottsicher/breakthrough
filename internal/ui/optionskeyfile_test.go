@@ -154,7 +154,7 @@ func TestOptionsKeyFileCommitRetriesTheModelFetch(t *testing.T) {
 	// No key configured yet — the initial fetch (triggered by
 	// selectOptionCategory) already failed and recorded
 	// errConsigliereNoAPIKey.
-	if _, ok := r.consigliereModelCache["anthropic"]; ok {
+	if _, ok := r.consigliere.ModelCache["anthropic"]; ok {
 		t.Fatal("setup: should not be cached yet")
 	}
 	called := make(chan struct{}, 1)
