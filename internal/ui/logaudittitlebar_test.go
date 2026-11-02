@@ -81,11 +81,11 @@ func TestLogAuditSelectionTitleBarHasCloseButton(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	r.logAuditTitleBar.SetRect(0, 0, 40, 1)
-	_, y, width, _ := r.logAuditTitleBar.GetRect()
+	r.log.TitleBar.SetRect(0, 0, 40, 1)
+	_, y, width, _ := r.log.TitleBar.GetRect()
 	col := closeTitleBarButtonCol(width)
 
-	consumed, _ := r.logAuditTitleBar.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(col, y, tcell.ButtonNone, 0), func(tview.Primitive) {})
+	consumed, _ := r.log.TitleBar.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(col, y, tcell.ButtonNone, 0), func(tview.Primitive) {})
 	if !consumed {
 		t.Fatal("clicking the selection screen's own close glyph should be consumed")
 	}

@@ -798,7 +798,7 @@ func (r *Root) newConnectionMenuTable() *tview.Table {
 // single-letter shortcuts (U/H/I/e/x/</>).
 // styleConnectionMenuSearchField applies styleInput (theme.go) — this
 // app's own shared InputBackground/InputFocusedBackground "look like a
-// real input" convention, the same one logAuditKeywordField already
+// real input" convention, the same one log.KeywordField already
 // uses for an identical kind of boolean-query field — and then
 // overrides the label's own base style back to SurfaceBackground/
 // MutedTextColor, so "Search: " reads as ordinary dropdown chrome

@@ -608,7 +608,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// styleConnectionMenuSearchField (connectionmenu.go), not a one-off
 	// SetFieldBackgroundColor: the shared InputBackground/
 	// InputFocusedBackground convention every real input field in this
-	// app already uses (logAuditKeywordField — filterexpr's own other
+	// app already uses (log.KeywordField — filterexpr's own other
 	// caller — among them), reflecting whatever the field's actual
 	// focus state is right now so a live theme switch mid-focus
 	// doesn't reset it to the unfocused look — plus its own label
