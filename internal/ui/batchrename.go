@@ -20,9 +20,9 @@ import (
 // menu's old "Mass rename" placeholder — same overall shape as the
 // Options screen (see optionsscreen.go), reused deliberately rather
 // than invented fresh: a list of "steps" down the left plays the same
-// role optionsCategories does, and the selected step's own settings
+// role options.Categories does, and the selected step's own settings
 // table on the right is rendered and driven exactly the same way
-// optionsTable is (see batchRenameField/batchRenameStep in
+// options.Table is (see batchRenameField/batchRenameStep in
 // batchrenamecatalog.go, the direct counterpart of optionSpec/
 // optionCategory). Someone who has already used the Options screen
 // needs to learn nothing new here.
@@ -136,7 +136,7 @@ func (r *Root) newBatchRenameScreen() {
 		AddItem(r.batchRenameHint, 1, 0, false)
 
 	// One shared input field for a typed value, the same
-	// one-widget-reused-per-edit pattern r.optionsInput already follows
+	// one-widget-reused-per-edit pattern r.options.Input already follows
 	// (see editOptionValue's own doc comment). Enum fields need no
 	// widget of their own — activating the row cycles them in place
 	// (see cycleBatchRenameChoice).
@@ -990,7 +990,7 @@ func (r *Root) applyBatchRenameTheme(theme config.ResolvedTheme) {
 	// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
 	// tabSwitcher/gitBreach's tables, for the identical reason.
 	// batchRenameFieldsTable doesn't need this: setOptionsPaneFocused
-	// already covers it, the same way it covers optionsTable.
+	// already covers it, the same way it covers options.Table.
 	r.batchRenamePreviewTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))

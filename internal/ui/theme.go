@@ -187,14 +187,14 @@ func applyTviewDefaultTheme(theme config.ResolvedTheme) {
 func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.theme = theme
 	applyTviewDefaultTheme(theme)   // see its own doc comment
-	r.updateOverlayTitleBarColors() // propertiesTitleBar/menuTitleBar — see its own doc comment
+	r.updateOverlayTitleBarColors() // properties.TitleBar/menuTitleBar — see its own doc comment
 
 	// AccentBackground: the shared, constant "normal panel background"
-	// every panel now uses (see propertiesText's own comment below for
+	// every panel now uses (see properties.Text's own comment below for
 	// the full reasoning) — menuTitleBar's own background is set via
 	// updateOverlayTitleBarColors below instead, since — per the user's
 	// own explicit request — it now depends on whether the context menu
-	// is the currently active overlay, the same as propertiesTitleBar.
+	// is the currently active overlay, the same as properties.TitleBar.
 	styleList(r.menu, theme)
 	r.menuTitleBar.SetTextColor(theme.Text)
 
@@ -212,11 +212,11 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.prompt.SetLabelColor(theme.TextColor)
 
 	// FocusedBackground, fixed rather than active/inactive-dependent the
-	// way propertiesTitleBar/menuTitleBar are (see updateOverlayTitleBarColors):
+	// way properties.TitleBar/menuTitleBar are (see updateOverlayTitleBarColors):
 	// quitConfirm/confirmDialog are single-layer, always-modal blocking
 	// dialogs, never themselves the base a further overlay stacks on top
 	// of the way Properties/Menu/Help can be — the same reasoning
-	// optionsTitleBar's own fixed FocusedBackground already follows.
+	// options.TitleBar's own fixed FocusedBackground already follows.
 	styleList(r.quitConfirm, theme)
 	r.quitConfirmTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.quitConfirmTitleBar.SetTextColor(theme.TextColor)
@@ -252,7 +252,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// SurfaceBackground, matching styleList's own call just above — a
 	// plain tview.NewBox() defaults to tview's own built-in
 	// PrimitiveBackgroundColor otherwise, the same mismatch
-	// duplicateSpacer/compressSpacer/rsyncSpacer's own doc comments
+	// duplicateSpacer/compress.Spacer/rsyncSpacer's own doc comments
 	// already warn about.
 	r.activityLogNoticeSpacer1.SetBackgroundColor(theme.SurfaceBackground)
 	r.activityLogNoticeSpacer2.SetBackgroundColor(theme.SurfaceBackground)
@@ -319,16 +319,16 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// every panel floating over the main one now uses (toolWindow/
 	// Details' own content areas included — see
 	// toolwindow.go/detailssidebar.go), per the user's own explicit
-	// request. propertiesTitleBar's own background is set via
+	// request. properties.TitleBar's own background is set via
 	// updateOverlayTitleBarColors below instead, since it now depends on
 	// whether Properties is the currently active overlay — see its own
 	// doc comment.
-	r.propertiesText.SetBackgroundColor(theme.SurfaceBackground)
-	styleInput(r.propertiesEditField, theme, true)
-	r.propertiesButtons.SetBackgroundColor(theme.SurfaceBackground)
-	r.propertiesTitleBar.SetTextColor(theme.TextColor)
-	styleButton(r.propertiesCancelBtn, theme)
-	styleButton(r.propertiesSaveBtn, theme)
+	r.properties.Text.SetBackgroundColor(theme.SurfaceBackground)
+	styleInput(r.properties.EditField, theme, true)
+	r.properties.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+	r.properties.TitleBar.SetTextColor(theme.TextColor)
+	styleButton(r.properties.CancelBtn, theme)
+	styleButton(r.properties.SaveBtn, theme)
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
 
 	// The Options screen (see optionsscreen.go/applyOptionsTheme).
@@ -423,7 +423,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.chmodButtons.SetBackgroundColor(theme.SurfaceBackground)
 		// FocusedBackground, fixed — chmod is a single-layer, always-modal
 		// dialog nothing else ever stacks on top of, the same reasoning
-		// optionsTitleBar's own fixed FocusedBackground already follows
+		// options.TitleBar's own fixed FocusedBackground already follows
 		// (see confirmDialogTitleBar/quitConfirmTitleBar just above for
 		// the identical choice on the same grounds).
 		r.chmodTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
@@ -449,7 +449,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	if r.helpTitleBar != nil {
 		// Background is set via updateOverlayTitleBarColors above
 		// instead, since it depends on whether Help is currently the
-		// active overlay, the same as propertiesTitleBar/menuTitleBar.
+		// active overlay, the same as properties.TitleBar/menuTitleBar.
 		r.helpTitleBar.SetTextColor(theme.Text)
 	}
 
@@ -665,7 +665,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// borrowed from renderHelpTitleBar instead.
 	r.sshShellMenuTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	// TextColor, not Text — see this block's own doc comment just above:
-	// every close-glyph title bar in this app (propertiesTitleBar,
+	// every close-glyph title bar in this app (properties.TitleBar,
 	// searchTitleBar, ...) paints with TextColor, not connectionMenu-
 	// TitleBar's own Text.
 	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)
@@ -692,24 +692,24 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// Duplicate/Multiply (see duplicate.go/applyDuplicateTheme).
 	r.applyDuplicateTheme(theme)
 
-	if r.compressForm != nil {
-		r.compressForm.SetBackgroundColor(theme.SurfaceBackground)
-		r.compressForm.SetLabelColor(theme.TextColor)
-		r.compressForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-		r.compressForm.SetFieldTextColor(theme.TextColor)
-		if r.compressFormatField != nil {
-			r.themeDuplicateDropDown(r.compressFormatField)
+	if r.compress.Form != nil {
+		r.compress.Form.SetBackgroundColor(theme.SurfaceBackground)
+		r.compress.Form.SetLabelColor(theme.TextColor)
+		r.compress.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
+		r.compress.Form.SetFieldTextColor(theme.TextColor)
+		if r.compress.FormatField != nil {
+			r.themeDuplicateDropDown(r.compress.FormatField)
 		}
-		r.compressPreviewView.SetBackgroundColor(theme.SurfaceBackground)
-		r.compressPreviewView.SetTextColor(theme.TextColor)
-		r.compressSpacer.SetBackgroundColor(theme.SurfaceBackground)
-		r.compressButtons.SetBackgroundColor(theme.SurfaceBackground)
-		styleButton(r.compressCancelBtn, theme)
-		styleButton(r.compressApplyBtn, theme)
+		r.compress.PreviewView.SetBackgroundColor(theme.SurfaceBackground)
+		r.compress.PreviewView.SetTextColor(theme.TextColor)
+		r.compress.Spacer.SetBackgroundColor(theme.SurfaceBackground)
+		r.compress.Buttons.SetBackgroundColor(theme.SurfaceBackground)
+		styleButton(r.compress.CancelBtn, theme)
+		styleButton(r.compress.ApplyBtn, theme)
 		// FocusedBackground, fixed — the same reasoning
 		// duplicateTitleBar's own identical choice just above follows.
-		r.compressTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.compressTitleBar.SetTextColor(theme.TextColor)
+		r.compress.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.compress.TitleBar.SetTextColor(theme.TextColor)
 	}
 
 	r.rsyncForm.SetBackgroundColor(theme.SurfaceBackground)

@@ -29,6 +29,29 @@ import (
 
 const compressPage = "compress"
 
+// compressState holds the Compress dialog's widgets, in-progress form
+// values, the bottom bar's own cancel-segment range, and the
+// backgrounded job/queue (see compressjob.go).
+type compressState struct {
+	Form            *tview.Form
+	FormatField     *tview.DropDown
+	OutputNameField *tview.InputField
+	PreviewView     *tview.TextView
+	Spacer          *tview.Box
+	CancelBtn       *tview.Button
+	ApplyBtn        *tview.Button
+	Buttons         *tview.Flex
+	TitleBar        *tview.TextView
+	ContentLayout   *tview.Flex
+	Layout          *tview.Flex
+	Targets         []string
+	FormatIndex     int
+	OutputName      string
+	CancelSpan      buttonBarSpan
+	Job             *compressJob
+	Queue           []compressRequest
+}
+
 // archiveFormat is one Compress/Extract format this app offers.
 type archiveFormat struct {
 	label string // shown in the Format dropdown
@@ -342,9 +365,9 @@ func (r *Root) openCompress() {
 		return
 	}
 
-	r.compressTargets = targets
-	r.compressFormatIndex = archiveFormatIndexByID(compressibleArchiveFormats(), r.settings.CompressFormat)
-	r.compressOutputName = defaultCompressOutputName(targets, r.panel.path)
+	r.compress.Targets = targets
+	r.compress.FormatIndex = archiveFormatIndexByID(compressibleArchiveFormats(), r.settings.CompressFormat)
+	r.compress.OutputName = defaultCompressOutputName(targets, r.panel.path)
 	r.renderCompressForm()
 	r.renderCompressPreview()
 
@@ -363,8 +386,8 @@ func (r *Root) openCompress() {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.compressLayout.SetRect(x, y, width, height)
-	r.showOverlay(compressPage, r.compressLayout)
+	r.compress.Layout.SetRect(x, y, width, height)
+	r.showOverlay(compressPage, r.compress.Layout)
 }
 
 // defaultCompressOutputName picks Compress's own starting "Output name"
@@ -400,14 +423,14 @@ func (r *Root) newCompressForm() *tview.Form {
 	return f
 }
 
-// renderCompressForm (re)builds compressForm's own items: Target
+// renderCompressForm (re)builds compress.Form's own items: Target
 // (read-only, the same duplicateTargetsLabel wording Multiply's own
 // identical field already uses — nothing about naming a target set is
 // specific to either dialog), Format, and Output name.
 func (r *Root) renderCompressForm() {
-	r.compressForm.Clear(true)
+	r.compress.Form.Clear(true)
 
-	r.compressForm.AddTextView("Target", duplicateTargetsLabel(r.compressTargets), 0, 1, true, false)
+	r.compress.Form.AddTextView("Target", duplicateTargetsLabel(r.compress.Targets), 0, 1, true, false)
 
 	formats := compressibleArchiveFormats()
 	labels := make([]string, len(formats))
@@ -415,25 +438,25 @@ func (r *Root) renderCompressForm() {
 		labels[i] = f.label
 	}
 	dd := tview.NewDropDown().SetLabel("Format").SetOptions(labels, func(_ string, index int) {
-		if index < 0 || index >= len(formats) || index == r.compressFormatIndex {
+		if index < 0 || index >= len(formats) || index == r.compress.FormatIndex {
 			return
 		}
-		r.compressFormatIndex = index
+		r.compress.FormatIndex = index
 		r.renderCompressPreview()
 	})
-	dd.SetCurrentOption(r.compressFormatIndex)
+	dd.SetCurrentOption(r.compress.FormatIndex)
 	styleDropDown(dd, r.theme)
-	r.compressFormatField = dd
-	r.compressForm.AddFormItem(dd)
+	r.compress.FormatField = dd
+	r.compress.Form.AddFormItem(dd)
 
-	nameField := tview.NewInputField().SetLabel("Output name").SetText(r.compressOutputName)
+	nameField := tview.NewInputField().SetLabel("Output name").SetText(r.compress.OutputName)
 	nameField.SetChangedFunc(func(v string) {
-		r.compressOutputName = v
+		r.compress.OutputName = v
 		r.renderCompressPreview()
 	})
 	// Tab on the form's own last field would otherwise just wrap back
-	// to Format instead of ever reaching compressCancelBtn/
-	// compressApplyBtn — the identical, real, previously-unfixed gap
+	// to Format instead of ever reaching compress.CancelBtn/
+	// compress.ApplyBtn — the identical, real, previously-unfixed gap
 	// newConnectForm's own doc comment already found and fixed for the
 	// Connect dialog: without this, the whole button row was reachable
 	// only by mouse (feature_upgrades.txt Befund 8's own "compress.go/
@@ -442,16 +465,16 @@ func (r *Root) renderCompressForm() {
 	// field is itself rebuilt fresh on every open.
 	nameField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.compressCancelBtn)
+			r.app.SetFocus(r.compress.CancelBtn)
 			return nil
 		}
 		return event
 	})
-	r.compressOutputNameField = nameField
-	r.compressForm.AddFormItem(nameField)
+	r.compress.OutputNameField = nameField
+	r.compress.Form.AddFormItem(nameField)
 }
 
-// newCompressPreviewView builds compressPreviewView once, from NewRoot
+// newCompressPreviewView builds compress.PreviewView once, from NewRoot
 // — the same "plain, read-only TextView sibling of the Form, never one
 // of its own items" shape newDuplicatePreviewView's own doc comment
 // explains in full (a TextView added as a Form item needs an explicit
@@ -468,85 +491,85 @@ func (r *Root) newCompressPreviewView() *tview.TextView {
 // so neither one can silently disagree with what "Compress" is about
 // to do.
 func (r *Root) renderCompressPreview() {
-	if r.compressPreviewView == nil {
+	if r.compress.PreviewView == nil {
 		return
 	}
-	format := compressibleArchiveFormats()[r.compressFormatIndex]
-	name := strings.TrimSpace(r.compressOutputName)
+	format := compressibleArchiveFormats()[r.compress.FormatIndex]
+	name := strings.TrimSpace(r.compress.OutputName)
 	if name == "" {
-		r.compressPreviewView.SetText("Preview: (enter an output name)")
+		r.compress.PreviewView.SetText("Preview: (enter an output name)")
 		return
 	}
-	r.compressPreviewView.SetText("Preview: " + name + format.ext)
+	r.compress.PreviewView.SetText("Preview: " + name + format.ext)
 }
 
-// newCompressButtons builds compressForm's own action row once, from
+// newCompressButtons builds compress.Form's own action row once, from
 // NewRoot — the same Cancel/action button pair newDuplicateButtons
 // already establishes.
 func (r *Root) newCompressButtons() *tview.Flex {
-	r.compressCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
-	r.compressApplyBtn = tview.NewButton("Compress").SetSelectedFunc(r.runCompress)
-	r.compressCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
-	r.compressApplyBtn.SetInputCapture(spaceAlsoActivates(r.runCompress))
+	r.compress.CancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
+	r.compress.ApplyBtn = tview.NewButton("Compress").SetSelectedFunc(r.runCompress)
+	r.compress.CancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
+	r.compress.ApplyBtn.SetInputCapture(spaceAlsoActivates(r.runCompress))
 
 	// Tab/Backtab cycle between the two buttons and back into the form
 	// (nameField's own forward Tab is the other half of this — see
 	// renderCompressForm's own doc comment); Escape always cancels.
-	// Wrapping forward goes through compressForm.SetFocus(0) then
-	// r.app.SetFocus(r.compressForm), not a direct
-	// r.app.SetFocus(r.compressFormatField) — naming the field
-	// directly would leave compressForm's own internal focusedElement
+	// Wrapping forward goes through compress.Form.SetFocus(0) then
+	// r.app.SetFocus(r.compress.Form), not a direct
+	// r.app.SetFocus(r.compress.FormatField) — naming the field
+	// directly would leave compress.Form's own internal focusedElement
 	// counter stale, the same real bug connectdialog.go's own
 	// connect.ConnectBtn.SetExitFunc found and fixed first (see its own
 	// doc comment for the full tview.Form internals).
-	r.compressCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.compress.CancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.compressApplyBtn)
+			r.app.SetFocus(r.compress.ApplyBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.compressOutputNameField)
+			r.app.SetFocus(r.compress.OutputNameField)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-	r.compressApplyBtn.SetExitFunc(func(key tcell.Key) {
+	r.compress.ApplyBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.compressForm.SetFocus(0)
-			r.app.SetFocus(r.compressForm)
+			r.compress.Form.SetFocus(0)
+			r.app.SetFocus(r.compress.Form)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.compressCancelBtn)
+			r.app.SetFocus(r.compress.CancelBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.compressCancelBtn, 0, 1, false).
-		AddItem(r.compressApplyBtn, 0, 1, false)
+		AddItem(r.compress.CancelBtn, 0, 1, false).
+		AddItem(r.compress.ApplyBtn, 0, 1, false)
 }
 
-// newCompressLayout wraps compressTitleBar above compressContentLayout
+// newCompressLayout wraps compress.TitleBar above compress.ContentLayout
 // — the same widget/layout split newDuplicateLayout already establishes.
 func (r *Root) newCompressLayout() *tview.Flex {
-	r.compressTitleBar = newPlainTitleBar("Compress")
-	r.compressContentLayout = r.newCompressContentLayout()
+	r.compress.TitleBar = newPlainTitleBar("Compress")
+	r.compress.ContentLayout = r.newCompressContentLayout()
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.compressTitleBar, 1, 0, false).
-		AddItem(r.compressContentLayout, 0, 1, true)
+		AddItem(r.compress.TitleBar, 1, 0, false).
+		AddItem(r.compress.ContentLayout, 0, 1, true)
 }
 
-// newCompressContentLayout stacks compressForm (7 rows: 3 items, 2 rows
+// newCompressContentLayout stacks compress.Form (7 rows: 3 items, 2 rows
 // of itemPadding between them, 2 rows of the Form's own border padding
 // — the same derivation newDuplicateContentLayout's own doc comment
-// spells out in full), compressPreviewView, compressSpacer, and
-// compressButtons.
+// spells out in full), compress.PreviewView, compress.Spacer, and
+// compress.Buttons.
 func (r *Root) newCompressContentLayout() *tview.Flex {
 	layout := tview.NewFlex().SetDirection(tview.FlexRow)
-	layout.AddItem(r.compressForm, 7, 0, true)
-	layout.AddItem(r.compressPreviewView, 1, 0, false)
-	layout.AddItem(r.compressSpacer, 1, 0, false)
-	layout.AddItem(r.compressButtons, 1, 0, false)
+	layout.AddItem(r.compress.Form, 7, 0, true)
+	layout.AddItem(r.compress.PreviewView, 1, 0, false)
+	layout.AddItem(r.compress.Spacer, 1, 0, false)
+	layout.AddItem(r.compress.Buttons, 1, 0, false)
 	return layout
 }
 
@@ -569,7 +592,7 @@ func compressTargetName(target, destDir string) string {
 	return filepath.Base(target)
 }
 
-// runCompress is compressButtons' own "Compress": refuses an empty
+// runCompress is compress.Buttons' own "Compress": refuses an empty
 // name, checks the chosen format's own required tools, then either
 // hands the real command line straight to compressjob.go's own
 // background engine (see startCompressJob) — the same "runs behind the
@@ -585,8 +608,8 @@ func compressTargetName(target, destDir string) string {
 // existing "no split, no guessing" reasoning defaultRsyncDestination's
 // own doc comment already gives.
 func (r *Root) runCompress() {
-	format := compressibleArchiveFormats()[r.compressFormatIndex]
-	name := strings.TrimSpace(r.compressOutputName)
+	format := compressibleArchiveFormats()[r.compress.FormatIndex]
+	name := strings.TrimSpace(r.compress.OutputName)
 	if name == "" {
 		r.showError(fmt.Errorf("compress: an output name is required"))
 		return
@@ -626,8 +649,8 @@ func (r *Root) runCompress() {
 		return
 	}
 
-	names := make([]string, len(r.compressTargets))
-	for i, t := range r.compressTargets {
+	names := make([]string, len(r.compress.Targets))
+	for i, t := range r.compress.Targets {
 		names[i] = shellQuoteArg(compressTargetName(t, sourceDir))
 	}
 	// outPath, not just outputName: cmd.Dir (set to sourceDir — see
@@ -673,8 +696,8 @@ func (r *Root) runCompressToRemote(format archiveFormat, outputName, sourceDir s
 		return
 	}
 
-	names := make([]string, len(r.compressTargets))
-	for i, t := range r.compressTargets {
+	names := make([]string, len(r.compress.Targets))
+	for i, t := range r.compress.Targets {
 		names[i] = shellQuoteArg(compressTargetName(t, sourceDir))
 	}
 	command := format.compress(shellQuoteArg(tempPath), names)

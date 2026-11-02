@@ -554,7 +554,7 @@ func (r *Root) newChmodDialog() *tview.Pages {
 	r.chmodText.SetMouseCapture(r.captureChmodMouse)
 
 	// Colored via r.theme.FocusedBackground (see applyTheme), same
-	// reasoning as propertiesEditField: this field is only ever shown for
+	// reasoning as properties.EditField: this field is only ever shown for
 	// whichever field currently has focus.
 	r.chmodEditField = tview.NewInputField()
 	r.chmodEditField.SetDoneFunc(r.finishChmodEdit)
@@ -1029,7 +1029,7 @@ func (r *Root) openChmod() {
 
 	// showOverlayWithRestore + restoreChmodDialog, not a plain
 	// showOverlay + setChmodFocus(0): the same reason openProperties
-	// leaves propertiesFocusIndex at -1 rather than auto-focusing (and
+	// leaves properties.FocusIndex at -1 rather than auto-focusing (and
 	// so auto-editing) Name immediately on open. chmodPages.SetRect
 	// just above does NOT cascade to chmodText's own rect synchronously
 	// — tview.Pages only resizes a resize=true child's rect inside its
