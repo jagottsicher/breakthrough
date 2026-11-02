@@ -138,13 +138,13 @@ func (r *Root) reallyMoveToTrash(targets []string) {
 	moved := 0
 	for _, src := range targets {
 		if target, err := fsops.MoveToTrash(src, dir); err != nil {
-			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("move to trash %q: %v", src, err))
+			r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("move to trash %q: %v", src, err))
 			if firstErr == nil {
 				firstErr = err
 			}
 		} else {
 			moved++
-			r.activityLog.Detail(activitylog.CategoryFileOps, fmt.Sprintf("moved %q to trash", src))
+			r.activity.Logger.Detail(activitylog.CategoryFileOps, fmt.Sprintf("moved %q to trash", src))
 			// A color label follows the file to its real new location
 			// inside the trash directory — see internal/filelabels'
 			// own doc comment on why Rehome, not some separate
@@ -164,7 +164,7 @@ func (r *Root) reallyMoveToTrash(targets []string) {
 		}
 	}
 	if moved > 0 {
-		r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("moved %d item(s) to trash", moved))
+		r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("moved %d item(s) to trash", moved))
 	}
 	r.panel.deselectAll()
 	r.reloadPanel(firstErr)
@@ -240,19 +240,19 @@ func (r *Root) openRemoveConfirm() {
 		removed := 0
 		for _, target := range targets {
 			if err := fsops.PurgeCompletely(target); err != nil {
-				r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove %q: %v", target, err))
+				r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove %q: %v", target, err))
 				if firstErr == nil {
 					firstErr = err
 				}
 			} else {
 				removed++
 				_ = r.labels.Delete(target) // a permanently deleted path's label is gone too, not rehomed anywhere
-				r.activityLog.Detail(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed %q", target))
+				r.activity.Logger.Detail(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed %q", target))
 				r.refreshDetailsIfShowing(target, "") // permanently gone — see refreshDetailsIfShowing's own doc comment
 			}
 		}
 		if removed > 0 {
-			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed %d item(s)", removed))
+			r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed %d item(s)", removed))
 		}
 		r.panel.deselectAll()
 		r.reloadPanel(firstErr)
@@ -294,25 +294,25 @@ func (r *Root) openRemoveConfirmRemote(remote remotefs.Client, targets []string,
 		for _, target := range targets {
 			entry, err := remote.Lstat(target)
 			if err != nil {
-				r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove remote %q: %v", target, err))
+				r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove remote %q: %v", target, err))
 				if firstErr == nil {
 					firstErr = err
 				}
 				continue
 			}
 			if err := removeRemoteRecursive(remote, target, entry.Type == fsops.TypeDir); err != nil {
-				r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove remote %q: %v", target, err))
+				r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove remote %q: %v", target, err))
 				if firstErr == nil {
 					firstErr = err
 				}
 			} else {
 				removed++
-				r.activityLog.Detail(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed remote %q", target))
+				r.activity.Logger.Detail(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed remote %q", target))
 				r.refreshDetailsIfShowing(target, "")
 			}
 		}
 		if removed > 0 {
-			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed %d remote item(s)", removed))
+			r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed %d remote item(s)", removed))
 		}
 		r.panel.deselectAll()
 		r.reloadPanel(firstErr)
@@ -429,9 +429,9 @@ func (r *Root) openEmptyTrashConfirm() {
 	r.openPurgeConfirm(fmt.Sprintf("Permanently empty the trash (%d items)?", len(items)), func() {
 		n, err := fsops.EmptyTrash(dir)
 		if err != nil {
-			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("empty trash: %v", err))
+			r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("empty trash: %v", err))
 		} else {
-			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("emptied trash (%d item(s))", n))
+			r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("emptied trash (%d item(s))", n))
 		}
 		r.reloadPanel(err)
 	})

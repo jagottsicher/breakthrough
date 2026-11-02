@@ -2418,7 +2418,7 @@ func TestGCReachesAIConsigliereFromEveryGitBreachPane(t *testing.T) {
 			if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
 				t.Fatal("the resolving 'C' should have been consumed")
 			}
-			if !r.consigliereVisible {
+			if !r.consigliere.Visible {
 				t.Error("\"gC\" should have opened the AI Consigliere sidebar")
 			}
 		})
@@ -2442,8 +2442,8 @@ func TestTabFromLastGitBreachTableReachesConsigliere(t *testing.T) {
 	if got := r.captureGitBreachStashTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
 		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
 	}
-	if !r.consigliereInput.HasFocus() {
-		t.Error("Tab from Stash should have reached consigliereInput, not wrapped to Files")
+	if !r.consigliere.Input.HasFocus() {
+		t.Error("Tab from Stash should have reached consigliere.Input, not wrapped to Files")
 	}
 }
 
@@ -2457,7 +2457,7 @@ func TestBacktabFromFirstGitBreachTableReachesConsigliere(t *testing.T) {
 
 	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
 
-	if !r.consigliereInput.HasFocus() && !r.consigliereHistory.HasFocus() {
+	if !r.consigliere.Input.HasFocus() && !r.consigliere.History.HasFocus() {
 		t.Error("Backtab from Files should have reached consigliere, not wrapped to Stash")
 	}
 }
@@ -2484,8 +2484,8 @@ func TestTabFromGitBreachMainReachesConsigliereWhenOwnerIsLast(t *testing.T) {
 	if got := r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
 		t.Fatalf("capture(Tab) = %v, want nil (consumed)", got)
 	}
-	if !r.consigliereInput.HasFocus() {
-		t.Error("Tab from Main (owned by Stash) should have reached consigliereInput, not wrapped to Files")
+	if !r.consigliere.Input.HasFocus() {
+		t.Error("Tab from Main (owned by Stash) should have reached consigliere.Input, not wrapped to Files")
 	}
 }
 
@@ -2501,7 +2501,7 @@ func TestFullTabLapFromGitBreachVisitsEveryTableAndConsigliere(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 	r.app.SetFocus(r.gitBreach.FilesTable)
-	// The real "gC" entry path (sets consigliereForwardExit), not a
+	// The real "gC" entry path (sets consigliere.ForwardExit), not a
 	// direct showConsigliere() call.
 	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
 	r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone))
@@ -2516,9 +2516,9 @@ func TestFullTabLapFromGitBreachVisitsEveryTableAndConsigliere(t *testing.T) {
 			r.captureGitBreachCommitsTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		case r.gitBreach.StashTable:
 			r.captureGitBreachStashTableKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
-		case r.consigliereInput:
+		case r.consigliere.Input:
 			r.handleConsigliereInputDone(tcell.KeyTab)
-		case r.consigliereHistory:
+		case r.consigliere.History:
 			r.captureConsigliereHistoryKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		default:
 			t.Fatalf("tabFrom: unhandled current focus %v", current)
@@ -2527,11 +2527,11 @@ func TestFullTabLapFromGitBreachVisitsEveryTableAndConsigliere(t *testing.T) {
 	}
 
 	var visited []tview.Primitive
-	var current tview.Primitive = r.consigliereInput // where "gC" just left focus
+	var current tview.Primitive = r.consigliere.Input // where "gC" just left focus
 	for i := 0; i < 8; i++ {
 		current = tabFrom(current)
 		visited = append(visited, current)
-		if current == r.consigliereInput && i > 0 {
+		if current == r.consigliere.Input && i > 0 {
 			break
 		}
 	}

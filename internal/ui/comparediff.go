@@ -42,24 +42,24 @@ const (
 // the same build-once/repopulate-on-open shape every other screen in
 // this app already follows.
 func (r *Root) newCompareDiffScreen() {
-	r.compareDiffLeft = tview.NewTextView()
-	r.compareDiffLeft.SetDynamicColors(true)
-	r.compareDiffLeft.SetWrap(false)
-	r.compareDiffLeft.SetBorderPadding(0, 0, 1, 1)
-	r.compareDiffLeft.SetInputCapture(r.captureCompareDiffPaneKey(true))
-	r.compareDiffLeft.SetMouseCapture(r.captureCompareDiffPaneMouse(true))
-	r.compareDiffLeft.SetFocusFunc(func() { r.compareDiffLeftFocused = true })
+	r.compare.DiffLeft = tview.NewTextView()
+	r.compare.DiffLeft.SetDynamicColors(true)
+	r.compare.DiffLeft.SetWrap(false)
+	r.compare.DiffLeft.SetBorderPadding(0, 0, 1, 1)
+	r.compare.DiffLeft.SetInputCapture(r.captureCompareDiffPaneKey(true))
+	r.compare.DiffLeft.SetMouseCapture(r.captureCompareDiffPaneMouse(true))
+	r.compare.DiffLeft.SetFocusFunc(func() { r.compare.DiffLeftFocused = true })
 
-	r.compareDiffRight = tview.NewTextView()
-	r.compareDiffRight.SetDynamicColors(true)
-	r.compareDiffRight.SetWrap(false)
-	r.compareDiffRight.SetBorderPadding(0, 0, 1, 1)
-	r.compareDiffRight.SetInputCapture(r.captureCompareDiffPaneKey(false))
-	r.compareDiffRight.SetMouseCapture(r.captureCompareDiffPaneMouse(false))
-	r.compareDiffRight.SetFocusFunc(func() { r.compareDiffLeftFocused = false })
+	r.compare.DiffRight = tview.NewTextView()
+	r.compare.DiffRight.SetDynamicColors(true)
+	r.compare.DiffRight.SetWrap(false)
+	r.compare.DiffRight.SetBorderPadding(0, 0, 1, 1)
+	r.compare.DiffRight.SetInputCapture(r.captureCompareDiffPaneKey(false))
+	r.compare.DiffRight.SetMouseCapture(r.captureCompareDiffPaneMouse(false))
+	r.compare.DiffRight.SetFocusFunc(func() { r.compare.DiffLeftFocused = false })
 
-	r.compareDiffSeparator = tview.NewBox()
-	r.compareDiffSeparator.SetDrawFunc(r.drawCompareDiffSeparator)
+	r.compare.DiffSeparator = tview.NewBox()
+	r.compare.DiffSeparator.SetDrawFunc(r.drawCompareDiffSeparator)
 	// Box's own default MouseHandler calls setFocus(b) on any
 	// MouseLeftDown within its rect — real behavior, not a
 	// hypothetical: a plain Box with no mouse capture of its own
@@ -76,17 +76,17 @@ func (r *Root) newCompareDiffScreen() {
 	// Not the shared gitBreachBlockFocusSteal directly — same real bug
 	// as gitBreachFocus*OnClick's own fix (gitbreachscreen.go) and
 	// gitBreach.DiffHeader's own (gitbreachdiffsplit.go): SetMouseCapture's
-	// callback runs for every event compareDiffBody's own Flex loop
+	// callback runs for every event compare.DiffBody's own Flex loop
 	// hands to this separator — including ones actually landing on
-	// compareDiffRight, item[2] of the same Flex, reached only after
+	// compare.DiffRight, item[2] of the same Flex, reached only after
 	// this separator (item[1]) already decided whether to consume the
 	// event — so without an explicit InRect check here, EVERY click
 	// anywhere in the whole box, including the right pane, got
 	// swallowed here first and never reached it at all. A real,
 	// reproduced bug (not hypothetical like the doc comment above
 	// suggested): clicking the right pane never focused it.
-	r.compareDiffSeparator.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-		if action == tview.MouseLeftDown && r.compareDiffSeparator.InRect(event.Position()) {
+	r.compare.DiffSeparator.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseLeftDown && r.compare.DiffSeparator.InRect(event.Position()) {
 			return tview.MouseConsumed, nil
 		}
 		return action, event
@@ -99,45 +99,45 @@ func (r *Root) newCompareDiffScreen() {
 	// Pair-guaranteed-equal-length panes, these two can have entirely
 	// different line counts — each scrollbar's own geometry has to come
 	// from its own pane alone. compareDiffPaneContent's own scrollTo is
-	// what keeps them in lockstep only while r.compareDiffLinked is
+	// what keeps them in lockstep only while r.compare.DiffLinked is
 	// true, checked fresh on every scroll (the title bar's own toggle
 	// can flip it at any moment) — the same shared-vs-independent
 	// choice scrollCompareDiff itself already makes for the keyboard
 	// and mouse wheel.
 	leftContent := &compareDiffPaneContent{
-		textViewContent: &textViewContent{view: r.compareDiffLeft},
+		textViewContent: &textViewContent{view: r.compare.DiffLeft},
 		root:            r,
-		other:           r.compareDiffRight,
+		other:           r.compare.DiffRight,
 	}
 	rightContent := &compareDiffPaneContent{
-		textViewContent: &textViewContent{view: r.compareDiffRight},
+		textViewContent: &textViewContent{view: r.compare.DiffRight},
 		root:            r,
-		other:           r.compareDiffLeft,
+		other:           r.compare.DiffLeft,
 	}
-	r.compareDiffLeftScrollbar = newVerticalScrollbar(r, leftContent)
-	r.compareDiffRightScrollbar = newVerticalScrollbar(r, rightContent)
+	r.compare.DiffLeftScrollbar = newVerticalScrollbar(r, leftContent)
+	r.compare.DiffRightScrollbar = newVerticalScrollbar(r, rightContent)
 	// Both panes are SetWrap(false).
-	r.compareDiffLeftScrollbar.EnableTextDensityMinimap()
-	r.compareDiffRightScrollbar.EnableTextDensityMinimap()
+	r.compare.DiffLeftScrollbar.EnableTextDensityMinimap()
+	r.compare.DiffRightScrollbar.EnableTextDensityMinimap()
 	// Same adapter instance as the vertical bar just above, not a fresh
 	// one — compareDiffPaneContent's own scrollTo override (linking the
-	// other pane while r.compareDiffLinked is true) must apply to a
+	// other pane while r.compare.DiffLinked is true) must apply to a
 	// horizontal scroll exactly the same way it already does to a
 	// vertical one, and sharing the instance is what guarantees the two
 	// bars always agree on this pane's own current column too.
-	r.compareDiffLeftHScrollbar = newHorizontalScrollbar(r, leftContent)
-	r.compareDiffRightHScrollbar = newHorizontalScrollbar(r, rightContent)
+	r.compare.DiffLeftHScrollbar = newHorizontalScrollbar(r, leftContent)
+	r.compare.DiffRightHScrollbar = newHorizontalScrollbar(r, rightContent)
 	// SurfaceBackground, not the scrollbar's own default
 	// (PanelBackground): both panes always sit on SurfaceBackground
 	// (see applyCompareDiffTheme) and never change with focus —
-	// compareDiffLeftFocused tracks which pane is active for keyboard/
+	// compare.DiffLeftFocused tracks which pane is active for keyboard/
 	// scroll purposes, not a background color (unlike Git Breach's own
 	// focus-tinted boxes).
 	surfaceTrackColor := func() tcell.Color { return r.theme.SurfaceBackground }
-	r.compareDiffLeftScrollbar.SetTrackColorFunc(surfaceTrackColor)
-	r.compareDiffRightScrollbar.SetTrackColorFunc(surfaceTrackColor)
-	r.compareDiffLeftHScrollbar.SetTrackColorFunc(surfaceTrackColor)
-	r.compareDiffRightHScrollbar.SetTrackColorFunc(surfaceTrackColor)
+	r.compare.DiffLeftScrollbar.SetTrackColorFunc(surfaceTrackColor)
+	r.compare.DiffRightScrollbar.SetTrackColorFunc(surfaceTrackColor)
+	r.compare.DiffLeftHScrollbar.SetTrackColorFunc(surfaceTrackColor)
+	r.compare.DiffRightHScrollbar.SetTrackColorFunc(surfaceTrackColor)
 
 	// The corner where each pane's own two bars would otherwise meet:
 	// the vertical bar keeps its own normal content-only height, and the
@@ -145,43 +145,43 @@ func (r *Root) newCompareDiffScreen() {
 	// 1-column spacer] — the spacer sits directly under the vertical
 	// bar's own column and is always reserved there (painted
 	// SurfaceBackground, the vertical bar's own track color on this
-	// screen — see r.compareDiffLeftSpacer/RightSpacer in
+	// screen — see r.compare.DiffLeftSpacer/RightSpacer in
 	// applyCompareDiffTheme), so the two bars' rects never share a
 	// cell.
-	r.compareDiffLeftSpacer = tview.NewBox().SetBackgroundColor(r.theme.SurfaceBackground)
-	r.compareDiffRightSpacer = tview.NewBox().SetBackgroundColor(r.theme.SurfaceBackground)
+	r.compare.DiffLeftSpacer = tview.NewBox().SetBackgroundColor(r.theme.SurfaceBackground)
+	r.compare.DiffRightSpacer = tview.NewBox().SetBackgroundColor(r.theme.SurfaceBackground)
 
 	leftTopRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.compareDiffLeft, 0, 1, true).
-		AddItem(r.compareDiffLeftScrollbar, 1, 0, false)
-	leftTopRow.SetMouseCapture(r.compareDiffLeftScrollbar.captureMouse)
+		AddItem(r.compare.DiffLeft, 0, 1, true).
+		AddItem(r.compare.DiffLeftScrollbar, 1, 0, false)
+	leftTopRow.SetMouseCapture(r.compare.DiffLeftScrollbar.captureMouse)
 	leftHBarRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.compareDiffLeftHScrollbar, 0, 1, false).
-		AddItem(r.compareDiffLeftSpacer, 1, 0, false)
-	leftHBarRow.SetMouseCapture(r.compareDiffLeftHScrollbar.captureMouse)
+		AddItem(r.compare.DiffLeftHScrollbar, 0, 1, false).
+		AddItem(r.compare.DiffLeftSpacer, 1, 0, false)
+	leftHBarRow.SetMouseCapture(r.compare.DiffLeftHScrollbar.captureMouse)
 	leftRow := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(leftTopRow, 0, 1, true).
 		AddItem(leftHBarRow, 1, 0, false)
 
 	rightTopRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.compareDiffRight, 0, 1, false).
-		AddItem(r.compareDiffRightScrollbar, 1, 0, false)
-	rightTopRow.SetMouseCapture(r.compareDiffRightScrollbar.captureMouse)
+		AddItem(r.compare.DiffRight, 0, 1, false).
+		AddItem(r.compare.DiffRightScrollbar, 1, 0, false)
+	rightTopRow.SetMouseCapture(r.compare.DiffRightScrollbar.captureMouse)
 	rightHBarRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.compareDiffRightHScrollbar, 0, 1, false).
-		AddItem(r.compareDiffRightSpacer, 1, 0, false)
-	rightHBarRow.SetMouseCapture(r.compareDiffRightHScrollbar.captureMouse)
+		AddItem(r.compare.DiffRightHScrollbar, 0, 1, false).
+		AddItem(r.compare.DiffRightSpacer, 1, 0, false)
+	rightHBarRow.SetMouseCapture(r.compare.DiffRightHScrollbar.captureMouse)
 	rightRow := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(rightTopRow, 0, 1, true).
 		AddItem(rightHBarRow, 1, 0, false)
 
-	r.compareDiffBody = tview.NewFlex().SetDirection(tview.FlexColumn).
+	r.compare.DiffBody = tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(leftRow, 0, 1, true).
-		AddItem(r.compareDiffSeparator, 1, 0, false).
+		AddItem(r.compare.DiffSeparator, 1, 0, false).
 		AddItem(rightRow, 0, 1, false)
 
-	r.compareDiffTitleBar = newPlainTitleBar("Diff")
-	r.compareDiffTitleBar.SetMouseCapture(r.captureCompareDiffTitleBarMouse())
+	r.compare.DiffTitleBar = newPlainTitleBar("Diff")
+	r.compare.DiffTitleBar.SetMouseCapture(r.captureCompareDiffTitleBarMouse())
 
 	// The bottom hint bar — per the user's own explicit request after
 	// reporting the link/unlink toggle's own glyph was unclear on its
@@ -189,15 +189,15 @@ func (r *Root) newCompareDiffScreen() {
 	// same shared bottom-hint-bar shape every other full-screen list in
 	// this app already uses (see listhint.go's own package doc
 	// comment), not a screen-specific one-off.
-	r.compareDiffHint = tview.NewTextView()
-	r.compareDiffHint.SetWrap(false)
-	r.compareDiffHint.SetDynamicColors(true)
-	r.compareDiffHint.SetMouseCapture(r.captureListHintMouse(r.compareDiffHint, &r.compareDiffHintSpans))
+	r.compare.DiffHint = tview.NewTextView()
+	r.compare.DiffHint.SetWrap(false)
+	r.compare.DiffHint.SetDynamicColors(true)
+	r.compare.DiffHint.SetMouseCapture(r.captureListHintMouse(r.compare.DiffHint, &r.compare.DiffHintSpans))
 
-	r.compareDiffLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.compareDiffTitleBar, 1, 0, false).
-		AddItem(r.compareDiffBody, 0, 1, true).
-		AddItem(r.compareDiffHint, 1, 0, false)
+	r.compare.DiffLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.compare.DiffTitleBar, 1, 0, false).
+		AddItem(r.compare.DiffBody, 0, 1, true).
+		AddItem(r.compare.DiffHint, 1, 0, false)
 }
 
 // compareDiffHintEntries is the bottom hint bar's own content —
@@ -209,7 +209,7 @@ func (r *Root) newCompareDiffScreen() {
 // click and the matching real key can never drift apart from each
 // other. A method on Root, not a bare function, the same as
 // gitBreachHintEntries — the link/unlink entry below needs to read
-// r.compareDiffLinked to show the glyph that's actually active right
+// r.compare.DiffLinked to show the glyph that's actually active right
 // now.
 func (r *Root) compareDiffHintEntries() []listHintEntry {
 	return []listHintEntry{
@@ -241,7 +241,7 @@ func (r *Root) compareDiffHintEntries() []listHintEntry {
 func (r *Root) compareDiffLinkHintEntry() listHintEntry {
 	glyph := string(compareDiffUnlinkedGlyph)
 	label := "link scroll (currently independent)"
-	if r.compareDiffLinked {
+	if r.compare.DiffLinked {
 		glyph = string(compareDiffLinkedGlyph)
 		label = "unlink scroll (currently linked)"
 	}
@@ -254,8 +254,8 @@ func (r *Root) compareDiffLinkHintEntry() listHintEntry {
 // link/unlink toggle, and on a theme switch.
 func (r *Root) renderCompareDiffHint() {
 	hintText, hintSpans := buildListHint(r.theme, r.compareDiffHintEntries())
-	r.compareDiffHint.SetText(hintText)
-	r.compareDiffHintSpans = hintSpans
+	r.compare.DiffHint.SetText(hintText)
+	r.compare.DiffHintSpans = hintSpans
 }
 
 // drawCompareDiffSeparator paints a plain vertical rule the full height
@@ -265,7 +265,7 @@ func (r *Root) renderCompareDiffHint() {
 // stays exactly one column wide regardless of how either pane's own
 // content scrolls horizontally.
 func (r *Root) drawCompareDiffSeparator(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
-	style := tcell.StyleDefault.Foreground(r.theme.MutedTextColor).Background(r.compareDiffSeparator.GetBackgroundColor())
+	style := tcell.StyleDefault.Foreground(r.theme.MutedTextColor).Background(r.compare.DiffSeparator.GetBackgroundColor())
 	for row := y; row < y+height; row++ {
 		screen.SetContent(x, row, '│', nil, style)
 	}
@@ -281,22 +281,22 @@ func (r *Root) drawCompareDiffSeparator(screen tcell.Screen, x, y, width, height
 // SetBackgroundColor having already run, same ordering
 // applyCompareFileTheme already follows for its own buttons.
 func (r *Root) applyCompareDiffTheme(theme config.ResolvedTheme) {
-	if r.compareDiffLayout == nil {
+	if r.compare.DiffLayout == nil {
 		return
 	}
-	r.compareDiffLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.compareDiffLeft.SetBackgroundColor(theme.SurfaceBackground)
-	r.compareDiffLeft.SetTextColor(theme.TextColor)
-	r.compareDiffRight.SetBackgroundColor(theme.SurfaceBackground)
-	r.compareDiffRight.SetTextColor(theme.TextColor)
-	r.compareDiffSeparator.SetBackgroundColor(theme.SurfaceBackground)
-	r.compareDiffTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.compareDiffTitleBar.SetTextColor(theme.TextColor)
-	r.compareDiffHint.SetBackgroundColor(theme.InputBackground)
-	r.compareDiffHint.SetTextColor(theme.MutedTextColor)
-	r.compareDiffLeftSpacer.SetBackgroundColor(theme.SurfaceBackground)
-	r.compareDiffRightSpacer.SetBackgroundColor(theme.SurfaceBackground)
-	if r.compareDiffPairs != nil {
+	r.compare.DiffLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.compare.DiffLeft.SetBackgroundColor(theme.SurfaceBackground)
+	r.compare.DiffLeft.SetTextColor(theme.TextColor)
+	r.compare.DiffRight.SetBackgroundColor(theme.SurfaceBackground)
+	r.compare.DiffRight.SetTextColor(theme.TextColor)
+	r.compare.DiffSeparator.SetBackgroundColor(theme.SurfaceBackground)
+	r.compare.DiffTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.compare.DiffTitleBar.SetTextColor(theme.TextColor)
+	r.compare.DiffHint.SetBackgroundColor(theme.InputBackground)
+	r.compare.DiffHint.SetTextColor(theme.MutedTextColor)
+	r.compare.DiffLeftSpacer.SetBackgroundColor(theme.SurfaceBackground)
+	r.compare.DiffRightSpacer.SetBackgroundColor(theme.SurfaceBackground)
+	if r.compare.DiffPairs != nil {
 		r.renderCompareDiff()
 	}
 	r.renderCompareDiffTitleBar()
@@ -310,7 +310,7 @@ func (r *Root) applyCompareDiffTheme(theme config.ResolvedTheme) {
 // gitBreachDiffSplitContent's own doc comment) Compare's two targets
 // can have entirely different line counts. scrollTo moves the other
 // pane to the exact same row/column too, but only while
-// root.compareDiffLinked is true — checked fresh on every scroll, the
+// root.compare.DiffLinked is true — checked fresh on every scroll, the
 // same way scrollCompareDiff itself already decides for the keyboard
 // and mouse wheel.
 type compareDiffPaneContent struct {
@@ -321,7 +321,7 @@ type compareDiffPaneContent struct {
 
 func (c *compareDiffPaneContent) scrollTo(row, col int) {
 	c.textViewContent.scrollTo(row, col)
-	if c.root.compareDiffLinked {
+	if c.root.compare.DiffLinked {
 		c.other.ScrollTo(row, col)
 	}
 }
@@ -336,30 +336,30 @@ func (c *compareDiffPaneContent) scrollTo(row, col int) {
 // is handled below as its own case rather than silently opening an
 // empty view.
 func (r *Root) openCompareDiff() {
-	a, err := os.ReadFile(r.compareA)
+	a, err := os.ReadFile(r.compare.A)
 	if err != nil {
 		r.showError(fmt.Errorf("compare: %w", err))
 		return
 	}
-	b, err := os.ReadFile(r.compareB)
+	b, err := os.ReadFile(r.compare.B)
 	if err != nil {
 		r.showError(fmt.Errorf("compare: %w", err))
 		return
 	}
 	if string(a) == string(b) {
-		r.showError(fmt.Errorf("compare: %s and %s have no differences", filepath.Base(r.compareA), filepath.Base(r.compareB)))
+		r.showError(fmt.Errorf("compare: %s and %s have no differences", filepath.Base(r.compare.A), filepath.Base(r.compare.B)))
 		return
 	}
 
-	r.compareDiffPairs = compare.SideBySide(string(a), string(b))
-	r.compareDiffLinked = true
-	r.compareDiffLeftFocused = true
+	r.compare.DiffPairs = compare.SideBySide(string(a), string(b))
+	r.compare.DiffLinked = true
+	r.compare.DiffLeftFocused = true
 	r.renderCompareDiff()
 	r.renderCompareDiffTitleBar()
 	r.renderCompareDiffHint()
-	r.compareDiffLeft.ScrollToBeginning()
-	r.compareDiffRight.ScrollToBeginning()
-	r.showOverlayWithRestore(compareDiffPage, r.compareDiffLayout, func() { r.app.SetFocus(r.compareDiffLeft) })
+	r.compare.DiffLeft.ScrollToBeginning()
+	r.compare.DiffRight.ScrollToBeginning()
+	r.showOverlayWithRestore(compareDiffPage, r.compare.DiffLayout, func() { r.app.SetFocus(r.compare.DiffLeft) })
 }
 
 // closeCompareDiff hides the diff view — Escape, the title bar's own
@@ -368,7 +368,7 @@ func (r *Root) closeCompareDiff() {
 	r.hideOverlay()
 }
 
-// renderCompareDiff fills both panes from compareDiffPairs — one row
+// renderCompareDiff fills both panes from compare.DiffPairs — one row
 // per LinePair, always the same row on both sides (see LinePair's own
 // doc comment: every pair produces exactly one line on each side, blank
 // where PairOnlyLeft/PairOnlyRight has nothing on that side), which is
@@ -386,8 +386,8 @@ func (r *Root) closeCompareDiff() {
 // carries "this line changed", foreground carries "what this code
 // actually is". A context line (PairSame) gets the same per-language
 // coloring with no background tint, exactly like gitbreach's own
-// context lines. Left and right panes are lexed against compareA/
-// compareB respectively — almost always the same language, but never
+// context lines. Left and right panes are lexed against compare.A/
+// compare.B respectively — almost always the same language, but never
 // assumed to be: a .go-vs-.go.bak compare should still highlight both
 // sides as Go.
 //
@@ -399,7 +399,7 @@ func (r *Root) renderCompareDiff() {
 	palette := paletteFor(r.theme.SurfaceBackground)
 
 	var left, right strings.Builder
-	for _, p := range r.compareDiffPairs {
+	for _, p := range r.compare.DiffPairs {
 		leftBg, rightBg := tcell.ColorDefault, tcell.ColorDefault
 		haveLeftBg, haveRightBg := false, false
 		switch p.Kind {
@@ -411,11 +411,11 @@ func (r *Root) renderCompareDiff() {
 		case compare.PairOnlyRight:
 			rightBg, haveRightBg = gitBreachDiffAddedBackground, true
 		}
-		writeCompareDiffLine(&left, p.LeftNo, p.Left, r.compareA, palette, leftBg, haveLeftBg)
-		writeCompareDiffLine(&right, p.RightNo, p.Right, r.compareB, palette, rightBg, haveRightBg)
+		writeCompareDiffLine(&left, p.LeftNo, p.Left, r.compare.A, palette, leftBg, haveLeftBg)
+		writeCompareDiffLine(&right, p.RightNo, p.Right, r.compare.B, palette, rightBg, haveRightBg)
 	}
-	r.compareDiffLeft.SetText(left.String())
-	r.compareDiffRight.SetText(right.String())
+	r.compare.DiffLeft.SetText(left.String())
+	r.compare.DiffRight.SetText(right.String())
 }
 
 // compareDiffGutterWidth is how many columns the line-number gutter
@@ -460,11 +460,11 @@ func writeCompareDiffLine(b *strings.Builder, lineNo int, content, path string, 
 // reload/close, since neither of those apply to a diff that's already
 // fully computed and has no state of its own to reload.
 func (r *Root) renderCompareDiffTitleBar() {
-	if r.compareDiffTitleBar == nil {
+	if r.compare.DiffTitleBar == nil {
 		return
 	}
 	glyph := compareDiffUnlinkedGlyph
-	if r.compareDiffLinked {
+	if r.compare.DiffLinked {
 		glyph = compareDiffLinkedGlyph
 	}
 	label := " Diff "
@@ -474,7 +474,7 @@ func (r *Root) renderCompareDiffTitleBar() {
 	if padding < 0 {
 		padding = 0
 	}
-	r.compareDiffTitleBar.SetText(label + strings.Repeat(" ", padding) + string(glyph) + " " + string(toolWindowCloseGlyph) + " ")
+	r.compare.DiffTitleBar.SetText(label + strings.Repeat(" ", padding) + string(glyph) + " " + string(toolWindowCloseGlyph) + " ")
 }
 
 // compareDiffCloseButtonCol mirrors closeTitleBarButtonCol (root.go):
@@ -499,7 +499,7 @@ func (r *Root) captureCompareDiffTitleBarMouse() func(tview.MouseAction, *tcell.
 	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		if action == tview.MouseLeftClick {
 			x, y := event.Position()
-			rectX, rectY, width, _ := r.compareDiffTitleBar.GetRect()
+			rectX, rectY, width, _ := r.compare.DiffTitleBar.GetRect()
 			if y == rectY {
 				switch x - rectX {
 				case compareDiffCloseButtonCol(width):
@@ -513,7 +513,7 @@ func (r *Root) captureCompareDiffTitleBarMouse() func(tview.MouseAction, *tcell.
 		}
 		// Any other click actually on the bar's own row (not one of the
 		// two glyphs above) is blocked here too, same reasoning as
-		// compareDiffSeparator's own mouse capture: a plain TextView's
+		// compare.DiffSeparator's own mouse capture: a plain TextView's
 		// default MouseHandler also calls setFocus(t) unconditionally
 		// on MouseLeftDown, which would otherwise steal keyboard focus
 		// onto this bar — a TextView with no SetInputCapture of its
@@ -523,13 +523,13 @@ func (r *Root) captureCompareDiffTitleBarMouse() func(tview.MouseAction, *tcell.
 		// The y == rectY check matters here for the same reason the
 		// separator's own fix needed one (see its own doc comment): a
 		// bare gitBreachBlockFocusSteal() call with no position check
-		// runs for every mouse event compareDiffLayout's own Flex hands
+		// runs for every mouse event compare.DiffLayout's own Flex hands
 		// to this title bar, not just ones on the bar's own row — a
 		// real, reproduced bug: without it, EVERY click anywhere in the
-		// whole screen (including compareDiffRight, two levels further
+		// whole screen (including compare.DiffRight, two levels further
 		// down the tree) was swallowed here first and never reached it.
 		_, y := event.Position()
-		_, rectY, _, _ := r.compareDiffTitleBar.GetRect()
+		_, rectY, _, _ := r.compare.DiffTitleBar.GetRect()
 		if action == tview.MouseLeftDown && y == rectY {
 			return gitBreachBlockFocusSteal(action, event)
 		}
@@ -545,8 +545,8 @@ func (r *Root) captureCompareDiffTitleBarMouse() func(tview.MouseAction, *tcell.
 // elsewhere (e.g. a diff tool's own side-by-side view, which the user's
 // own reference screenshot is one example of).
 func (r *Root) toggleCompareDiffLinked() {
-	r.compareDiffLinked = !r.compareDiffLinked
-	if r.compareDiffLinked {
+	r.compare.DiffLinked = !r.compare.DiffLinked
+	if r.compare.DiffLinked {
 		row, col := r.activeCompareDiffPane().GetScrollOffset()
 		r.inactiveCompareDiffPane().ScrollTo(row, col)
 	}
@@ -555,21 +555,21 @@ func (r *Root) toggleCompareDiffLinked() {
 }
 
 // activeCompareDiffPane/inactiveCompareDiffPane return the focused pane
-// and its own other half — compareDiffLeftFocused is kept up to date by
+// and its own other half — compare.DiffLeftFocused is kept up to date by
 // each TextView's own SetFocusFunc (see newCompareDiffScreen), not by
 // re-deriving it from tview's own focus tree on every call.
 func (r *Root) activeCompareDiffPane() *tview.TextView {
-	if r.compareDiffLeftFocused {
-		return r.compareDiffLeft
+	if r.compare.DiffLeftFocused {
+		return r.compare.DiffLeft
 	}
-	return r.compareDiffRight
+	return r.compare.DiffRight
 }
 
 func (r *Root) inactiveCompareDiffPane() *tview.TextView {
-	if r.compareDiffLeftFocused {
-		return r.compareDiffRight
+	if r.compare.DiffLeftFocused {
+		return r.compare.DiffRight
 	}
-	return r.compareDiffLeft
+	return r.compare.DiffLeft
 }
 
 // captureCompareDiffPaneKey is the diff view's own shared key handling,
@@ -623,7 +623,7 @@ func (r *Root) captureCompareDiffPaneKey(isLeft bool) func(event *tcell.EventKey
 // until then — the same defensive floor renderReloadTitleBar's own doc
 // comment already explains for an identical reason).
 func (r *Root) compareDiffPageStep() int {
-	_, _, _, height := r.compareDiffLeft.GetRect()
+	_, _, _, height := r.compare.DiffLeft.GetRect()
 	if height <= 0 {
 		return 10
 	}
@@ -634,11 +634,11 @@ func (r *Root) compareDiffPageStep() int {
 // there are only ever two, so "the other one" needs no index math the
 // way cycleCompareFocus's own button list does.
 func (r *Root) cycleCompareDiffFocus() {
-	if r.compareDiffLeftFocused {
-		r.app.SetFocus(r.compareDiffRight)
+	if r.compare.DiffLeftFocused {
+		r.app.SetFocus(r.compare.DiffRight)
 		return
 	}
-	r.app.SetFocus(r.compareDiffLeft)
+	r.app.SetFocus(r.compare.DiffLeft)
 }
 
 // scrollCompareDiff moves the pane named by isLeft by delta rows
@@ -650,19 +650,19 @@ func (r *Root) cycleCompareDiffFocus() {
 // — row is never validated here), so delta can run past either edge
 // safely.
 func (r *Root) scrollCompareDiff(isLeft bool, delta int) {
-	pane := r.compareDiffRight
+	pane := r.compare.DiffRight
 	if isLeft {
-		pane = r.compareDiffLeft
+		pane = r.compare.DiffLeft
 	}
 	row, col := pane.GetScrollOffset()
 	row += delta
 	pane.ScrollTo(row, col)
-	if !r.compareDiffLinked {
+	if !r.compare.DiffLinked {
 		return
 	}
-	other := r.compareDiffLeft
+	other := r.compare.DiffLeft
 	if isLeft {
-		other = r.compareDiffRight
+		other = r.compare.DiffRight
 	}
 	other.ScrollTo(row, col)
 }

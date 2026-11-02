@@ -46,14 +46,14 @@ func TestApplyThemeColorsTheSSHShellMenuAndDialog(t *testing.T) {
 	custom := solarizedTheme().Resolve()
 	r.applyTheme(custom)
 
-	if got := r.sshShellMenuTable.GetBackgroundColor(); got != custom.SurfaceBackground {
-		t.Errorf("sshShellMenuTable background = %v, want %v", got, custom.SurfaceBackground)
+	if got := r.ssh.ShellMenuTable.GetBackgroundColor(); got != custom.SurfaceBackground {
+		t.Errorf("ssh.ShellMenuTable background = %v, want %v", got, custom.SurfaceBackground)
 	}
-	if got := r.sshShellForm.GetBackgroundColor(); got != custom.SurfaceBackground {
-		t.Errorf("sshShellForm background = %v, want %v", got, custom.SurfaceBackground)
+	if got := r.ssh.ShellForm.GetBackgroundColor(); got != custom.SurfaceBackground {
+		t.Errorf("ssh.ShellForm background = %v, want %v", got, custom.SurfaceBackground)
 	}
-	if got := r.sshShellTitleBar.GetBackgroundColor(); got != custom.InputFocusedBackground {
-		t.Errorf("sshShellTitleBar background = %v, want %v", got, custom.InputFocusedBackground)
+	if got := r.ssh.ShellTitleBar.GetBackgroundColor(); got != custom.InputFocusedBackground {
+		t.Errorf("ssh.ShellTitleBar background = %v, want %v", got, custom.InputFocusedBackground)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestApplyThemeGivesTheCheckboxesPlainColorsNotAHighlightedField(t *testing.
 	custom := solarizedTheme().Resolve()
 	r.applyTheme(custom)
 	r.openSSHShellDialog(remotefs.Connection{})
-	r.sshShellAgentCheckbox.SetChecked(true)
+	r.ssh.ShellAgentCheckbox.SetChecked(true)
 	screen.Clear()
 	r.Draw(screen)
 
@@ -128,7 +128,7 @@ func TestSSHShellMenuTitleBarClosesOnCloseButtonClick(t *testing.T) {
 	}
 	r.openSSHShellMenu()
 
-	x, y, width, _ := r.sshShellMenuTitleBar.GetRect()
+	x, y, width, _ := r.ssh.ShellMenuTitleBar.GetRect()
 	closeX := x + toolWindowCloseButtonCol(0, width)
 	captured, _ := r.captureSSHShellMenuTitleBarMouse(tview.MouseLeftClick, tcell.NewEventMouse(closeX, y, tcell.ButtonNone, 0))
 
@@ -143,7 +143,7 @@ func TestSSHShellMenuTitleBarClosesOnCloseButtonClick(t *testing.T) {
 func TestSSHShellDialogTitleBarClosesOnCloseButtonClick(t *testing.T) {
 	r := newTestRootForSSHShell(t)
 
-	x, y, width, _ := r.sshShellTitleBar.GetRect()
+	x, y, width, _ := r.ssh.ShellTitleBar.GetRect()
 	closeX := x + toolWindowCloseButtonCol(0, width)
 	captured, _ := r.captureSSHShellTitleBarMouse(tview.MouseLeftClick, tcell.NewEventMouse(closeX, y, tcell.ButtonNone, 0))
 
@@ -168,51 +168,51 @@ func TestSSHShellTitleBarsNameTheRightWindow(t *testing.T) {
 	}
 
 	r.openSSHShellMenu()
-	if got := r.sshShellMenuTitleBar.GetText(true); !strings.Contains(got, "Open shell to") {
-		t.Errorf("sshShellMenuTitleBar = %q, want it to mention %q", got, "Open shell to")
+	if got := r.ssh.ShellMenuTitleBar.GetText(true); !strings.Contains(got, "Open shell to") {
+		t.Errorf("ssh.ShellMenuTitleBar = %q, want it to mention %q", got, "Open shell to")
 	}
 
 	r.openSSHShellDialog(remotefs.Connection{})
-	if got := r.sshShellTitleBar.GetText(true); !strings.Contains(got, "Add new ssh connection") {
-		t.Errorf("sshShellTitleBar = %q, want it to mention %q", got, "Add new ssh connection")
+	if got := r.ssh.ShellTitleBar.GetText(true); !strings.Contains(got, "Add new ssh connection") {
+		t.Errorf("ssh.ShellTitleBar = %q, want it to mention %q", got, "Add new ssh connection")
 	}
 }
 
 func TestRunSSHShellFromDialogRejectsAnEmptyHost(t *testing.T) {
 	r := newTestRootForSSHShell(t)
-	r.sshShellHostField.SetText("")
+	r.ssh.ShellHostField.SetText("")
 
 	r.runSSHShellFromDialog()
 
 	if r.activePage != sshShellDialogPage {
 		t.Fatalf("activePage = %q, want the dialog to stay open", r.activePage)
 	}
-	if !strings.Contains(r.sshShellStatus.GetText(true), "Host is required") {
-		t.Errorf("status = %q, want it to mention the missing host", r.sshShellStatus.GetText(true))
+	if !strings.Contains(r.ssh.ShellStatus.GetText(true), "Host is required") {
+		t.Errorf("status = %q, want it to mention the missing host", r.ssh.ShellStatus.GetText(true))
 	}
 }
 
 func TestRunSSHShellFromDialogRejectsAMalformedPort(t *testing.T) {
 	r := newTestRootForSSHShell(t)
-	r.sshShellHostField.SetText("example.com")
-	r.sshShellPortField.SetText("not-a-number")
+	r.ssh.ShellHostField.SetText("example.com")
+	r.ssh.ShellPortField.SetText("not-a-number")
 
 	r.runSSHShellFromDialog()
 
-	if !strings.Contains(r.sshShellStatus.GetText(true), "Port must be a number") {
-		t.Errorf("status = %q, want it to mention the malformed port", r.sshShellStatus.GetText(true))
+	if !strings.Contains(r.ssh.ShellStatus.GetText(true), "Port must be a number") {
+		t.Errorf("status = %q, want it to mention the malformed port", r.ssh.ShellStatus.GetText(true))
 	}
 }
 
 func TestRunSSHShellFromDialogRejectsAnOutOfRangePort(t *testing.T) {
 	r := newTestRootForSSHShell(t)
-	r.sshShellHostField.SetText("example.com")
-	r.sshShellPortField.SetText("99999")
+	r.ssh.ShellHostField.SetText("example.com")
+	r.ssh.ShellPortField.SetText("99999")
 
 	r.runSSHShellFromDialog()
 
-	if !strings.Contains(r.sshShellStatus.GetText(true), "Port must be a number") {
-		t.Errorf("status = %q, want it to mention the out-of-range port", r.sshShellStatus.GetText(true))
+	if !strings.Contains(r.ssh.ShellStatus.GetText(true), "Port must be a number") {
+		t.Errorf("status = %q, want it to mention the out-of-range port", r.ssh.ShellStatus.GetText(true))
 	}
 }
 
@@ -227,10 +227,10 @@ func TestRunSSHShellFromDialogRejectsAnOutOfRangePort(t *testing.T) {
 // RecordAttempt.
 func TestRunSSHShellFromDialogRecordsTheFlagsFromTheCheckboxes(t *testing.T) {
 	r := newTestRootForSSHShell(t)
-	r.sshShellHostField.SetText("example.com")
-	r.sshShellUserField.SetText("jens")
-	r.sshShellCompressionCheckbox.SetChecked(true)
-	r.sshShellVerboseCheckbox.SetChecked(true)
+	r.ssh.ShellHostField.SetText("example.com")
+	r.ssh.ShellUserField.SetText("jens")
+	r.ssh.ShellCompressionCheckbox.SetChecked(true)
+	r.ssh.ShellVerboseCheckbox.SetChecked(true)
 
 	r.runSSHShellFromDialog()
 
@@ -324,8 +324,8 @@ func TestRenderSSHShellMenuDistinguishesFlagVariantsByLabelSuffix(t *testing.T) 
 	r.renderSSHShellMenu()
 
 	var labels []string
-	for i := 0; i < r.sshShellMenuTable.GetRowCount(); i++ {
-		if cell := r.sshShellMenuTable.GetCell(i, sshShellMenuColLabel); cell != nil {
+	for i := 0; i < r.ssh.ShellMenuTable.GetRowCount(); i++ {
+		if cell := r.ssh.ShellMenuTable.GetCell(i, sshShellMenuColLabel); cell != nil {
 			labels = append(labels, cell.Text)
 		}
 	}
@@ -425,8 +425,8 @@ func TestGSChordOpensSSHShellMenu(t *testing.T) {
 // TestBacktabFromHostAfterAFullTabRoundTripWrapsToX11 mirrors
 // connectdialog_test.go's own identical regression test — see its own
 // doc comment for the full tview.Form internals this pins:
-// sshShellOpenBtn's own Tab handler now goes through
-// sshShellForm.SetFocus(0) rather than naming the Host field directly,
+// ssh.ShellOpenBtn's own Tab handler now goes through
+// ssh.ShellForm.SetFocus(0) rather than naming the Host field directly,
 // which used to leave the form's own focusedElement counter stale and
 // sent the next Backtab to the wrong field instead of wrapping back to
 // X11 forwarding.
@@ -436,19 +436,19 @@ func TestBacktabFromHostAfterAFullTabRoundTripWrapsToX11(t *testing.T) {
 	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
 
 	for _, p := range []tview.Primitive{
-		r.sshShellHostField, r.sshShellPortField, r.sshShellUserField,
-		r.sshShellAgentCheckbox, r.sshShellCompressionCheckbox, r.sshShellVerboseCheckbox,
-		r.sshShellX11Checkbox, r.sshShellCancelBtn, r.sshShellOpenBtn,
+		r.ssh.ShellHostField, r.ssh.ShellPortField, r.ssh.ShellUserField,
+		r.ssh.ShellAgentCheckbox, r.ssh.ShellCompressionCheckbox, r.ssh.ShellVerboseCheckbox,
+		r.ssh.ShellX11Checkbox, r.ssh.ShellCancelBtn, r.ssh.ShellOpenBtn,
 	} {
 		tab(p)
 	}
-	if !r.sshShellHostField.HasFocus() {
+	if !r.ssh.ShellHostField.HasFocus() {
 		t.Fatal("full Tab loop did not wrap back to Host")
 	}
 
-	r.sshShellHostField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	r.ssh.ShellHostField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
 
-	if !r.sshShellX11Checkbox.HasFocus() {
+	if !r.ssh.ShellX11Checkbox.HasFocus() {
 		t.Error("Backtab from Host after a full loop did not wrap back to X11 forwarding")
 	}
 }

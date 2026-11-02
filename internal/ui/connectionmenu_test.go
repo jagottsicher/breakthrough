@@ -1359,16 +1359,16 @@ func TestPressingEOnANonActiveHistoryRowOpensEditPrefilled(t *testing.T) {
 	if r.activePage != connectDialogPage {
 		t.Errorf("activePage = %q, want the Connect dialog open", r.activePage)
 	}
-	if got := r.connectHostField.GetText(); got != conn.Host {
+	if got := r.connect.HostField.GetText(); got != conn.Host {
 		t.Errorf("Host field = %q, want %q", got, conn.Host)
 	}
-	if got := r.connectPortField.GetText(); got != "2222" {
+	if got := r.connect.PortField.GetText(); got != "2222" {
 		t.Errorf("Port field = %q, want \"2222\"", got)
 	}
-	if got := r.connectUserField.GetText(); got != conn.User {
+	if got := r.connect.UserField.GetText(); got != conn.User {
 		t.Errorf("User field = %q, want %q", got, conn.User)
 	}
-	if got := r.connectIdentifierField.GetText(); got != conn.Identifier {
+	if got := r.connect.IdentifierField.GetText(); got != conn.Identifier {
 		t.Errorf("Identifier field = %q, want %q", got, conn.Identifier)
 	}
 	if r.panel.remote != nil {
@@ -1426,7 +1426,7 @@ func TestClickingTheEditCellOpensEditPrefilled(t *testing.T) {
 	if r.activePage != connectDialogPage {
 		t.Errorf("activePage = %q, want the Connect dialog open", r.activePage)
 	}
-	if got := r.connectHostField.GetText(); got != conn.Host {
+	if got := r.connect.HostField.GetText(); got != conn.Host {
 		t.Errorf("Host field = %q, want %q", got, conn.Host)
 	}
 }

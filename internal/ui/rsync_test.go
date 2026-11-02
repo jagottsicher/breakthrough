@@ -59,9 +59,9 @@ func TestOpenRsyncFillsItsEntireRectSoNothingBehindItShowsThrough(t *testing.T) 
 		}
 	}
 
-	r.rsyncLayout.Draw(screen)
+	r.rsync.Layout.Draw(screen)
 
-	x, y, width, height := r.rsyncLayout.GetRect()
+	x, y, width, height := r.rsync.Layout.GetRect()
 	for row := y; row < y+height; row++ {
 		for col := x; col < x+width; col++ {
 			if ch, _, _ := screen.Get(col, row); ch == sentinel {
@@ -80,7 +80,7 @@ func TestOpenRsyncOpensTheDialogWithFormItems(t *testing.T) {
 		t.Fatalf("activePage = %q, want %q", r.activePage, rsyncPage)
 	}
 	for _, label := range []string{"Source", "Destination", "Exclude (comma-separated patterns)", "Extra flags"} {
-		if r.rsyncForm.GetFormItemByLabel(label) == nil {
+		if r.rsync.Form.GetFormItemByLabel(label) == nil {
 			t.Errorf("form is missing an item labeled %q", label)
 		}
 	}
@@ -281,7 +281,7 @@ func TestCurrentRsyncJobTreatsAnEditedRemoteDefaultAsPlainTextWithNoPort(t *test
 		t.Fatalf("connectRemote: %v", err)
 	}
 	r.openRsync()
-	r.rsyncSourceField.SetText("tester@example.com:/remote/elsewhere") // edited: different path than what was defaulted
+	r.rsync.SourceField.SetText("tester@example.com:/remote/elsewhere") // edited: different path than what was defaulted
 
 	job := r.currentRsyncJob()
 
@@ -309,11 +309,11 @@ func TestRunRsyncBackgroundRefusesAPasswordOnlySourceConnection(t *testing.T) {
 		t.Fatalf("connectRemote: %v", err)
 	}
 	r.openRsync() // Source defaults from r.panel, untouched from here on
-	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+	r.rsync.DestinationField.SetText(filepath.Join(dir, "dest"))
 
 	r.runRsyncBackground()
 
-	if r.rsyncJob != nil {
+	if r.rsync.Job != nil {
 		t.Error("startRsyncBackground ran despite a password-only Source connection")
 	}
 	if r.activePage != errorPage {
@@ -344,7 +344,7 @@ func TestRunRsyncBackgroundRefusesAPasswordOnlyDestinationConnection(t *testing.
 
 	r.runRsyncBackground()
 
-	if r.rsyncJob != nil {
+	if r.rsync.Job != nil {
 		t.Error("startRsyncBackground ran despite a password-only Destination connection")
 	}
 	if got := r.errorView.GetText(true); !strings.Contains(got, "Destination") || !strings.Contains(got, "password") {
@@ -367,14 +367,14 @@ func TestRunRsyncBackgroundAllowsAKeyOrAgentConnection(t *testing.T) {
 		t.Fatalf("connectRemote: %v", err)
 	}
 	r.openRsync()
-	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+	r.rsync.DestinationField.SetText(filepath.Join(dir, "dest"))
 
 	r.runRsyncBackground()
 
 	if r.activePage == errorPage {
 		t.Errorf("runRsyncBackground refused a key/agent connection: %q", r.errorView.GetText(true))
 	}
-	if r.rsyncJob == nil {
+	if r.rsync.Job == nil {
 		t.Error("startRsyncBackground never ran for a key/agent connection")
 	}
 }
@@ -390,15 +390,15 @@ func TestRunRsyncBackgroundAllowsAKeyOrAgentConnection(t *testing.T) {
 func TestRunRsyncBackgroundAllowsAHandTypedRemoteEndpointWithNoKnownConnection(t *testing.T) {
 	r, dir := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText("someone@unknown-host.example:/data")
-	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+	r.rsync.SourceField.SetText("someone@unknown-host.example:/data")
+	r.rsync.DestinationField.SetText(filepath.Join(dir, "dest"))
 
 	r.runRsyncBackground()
 
 	if r.activePage == errorPage {
 		t.Errorf("runRsyncBackground refused a hand-typed remote endpoint with no known Connection: %q", r.errorView.GetText(true))
 	}
-	if r.rsyncJob == nil {
+	if r.rsync.Job == nil {
 		t.Error("startRsyncBackground never ran for a hand-typed remote endpoint")
 	}
 }
@@ -453,7 +453,7 @@ func TestRunRsyncBackgroundHandlesARealRemoteToRemoteJob(t *testing.T) {
 	if r.activePage == errorPage {
 		t.Errorf("runRsyncBackground refused a real remote-to-remote job with key/agent auth on both sides: %q", r.errorView.GetText(true))
 	}
-	if r.rsyncJob == nil {
+	if r.rsync.Job == nil {
 		t.Error("startRsyncBackground never ran for a remote-to-remote job")
 	}
 }
@@ -498,7 +498,7 @@ func TestRunRsyncBackgroundRefusesEitherSideOfARemoteToRemoteJob(t *testing.T) {
 
 			r.runRsyncBackground()
 
-			if r.rsyncJob != nil {
+			if r.rsync.Job != nil {
 				t.Error("startRsyncBackground ran despite a password-only connection on one side")
 			}
 			if r.activePage != errorPage {
@@ -522,7 +522,7 @@ func TestRunRsyncAllowsPasswordAuthInTheForeground(t *testing.T) {
 		t.Fatalf("connectRemote: %v", err)
 	}
 	r.openRsync()
-	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+	r.rsync.DestinationField.SetText(filepath.Join(dir, "dest"))
 
 	r.runRsync()
 
@@ -578,12 +578,12 @@ func TestRsyncRelayHintAlsoCatchesHandTypedRemoteSyntax(t *testing.T) {
 func TestRenderRsyncPreviewShowsTheRelayHintForRemoteToRemote(t *testing.T) {
 	r, _ := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText("tester@a.example.com:/src")
-	r.rsyncDestinationField.SetText("tester@b.example.com:/dst")
+	r.rsync.SourceField.SetText("tester@a.example.com:/src")
+	r.rsync.DestinationField.SetText("tester@b.example.com:/dst")
 
 	r.renderRsyncPreview()
 
-	got := r.rsyncHintView.GetText(true)
+	got := r.rsync.HintView.GetText(true)
 	if !strings.Contains(got, "relayed through this machine") {
 		t.Errorf("hint text = %q, want the remote-to-remote relay warning", got)
 	}
@@ -592,12 +592,12 @@ func TestRenderRsyncPreviewShowsTheRelayHintForRemoteToRemote(t *testing.T) {
 func TestRenderRsyncPreviewHintIsBlankForLocalToRemote(t *testing.T) {
 	r, _ := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText("/src")
-	r.rsyncDestinationField.SetText("tester@b.example.com:/dst")
+	r.rsync.SourceField.SetText("/src")
+	r.rsync.DestinationField.SetText("tester@b.example.com:/dst")
 
 	r.renderRsyncPreview()
 
-	if got := r.rsyncHintView.GetText(true); got != "" {
+	if got := r.rsync.HintView.GetText(true); got != "" {
 		t.Errorf("hint text = %q, want blank for a local source", got)
 	}
 }
@@ -624,10 +624,10 @@ func TestCurrentRsyncJobReflectsEveryFieldAndFlag(t *testing.T) {
 	r, _ := newTestRootForRsync(t)
 	r.openRsync()
 
-	r.rsyncSourceField.SetText("/data/src")
-	r.rsyncDestinationField.SetText("/data/dst")
-	r.rsyncExcludesField.SetText("*.log, tmp")
-	r.rsyncExtraArgsField.SetText("--bwlimit=500")
+	r.rsync.SourceField.SetText("/data/src")
+	r.rsync.DestinationField.SetText("/data/dst")
+	r.rsync.ExcludesField.SetText("*.log, tmp")
+	r.rsync.ExtraArgsField.SetText("--bwlimit=500")
 	r.toggleRsyncFlag(rsyncLabelDelete)
 	r.toggleRsyncFlag(rsyncLabelDryRun)
 
@@ -659,12 +659,12 @@ func TestCurrentRsyncJobReflectsEveryFieldAndFlag(t *testing.T) {
 func TestRenderRsyncPreviewShowsTheRealCommand(t *testing.T) {
 	r, _ := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText("/src")
-	r.rsyncDestinationField.SetText("/dst")
+	r.rsync.SourceField.SetText("/src")
+	r.rsync.DestinationField.SetText("/dst")
 
 	r.renderRsyncPreview()
 
-	got := r.rsyncPreviewView.GetText(true)
+	got := r.rsync.PreviewView.GetText(true)
 	if !strings.Contains(got, "rsync") || !strings.Contains(got, "'/src'") || !strings.Contains(got, "'/dst'") {
 		t.Errorf("preview text = %q, want it to contain the real rsync command", got)
 	}
@@ -677,11 +677,11 @@ func TestRenderRsyncPreviewShowsTheRealCommand(t *testing.T) {
 func TestRenderRsyncPreviewHighlightsDeleteWithAWarningTag(t *testing.T) {
 	r, _ := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText("/src")
-	r.rsyncDestinationField.SetText("/dst")
+	r.rsync.SourceField.SetText("/src")
+	r.rsync.DestinationField.SetText("/dst")
 	r.toggleRsyncFlag(rsyncLabelDelete)
 
-	got := r.rsyncPreviewView.GetText(false) // raw, with style tags still in place
+	got := r.rsync.PreviewView.GetText(false) // raw, with style tags still in place
 	if !strings.Contains(got, colorTag(r.theme.WarningText)) {
 		t.Errorf("preview text = %q, want it to carry the warning color tag around --delete", got)
 	}
@@ -696,8 +696,8 @@ func TestRenderRsyncPreviewHighlightsDeleteWithAWarningTag(t *testing.T) {
 func TestRunRsyncRefusesAnEmptySourceOrDestination(t *testing.T) {
 	r, _ := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText("/src")
-	r.rsyncDestinationField.SetText("") // left blank
+	r.rsync.SourceField.SetText("/src")
+	r.rsync.DestinationField.SetText("") // left blank
 
 	r.runRsync()
 
@@ -720,8 +720,8 @@ func TestRunRsyncRefusesAnEmptySourceOrDestination(t *testing.T) {
 func TestRunRsyncLogsAnAction(t *testing.T) {
 	r, dir := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText(filepath.Join(dir, "a.txt"))
-	r.rsyncDestinationField.SetText(filepath.Join(dir, "b.txt"))
+	r.rsync.SourceField.SetText(filepath.Join(dir, "a.txt"))
+	r.rsync.DestinationField.SetText(filepath.Join(dir, "b.txt"))
 	readLog := attachTestActivityLog(t, r)
 
 	r.runRsync()
@@ -736,19 +736,19 @@ func TestToggleRsyncFlagFlipsStateAndRelabelsTheRow(t *testing.T) {
 	r, _ := newTestRootForRsync(t)
 	r.openRsync()
 
-	if r.rsyncFlags[rsyncLabelCompress] {
+	if r.rsync.Flags[rsyncLabelCompress] {
 		t.Fatal("setup: Compress should start off")
 	}
 
 	r.toggleRsyncFlag(rsyncLabelCompress)
 
-	if !r.rsyncFlags[rsyncLabelCompress] {
+	if !r.rsync.Flags[rsyncLabelCompress] {
 		t.Error("toggleRsyncFlag did not flip the flag's own state")
 	}
 	var rowText string
 	for i, label := range rsyncFlagOrder {
 		if label == rsyncLabelCompress {
-			rowText, _ = r.rsyncFlagsList.GetItemText(i)
+			rowText, _ = r.rsync.FlagsList.GetItemText(i)
 		}
 	}
 	if !strings.HasPrefix(rowText, "●") {
@@ -764,11 +764,11 @@ func TestToggleRsyncFlagFlipsStateAndRelabelsTheRow(t *testing.T) {
 func TestToggleRsyncFlagCopyContentsAppendsTrailingSlashToSourceField(t *testing.T) {
 	r, dir := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText(dir)
+	r.rsync.SourceField.SetText(dir)
 
 	r.toggleRsyncFlag(rsyncLabelCopyContents)
 
-	if got, want := r.rsyncSourceField.GetText(), dir+"/"; got != want {
+	if got, want := r.rsync.SourceField.GetText(), dir+"/"; got != want {
 		t.Errorf("Source field = %q, want %q", got, want)
 	}
 }
@@ -779,12 +779,12 @@ func TestToggleRsyncFlagCopyContentsAppendsTrailingSlashToSourceField(t *testing
 func TestToggleRsyncFlagCopyContentsRemovesTrailingSlashWhenTurnedOff(t *testing.T) {
 	r, dir := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText(dir)
+	r.rsync.SourceField.SetText(dir)
 	r.toggleRsyncFlag(rsyncLabelCopyContents) // on: dir -> dir + "/"
 
 	r.toggleRsyncFlag(rsyncLabelCopyContents) // off again
 
-	if got := r.rsyncSourceField.GetText(); got != dir {
+	if got := r.rsync.SourceField.GetText(); got != dir {
 		t.Errorf("Source field = %q, want %q (the trailing \"/\" removed again)", got, dir)
 	}
 }
@@ -796,11 +796,11 @@ func TestToggleRsyncFlagCopyContentsRemovesTrailingSlashWhenTurnedOff(t *testing
 func TestToggleRsyncFlagCopyContentsNeverDoublesAnExistingTrailingSlash(t *testing.T) {
 	r, dir := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText(dir + "/")
+	r.rsync.SourceField.SetText(dir + "/")
 
 	r.toggleRsyncFlag(rsyncLabelCopyContents)
 
-	if got, want := r.rsyncSourceField.GetText(), dir+"/"; got != want {
+	if got, want := r.rsync.SourceField.GetText(), dir+"/"; got != want {
 		t.Errorf("Source field = %q, want %q (no doubled slash)", got, want)
 	}
 }
@@ -813,11 +813,11 @@ func TestToggleRsyncFlagCopyContentsNeverDoublesAnExistingTrailingSlash(t *testi
 func TestToggleRsyncFlagCopyContentsIsANoOpOnAnEmptyField(t *testing.T) {
 	r, _ := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText("")
+	r.rsync.SourceField.SetText("")
 
 	r.toggleRsyncFlag(rsyncLabelCopyContents)
 
-	if got := r.rsyncSourceField.GetText(); got != "" {
+	if got := r.rsync.SourceField.GetText(); got != "" {
 		t.Errorf("Source field = %q, want it to stay empty", got)
 	}
 }
@@ -839,8 +839,8 @@ func TestToggleRsyncFlagCopyContentsKeepsThePortForARemoteSource(t *testing.T) {
 
 	r.toggleRsyncFlag(rsyncLabelCopyContents)
 
-	if want := "tester@example.com:/remote/"; r.rsyncSourceField.GetText() != want {
-		t.Fatalf("setup: Source field = %q, want %q", r.rsyncSourceField.GetText(), want)
+	if want := "tester@example.com:/remote/"; r.rsync.SourceField.GetText() != want {
+		t.Fatalf("setup: Source field = %q, want %q", r.rsync.SourceField.GetText(), want)
 	}
 	job := r.currentRsyncJob()
 	if job.Source.Host != "example.com" || job.Source.User != "tester" || job.Source.Port != 2222 {
@@ -860,13 +860,13 @@ func TestToggleRsyncFlagCopyContentsSubstitutesTheParentDirectoryForAFileSource(
 	r.panel.focusRow(1) // off ".." onto a.txt, nothing checked
 	r.openRsync()
 	file := filepath.Join(dir, "a.txt")
-	if got := r.rsyncSourceField.GetText(); got != file {
+	if got := r.rsync.SourceField.GetText(); got != file {
 		t.Fatalf("setup: Source field = %q, want %q", got, file)
 	}
 
 	r.toggleRsyncFlag(rsyncLabelCopyContents)
 
-	if got, want := r.rsyncSourceField.GetText(), dir+"/"; got != want {
+	if got, want := r.rsync.SourceField.GetText(), dir+"/"; got != want {
 		t.Errorf("Source field = %q, want the file's own parent directory %q", got, want)
 	}
 }
@@ -886,7 +886,7 @@ func TestToggleRsyncFlagCopyContentsRestoresTheOriginalFileWhenTurnedOffAgain(t 
 
 	r.toggleRsyncFlag(rsyncLabelCopyContents) // off again
 
-	if got := r.rsyncSourceField.GetText(); got != file {
+	if got := r.rsync.SourceField.GetText(); got != file {
 		t.Errorf("Source field = %q, want the original file %q restored", got, file)
 	}
 }
@@ -902,11 +902,11 @@ func TestToggleRsyncFlagCopyContentsFileSubstitutionSkipsAnEditedField(t *testin
 	r.panel.focusRow(1) // a.txt
 	r.openRsync()
 	edited := filepath.Join(dir, "other.txt")
-	r.rsyncSourceField.SetText(edited) // edited away from the original file default
+	r.rsync.SourceField.SetText(edited) // edited away from the original file default
 
 	r.toggleRsyncFlag(rsyncLabelCopyContents)
 
-	if got, want := r.rsyncSourceField.GetText(), edited+"/"; got != want {
+	if got, want := r.rsync.SourceField.GetText(), edited+"/"; got != want {
 		t.Errorf("Source field = %q, want the plain slash-append fallback %q, not the original file's own parent directory", got, want)
 	}
 }
@@ -926,14 +926,14 @@ func TestToggleRsyncFlagCopyContentsFileSubstitutionKeepsThePortForARemoteFileSo
 	}
 	r.panel.focusRow(1) // b.txt, a plain file
 	r.openRsync()
-	if want := "tester@example.com:/remote/b.txt"; r.rsyncSourceField.GetText() != want {
-		t.Fatalf("setup: Source field = %q, want %q", r.rsyncSourceField.GetText(), want)
+	if want := "tester@example.com:/remote/b.txt"; r.rsync.SourceField.GetText() != want {
+		t.Fatalf("setup: Source field = %q, want %q", r.rsync.SourceField.GetText(), want)
 	}
 
 	r.toggleRsyncFlag(rsyncLabelCopyContents)
 
-	if want := "tester@example.com:/remote/"; r.rsyncSourceField.GetText() != want {
-		t.Fatalf("setup: Source field = %q, want %q", r.rsyncSourceField.GetText(), want)
+	if want := "tester@example.com:/remote/"; r.rsync.SourceField.GetText() != want {
+		t.Fatalf("setup: Source field = %q, want %q", r.rsync.SourceField.GetText(), want)
 	}
 	job := r.currentRsyncJob()
 	if job.Source.Host != "example.com" || job.Source.User != "tester" || job.Source.Port != 2222 {
@@ -966,7 +966,7 @@ func TestOpenRsyncTabPickerListsEveryOpenTab(t *testing.T) {
 	r.newTabHere()
 	r.openRsync()
 
-	r.openRsyncTabPicker(r.rsyncSourceField, &r.rsyncSourceDefault)
+	r.openRsyncTabPicker(r.rsync.SourceField, &r.rsync.SourceDefault)
 
 	if r.activePage != pickerPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, pickerPage)
@@ -990,22 +990,22 @@ func TestOpenRsyncTabPickerPickingATabFillsTheFieldAndItsOwnDefault(t *testing.T
 		t.Fatal(err)
 	}
 	r.openRsync()
-	if r.rsyncSourceField.GetText() != otherDir {
-		t.Fatalf("setup: Source field = %q, want the active tab's own path %q", r.rsyncSourceField.GetText(), otherDir)
+	if r.rsync.SourceField.GetText() != otherDir {
+		t.Fatalf("setup: Source field = %q, want the active tab's own path %q", r.rsync.SourceField.GetText(), otherDir)
 	}
 
-	r.openRsyncTabPicker(r.rsyncSourceField, &r.rsyncSourceDefault)
+	r.openRsyncTabPicker(r.rsync.SourceField, &r.rsync.SourceDefault)
 	r.picker.SetCurrentItem(0) // tab 0 — the original tab, showing dir
 	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != rsyncPage {
 		t.Errorf("activePage = %q, want back to %q once a tab is picked", r.activePage, rsyncPage)
 	}
-	if r.rsyncSourceField.GetText() != dir {
-		t.Errorf("Source field = %q, want the picked tab's own path %q", r.rsyncSourceField.GetText(), dir)
+	if r.rsync.SourceField.GetText() != dir {
+		t.Errorf("Source field = %q, want the picked tab's own path %q", r.rsync.SourceField.GetText(), dir)
 	}
-	if r.rsyncSourceDefault.text != dir {
-		t.Errorf("rsyncSourceDefault.text = %q, want %q", r.rsyncSourceDefault.text, dir)
+	if r.rsync.SourceDefault.text != dir {
+		t.Errorf("rsync.SourceDefault.text = %q, want %q", r.rsync.SourceDefault.text, dir)
 	}
 }
 
@@ -1027,12 +1027,12 @@ func TestOpenRsyncTabPickerPickingARemoteTabTracksItsConnection(t *testing.T) {
 	r.switchToTab(0) // back to the original, local tab
 	r.openRsync()
 
-	r.openRsyncTabPicker(r.rsyncDestinationField, &r.rsyncDestinationDefault)
+	r.openRsyncTabPicker(r.rsync.DestinationField, &r.rsync.DestinationDefault)
 	r.picker.SetCurrentItem(1) // tab 1 — the remote one
 	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
-	if want := "tester@example.com:/remote"; r.rsyncDestinationField.GetText() != want {
-		t.Fatalf("Destination field = %q, want %q", r.rsyncDestinationField.GetText(), want)
+	if want := "tester@example.com:/remote"; r.rsync.DestinationField.GetText() != want {
+		t.Fatalf("Destination field = %q, want %q", r.rsync.DestinationField.GetText(), want)
 	}
 	job := r.currentRsyncJob()
 	if job.Destination.Host != "example.com" || job.Destination.User != "tester" {
@@ -1054,16 +1054,16 @@ func TestResetRsyncFormSeedsFlagsFromSettings(t *testing.T) {
 	r.openRsync()
 
 	switch {
-	case !r.rsyncFlags[rsyncLabelCopyContents]:
-		t.Error("rsyncFlags[CopyContents] = false, want it seeded true from settings")
-	case r.rsyncFlags[rsyncLabelArchive]:
-		t.Error("rsyncFlags[Archive] = true, want it seeded false from settings")
-	case !r.rsyncFlags[rsyncLabelCompress]:
-		t.Error("rsyncFlags[Compress] = false, want it seeded true from settings")
-	case !r.rsyncFlags[rsyncLabelDelete]:
-		t.Error("rsyncFlags[Delete] = false, want it seeded true from settings")
-	case !r.rsyncFlags[rsyncLabelDryRun]:
-		t.Error("rsyncFlags[DryRun] = false, want it seeded true from settings")
+	case !r.rsync.Flags[rsyncLabelCopyContents]:
+		t.Error("rsync.Flags[CopyContents] = false, want it seeded true from settings")
+	case r.rsync.Flags[rsyncLabelArchive]:
+		t.Error("rsync.Flags[Archive] = true, want it seeded false from settings")
+	case !r.rsync.Flags[rsyncLabelCompress]:
+		t.Error("rsync.Flags[Compress] = false, want it seeded true from settings")
+	case !r.rsync.Flags[rsyncLabelDelete]:
+		t.Error("rsync.Flags[Delete] = false, want it seeded true from settings")
+	case !r.rsync.Flags[rsyncLabelDryRun]:
+		t.Error("rsync.Flags[DryRun] = false, want it seeded true from settings")
 	}
 }
 
@@ -1077,8 +1077,8 @@ func TestRunRsyncWritesBackTheChosenFlagsAsTheNewDefault(t *testing.T) {
 	configPath := isolateUserConfigFile(t)
 	r, dir := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText(filepath.Join(dir, "a.txt"))
-	r.rsyncDestinationField.SetText(filepath.Join(dir, "b.txt"))
+	r.rsync.SourceField.SetText(filepath.Join(dir, "a.txt"))
+	r.rsync.DestinationField.SetText(filepath.Join(dir, "b.txt"))
 	r.toggleRsyncFlag(rsyncLabelCompress)
 	r.toggleRsyncFlag(rsyncLabelDelete)
 
@@ -1109,8 +1109,8 @@ func TestRunRsyncNeverPersistsOnAMissingDestination(t *testing.T) {
 	configPath := isolateUserConfigFile(t)
 	r, _ := newTestRootForRsync(t)
 	r.openRsync()
-	r.rsyncSourceField.SetText("/src")
-	r.rsyncDestinationField.SetText("")
+	r.rsync.SourceField.SetText("/src")
+	r.rsync.DestinationField.SetText("")
 	r.toggleRsyncFlag(rsyncLabelDelete)
 
 	r.runRsync()
@@ -1123,8 +1123,8 @@ func TestRunRsyncNeverPersistsOnAMissingDestination(t *testing.T) {
 // TestBacktabFromSourceAfterAFullTabRoundTripWrapsToExtraFlags mirrors
 // connectdialog_test.go's own identical regression test — see its own
 // doc comment for the full tview.Form internals this pins:
-// rsyncRunBackgroundBtn's own Tab handler now goes through
-// rsyncForm.SetFocus(0) rather than naming the Source field directly,
+// rsync.RunBackgroundBtn's own Tab handler now goes through
+// rsync.Form.SetFocus(0) rather than naming the Source field directly,
 // which used to leave the form's own focusedElement counter stale and
 // sent the next Backtab to the wrong field instead of wrapping back to
 // Extra flags.
@@ -1135,28 +1135,28 @@ func TestBacktabFromSourceAfterAFullTabRoundTripWrapsToExtraFlags(t *testing.T) 
 	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
 
 	for _, p := range []tview.Primitive{
-		r.rsyncSourceField, r.rsyncDestinationField, r.rsyncExcludesField, r.rsyncExtraArgsField,
+		r.rsync.SourceField, r.rsync.DestinationField, r.rsync.ExcludesField, r.rsync.ExtraArgsField,
 	} {
 		tab(p)
 	}
-	// rsyncFlagsList is a real tview.List with its own internal item
+	// rsync.FlagsList is a real tview.List with its own internal item
 	// cursor, not a single stop — Tab from its own last row continues
-	// the chain into rsyncPickSourceBtn (see newRsyncFlagsList's own
+	// the chain into rsync.PickSourceBtn (see newRsyncFlagsList's own
 	// wiring), so it's skipped here rather than guessed at.
-	r.rsyncFlagsList.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	r.rsync.FlagsList.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
 	for _, p := range []tview.Primitive{
-		r.rsyncPickSourceBtn, r.rsyncPickDestinationBtn,
-		r.rsyncCancelBtn, r.rsyncRunBtn, r.rsyncRunBackgroundBtn,
+		r.rsync.PickSourceBtn, r.rsync.PickDestinationBtn,
+		r.rsync.CancelBtn, r.rsync.RunBtn, r.rsync.RunBackgroundBtn,
 	} {
 		tab(p)
 	}
-	if !r.rsyncSourceField.HasFocus() {
+	if !r.rsync.SourceField.HasFocus() {
 		t.Fatal("full Tab loop did not wrap back to Source")
 	}
 
-	r.rsyncSourceField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	r.rsync.SourceField.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
 
-	if !r.rsyncExtraArgsField.HasFocus() {
+	if !r.rsync.ExtraArgsField.HasFocus() {
 		t.Error("Backtab from Source after a full loop did not wrap back to Extra flags")
 	}
 }

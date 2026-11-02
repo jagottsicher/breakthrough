@@ -41,8 +41,8 @@ func TestOptionsTabStillClosesOnOrdinaryStringRows(t *testing.T) {
 	original := r.settings.TrashMaxAgeDays
 
 	r.activateOptionRow(row)
-	r.optionsInput.SetText("999")
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText("999")
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != optionsPage {
 		t.Errorf("activePage = %q after Tab, want back on the Options screen", r.activePage)
@@ -59,13 +59,13 @@ func TestOptionsTabOnKeyFileRowCompletesInstead(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	openConsigliereAPIKeyFileRow(t, r)
 
-	r.optionsInput.SetText(r.panel.path + "/apr") // "apricot.txt" is fixtureDir's own only "apr"-prefixed entry
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText(r.panel.path + "/apr") // "apricot.txt" is fixtureDir's own only "apr"-prefixed entry
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != optionsInputPage {
 		t.Errorf("activePage = %q after Tab, want to stay on the input dialog %q", r.activePage, optionsInputPage)
 	}
-	if want, got := filepath.Join(r.panel.path, "apricot.txt"), r.optionsInput.GetText(); got != want {
+	if want, got := filepath.Join(r.panel.path, "apricot.txt"), r.options.Input.GetText(); got != want {
 		t.Errorf("input text = %q after Tab, want the completed %q", got, want)
 	}
 }
@@ -77,8 +77,8 @@ func TestOptionsKeyFileRejectsADirectory(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	openConsigliereAPIKeyFileRow(t, r)
 
-	r.optionsInput.SetText(r.panel.path) // a real directory, not a file
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText(r.panel.path) // a real directory, not a file
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	// showTransientErrorOverOverlay layers the rejection on top (see
 	// validateOptionsInputPath's own doc comment) — activePage is now
@@ -114,8 +114,8 @@ func TestOptionsKeyFileRejectsAMissingFile(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	openConsigliereAPIKeyFileRow(t, r)
 
-	r.optionsInput.SetText("sk-ant-definitely-not-a-real-path-12345")
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText("sk-ant-definitely-not-a-real-path-12345")
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want the rejection's own error layered on top", r.activePage)
@@ -131,8 +131,8 @@ func TestOptionsKeyFileAcceptsARealFileAndResolvesToAbsolute(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	openConsigliereAPIKeyFileRow(t, r)
 
-	r.optionsInput.SetText("apple.txt") // relative to r.panel.path, see fixtureDir
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText("apple.txt") // relative to r.panel.path, see fixtureDir
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != optionsPage {
 		t.Fatalf("activePage = %q, want back on the Options screen after a valid commit", r.activePage)
@@ -154,7 +154,7 @@ func TestOptionsKeyFileCommitRetriesTheModelFetch(t *testing.T) {
 	// No key configured yet — the initial fetch (triggered by
 	// selectOptionCategory) already failed and recorded
 	// errConsigliereNoAPIKey.
-	if _, ok := r.consigliereModelCache["anthropic"]; ok {
+	if _, ok := r.consigliere.ModelCache["anthropic"]; ok {
 		t.Fatal("setup: should not be cached yet")
 	}
 	called := make(chan struct{}, 1)
@@ -167,8 +167,8 @@ func TestOptionsKeyFileCommitRetriesTheModelFetch(t *testing.T) {
 	if err := os.WriteFile(keyFile, []byte("sk-ant-real-key"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r.optionsInput.SetText(keyFile)
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText(keyFile)
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	select {
 	case <-called:
@@ -186,8 +186,8 @@ func TestOptionsKeyFileBlankCommitUnsetsIt(t *testing.T) {
 	r.settings.ConsigliereAnthropicAPIKeyFile = filepath.Join(r.panel.path, "apple.txt")
 	openConsigliereAPIKeyFileRow(t, r)
 
-	r.optionsInput.SetText("")
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText("")
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.settings.ConsigliereAnthropicAPIKeyFile != "" {
 		t.Errorf("ConsigliereAPIKeyFile = %q, want a blank commit to unset it", r.settings.ConsigliereAnthropicAPIKeyFile)
