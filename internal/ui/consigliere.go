@@ -1442,11 +1442,11 @@ const consigliereMaxMountEntries = 50
 func (r *Root) mountsContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Mounts.\n")
-	if r.mountsErr != nil {
-		fmt.Fprintf(&b, "Could not read the current mount table: %v\n", r.mountsErr)
+	if r.mounts.Err != nil {
+		fmt.Fprintf(&b, "Could not read the current mount table: %v\n", r.mounts.Err)
 		return strings.TrimSpace(b.String())
 	}
-	entries := r.mountsEntries
+	entries := r.mounts.Entries
 	fmt.Fprintf(&b, "%d mounts:\n", len(entries))
 	n := len(entries)
 	if n > consigliereMaxMountEntries {
@@ -1625,7 +1625,7 @@ func (r *Root) consigliereMachiavelliActionLogEntries() string {
 func (r *Root) transferCenterContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Undertow.\n")
-	ops := r.transferCenterOps
+	ops := r.transfer.Ops
 	fmt.Fprintf(&b, "%d operations.\n", len(ops))
 	byType := map[string]int{}
 	for _, op := range ops {
@@ -1649,7 +1649,7 @@ func (r *Root) transferCenterContextSnapshot() string {
 // current operation's own Source/Target, verbatim, once Machiavelli
 // Mode is on.
 func (r *Root) consigliereMachiavelliTransferCenterOperations() string {
-	ops := r.transferCenterOps
+	ops := r.transfer.Ops
 	if len(ops) == 0 {
 		return ""
 	}

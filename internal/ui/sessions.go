@@ -530,7 +530,7 @@ func (r *Root) applySessionsTheme(theme config.ResolvedTheme) {
 	if r.sessions.Table == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.sessions.Layout.SetBackgroundColor(theme.PanelBackground)
 	r.sessions.Table.SetBackgroundColor(theme.PanelBackground)
@@ -546,7 +546,7 @@ func (r *Root) applySessionsTheme(theme config.ResolvedTheme) {
 	r.sessions.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.sessions.TitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.sessions.Hint.SetBackgroundColor(theme.SurfaceBackground)
 	r.sessions.Hint.SetTextColor(theme.TextColor)
 	sessionsHintText, hintSpans := buildListHint(theme, sessionsHintEntries())
