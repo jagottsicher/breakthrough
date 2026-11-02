@@ -645,7 +645,7 @@ func (r *Root) applyMessagesTheme(theme config.ResolvedTheme) {
 	if r.messagesTable == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.messagesLayout.SetBackgroundColor(theme.PanelBackground)
 	r.messagesTable.SetBackgroundColor(theme.PanelBackground)
@@ -661,7 +661,7 @@ func (r *Root) applyMessagesTheme(theme config.ResolvedTheme) {
 	r.messagesTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.messagesTitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.messagesHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.messagesHint.SetTextColor(theme.TextColor)
 	messagesHintText, messagesHintSpans := buildListHint(theme, messagesHintEntries())

@@ -21,7 +21,19 @@ import (
 
 const mountsPage = "mounts"
 
-// Column indices within mountsTable. Bind/Persistent/Type — this
+// mountsState holds the Mounts screen's widgets and last read result.
+type mountsState struct {
+	Layout    *tview.Flex
+	TitleBar  *tview.TextView
+	Hint      *tview.TextView
+	HintSpans []listHintSpan
+	Table     *tview.Table
+	Scrollbar *verticalScrollbar
+	Entries   []mounts.Entry
+	Err       error
+}
+
+// Column indices within mounts.Table. Bind/Persistent/Type — this
 // screen's own short, fixed-width, at-a-glance columns — deliberately
 // come right after Target, before Source and Options: a live check
 // against a real system with a mounted CIFS share showed a single long
@@ -87,37 +99,37 @@ func mountsHintEntries() []listHintEntry {
 // build-once/repopulate-on-open shape newToolboxScreen already
 // establishes.
 func (r *Root) newMountsScreen() {
-	r.mountsTable = tview.NewTable()
-	r.mountsTable.SetBorders(false)
-	r.mountsTable.SetBorderPadding(1, 0, 2, 1)
-	r.mountsTable.SetSelectable(true, false)
+	r.mounts.Table = tview.NewTable()
+	r.mounts.Table.SetBorders(false)
+	r.mounts.Table.SetBorderPadding(1, 0, 2, 1)
+	r.mounts.Table.SetSelectable(true, false)
 	// The header row (see renderMounts) never scrolls out of view, the
 	// same fixed-header shape renderCompareTree already establishes for
 	// its own table.
-	r.mountsTable.SetFixed(1, 0)
-	r.mountsTable.SetInputCapture(r.captureMountsKey)
+	r.mounts.Table.SetFixed(1, 0)
+	r.mounts.Table.SetInputCapture(r.captureMountsKey)
 
-	r.mountsTitleBar = newPlainTitleBar("Mounts")
-	r.mountsTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.mountsTitleBar, r.reloadMounts, r.closeMounts))
+	r.mounts.TitleBar = newPlainTitleBar("Mounts")
+	r.mounts.TitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.mounts.TitleBar, r.reloadMounts, r.closeMounts))
 
-	r.mountsHint = tview.NewTextView()
-	r.mountsHint.SetWrap(false)
-	r.mountsHint.SetDynamicColors(true)
-	mountsHintText, mountsHintSpans := buildListHint(r.theme, mountsHintEntries())
-	r.mountsHint.SetText(mountsHintText)
-	r.mountsHintSpans = mountsHintSpans
-	r.mountsHint.SetMouseCapture(r.captureListHintMouse(r.mountsHint, &r.mountsHintSpans))
+	r.mounts.Hint = tview.NewTextView()
+	r.mounts.Hint.SetWrap(false)
+	r.mounts.Hint.SetDynamicColors(true)
+	mountsHintText, hintSpans := buildListHint(r.theme, mountsHintEntries())
+	r.mounts.Hint.SetText(mountsHintText)
+	r.mounts.HintSpans = hintSpans
+	r.mounts.Hint.SetMouseCapture(r.captureListHintMouse(r.mounts.Hint, &r.mounts.HintSpans))
 
-	r.mountsScrollbar = newVerticalScrollbarForTable(r, r.mountsTable)
+	r.mounts.Scrollbar = newVerticalScrollbarForTable(r, r.mounts.Table)
 	mountsTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.mountsTable, 0, 1, true).
-		AddItem(r.mountsScrollbar, 1, 0, false)
-	mountsTableRow.SetMouseCapture(r.mountsScrollbar.captureMouse)
+		AddItem(r.mounts.Table, 0, 1, true).
+		AddItem(r.mounts.Scrollbar, 1, 0, false)
+	mountsTableRow.SetMouseCapture(r.mounts.Scrollbar.captureMouse)
 
-	r.mountsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.mountsTitleBar, 1, 0, false).
+	r.mounts.Layout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.mounts.TitleBar, 1, 0, false).
 		AddItem(mountsTableRow, 0, 1, true).
-		AddItem(r.mountsHint, 1, 0, false)
+		AddItem(r.mounts.Hint, 1, 0, false)
 }
 
 // openMounts shows the Mounts screen, freshly read every time — there
@@ -125,7 +137,7 @@ func (r *Root) newMountsScreen() {
 // is to reflect whatever is mounted right now.
 func (r *Root) openMounts() {
 	r.reloadMounts()
-	r.showOverlay(mountsPage, r.mountsLayout)
+	r.showOverlay(mountsPage, r.mounts.Layout)
 }
 
 // closeMounts hides the Mounts screen. Nothing to save — this is a pure
@@ -140,8 +152,8 @@ func (r *Root) closeMounts() {
 // this screen is open and nothing here otherwise notices on its own.
 func (r *Root) reloadMounts() {
 	entries, err := mounts.Read()
-	r.mountsEntries = entries
-	r.mountsErr = err
+	r.mounts.Entries = entries
+	r.mounts.Err = err
 	r.renderMounts()
 }
 
@@ -152,12 +164,12 @@ func (r *Root) reloadMounts() {
 // "report it, don't swallow it" principle every other action in this
 // app already follows.
 func (r *Root) renderMounts() {
-	r.mountsTable.Clear()
+	r.mounts.Table.Clear()
 
-	renderReloadCloseTitleBar(r.mountsTitleBar, " Mounts ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.mounts.TitleBar, " Mounts ", r.lastScreenWidth)
 
 	header := func(col int, text string) {
-		r.mountsTable.SetCell(0, col,
+		r.mounts.Table.SetCell(0, col,
 			tview.NewTableCell(padRight(text, mountsColumnWidth(col))).
 				SetTextColor(r.theme.Text).
 				SetAttributes(tcell.AttrBold).
@@ -174,19 +186,19 @@ func (r *Root) renderMounts() {
 	// zero-entries case below — go through it rather than a bare
 	// SetCell: it's the fix for a real, reported freeze, not just a
 	// message.
-	if r.mountsErr != nil {
-		showTablePlaceholder(r.mountsTable, r.mountsErr.Error(), r.theme.EntryError)
+	if r.mounts.Err != nil {
+		showTablePlaceholder(r.mounts.Table, r.mounts.Err.Error(), r.theme.EntryError)
 		return
 	}
 
 	// Real, selectable rows may exist below — reset again just below if
 	// this directory turns out to have none.
-	enableTableSelection(r.mountsTable)
+	enableTableSelection(r.mounts.Table)
 
-	for i, m := range r.mountsEntries {
+	for i, m := range r.mounts.Entries {
 		row := i + 1
 
-		r.mountsTable.SetCell(row, mountsColTarget,
+		r.mounts.Table.SetCell(row, mountsColTarget,
 			tview.NewTableCell(padRight(m.Target, mountsColumnWidth(mountsColTarget))).
 				SetTextColor(r.theme.Text).SetSelectable(true))
 		// statusGlyphText, not checkboxText — bind/persistent are plain
@@ -197,19 +209,19 @@ func (r *Root) renderMounts() {
 		// unchanged (PlaceholderText, same as Type/Source/Options) —
 		// see statusGlyphText's own doc comment on why this stays
 		// plain rather than green/red.
-		r.mountsTable.SetCell(row, mountsColBind,
+		r.mounts.Table.SetCell(row, mountsColBind,
 			tview.NewTableCell(padRight(statusGlyphText(m.Bind), mountsColumnWidth(mountsColBind))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
-		r.mountsTable.SetCell(row, mountsColPersistent,
+		r.mounts.Table.SetCell(row, mountsColPersistent,
 			tview.NewTableCell(padRight(statusGlyphText(m.Persistent), mountsColumnWidth(mountsColPersistent))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
-		r.mountsTable.SetCell(row, mountsColFstype,
+		r.mounts.Table.SetCell(row, mountsColFstype,
 			tview.NewTableCell(padRight(m.Fstype, mountsColumnWidth(mountsColFstype))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
-		r.mountsTable.SetCell(row, mountsColSource,
+		r.mounts.Table.SetCell(row, mountsColSource,
 			tview.NewTableCell(padRight(m.Source, mountsColumnWidth(mountsColSource))).
 				SetTextColor(r.theme.Text).SetSelectable(true))
-		r.mountsTable.SetCell(row, mountsColOptions,
+		r.mounts.Table.SetCell(row, mountsColOptions,
 			tview.NewTableCell(m.Options).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
 	}
@@ -224,12 +236,12 @@ func (r *Root) renderMounts() {
 	// error branch above, so it goes through the same helper — and,
 	// same as renderFirewall's "No rules configured.", reports the
 	// empty read explicitly instead of just looking like one.
-	if len(r.mountsEntries) == 0 {
-		showTablePlaceholder(r.mountsTable, "No real storage mounted.", r.theme.PlaceholderText)
+	if len(r.mounts.Entries) == 0 {
+		showTablePlaceholder(r.mounts.Table, "No real storage mounted.", r.theme.PlaceholderText)
 		return
 	}
-	if row, _ := r.mountsTable.GetSelection(); row < 1 || row > len(r.mountsEntries) {
-		r.mountsTable.Select(1, 0)
+	if row, _ := r.mounts.Table.GetSelection(); row < 1 || row > len(r.mounts.Entries) {
+		r.mounts.Table.Select(1, 0)
 	}
 }
 
@@ -243,17 +255,17 @@ func (r *Root) captureMountsKey(event *tcell.EventKey) *tcell.EventKey {
 	// Tab/Backtab reach the AI Consigliere sidebar — see
 	// startConsigliereChord's own doc comment in consigliere.go and
 	// captureLogAuditSelectionTableKey's own identical shape.
-	// mountsTable is this screen's only real focus target.
-	if r.consigliereVisible {
+	// mounts.Table is this screen's only real focus target.
+	if r.consigliere.Visible {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.consigliereInput)
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		if event.Key() == tcell.KeyBacktab {
-			if r.consigliereScrollbar.maxOffset() > 0 {
-				r.app.SetFocus(r.consigliereHistory)
+			if r.consigliere.Scrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliere.History)
 			} else {
-				r.app.SetFocus(r.consigliereInput)
+				r.app.SetFocus(r.consigliere.Input)
 			}
 			return nil
 		}
@@ -274,7 +286,7 @@ func (r *Root) captureMountsKey(event *tcell.EventKey) *tcell.EventKey {
 // applyMountsTheme themes the Mounts screen — split out of applyTheme
 // (see its own doc comment). Guarded the same way applyOptionsTheme is.
 func (r *Root) applyMountsTheme(theme config.ResolvedTheme) {
-	if r.mountsTable == nil {
+	if r.mounts.Table == nil {
 		return
 	}
 	// PanelBackground/SurfaceBackground, not SurfaceBackground/
@@ -286,28 +298,28 @@ func (r *Root) applyMountsTheme(theme config.ResolvedTheme) {
 	// applyTheme) instead of a shade meant for genuinely floating
 	// chrome, per the user's own explicit request to bring every
 	// full-screen catalog in line with the main screen it fully covers.
-	r.mountsLayout.SetBackgroundColor(theme.PanelBackground)
-	r.mountsTable.SetBackgroundColor(theme.PanelBackground)
+	r.mounts.Layout.SetBackgroundColor(theme.PanelBackground)
+	r.mounts.Table.SetBackgroundColor(theme.PanelBackground)
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
 	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
 	// gitBreach's tables, for the identical reason.
-	r.mountsTable.SetSelectedStyle(tcell.StyleDefault.
+	r.mounts.Table.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
 
 	// FocusedBackground, fixed — same reasoning toolbox.TitleBar's own
 	// fixed FocusedBackground just above follows.
-	r.mountsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.mountsTitleBar.SetTextColor(theme.TextColor)
+	r.mounts.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.mounts.TitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar exactly — see mountsLayout's own comment above.
-	r.mountsHint.SetBackgroundColor(theme.SurfaceBackground)
-	r.mountsHint.SetTextColor(theme.TextColor)
-	mountsHintText, mountsHintSpans := buildListHint(theme, mountsHintEntries())
-	r.mountsHint.SetText(mountsHintText)
-	r.mountsHintSpans = mountsHintSpans
+	// buttonBar/statusBar exactly — see mounts.Layout's own comment above.
+	r.mounts.Hint.SetBackgroundColor(theme.SurfaceBackground)
+	r.mounts.Hint.SetTextColor(theme.TextColor)
+	mountsHintText, hintSpans := buildListHint(theme, mountsHintEntries())
+	r.mounts.Hint.SetText(mountsHintText)
+	r.mounts.HintSpans = hintSpans
 
 	r.renderMounts() // cell colors are baked in per cell, not looked up live at draw time
 }

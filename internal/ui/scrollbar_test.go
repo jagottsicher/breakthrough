@@ -243,10 +243,10 @@ func TestTableContentScrollbarOnMounts(t *testing.T) {
 	for i := range entries {
 		entries[i] = mounts.Entry{Target: fmt.Sprintf("/mnt/%02d", i), Fstype: "ext4"}
 	}
-	r.mountsEntries = entries
-	r.mountsErr = nil
+	r.mounts.Entries = entries
+	r.mounts.Err = nil
 	// Not r.openMounts(): that calls reloadMounts(), which immediately
-	// overwrites mountsEntries above with a real mounts.Read() of
+	// overwrites mounts.Entries above with a real mounts.Read() of
 	// whatever machine runs this test — on a real workstation that's
 	// often still enough rows to accidentally overflow a 10-row screen
 	// anyway, but a CI container can easily have far fewer, making the
@@ -255,7 +255,7 @@ func TestTableContentScrollbarOnMounts(t *testing.T) {
 	// showOverlay is the same "set state, then just render/show it"
 	// shape TestRenderMountsShowsTheErrorInPlaceOfRows already uses.
 	r.renderMounts()
-	r.showOverlay(mountsPage, r.mountsLayout)
+	r.showOverlay(mountsPage, r.mounts.Layout)
 
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
@@ -263,9 +263,9 @@ func TestTableContentScrollbarOnMounts(t *testing.T) {
 	}
 	defer screen.Fini()
 	screen.SetSize(60, 10)
-	r.mountsLayout.Draw(screen)
+	r.mounts.Layout.Draw(screen)
 
-	sb := r.mountsScrollbar
+	sb := r.mounts.Scrollbar
 	if sb.maxOffset() <= 0 {
 		t.Fatal("maxOffset <= 0, want real overflow to scroll through for 50 mount rows on a 10-row screen")
 	}
@@ -275,8 +275,8 @@ func TestTableContentScrollbarOnMounts(t *testing.T) {
 	sb.stopRepeat()
 	sb.captureMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0))
 
-	if row, _ := r.mountsTable.GetOffset(); row != 1 {
-		t.Errorf("mountsTable offset after one down-arrow click = %d, want 1", row)
+	if row, _ := r.mounts.Table.GetOffset(); row != 1 {
+		t.Errorf("mounts.Table offset after one down-arrow click = %d, want 1", row)
 	}
 }
 

@@ -804,16 +804,16 @@ func (r *Root) captureToolboxKey(event *tcell.EventKey) *tcell.EventKey {
 		r.closeToolbox()
 		return nil
 	}
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.consigliereInput)
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		if event.Key() == tcell.KeyBacktab {
-			if r.consigliereScrollbar.maxOffset() > 0 {
-				r.app.SetFocus(r.consigliereHistory)
+			if r.consigliere.Scrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliere.History)
 			} else {
-				r.app.SetFocus(r.consigliereInput)
+				r.app.SetFocus(r.consigliere.Input)
 			}
 			return nil
 		}
@@ -1118,7 +1118,7 @@ func (r *Root) renderToolboxForm() {
 	// Tab wraps back to the form's own first field through
 	// toolbox.Form.SetFocus(0) then r.app.SetFocus(r.toolbox.Form), not a
 	// direct named-field jump — the identical, real, previously-fixed
-	// bug connectConnectBtn's own doc comment (connectdialog.go) found
+	// bug connect.ConnectBtn's own doc comment (connectdialog.go) found
 	// first: a direct jump leaves the Form's own internal focusedElement
 	// counter stale, so the next Backtab from that field lands wrong.
 	r.toolbox.FormRunBtn.SetExitFunc(func(key tcell.Key) {
@@ -1246,7 +1246,7 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	if r.toolbox.Table == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.toolbox.Layout.SetBackgroundColor(theme.PanelBackground)
 	r.toolbox.Table.SetBackgroundColor(theme.PanelBackground)
@@ -1267,7 +1267,7 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	r.toolbox.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.toolbox.TitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.toolbox.Hint.SetBackgroundColor(theme.SurfaceBackground)
 	r.toolbox.Hint.SetTextColor(theme.TextColor)
 	toolboxHintText, hintSpans := buildListHint(theme, toolboxHintEntries())
