@@ -94,6 +94,59 @@ type logAuditState struct {
 	DetailDragging      bool
 	DetailDragOffsetX   int
 	DetailDragOffsetY   int
+
+	// CurrentEntries/CurrentFiles/CurrentSkipped/CurrentErr hold
+	// GroupOpen's own current (first, unrotated) file's last read
+	// result — refreshLogAuditCurrentFile's own output, re-run on open
+	// and on "r". RotatedEntries/RotatedFiles/RotatedSkipped/RotatedErr
+	// are the same for every rotated file (Files[1:]) read so far —
+	// filled in once, progressively, by startLogAuditProgressiveLoad,
+	// and never touched by a refresh, since a rotated file never
+	// changes once logrotate has renamed it away from the family's own
+	// bare name. recomputeLogAuditCombined merges both halves into
+	// AllEntries/Files/Skipped/ParseErr above, the same fields every
+	// other reader (filtering, the title bar, Machiavelli Mode's own
+	// context snapshot, ...) already uses without needing to know this
+	// split exists at all.
+	CurrentEntries []logview.Entry
+	CurrentFiles   int
+	CurrentSkipped int
+	CurrentErr     error
+	RotatedEntries []logview.Entry
+	RotatedFiles   int
+	RotatedSkipped int
+	RotatedErr     error
+	// RotatedCache is session-only (per explicit request — never
+	// written to disk, cleared only by the app exiting), keyed by
+	// logAuditCacheKey — a rotated file never changes once written, so
+	// a cache hit is always correct. Read and written only on the UI
+	// goroutine (the pre-pass in startLogAuditProgressiveLoad, and
+	// applyLogAuditRotatedFile's own QueueUpdateDraw callback) — the
+	// background loader goroutine itself never touches this map, the
+	// same "never touch a Root field concurrently with the UI
+	// goroutine" rule startLogAuditFollow's own doc comment already
+	// states for the identical reason.
+	RotatedCache map[string][]logview.Entry
+	// TotalFiles is len(group.Files) as Discover found it when the
+	// viewer opened — known upfront, never changes for this one open,
+	// used only for the "x/y files" loading segment in the title bar
+	// (see renderLogAuditViewer).
+	TotalFiles int
+	// LoadingMore/LoadCancel/LoadAnimFrame back
+	// startLogAuditProgressiveLoad's own in-progress state — the same
+	// three-field shape Following/FollowCancel plus hashInProgress/
+	// hashCancel/hashAnimFrame already establish for an equivalent
+	// cancelable background job with its own animation.
+	LoadingMore   bool
+	LoadCancel    context.CancelFunc
+	LoadAnimFrame int
+	// ViewerTitleTemplate is the last full title string built by
+	// renderLogAuditViewer, with logAuditLoadGlyphPlaceholder still in
+	// place of the animated glyph — empty whenever nothing is loading —
+	// so animateLogAuditLoad's own ticker can repaint just the glyph
+	// every tick without re-scanning every entry the way a full
+	// renderLogAuditViewer call would (see its own doc comment).
+	ViewerTitleTemplate string
 }
 
 const (
@@ -963,6 +1016,96 @@ func (r *Root) renderLogAuditFocusIndicator(focused bool) {
 	r.log.FocusIndicator.SetBackgroundColor(background)
 }
 
+// logAuditLoadGlyphPlaceholder stands in for the animated glyph inside
+// log.ViewerTitleTemplate — buildLogAuditViewerTitle writes it,
+// resolveLogAuditLoadGlyph/tickLogAuditLoadAnimation substitute the
+// real glyph in later, so neither needs to rebuild the rest of the
+// title string around it.
+const logAuditLoadGlyphPlaceholder = "\x00"
+
+// buildLogAuditViewerTitle builds the viewer's own title-bar text from
+// shown/errCount/warnCount (see logAuditVisibleEntries) and whatever
+// Root fields renderLogAuditViewer already keeps current — factored
+// out so it can be built once per real data change and reused as-is
+// by the animation-only tick (see tickLogAuditLoadAnimation), instead
+// of every one of several-times-a-second ticks re-scanning every
+// entry just to redraw a single moving glyph.
+func (r *Root) buildLogAuditViewerTitle(shown []logview.Entry, errCount, warnCount int) string {
+	filesText := fmt.Sprintf("%d files", r.log.Files)
+	if r.log.LoadingMore {
+		// The glyph itself is filled in by resolveLogAuditLoadGlyph (a
+		// fresh render) or tickLogAuditLoadAnimation (the ticker, no
+		// rescan) — never baked in here, so both can share this exact
+		// same template string.
+		filesText = fmt.Sprintf("%s %d/%d files", logAuditLoadGlyphPlaceholder, r.log.Files, r.log.TotalFiles)
+	}
+
+	title := fmt.Sprintf(" Log Holepunch — %d events │ %s │ %d skipped │ %d errors │ %d warnings",
+		len(r.log.AllEntries), filesText, r.log.Skipped, errCount, warnCount)
+	if len(shown) != len(r.log.AllEntries) {
+		title += fmt.Sprintf(" │ %d matching", len(shown))
+	}
+	if len(shown) > logAuditMaxRenderedRows {
+		// Without this, a file past the cap silently showed only a
+		// fraction of what the counts above claim — a real, user-
+		// reported point of confusion ("es werden doch auch alle logs
+		// ... richtig angezeigt", i.e. the file counts looked complete,
+		// so the missing rows read as a bug rather than a documented
+		// limit). Shortened to "showing x/y" (was "showing first x (of
+		// y — narrow the filter to see the rest)") per the user's own
+		// explicit request, now that the files segment above can
+		// itself grow a second, similarly-shaped count while loading.
+		title += fmt.Sprintf(" │ showing %d/%d", logAuditMaxRenderedRows, len(shown))
+	}
+	if r.log.Following {
+		title += " │ ● following"
+	}
+	// A parse error only blocks the whole view when there is nothing
+	// else to show — readLogAuditFile/logaudit.go keeps every entry
+	// that DID parse from a group's other files even when one of them
+	// failed (a corrupted .gz, a permission error on an older
+	// rotation, ...), so showing just the error page here used to
+	// silently hide all of those too, a real, independently-discovered
+	// bug directly on point for "nicht alle Logeinträge sichtbar": an
+	// unrelated problem with one rotation of a file could erase every
+	// entry from the whole family, successfully-read ones included.
+	if r.log.ParseErr != nil && len(r.log.AllEntries) > 0 {
+		title += fmt.Sprintf(" │ 1 file failed: %s", r.log.ParseErr.Error())
+	}
+	// One general note instead of repeating it on every affected hint
+	// — see logAuditViewerHintEntries' own doc comment for why.
+	title += " │ e/w/Enter/r/f/s need the list focused"
+	return title
+}
+
+// resolveLogAuditLoadGlyph substitutes the current animation frame's
+// own glyph into template (see logAuditLoadGlyphPlaceholder) — a plain
+// pass-through when nothing is loading, since buildLogAuditViewerTitle
+// never writes the placeholder in that case.
+func (r *Root) resolveLogAuditLoadGlyph(template string) string {
+	if !r.log.LoadingMore {
+		return template
+	}
+	glyph := hashAnimationFrames[r.log.LoadAnimFrame%len(hashAnimationFrames)]
+	return strings.Replace(template, logAuditLoadGlyphPlaceholder, glyph, 1)
+}
+
+// tickLogAuditLoadAnimation repaints only the viewer's own title bar
+// with the next animation frame — see animateLogAuditLoad's own doc
+// comment (logaudit.go) for why this never calls renderLogAuditViewer
+// itself. A no-op once log.ViewerTitleTemplate has been cleared
+// (stopLogAuditProgressiveLoad already ran) — a tick that was already
+// queued when that happened lands here, finds nothing to do, and
+// simply returns.
+func (r *Root) tickLogAuditLoadAnimation() {
+	r.log.LoadAnimFrame++
+	if r.log.ViewerTitleTemplate == "" {
+		return
+	}
+	title := r.resolveLogAuditLoadGlyph(r.log.ViewerTitleTemplate)
+	renderReloadCloseTitleBar(r.log.ViewerTitle, title+" ", r.lastScreenWidth)
+}
+
 // logAuditVisibleEntries filters r.log.AllEntries down to whatever
 // currently matches the Keyword/Time/Level fields — factored out of
 // renderLogAuditViewer so consigliereLogAuditMatchedLines (Machiavelli
@@ -1041,39 +1184,13 @@ func (r *Root) renderLogAuditViewer() {
 
 	shown, errCount, warnCount := r.logAuditVisibleEntries()
 
-	title := fmt.Sprintf(" Log Holepunch — %d events │ %d files │ %d skipped │ %d errors │ %d warnings",
-		len(r.log.AllEntries), r.log.Files, r.log.Skipped, errCount, warnCount)
-	if len(shown) != len(r.log.AllEntries) {
-		title += fmt.Sprintf(" │ %d matching", len(shown))
+	title := r.buildLogAuditViewerTitle(shown, errCount, warnCount)
+	if r.log.LoadingMore {
+		r.log.ViewerTitleTemplate = title
+	} else {
+		r.log.ViewerTitleTemplate = ""
 	}
-	if len(shown) > logAuditMaxRenderedRows {
-		// Without this, a file past the cap silently showed only a
-		// fraction of what the counts above claim — a real, user-
-		// reported point of confusion ("es werden doch auch alle logs
-		// ... richtig angezeigt", i.e. the file counts looked complete,
-		// so the missing rows read as a bug rather than a documented
-		// limit).
-		title += fmt.Sprintf(" │ showing first %d (of %d — narrow the filter to see the rest)", logAuditMaxRenderedRows, len(shown))
-	}
-	if r.log.Following {
-		title += " │ ● following"
-	}
-	// A parse error only blocks the whole view when there is nothing
-	// else to show — readLogAuditGroup/logaudit.go keeps every entry
-	// that DID parse from a group's other files even when one of them
-	// failed (a corrupted .gz, a permission error on an older
-	// rotation, ...), so showing just the error page here used to
-	// silently hide all of those too, a real, independently-discovered
-	// bug directly on point for "nicht alle Logeinträge sichtbar": an
-	// unrelated problem with one rotation of a file could erase every
-	// entry from the whole family, successfully-read ones included.
-	if r.log.ParseErr != nil && len(r.log.AllEntries) > 0 {
-		title += fmt.Sprintf(" │ 1 file failed: %s", r.log.ParseErr.Error())
-	}
-	// One general note instead of repeating it on every affected hint
-	// — see logAuditViewerHintEntries' own doc comment for why.
-	title += " │ e/w/Enter/r/f/s need the list focused"
-	renderReloadCloseTitleBar(r.log.ViewerTitle, title+" ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.log.ViewerTitle, r.resolveLogAuditLoadGlyph(title)+" ", r.lastScreenWidth)
 
 	r.renderLogAuditTimeline(shown)
 
