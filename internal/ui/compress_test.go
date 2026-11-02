@@ -365,12 +365,12 @@ func TestRunCompressOnTheCurrentDirectoryItselfBuildsAWorkingCommand(t *testing.
 	r, _, _ := newTestRootWithFile(t)
 	r.panel.focusRow(0) // the ".." row
 	r.openCompress()
-	r.compressOutputName = "whole-dir"
-	r.compressFormatIndex = 0 // zip
+	r.compress.OutputName = "whole-dir"
+	r.compress.FormatIndex = 0 // zip
 
 	r.runCompress()
 
-	job := r.compressJob
+	job := r.compress.Job
 	if job == nil {
 		t.Fatal("runCompress did not start a background job")
 	}
@@ -394,11 +394,11 @@ func TestOpenCompressPopulatesTargetsAndDefaultName(t *testing.T) {
 	if r.activePage != compressPage {
 		t.Fatalf("activePage = %q, want the Compress dialog", r.activePage)
 	}
-	if len(r.compressTargets) != 1 || r.compressTargets[0] != file {
-		t.Errorf("compressTargets = %v, want [%q]", r.compressTargets, file)
+	if len(r.compress.Targets) != 1 || r.compress.Targets[0] != file {
+		t.Errorf("compress.Targets = %v, want [%q]", r.compress.Targets, file)
 	}
-	if r.compressOutputName != filepath.Base(file) {
-		t.Errorf("compressOutputName = %q, want %q", r.compressOutputName, filepath.Base(file))
+	if r.compress.OutputName != filepath.Base(file) {
+		t.Errorf("compress.OutputName = %q, want %q", r.compress.OutputName, filepath.Base(file))
 	}
 }
 
@@ -425,7 +425,7 @@ func TestOpenCompressRefusedOnRemotePanel(t *testing.T) {
 func TestRunCompressRefusesAnEmptyOutputName(t *testing.T) {
 	r, _, _ := newTestRootWithFile(t)
 	r.openCompress()
-	r.compressOutputName = "   "
+	r.compress.OutputName = "   "
 
 	r.runCompress()
 
@@ -441,8 +441,8 @@ func TestRunCompressRefusesAnEmptyOutputName(t *testing.T) {
 func TestRunCompressRefusesAnAlreadyExistingOutputFile(t *testing.T) {
 	r, dir, _ := newTestRootWithFile(t)
 	r.openCompress()
-	r.compressOutputName = "already-there"
-	r.compressFormatIndex = 0 // zip
+	r.compress.OutputName = "already-there"
+	r.compress.FormatIndex = 0 // zip
 	if err := os.WriteFile(filepath.Join(dir, "already-there.zip"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -821,7 +821,7 @@ func TestRunCompressToRemoteRefusesAnAlreadyExistingRemoteFile(t *testing.T) {
 	if r.activePage != errorPage {
 		t.Fatalf("activePage = %q, want the error overlay", r.activePage)
 	}
-	if r.compressJob != nil {
+	if r.compress.Job != nil {
 		t.Error("no job should have started once the remote destination already had a colliding file")
 	}
 }
@@ -853,7 +853,7 @@ func TestExtractCurrentArchiveToRemoteExtractsLocallyFirst(t *testing.T) {
 
 	r.extractCurrentArchive(false)
 
-	job := r.compressJob
+	job := r.compress.Job
 	if job == nil {
 		t.Fatal("extractCurrentArchive did not start a background job")
 	}
@@ -877,8 +877,8 @@ func TestOpenCompressSeedsFormatIndexFromSettings(t *testing.T) {
 	r.openCompress()
 
 	want := archiveFormatIndexByID(archiveFormats(), "tar.gz")
-	if r.compressFormatIndex != want {
-		t.Errorf("compressFormatIndex = %d, want %d (tar.gz)", r.compressFormatIndex, want)
+	if r.compress.FormatIndex != want {
+		t.Errorf("compress.FormatIndex = %d, want %d (tar.gz)", r.compress.FormatIndex, want)
 	}
 }
 
@@ -893,8 +893,8 @@ func TestOpenCompressFallsBackToZipForAnUnrecognizedStoredFormat(t *testing.T) {
 
 	r.openCompress()
 
-	if r.compressFormatIndex != 0 {
-		t.Errorf("compressFormatIndex = %d, want 0 (zip) for an unrecognized stored format", r.compressFormatIndex)
+	if r.compress.FormatIndex != 0 {
+		t.Errorf("compress.FormatIndex = %d, want 0 (zip) for an unrecognized stored format", r.compress.FormatIndex)
 	}
 }
 
@@ -907,8 +907,8 @@ func TestRunCompressWritesBackTheChosenFormatAsTheNewDefault(t *testing.T) {
 	configPath := isolateUserConfigFile(t)
 	r, _, _ := newTestRootWithFile(t)
 	r.openCompress()
-	r.compressOutputName = "whole-dir"
-	r.compressFormatIndex = archiveFormatIndexByID(archiveFormats(), "tar.gz")
+	r.compress.OutputName = "whole-dir"
+	r.compress.FormatIndex = archiveFormatIndexByID(archiveFormats(), "tar.gz")
 
 	r.runCompress()
 	defer r.cancelCompressJob()
@@ -933,8 +933,8 @@ func TestRunCompressNeverPersistsOnAnEmptyOutputName(t *testing.T) {
 	configPath := isolateUserConfigFile(t)
 	r, _, _ := newTestRootWithFile(t)
 	r.openCompress()
-	r.compressOutputName = "   "
-	r.compressFormatIndex = archiveFormatIndexByID(archiveFormats(), "tar.gz")
+	r.compress.OutputName = "   "
+	r.compress.FormatIndex = archiveFormatIndexByID(archiveFormats(), "tar.gz")
 
 	r.runCompress()
 
@@ -948,7 +948,7 @@ func TestRunCompressNeverPersistsOnAnEmptyOutputName(t *testing.T) {
 
 // TestTabFromTheOutputNameFieldReachesTheButtons pins a real,
 // previously-unfixed gap (feature_upgrades.txt Befund 8's own
-// compress.go/duplicate.go follow-up): compressForm and its own
+// compress.go/duplicate.go follow-up): compress.Form and its own
 // Cancel/Compress buttons are two independent widgets, and there used
 // to be no Tab path between them at all — reachable only by mouse.
 func TestTabFromTheOutputNameFieldReachesTheButtons(t *testing.T) {
@@ -957,19 +957,19 @@ func TestTabFromTheOutputNameFieldReachesTheButtons(t *testing.T) {
 	noop := func(tview.Primitive) {}
 	tab := func(p tview.Primitive) { p.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop) }
 
-	tab(r.compressFormatField)
-	tab(r.compressOutputNameField)
-	if !r.compressCancelBtn.HasFocus() {
-		t.Fatal("Tab from Output name did not reach compressCancelBtn")
+	tab(r.compress.FormatField)
+	tab(r.compress.OutputNameField)
+	if !r.compress.CancelBtn.HasFocus() {
+		t.Fatal("Tab from Output name did not reach compress.CancelBtn")
 	}
 
-	tab(r.compressCancelBtn)
-	if !r.compressApplyBtn.HasFocus() {
+	tab(r.compress.CancelBtn)
+	if !r.compress.ApplyBtn.HasFocus() {
 		t.Fatal("Tab from Cancel did not reach Compress")
 	}
 
-	tab(r.compressApplyBtn)
-	if !r.compressFormatField.HasFocus() {
+	tab(r.compress.ApplyBtn)
+	if !r.compress.FormatField.HasFocus() {
 		t.Error("Tab from Compress did not wrap back to Format")
 	}
 }

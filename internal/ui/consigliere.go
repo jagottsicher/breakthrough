@@ -362,7 +362,7 @@ func (r *Root) captureConsigliereTitleBarMouse(action tview.MouseAction, event *
 // own consigliere.Dragging check — not tview's own position-based
 // dispatch — is what keeps a drag that moves up/left receiving its
 // own subsequent events once the cursor is no longer over the
-// not-yet-updated title bar rect: the identical bug propertiesDragging's
+// not-yet-updated title bar rect: the identical bug properties.Dragging's
 // own check already exists to prevent, for the identical reason.
 //
 // handled reports whether this call was about dragging (or the close
@@ -1584,11 +1584,11 @@ func (r *Root) sshKeysContextSnapshot() string {
 func (r *Root) activityLogContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Action Log.\n")
-	if r.activityLogReadErr != nil {
-		fmt.Fprintf(&b, "Could not read the real log file: %v\n", r.activityLogReadErr)
+	if r.activity.ReadErr != nil {
+		fmt.Fprintf(&b, "Could not read the real log file: %v\n", r.activity.ReadErr)
 		return strings.TrimSpace(b.String())
 	}
-	entries := r.activityLogAllEntries
+	entries := r.activity.AllEntries
 	fmt.Fprintf(&b, "%d entries.\n", len(entries))
 	byCategory := map[activitylog.Category]int{}
 	for _, e := range entries {
@@ -1602,10 +1602,10 @@ func (r *Root) activityLogContextSnapshot() string {
 		sort.Strings(parts)
 		fmt.Fprintf(&b, "By category: %s\n", strings.Join(parts, ", "))
 	}
-	if kw := strings.TrimSpace(r.activityLogKeywordField.GetText()); kw != "" {
+	if kw := strings.TrimSpace(r.activity.KeywordField.GetText()); kw != "" {
 		fmt.Fprintf(&b, "Current keyword filter: %s\n", kw)
 	}
-	if tf := strings.TrimSpace(r.activityLogTimeField.GetText()); tf != "" {
+	if tf := strings.TrimSpace(r.activity.TimeField.GetText()); tf != "" {
 		fmt.Fprintf(&b, "Current time filter: %s\n", tf)
 	}
 	if r.settings.ConsigliereHardcoreMode {
@@ -1620,8 +1620,8 @@ func (r *Root) activityLogContextSnapshot() string {
 // Mode is on — reuses filterActivityLogEntries so this always matches
 // exactly what the table itself is showing.
 func (r *Root) consigliereMachiavelliActionLogEntries() string {
-	matching := filterActivityLogEntries(r.activityLogAllEntries,
-		r.activityLogKeywordField.GetText(), r.activityLogTimeField.GetText(), time.Now())
+	matching := filterActivityLogEntries(r.activity.AllEntries,
+		r.activity.KeywordField.GetText(), r.activity.TimeField.GetText(), time.Now())
 	if len(matching) == 0 {
 		return ""
 	}

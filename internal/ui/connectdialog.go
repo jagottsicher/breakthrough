@@ -279,7 +279,7 @@ func (r *Root) normalizeConnectIdentifierField() {
 // isConnectIdentifierRune) and 32-character cap live, as each
 // keystroke (or paste) arrives — the
 // same SetAcceptanceFunc-as-validator shape chmodEditField/
-// propertiesEditField already use elsewhere in this app. tview's own
+// properties.EditField already use elsewhere in this app. tview's own
 // InputField has no SetMaxLength in this version (verified directly
 // against inputfield.go, not guessed — see chmodEditField's own doc
 // comment, which found this gap first), so rejecting anything past the
@@ -610,7 +610,7 @@ func (r *Root) runConnectOK() {
 		r.setConnectStatus(err.Error(), r.theme.CriticalText)
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("saved %s", conn.Label()))
+	r.activity.Logger.Action(activitylog.CategoryRemote, fmt.Sprintf("saved %s", conn.Label()))
 	r.hideOverlay()
 }
 
@@ -716,7 +716,7 @@ func (r *Root) finishConnect(panel *Panel, conn remotefs.Connection, client remo
 	r.cancelConnectAttempt()
 	if err != nil {
 		_ = remotefs.RecordAttempt(conn, true)
-		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("connect to %s: %v", conn.Label(), err))
+		r.activity.Logger.Error(activitylog.CategoryRemote, fmt.Sprintf("connect to %s: %v", conn.Label(), err))
 
 		var mismatchErr *remotefs.HostKeyMismatchError
 		if errors.As(err, &mismatchErr) {
@@ -743,7 +743,7 @@ func (r *Root) finishConnect(panel *Panel, conn remotefs.Connection, client remo
 	conn.AuthMethod = client.AuthMethod()
 
 	_ = remotefs.RecordAttempt(conn, false)
-	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("connected to %s", conn.Label()))
+	r.activity.Logger.Action(activitylog.CategoryRemote, fmt.Sprintf("connected to %s", conn.Label()))
 
 	if !r.hasTab(panel) {
 		// The tab this connection was meant for closed while Dial was

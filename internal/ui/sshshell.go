@@ -652,10 +652,10 @@ func (r *Root) launchSSHShell(conn remotefs.Connection) {
 	switch outcome {
 	case sshshell.Succeeded:
 		_ = remotefs.RecordAttempt(conn, false)
-		r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s", conn.Label()))
+		r.activity.Logger.Action(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s", conn.Label()))
 	case sshshell.ConnectionFailed:
 		_ = remotefs.RecordAttempt(conn, true)
-		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s: connection failed", conn.Label()))
+		r.activity.Logger.Error(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s: connection failed", conn.Label()))
 	case sshshell.LocalError:
 		// ssh itself never actually ran (missing binary, ...) — a local
 		// problem, not a connection attempt at all, so history is left

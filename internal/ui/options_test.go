@@ -64,7 +64,7 @@ func TestOpenOptionsShowsTheActiveSchemeAsAValue(t *testing.T) {
 	}
 	// Trimmed: the cells are space-padded to fixed column widths (see
 	// padRight) so the columns line up across categories.
-	if got := strings.TrimSpace(r.optionsTable.GetCell(row, optionsColValue).Text); got != "Solarized" {
+	if got := strings.TrimSpace(r.options.Table.GetCell(row, optionsColValue).Text); got != "Solarized" {
 		t.Errorf("color scheme value cell = %q, want %q", got, "Solarized")
 	}
 }
@@ -265,7 +265,7 @@ func TestOpenOptionsEscapeClosesTheScreen(t *testing.T) {
 	}
 
 	r.openOptions()
-	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Table.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != "" {
 		t.Errorf("activePage = %q after Escape, want closed", r.activePage)

@@ -465,8 +465,8 @@ func TestConsigliereModelRowBlankCommitResetsToDefault(t *testing.T) {
 	opt, _ := r.optionAtRow(row)
 
 	r.editOptionValue(opt)
-	r.optionsInput.SetText("")
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText("")
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.settings.ConsigliereAnthropicModel != "" {
 		t.Errorf("ConsigliereAnthropicModel = %q, want a blank commit to reset it to the built-in default", r.settings.ConsigliereAnthropicModel)
@@ -483,7 +483,7 @@ func TestConsigliereModelRowApplyRetriggersTheFetch(t *testing.T) {
 	r := rootWithConsigliereKey(t)
 	for i, cat := range optionCategories() {
 		if cat.name == "AI Consigliere" {
-			r.optionsCategory = i
+			r.options.Category = i
 		}
 	}
 	calls := make(chan struct{}, 2)
@@ -710,7 +710,7 @@ func TestOptionDefaultHintSurfacesAModelFetchFailure(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	for i, cat := range optionCategories() {
 		if cat.name == "AI Consigliere" {
-			r.optionsCategory = i
+			r.options.Category = i
 		}
 	}
 	r.consigliere.ModelFetchInFlight["anthropic"] = true
@@ -745,7 +745,7 @@ func TestOptionDefaultHintTruncatesALongModelFetchFailure(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	for i, cat := range optionCategories() {
 		if cat.name == "AI Consigliere" {
-			r.optionsCategory = i
+			r.options.Category = i
 		}
 	}
 	long := "consigliere: Anthropic: the parameter name is `lifecycle[]`, not `lifecycle` — a much longer message than any ordinary default hint"
@@ -771,7 +771,7 @@ func TestShowOptionInfoIncludesTheFullModelFetchFailure(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	for i, cat := range optionCategories() {
 		if cat.name == "AI Consigliere" {
-			r.optionsCategory = i
+			r.options.Category = i
 		}
 	}
 	long := "consigliere: Anthropic: the parameter name is `lifecycle[]`, not `lifecycle` — a much longer message than any ordinary default hint"
@@ -785,8 +785,8 @@ func TestShowOptionInfoIncludesTheFullModelFetchFailure(t *testing.T) {
 	opt, _ := r.optionAtRow(modelRow)
 	r.showOptionInfo(opt)
 
-	if got := r.optionsInfo.GetText(true); !strings.Contains(got, long) {
-		t.Errorf("optionsInfo text = %q, want it to include the full, untruncated error %q", got, long)
+	if got := r.options.Info.GetText(true); !strings.Contains(got, long) {
+		t.Errorf("options.Info text = %q, want it to include the full, untruncated error %q", got, long)
 	}
 }
 
@@ -800,7 +800,7 @@ func TestOptionDefaultHintSurfacesAnEmptyModelList(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	for i, cat := range optionCategories() {
 		if cat.name == "AI Consigliere" {
-			r.optionsCategory = i
+			r.options.Category = i
 		}
 	}
 	r.consigliere.ModelFetchInFlight["anthropic"] = true

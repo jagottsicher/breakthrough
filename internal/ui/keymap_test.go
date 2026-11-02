@@ -334,7 +334,7 @@ func TestChordMenuCancelCompressOpensItsOwnDialog(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	root.compressJob = &compressJob{ctx: ctx, cancel: cancel}
+	root.compress.Job = &compressJob{ctx: ctx, cancel: cancel}
 	root.HandlePlainKey(runeEvent('m'))
 	root.HandlePlainKey(runeEvent('C'))
 	if root.activePage != bgJobCancelPage {

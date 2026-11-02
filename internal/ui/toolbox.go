@@ -19,7 +19,7 @@ import (
 // Every entry either runs immediately (toolboxFixedEntry — lsblk,
 // lscpu, ...) or asks for one further argument first through
 // toolbox.Input, a small field floated on top of this screen the same
-// way optionsInput floats on top of Options (toolboxArgEntry — ping,
+// way options.Input floats on top of Options (toolboxArgEntry — ping,
 // nmap, dig, ...). Either way, the command that actually runs is a real
 // external process, streamed live into a toolWindow via
 // openToolCommand — never reimplemented, matching every other external-
@@ -695,7 +695,7 @@ func (r *Root) newToolboxScreen() {
 
 	// The one small floating input this screen layers on top of itself
 	// (see toolboxPromptForArg) — the same "one shared, repopulated
-	// field" pattern r.prompt/r.optionsInput already use elsewhere.
+	// field" pattern r.prompt/r.options.Input already use elsewhere.
 	r.toolbox.Input = tview.NewInputField()
 }
 
@@ -851,7 +851,7 @@ func (r *Root) captureToolboxTableMouse(action tview.MouseAction, event *tcell.E
 // toolboxArgEntry) — pushed on top of the Toolbox screen rather than
 // replacing it (see pushOverlay), the same "small input floats over the
 // full-screen list it belongs to" shape editOptionValue already
-// establishes for Options' own optionsInput.
+// establishes for Options' own options.Input.
 //
 // Reusing the generic r.prompt/openPrompt here instead would have
 // closed the Toolbox screen underneath it first (see openPrompt's own
@@ -1262,7 +1262,7 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	// FocusedBackground, fixed — the Toolbox screen has exactly one
 	// focusable widget (its own table), never itself the base a
 	// further overlay stacks on top of in a way that should dim it,
-	// the same reasoning optionsTitleBar's own fixed
+	// the same reasoning options.TitleBar's own fixed
 	// FocusedBackground already follows.
 	r.toolbox.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.toolbox.TitleBar.SetTextColor(theme.TextColor)
