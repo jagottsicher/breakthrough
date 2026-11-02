@@ -27,7 +27,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/logview"
-	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/operations"
 	"github.com/jagottsicher/breakthrough/internal/rclone"
@@ -517,16 +516,9 @@ type Root struct {
 	// after the Tab switcher/Connection menu's own per-row action-cell
 	// table rather than Mounts/Firewall's own plain read-only rows: each
 	// session carries three independent actions (Attach, Attach in new
-	// window, Close). sessionsList/sessionsErr hold the last read
+	// window, Close). sessions.List/sessions.Err hold the last read
 	// result, refreshed by reloadSessions (on open, and on "r").
-	sessionsLayout    *tview.Flex
-	sessionsTitleBar  *tview.TextView
-	sessionsHint      *tview.TextView
-	sessionsHintSpans []listHintSpan
-	sessionsTable     *tview.Table
-	sessionsScrollbar *verticalScrollbar
-	sessionsList      []multiplex.Session
-	sessionsErr       error
+	sessions sessionsState
 
 	// The Messages screen ("gm", see messages.go and feature_ideas.txt's
 	// own "3a. Benachrichtigungen", Stufen 3-5) — a full-screen catalog
@@ -3390,7 +3382,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Sessions screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
-	r.AddPage(sessionsPage, r.sessionsLayout, true, false)
+	r.AddPage(sessionsPage, r.sessions.Layout, true, false)
 	// resize=true: the SSH Keys screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall/Sessions screens' own comments above give.

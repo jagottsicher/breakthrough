@@ -800,7 +800,7 @@ func TestConsigliereContextSnapshotDispatchesToMounts(t *testing.T) {
 // to a Git Breach commit subject, already sent by default.
 func TestSessionsContextSnapshotIncludesSessions(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.sessionsList = []multiplex.Session{
+	root.sessions.List = []multiplex.Session{
 		{Name: "work", Backend: multiplex.BackendTmux, Status: multiplex.StatusAttached},
 	}
 
@@ -818,7 +818,7 @@ func TestSessionsContextSnapshotIncludesSessions(t *testing.T) {
 // snapshot.
 func TestSessionsContextSnapshotReportsReadError(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.sessionsErr = errors.New("neither screen nor tmux nor zellij is installed")
+	root.sessions.Err = errors.New("neither screen nor tmux nor zellij is installed")
 
 	got := root.sessionsContextSnapshot()
 
@@ -835,7 +835,7 @@ func TestSessionsContextSnapshotCapsSessionList(t *testing.T) {
 	for i := 0; i < consigliereMaxSessions+5; i++ {
 		sessions = append(sessions, multiplex.Session{Name: "distinct-session", Backend: multiplex.BackendScreen})
 	}
-	root.sessionsList = sessions
+	root.sessions.List = sessions
 
 	got := root.sessionsContextSnapshot()
 
@@ -849,7 +849,7 @@ func TestSessionsContextSnapshotCapsSessionList(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToSessions(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = sessionsPage
-	root.sessionsList = []multiplex.Session{{Name: "work"}}
+	root.sessions.List = []multiplex.Session{{Name: "work"}}
 
 	got := root.consigliereContextSnapshot()
 
