@@ -126,9 +126,9 @@ func (r *Root) finishExtractClipboardArchive(archivePath string, memberCount int
 		}
 	})
 	if err != nil {
-		r.activityLog.Error(activitylog.CategoryArchive, fmt.Sprintf("extract from %s: %v", archivePath, err))
+		r.activity.Logger.Error(activitylog.CategoryArchive, fmt.Sprintf("extract from %s: %v", archivePath, err))
 		r.showError(fmt.Errorf("extract from %s: %w", archivePath, err))
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryArchive, fmt.Sprintf("extracted %d item(s) from %s", memberCount, archivePath))
+	r.activity.Logger.Action(activitylog.CategoryArchive, fmt.Sprintf("extracted %d item(s) from %s", memberCount, archivePath))
 }

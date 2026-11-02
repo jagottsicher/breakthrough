@@ -210,7 +210,7 @@ type verticalScrollbar struct {
 
 	// trackColor is normally nil (Draw then falls back to
 	// theme.PanelBackground, the background every plain catalog
-	// screen's own body already rests on — see mountsLayout's own
+	// screen's own body already rests on — see mounts.Layout's own
 	// comment). Git Breach is the one exception so far: its own boxes
 	// brighten when focused (see styleGitBreachFocus), and tview's own
 	// Box exposes no getter for "whatever background color I was last

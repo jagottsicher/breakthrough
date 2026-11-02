@@ -31,12 +31,12 @@ func finishCompareTreeWalk(t *testing.T, r *Root) {
 		h, err := hashFile(ctx, path, nil)
 		return h.SHA256, err
 	}
-	entries, stats, err := compare.Walk(context.Background(), r.compareTreeA, r.compareTreeB, r.compareTreeMode, hash, nil)
+	entries, stats, err := compare.Walk(context.Background(), r.compare.TreeA, r.compare.TreeB, r.compare.TreeMode, hash, nil)
 	if err != nil {
 		t.Fatalf("compare.Walk: %v", err)
 	}
 	r.cancelCompareTreeWalk()
-	r.compareTreeEntries, r.compareTreeStats = entries, stats
+	r.compare.TreeEntries, r.compare.TreeStats = entries, stats
 	r.renderCompareTree()
 	r.resetCompareTreeScrollPosition()
 }
@@ -76,22 +76,22 @@ func newCompareTreePair(t *testing.T) (r *Root, dirA, dirB string) {
 
 func TestOpenCompareTreeStartsFreshEveryTime(t *testing.T) {
 	r, dirA, dirB := newCompareTreePair(t)
-	r.compareTreeMode = compare.ModeHash // stale state from a previous open
-	r.compareTreeShowIdentical = true
+	r.compare.TreeMode = compare.ModeHash // stale state from a previous open
+	r.compare.TreeShowIdentical = true
 
 	r.openCompareTree(dirA, dirB)
 
-	if r.compareTreeMode != compare.ModeQuick {
-		t.Errorf("mode = %v, want a fresh open to reset to ModeQuick", r.compareTreeMode)
+	if r.compare.TreeMode != compare.ModeQuick {
+		t.Errorf("mode = %v, want a fresh open to reset to ModeQuick", r.compare.TreeMode)
 	}
-	if r.compareTreeShowIdentical {
+	if r.compare.TreeShowIdentical {
 		t.Error("showIdentical should reset to false on a fresh open")
 	}
 	if r.activePage != compareTreePage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, compareTreePage)
 	}
-	if !r.compareTreeRunning {
-		t.Error("opening should start a walk immediately (compareTreeRunning)")
+	if !r.compare.TreeRunning {
+		t.Error("opening should start a walk immediately (compare.TreeRunning)")
 	}
 }
 
@@ -140,8 +140,8 @@ func TestToggleCompareTreeModeResolvesTheHeuristicsBlindSpot(t *testing.T) {
 	}
 
 	r.toggleCompareTreeMode()
-	if r.compareTreeMode != compare.ModeHash {
-		t.Fatalf("mode after toggling = %v, want ModeHash", r.compareTreeMode)
+	if r.compare.TreeMode != compare.ModeHash {
+		t.Fatalf("mode after toggling = %v, want ModeHash", r.compare.TreeMode)
 	}
 	finishCompareTreeWalk(t, r)
 
@@ -153,11 +153,11 @@ func TestToggleCompareTreeModeResolvesTheHeuristicsBlindSpot(t *testing.T) {
 
 func TestToggleCompareTreeModeIgnoredWhileAWalkIsRunning(t *testing.T) {
 	r, dirA, dirB := newCompareTreePair(t)
-	r.openCompareTree(dirA, dirB) // leaves compareTreeRunning true (see the test above)
+	r.openCompareTree(dirA, dirB) // leaves compare.TreeRunning true (see the test above)
 
 	r.toggleCompareTreeMode()
 
-	if r.compareTreeMode != compare.ModeQuick {
+	if r.compare.TreeMode != compare.ModeQuick {
 		t.Error("toggling mode while a walk is running should be a no-op")
 	}
 }
@@ -175,8 +175,8 @@ func TestActivateCompareTreeRowOpensTheDiffForADifferingPair(t *testing.T) {
 	if r.activePage != compareDiffPage {
 		t.Fatalf("activePage = %q, want the diff view %q", r.activePage, compareDiffPage)
 	}
-	left := r.compareDiffLeft.GetText(false)
-	right := r.compareDiffRight.GetText(false)
+	left := r.compare.DiffLeft.GetText(false)
+	right := r.compare.DiffRight.GetText(false)
 	if !strings.Contains(left, "old text") {
 		t.Errorf("left pane = %q, missing %q", left, "old text")
 	}
@@ -236,17 +236,17 @@ func TestOpenCompareTreeAlwaysStartsAtTheTopOfANewComparison(t *testing.T) {
 	r.toggleCompareTreeShowIdentical() // guarantee more than one real row to scroll away from
 	finishCompareTreeWalk(t, r)
 
-	lastRow := r.compareTreeTable.GetRowCount() - 1
+	lastRow := r.compare.TreeTable.GetRowCount() - 1
 	if lastRow <= 1 {
 		t.Fatalf("setup: expected more than one row, got last row %d", lastRow)
 	}
-	r.compareTreeTable.Select(lastRow, 0)
+	r.compare.TreeTable.Select(lastRow, 0)
 
 	// A second, fresh comparison against the exact same shared widget.
 	r.openCompareTree(dirA, dirB)
 	finishCompareTreeWalk(t, r)
 
-	if row, _ := r.compareTreeTable.GetSelection(); row != 1 {
+	if row, _ := r.compare.TreeTable.GetSelection(); row != 1 {
 		t.Errorf("selection after opening a fresh comparison = row %d, want row 1 (the top)", row)
 	}
 }
@@ -263,12 +263,12 @@ func TestCompareTreeStatusTextTalliesEveryVerdict(t *testing.T) {
 // compareTreeVisibleRelPaths reads back every row renderCompareTree
 // actually put in the table, by its own stored Entry (see
 // compareTreeEntryAt) -- the ground truth for "what's on screen",
-// rather than re-deriving it from compareTreeEntries/showIdentical
+// rather than re-deriving it from compare.TreeEntries/showIdentical
 // separately, which would only test the test's own logic against
 // itself.
 func compareTreeVisibleRelPaths(r *Root) []string {
 	var names []string
-	for row := 1; row < r.compareTreeTable.GetRowCount(); row++ {
+	for row := 1; row < r.compare.TreeTable.GetRowCount(); row++ {
 		if e, ok := r.compareTreeEntryAt(row); ok {
 			names = append(names, e.RelPath)
 		}
@@ -278,7 +278,7 @@ func compareTreeVisibleRelPaths(r *Root) []string {
 
 func compareTreeRowOf(t *testing.T, r *Root, relPath string) int {
 	t.Helper()
-	for row := 1; row < r.compareTreeTable.GetRowCount(); row++ {
+	for row := 1; row < r.compare.TreeTable.GetRowCount(); row++ {
 		if e, ok := r.compareTreeEntryAt(row); ok && e.RelPath == relPath {
 			return row
 		}
@@ -302,7 +302,7 @@ func TestGCReachesAIConsigliereFromCompareTree(t *testing.T) {
 	if !r.HandlePlainKey(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone)) {
 		t.Fatal("the resolving 'C' should have been consumed")
 	}
-	if !r.consigliereVisible {
+	if !r.consigliere.Visible {
 		t.Error("\"gC\" should have opened the AI Consigliere sidebar")
 	}
 }

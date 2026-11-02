@@ -182,7 +182,7 @@ func TestTextSize(t *testing.T) {
 // not real navigation) and seeds its Properties state directly, the same
 // assignments openProperties itself makes, bypassing fsops.Stat so a
 // fabricated fsops.Info can be used without a real file backing it.
-// Callers that need Root.propertiesTarget to resolve to something real on
+// Callers that need Root.properties.Target to resolve to something real on
 // disk (Save, hashing, symlink chains) should set info.Path themselves
 // and create it under t.TempDir() first.
 func seedProperties(t *testing.T, info fsops.Info) *Root {
@@ -191,10 +191,10 @@ func seedProperties(t *testing.T, info fsops.Info) *Root {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.propertiesTarget = info.Path
-	r.propertiesStat = info
-	r.propertiesHashes = nil
-	r.propertiesDirty = false
+	r.properties.Target = info.Path
+	r.properties.Stat = info
+	r.properties.Hashes = nil
+	r.properties.Dirty = false
 	r.stagedName = info.Name
 	r.stagedMode = info.Mode.Perm()
 	r.stagedMtime = info.ModTime
@@ -204,7 +204,7 @@ func seedProperties(t *testing.T, info fsops.Info) *Root {
 
 func TestPropertiesShowsLinkTargetOnlyForSymlinks(t *testing.T) {
 	file := seedProperties(t, fsops.Info{Name: "a.txt", ModTime: time.Now()})
-	if text := file.propertiesText.GetText(true); strings.Contains(text, "Link target") {
+	if text := file.properties.Text.GetText(true); strings.Contains(text, "Link target") {
 		t.Error("a regular file's Properties should not mention a link target")
 	}
 
@@ -214,7 +214,7 @@ func TestPropertiesShowsLinkTargetOnlyForSymlinks(t *testing.T) {
 		LinkTarget: "/somewhere/else",
 		ModTime:    time.Now(),
 	})
-	text := link.propertiesText.GetText(true)
+	text := link.properties.Text.GetText(true)
 	wantLinkLine := fmt.Sprintf("%-13s%s", "Link target:", "/somewhere/else")
 	if !strings.Contains(text, wantLinkLine) {
 		t.Errorf("symlink Properties should contain %q, got:\n%s", wantLinkLine, text)
@@ -228,17 +228,17 @@ func TestPropertiesShowsLinkTargetOnlyForSymlinks(t *testing.T) {
 // always have Nlink >= 2 trivially.
 func TestPropertiesShowsLinksOnlyWhenSharedAndNotForDirs(t *testing.T) {
 	single := seedProperties(t, fsops.Info{Name: "a.txt", Nlink: 1, ModTime: time.Now()})
-	if text := single.propertiesText.GetText(true); strings.Contains(text, "Links") {
+	if text := single.properties.Text.GetText(true); strings.Contains(text, "Links") {
 		t.Errorf("a single-link file should not mention Links, got:\n%s", text)
 	}
 
 	shared := seedProperties(t, fsops.Info{Name: "b.txt", Nlink: 2, ModTime: time.Now()})
-	if text := shared.propertiesText.GetText(true); !strings.Contains(text, "Links") {
+	if text := shared.properties.Text.GetText(true); !strings.Contains(text, "Links") {
 		t.Errorf("a file with Nlink=2 should mention Links, got:\n%s", text)
 	}
 
 	dir := seedProperties(t, fsops.Info{Name: "c", IsDir: true, Nlink: 2, ModTime: time.Now()})
-	if text := dir.propertiesText.GetText(true); strings.Contains(text, "Links") {
+	if text := dir.properties.Text.GetText(true); strings.Contains(text, "Links") {
 		t.Errorf("a directory should not mention Links even with Nlink > 1, got:\n%s", text)
 	}
 }
@@ -247,12 +247,12 @@ func TestPropertiesShowsLinksOnlyWhenSharedAndNotForDirs(t *testing.T) {
 // appears when Info.MountPoint is true.
 func TestPropertiesShowsMountPoint(t *testing.T) {
 	plain := seedProperties(t, fsops.Info{Name: "a", IsDir: true, ModTime: time.Now()})
-	if text := plain.propertiesText.GetText(true); strings.Contains(text, "Mount point") {
+	if text := plain.properties.Text.GetText(true); strings.Contains(text, "Mount point") {
 		t.Errorf("an ordinary directory should not mention a mount point, got:\n%s", text)
 	}
 
 	mounted := seedProperties(t, fsops.Info{Name: "b", IsDir: true, MountPoint: true, ModTime: time.Now()})
-	text := mounted.propertiesText.GetText(true)
+	text := mounted.properties.Text.GetText(true)
 	wantLine := fmt.Sprintf("%-13s%s", "Mount point:", "yes")
 	if !strings.Contains(text, wantLine) {
 		t.Errorf("a mount point should say so (want %q), got:\n%s", wantLine, text)
@@ -284,7 +284,7 @@ func TestRenderPropertiesShowsChainForMultiHopSymlink(t *testing.T) {
 	r.target = start
 	r.openProperties()
 
-	text := r.propertiesText.GetText(true)
+	text := r.properties.Text.GetText(true)
 	wantChain := fmt.Sprintf("%s -> %s (file)", mid, final)
 	if !strings.Contains(text, wantChain) {
 		t.Errorf("Properties text should contain the chain %q, got:\n%s", wantChain, text)
@@ -316,7 +316,7 @@ func TestRenderPropertiesOmitsChainForSingleHopSymlink(t *testing.T) {
 	// bare word is a false-positive trap here: t.TempDir() names the
 	// directory after this very test function, and this one's own name
 	// contains "Chain" too, via the Path/Link target fields.
-	if text := r.propertiesText.GetText(true); strings.Contains(text, "Chain:") {
+	if text := r.properties.Text.GetText(true); strings.Contains(text, "Chain:") {
 		t.Errorf("a single-hop symlink should not show a Chain line, got:\n%s", text)
 	}
 }
@@ -335,7 +335,7 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 	r.target = path
 	r.openProperties()
 
-	before := r.propertiesText.GetText(true)
+	before := r.properties.Text.GetText(true)
 	if !strings.Contains(before, "h to compute SHA-256") {
 		t.Errorf("Properties text before computing hashes should show the hint, got:\n%s", before)
 	}
@@ -346,9 +346,9 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 	// drains (see isolateHashFile's own doc comment on why that's not
 	// safe to do in a test without a running event loop). What's
 	// actually being pinned here is renderProperties' own rendering of
-	// an already-computed result, so set propertiesHashes directly
+	// an already-computed result, so set properties.Hashes directly
 	// rather than going through the async path.
-	r.propertiesHashes = &fsops.Hashes{
+	r.properties.Hashes = &fsops.Hashes{
 		MD5:    "5eb63bbbe01eeed093cb22bb8f5acdc3", // MD5("hello world")
 		SHA1:   "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed",
 		SHA256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
@@ -357,7 +357,7 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 	}
 	r.rerenderProperties()
 
-	after := r.propertiesText.GetText(true)
+	after := r.properties.Text.GetText(true)
 	if !strings.Contains(after, "5eb63bbbe01eeed093cb22bb8f5acdc3") {
 		t.Errorf("Properties text after computing hashes should show the MD5 digest, got:\n%s", after)
 	}
@@ -466,13 +466,13 @@ func TestComputeHashesSkipsDirectories(t *testing.T) {
 	r.target = filepath.Join(dir, "app-data")
 	r.openProperties()
 
-	text := r.propertiesText.GetText(true)
+	text := r.properties.Text.GetText(true)
 	if strings.Contains(text, "Press h or click here") {
 		t.Errorf("a directory's Properties should not offer to compute a hash, got:\n%s", text)
 	}
 
 	r.computeHashes()
-	if r.propertiesText.GetText(true) != text {
+	if r.properties.Text.GetText(true) != text {
 		t.Error("computeHashes on a directory should not change the Properties text")
 	}
 	if r.activePage == errorPage {
@@ -547,9 +547,9 @@ func TestComputeHashesShowsAnimationImmediately(t *testing.T) {
 	if !r.hashInProgress {
 		t.Fatal("hashInProgress should be true right after computeHashes starts")
 	}
-	text := r.propertiesText.GetText(true)
+	text := r.properties.Text.GetText(true)
 	if !strings.Contains(text, hashAnimationFrames[0]) || !strings.Contains(text, "Computing hashes") {
-		t.Errorf("propertiesText should show the first animation frame (%q) and \"Computing hashes\", got:\n%s", hashAnimationFrames[0], text)
+		t.Errorf("properties.Text should show the first animation frame (%q) and \"Computing hashes\", got:\n%s", hashAnimationFrames[0], text)
 	}
 }
 
@@ -598,9 +598,9 @@ func TestComputeHashesShowsPercentProgress(t *testing.T) {
 	// byte count onProgress just stored.
 	r.rerenderProperties()
 
-	text := r.propertiesText.GetText(true)
+	text := r.properties.Text.GetText(true)
 	if !strings.Contains(text, "50%") {
-		t.Errorf("propertiesText should show 50%% progress for a 100/200-byte read, got:\n%s", text)
+		t.Errorf("properties.Text should show 50%% progress for a 100/200-byte read, got:\n%s", text)
 	}
 }
 
@@ -657,7 +657,7 @@ func TestFinishHashComputationRecordsSucceeded(t *testing.T) {
 	}
 	r.target = path
 	r.openProperties()
-	r.propertiesTarget = path
+	r.properties.Target = path
 	r.hashInProgress = true
 	r.hashOpID = r.operations.Start(hashOperationType, path, "")
 
@@ -673,8 +673,8 @@ func TestFinishHashComputationRecordsSucceeded(t *testing.T) {
 	if r.hashInProgress {
 		t.Error("hashInProgress should be false once finishHashComputation has run")
 	}
-	if r.propertiesHashes == nil || r.propertiesHashes.MD5 != "deadbeef" {
-		t.Errorf("propertiesHashes = %+v, want the computed result propagated", r.propertiesHashes)
+	if r.properties.Hashes == nil || r.properties.Hashes.MD5 != "deadbeef" {
+		t.Errorf("properties.Hashes = %+v, want the computed result propagated", r.properties.Hashes)
 	}
 }
 
@@ -852,17 +852,17 @@ func TestPropertiesEditFieldHPressDoesNotTriggerHash(t *testing.T) {
 	r.openProperties()
 
 	r.setPropertiesFocus(0) // fieldName is propertyFieldOrder[0] — auto-opens the inline editor, pre-filled with the current name
-	if !r.propertiesEditField.HasFocus() {
+	if !r.properties.EditField.HasFocus() {
 		t.Fatal("setup: expected the inline editor to have opened and taken focus")
 	}
-	nameBefore := r.propertiesEditField.GetText()
+	nameBefore := r.properties.EditField.GetText()
 
-	r.properties.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
+	r.properties.Pages.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
 
 	if r.hashInProgress {
 		t.Error("pressing h while the inline editor has real focus should not start computing the hash")
 	}
-	if got, want := r.propertiesEditField.GetText(), nameBefore+"h"; got != want {
+	if got, want := r.properties.EditField.GetText(), nameBefore+"h"; got != want {
 		t.Errorf("the inline editor's own text = %q, want %q — h should be typed into it like any other character", got, want)
 	}
 }
@@ -888,7 +888,7 @@ func TestHandlePlainKeyHDoesNotFireWhileEditFieldFocused(t *testing.T) {
 	r.target = path
 	r.openProperties()
 	r.setPropertiesFocus(0) // auto-opens the inline editor, pre-filled — see the sibling test above
-	if !r.propertiesEditField.HasFocus() {
+	if !r.properties.EditField.HasFocus() {
 		t.Fatal("setup: expected the inline editor to have opened and taken focus")
 	}
 
@@ -902,7 +902,7 @@ func TestHandlePlainKeyHDoesNotFireWhileEditFieldFocused(t *testing.T) {
 
 // TestPropertiesHashLineClickTriggersHash pins the click affordance: a
 // click landing on (or below) the hash hint line computes the hash,
-// dispatched through r.properties itself (see hashesMouseCapture) the
+// dispatched through r.properties.Pages itself (see hashesMouseCapture) the
 // way a real click arrives, with a genuinely drawn overlay
 // (tcell.SimulationScreen) behind the coordinates rather than assumed
 // ones.
@@ -923,10 +923,10 @@ func TestPropertiesHashLineClickTriggersHash(t *testing.T) {
 	screen := drawProperties(t, r)
 	defer screen.Fini()
 
-	x, y, _, _ := r.propertiesText.GetInnerRect()
+	x, y, _, _ := r.properties.Text.GetInnerRect()
 	clickY := y + r.hashSectionRow
 
-	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	consumed, _ := r.properties.Pages.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0), func(tview.Primitive) {})
 	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
 	if !consumed {
 		t.Error("click on the hash line should be consumed")
@@ -958,7 +958,7 @@ func TestPropertiesHashLineClickPastTheButtonDoesNotTriggerHash(t *testing.T) {
 	screen := drawProperties(t, r)
 	defer screen.Fini()
 
-	x, y, _, _ := r.propertiesText.GetInnerRect()
+	x, y, _, _ := r.properties.Text.GetInnerRect()
 	clickY := y + r.hashSectionRow
 
 	// consumed itself isn't checked here: tview's own default TextView
@@ -966,7 +966,7 @@ func TestPropertiesHashLineClickPastTheButtonDoesNotTriggerHash(t *testing.T) {
 	// consumed regardless of whether this app's own hashesMouseCapture
 	// matched anything — hashInProgress is what actually pins whether
 	// the click reached the hash section's own action at all.
-	r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x+r.hashButtonWidth+5, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	r.properties.Pages.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x+r.hashButtonWidth+5, clickY, tcell.Button1, 0), func(tview.Primitive) {})
 	if r.hashInProgress {
 		t.Error("clicking past the button should not have started computing hashes")
 	}
@@ -979,7 +979,7 @@ func TestPropertiesHashLineClickPastTheButtonDoesNotTriggerHash(t *testing.T) {
 // occupy that screen position once a field had already been tabbed to —
 // closing the overlay via Cancel/Save instead of computing hashes, even
 // though nothing had actually been changed. hashesMouseCapture (also
-// installed on r.properties) runs before any of that, so this now finds
+// installed on r.properties.Pages) runs before any of that, so this now finds
 // the hash line regardless.
 func TestPropertiesHashLineClickTriggersHashWhileInlineEditorOpen(t *testing.T) {
 	dir := fixtureDir(t)
@@ -996,17 +996,17 @@ func TestPropertiesHashLineClickTriggersHashWhileInlineEditorOpen(t *testing.T) 
 	r.openProperties()
 
 	r.setPropertiesFocus(0) // auto-opens the inline editor over Name
-	if !r.propertiesEditField.HasFocus() {
+	if !r.properties.EditField.HasFocus() {
 		t.Fatal("setup: expected the inline editor to have opened and taken focus")
 	}
 
 	screen := drawProperties(t, r)
 	defer screen.Fini()
 
-	x, y, _, _ := r.propertiesText.GetInnerRect()
+	x, y, _, _ := r.properties.Text.GetInnerRect()
 	clickY := y + r.hashSectionRow
 
-	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	consumed, _ := r.properties.Pages.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0), func(tview.Primitive) {})
 	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
 	if !consumed {
 		t.Error("click on the hash line should be consumed even while the inline editor is open")
@@ -1054,7 +1054,7 @@ func TestSavingUntouchedFieldsDoesNotWriteAnything(t *testing.T) {
 
 	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
 	for i := 0; i < len(r.currentFieldOrder()); i++ {
-		r.properties.InputHandler()(tab, func(tview.Primitive) {})
+		r.properties.Pages.InputHandler()(tab, func(tview.Primitive) {})
 	}
 
 	r.savePropertiesEdit()
@@ -1086,13 +1086,13 @@ func drawProperties(t *testing.T, r *Root) tcell.SimulationScreen {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	screen.SetSize(80, 24)
-	r.properties.SetRect(0, 0, 60, 20)
-	r.properties.Draw(screen)
+	r.properties.Pages.SetRect(0, 0, 60, 20)
+	r.properties.Pages.Draw(screen)
 	return screen
 }
 
 // drawPropertiesAtCurrentRect is drawProperties' counterpart for tests
-// that need r.properties' own real, already-computed rect (see
+// that need r.properties.Pages' own real, already-computed rect (see
 // resizeProperties) left alone rather than overridden to a fixed
 // 60x20. That matters specifically for the Cancel/Save row: its own
 // rect (see newPropertiesView's "buttons" page, added with resize:
@@ -1101,7 +1101,7 @@ func drawProperties(t *testing.T, r *Root) tcell.SimulationScreen {
 // realistic (wide) panel rect and a long enough t.TempDir() path in the
 // rendered "Path:" line, can end up wider than drawProperties' fixed 60
 // columns. Overriding to a narrower rect then leaves the button row's
-// own already-computed position extending past r.properties' new
+// own already-computed position extending past r.properties.Pages' new
 // (narrower) bounds, so a click there gets rejected by Pages' own
 // InRect check before ever reaching the button underneath it — not a
 // real app bug, just this fixed-size test helper being too narrow for
@@ -1114,7 +1114,7 @@ func drawPropertiesAtCurrentRect(t *testing.T, r *Root) tcell.SimulationScreen {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	screen.SetSize(120, 40) // generous enough for any realistic content width against an 80x24 panel
-	r.properties.Draw(screen)
+	r.properties.Pages.Draw(screen)
 	return screen
 }
 
@@ -1146,7 +1146,7 @@ func TestCapturePropertiesMouseClickOnPermissionBitToggles(t *testing.T) {
 	if !ok {
 		t.Fatal("no fieldPermOwnerWrite span found")
 	}
-	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	rectX, rectY, _, _ := r.properties.Text.GetInnerRect()
 	clickX, clickY := rectX+span.startCol, rectY+span.row
 
 	action, event := r.capturePropertiesMouse(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0))
@@ -1156,7 +1156,7 @@ func TestCapturePropertiesMouseClickOnPermissionBitToggles(t *testing.T) {
 	if r.stagedMode != 0o444 { // owner-write toggled off
 		t.Errorf("stagedMode = %o, want %o", r.stagedMode, 0o444)
 	}
-	if !r.propertiesDirty {
+	if !r.properties.Dirty {
 		t.Error("clicking a permission bit should mark Properties dirty")
 	}
 }
@@ -1234,14 +1234,14 @@ func TestPropertiesNameSpanAccountsForWideCharacters(t *testing.T) {
 	// name's own actual last column must still land inside its span.
 	screen := drawProperties(t, r)
 	defer screen.Fini()
-	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	rectX, rectY, _, _ := r.properties.Text.GetInnerRect()
 	clickX, clickY := rectX+span.endCol-1, rectY+span.row
 
 	action, event := r.capturePropertiesMouse(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0))
 	if action != tview.MouseConsumed || event != nil {
 		t.Errorf("click on the name field's own last column should be consumed, got action=%v event=%v", action, event)
 	}
-	if !r.propertiesEditField.HasFocus() {
+	if !r.properties.EditField.HasFocus() {
 		t.Error("clicking the name field's last column should open the inline editor, not miss the span")
 	}
 }
@@ -1266,11 +1266,11 @@ func TestOpenPropertiesInitializesStagedValues(t *testing.T) {
 	if r.stagedMode != 0o640 {
 		t.Errorf("stagedMode = %o, want %o", r.stagedMode, 0o640)
 	}
-	if !r.stagedMtime.Equal(r.propertiesStat.ModTime) {
-		t.Errorf("stagedMtime = %v, want %v", r.stagedMtime, r.propertiesStat.ModTime)
+	if !r.stagedMtime.Equal(r.properties.Stat.ModTime) {
+		t.Errorf("stagedMtime = %v, want %v", r.stagedMtime, r.properties.Stat.ModTime)
 	}
-	if r.propertiesDirty {
-		t.Error("propertiesDirty should be false right after opening, before any field is touched")
+	if r.properties.Dirty {
+		t.Error("properties.Dirty should be false right after opening, before any field is touched")
 	}
 }
 
@@ -1297,11 +1297,11 @@ func TestTogglePermBitFlipsStagedModeAndMarksDirty(t *testing.T) {
 	if r.stagedMode != want {
 		t.Errorf("stagedMode = %o, want %o", r.stagedMode, want)
 	}
-	if !r.propertiesDirty {
+	if !r.properties.Dirty {
 		t.Error("toggling a permission bit should mark Properties dirty")
 	}
-	if !strings.Contains(r.propertiesText.GetText(true), fmt.Sprintf("(%04o)", want)) {
-		t.Errorf("rendered text should show the new octal value, got:\n%s", r.propertiesText.GetText(true))
+	if !strings.Contains(r.properties.Text.GetText(true), fmt.Sprintf("(%04o)", want)) {
+		t.Errorf("rendered text should show the new octal value, got:\n%s", r.properties.Text.GetText(true))
 	}
 
 	r.togglePermBit(fieldPermOwnerWrite)
@@ -1314,7 +1314,7 @@ func TestTogglePermBitFlipsStagedModeAndMarksDirty(t *testing.T) {
 // own report ("manche Felder leuchten hell auf, wenn man drin ist,
 // andere aber nicht"): the shared inline edit field always carries
 // theme.FocusedBackground, the same bright color the currently-focused
-// field's own span in propertiesText shows (see focusTag) — before this
+// field's own span in properties.Text shows (see focusTag) — before this
 // fix it used the plainer editableBackgroundColor instead, so a field
 // that opened its own editor immediately (Name/Date/Time/the octal
 // value) visually covered its own highlight with a duller color, while
@@ -1327,9 +1327,9 @@ func TestPropertiesEditFieldUsesFocusedColor(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	_, bg, _ := r.propertiesEditField.GetFieldStyle().Decompose()
+	_, bg, _ := r.properties.EditField.GetFieldStyle().Decompose()
 	if bg != r.theme.FocusedBackground {
-		t.Errorf("propertiesEditField's field background = %v, want theme.FocusedBackground (%v)", bg, r.theme.FocusedBackground)
+		t.Errorf("properties.EditField's field background = %v, want theme.FocusedBackground (%v)", bg, r.theme.FocusedBackground)
 	}
 }
 
@@ -1346,7 +1346,7 @@ func TestActivatePropertyFieldMarksDirty(t *testing.T) {
 	r.target = filepath.Join(dir, "apple.txt")
 	r.openProperties()
 
-	if r.propertiesDirty {
+	if r.properties.Dirty {
 		t.Fatal("setup: should not be dirty before any click")
 	}
 
@@ -1356,10 +1356,10 @@ func TestActivatePropertyFieldMarksDirty(t *testing.T) {
 	}
 	r.activatePropertyField(span)
 
-	if !r.propertiesDirty {
+	if !r.properties.Dirty {
 		t.Error("clicking a field should mark Properties dirty immediately")
 	}
-	if got := r.propertiesEditField.GetText(); got != "apple.txt" {
+	if got := r.properties.EditField.GetText(); got != "apple.txt" {
 		t.Errorf("edit field pre-filled with %q, want %q", got, "apple.txt")
 	}
 }
@@ -1375,13 +1375,13 @@ func TestFinishPropertyEditAppliesNameOnEnter(t *testing.T) {
 
 	span, _ := findPropertySpan(r, fieldName)
 	r.activatePropertyField(span)
-	r.propertiesEditField.SetText("renamed.txt")
+	r.properties.EditField.SetText("renamed.txt")
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	if r.stagedName != "renamed.txt" {
 		t.Errorf("stagedName = %q, want %q", r.stagedName, "renamed.txt")
 	}
-	if !strings.Contains(r.propertiesText.GetText(true), "renamed.txt") {
+	if !strings.Contains(r.properties.Text.GetText(true), "renamed.txt") {
 		t.Error("rendered text should reflect the staged name")
 	}
 }
@@ -1397,7 +1397,7 @@ func TestFinishPropertyEditEscapeDiscardsFieldEdit(t *testing.T) {
 
 	span, _ := findPropertySpan(r, fieldName)
 	r.activatePropertyField(span)
-	r.propertiesEditField.SetText("should-not-apply.txt")
+	r.properties.EditField.SetText("should-not-apply.txt")
 	r.finishPropertyEdit(tcell.KeyEscape)
 
 	if r.stagedName != "apple.txt" {
@@ -1425,15 +1425,15 @@ func TestFinishPropertyEditTabCommitsAndAdvances(t *testing.T) {
 	dateSpan, _ := findPropertySpan(r, fieldMtimeDate)
 	timeIdx, _ := r.propertyFieldIndex(fieldMtimeTime)
 	r.activatePropertyField(dateSpan)
-	r.propertiesEditField.SetText("2026-08-05")
+	r.properties.EditField.SetText("2026-08-05")
 	r.finishPropertyEdit(tcell.KeyTab)
 
 	wantDate := time.Date(2026, time.August, 5, 14, 30, 45, 0, time.Local)
 	if !r.stagedMtime.Equal(wantDate) {
 		t.Errorf("stagedMtime = %v, want %v — Tab should commit the typed date, not discard it", r.stagedMtime, wantDate)
 	}
-	if r.propertiesFocusIndex != timeIdx {
-		t.Errorf("propertiesFocusIndex = %d, want %d (the Time field) after Tab out of Date", r.propertiesFocusIndex, timeIdx)
+	if r.properties.FocusIndex != timeIdx {
+		t.Errorf("properties.FocusIndex = %d, want %d (the Time field) after Tab out of Date", r.properties.FocusIndex, timeIdx)
 	}
 }
 
@@ -1452,15 +1452,15 @@ func TestFinishPropertyEditBacktabCommitsAndRetreats(t *testing.T) {
 	timeSpan, _ := findPropertySpan(r, fieldMtimeTime)
 	dateIdx, _ := r.propertyFieldIndex(fieldMtimeDate)
 	r.activatePropertyField(timeSpan)
-	r.propertiesEditField.SetText("09:05:03")
+	r.properties.EditField.SetText("09:05:03")
 	r.finishPropertyEdit(tcell.KeyBacktab)
 
 	wantTime := time.Date(2020, time.January, 1, 9, 5, 3, 0, time.Local)
 	if !r.stagedMtime.Equal(wantTime) {
 		t.Errorf("stagedMtime = %v, want %v — Backtab should commit the typed time, not discard it", r.stagedMtime, wantTime)
 	}
-	if r.propertiesFocusIndex != dateIdx {
-		t.Errorf("propertiesFocusIndex = %d, want %d (the Date field) after Backtab out of Time", r.propertiesFocusIndex, dateIdx)
+	if r.properties.FocusIndex != dateIdx {
+		t.Errorf("properties.FocusIndex = %d, want %d (the Date field) after Backtab out of Time", r.properties.FocusIndex, dateIdx)
 	}
 }
 
@@ -1494,7 +1494,7 @@ func TestActivatePropertyFieldOctalOpensInlineEditor(t *testing.T) {
 	// so each digit can be overwritten in place (see octalDigitCapture's
 	// own doc comment) rather than requiring the whole value to be
 	// retyped from scratch.
-	if got := r.propertiesEditField.GetText(); got != "0644" {
+	if got := r.properties.EditField.GetText(); got != "0644" {
 		t.Errorf("edit field pre-filled with %q, want %q", got, "0644")
 	}
 }
@@ -1525,10 +1525,10 @@ func TestActivatePropertyFieldOctalLimitsToFourDigits(t *testing.T) {
 	r.activatePropertyField(span)
 
 	for _, ch := range "076543" { // 6 digits typed, only the first 4 should land
-		r.propertiesEditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
+		r.properties.EditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
 	}
 
-	if got := r.propertiesEditField.GetText(); got != "0765" {
+	if got := r.properties.EditField.GetText(); got != "0765" {
 		t.Errorf("edit field text = %q, want %q (capped at 4 characters)", got, "0765")
 	}
 }
@@ -1560,10 +1560,10 @@ func TestActivatePropertyFieldOctalOverwritesInPlace(t *testing.T) {
 	r.activatePropertyField(span)
 
 	for _, ch := range "17" { // only the first two digits are touched
-		r.propertiesEditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
+		r.properties.EditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
 	}
 
-	if got := r.propertiesEditField.GetText(); got != "1744" {
+	if got := r.properties.EditField.GetText(); got != "1744" {
 		t.Errorf("edit field text = %q, want %q (first two digits overwritten, last two untouched)", got, "1744")
 	}
 }
@@ -1593,10 +1593,10 @@ func TestActivatePropertyFieldOctalRejectsNonOctalDigits(t *testing.T) {
 	r.activatePropertyField(span)
 
 	for _, ch := range "89x5" { // '8', '9', 'x' rejected; '5' overwrites the first digit
-		r.propertiesEditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
+		r.properties.EditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
 	}
 
-	if got := r.propertiesEditField.GetText(); got != "5644" {
+	if got := r.properties.EditField.GetText(); got != "5644" {
 		t.Errorf("edit field text = %q, want %q ('8'/'9'/'x' rejected, only '5' landing)", got, "5644")
 	}
 }
@@ -1620,13 +1620,13 @@ func TestFinishPropertyEditOctalAppliesValidValue(t *testing.T) {
 
 	span, _ := findPropertySpan(r, fieldPermOctal)
 	r.activatePropertyField(span)
-	r.propertiesEditField.SetText("755")
+	r.properties.EditField.SetText("755")
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	if r.stagedMode != 0o755 {
 		t.Errorf("stagedMode = %o, want 0755", r.stagedMode)
 	}
-	if !strings.Contains(r.propertiesText.GetText(true), "(0755)") {
+	if !strings.Contains(r.properties.Text.GetText(true), "(0755)") {
 		t.Error("rendered text should show the new octal value")
 	}
 }
@@ -1652,7 +1652,7 @@ func TestFinishPropertyEditOctalInvalidValueKeepsPreviousStaged(t *testing.T) {
 
 	span, _ := findPropertySpan(r, fieldPermOctal)
 	r.activatePropertyField(span)
-	r.propertiesEditField.SetText("999") // not valid octal
+	r.properties.EditField.SetText("999") // not valid octal
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	if r.stagedMode != original {
@@ -1679,7 +1679,7 @@ func TestSavePropertiesEditAppliesOctalEdit(t *testing.T) {
 
 	span, _ := findPropertySpan(r, fieldPermOctal)
 	r.activatePropertyField(span)
-	r.propertiesEditField.SetText("600")
+	r.properties.EditField.SetText("600")
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	r.savePropertiesEdit()
@@ -1705,14 +1705,14 @@ func TestFinishPropertyEditDateValidShorthandPadsAndPreservesTime(t *testing.T) 
 
 	span, _ := findPropertySpan(r, fieldMtimeDate)
 	r.activatePropertyField(span)
-	r.propertiesEditField.SetText("2026-8-5") // shorthand: 1-digit month/day
+	r.properties.EditField.SetText("2026-8-5") // shorthand: 1-digit month/day
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	want := time.Date(2026, time.August, 5, 14, 30, 45, 0, time.Local)
 	if !r.stagedMtime.Equal(want) {
 		t.Errorf("stagedMtime = %v, want %v", r.stagedMtime, want)
 	}
-	if !strings.Contains(r.propertiesText.GetText(true), "2026-08-05") {
+	if !strings.Contains(r.properties.Text.GetText(true), "2026-08-05") {
 		t.Error("rendered text should show the zero-padded date")
 	}
 }
@@ -1729,14 +1729,14 @@ func TestFinishPropertyEditTimeValidShorthandPadsAndPreservesDate(t *testing.T) 
 
 	span, _ := findPropertySpan(r, fieldMtimeTime)
 	r.activatePropertyField(span)
-	r.propertiesEditField.SetText("9:5:3")
+	r.properties.EditField.SetText("9:5:3")
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	want := time.Date(2020, time.January, 1, 9, 5, 3, 0, time.Local)
 	if !r.stagedMtime.Equal(want) {
 		t.Errorf("stagedMtime = %v, want %v", r.stagedMtime, want)
 	}
-	if !strings.Contains(r.propertiesText.GetText(true), "09:05:03") {
+	if !strings.Contains(r.properties.Text.GetText(true), "09:05:03") {
 		t.Error("rendered text should show the zero-padded time")
 	}
 }
@@ -1753,7 +1753,7 @@ func TestFinishPropertyEditInvalidDateKeepsPreviousStaged(t *testing.T) {
 
 	span, _ := findPropertySpan(r, fieldMtimeDate)
 	r.activatePropertyField(span)
-	r.propertiesEditField.SetText("2026-02-30") // no such day
+	r.properties.EditField.SetText("2026-02-30") // no such day
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	if !r.stagedMtime.Equal(original) {
@@ -1854,17 +1854,17 @@ func TestSavePropertiesEditAppliesAllStagedChanges(t *testing.T) {
 
 	nameSpan, _ := findPropertySpan(r, fieldName)
 	r.activatePropertyField(nameSpan)
-	r.propertiesEditField.SetText("saved.txt")
+	r.properties.EditField.SetText("saved.txt")
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	wantMtime := time.Date(2021, time.June, 15, 8, 0, 0, 0, time.Local)
 	dateSpan, _ := findPropertySpan(r, fieldMtimeDate)
 	r.activatePropertyField(dateSpan)
-	r.propertiesEditField.SetText(wantMtime.Format("2006-01-02"))
+	r.properties.EditField.SetText(wantMtime.Format("2006-01-02"))
 	r.finishPropertyEdit(tcell.KeyEnter)
 	timeSpan, _ := findPropertySpan(r, fieldMtimeTime)
 	r.activatePropertyField(timeSpan)
-	r.propertiesEditField.SetText(wantMtime.Format("15:04:05"))
+	r.properties.EditField.SetText(wantMtime.Format("15:04:05"))
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	r.savePropertiesEdit()
@@ -1909,7 +1909,7 @@ func TestSavePropertiesEditLogsRenameAndChmod(t *testing.T) {
 	r.togglePermBit(fieldPermOtherRead) // 0644 -> 0640
 	nameSpan, _ := findPropertySpan(r, fieldName)
 	r.activatePropertyField(nameSpan)
-	r.propertiesEditField.SetText("saved.txt")
+	r.properties.EditField.SetText("saved.txt")
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	readLog := attachTestActivityLog(t, r)
@@ -1983,7 +1983,7 @@ func TestSavePropertiesEditNoopWhenNothingChanged(t *testing.T) {
 // applies a changed stagedOwner/stagedGroup via fsops.Chown — kept
 // privilege-independent the same way TestChownNoopToOwnUser in fsops is:
 // staging the process's own uid/gid *as a numeric string* differs from
-// propertiesStat.Owner/Group (which are resolved names), so the "did
+// properties.Stat.Owner/Group (which are resolved names), so the "did
 // this change" comparison sees a real change and Chown actually runs,
 // but resolves back to a no-op requiring no special privileges.
 func TestSavePropertiesEditAppliesOwnerGroupChange(t *testing.T) {
@@ -2091,7 +2091,7 @@ func TestToggleRecursiveApplyIndependence(t *testing.T) {
 	if r.stagedRecursiveGroup {
 		t.Error("clicking the Owner toggle should not affect Group's own toggle")
 	}
-	if !r.propertiesDirty {
+	if !r.properties.Dirty {
 		t.Error("clicking the toggle should mark the overlay dirty, same as every other field")
 	}
 
@@ -2195,7 +2195,7 @@ func TestCancelPropertiesEditDiscardsChanges(t *testing.T) {
 	r.openProperties()
 
 	r.togglePermBit(fieldPermOtherRead)
-	if !r.propertiesDirty {
+	if !r.properties.Dirty {
 		t.Fatal("setup: should be dirty after toggling a bit")
 	}
 
@@ -2214,13 +2214,13 @@ func TestCancelPropertiesEditDiscardsChanges(t *testing.T) {
 }
 
 // TestPropertiesCancelButtonClickStillClosesOverlay pins the fix for a
-// real regression: hashesMouseCapture (installed on r.properties itself
+// real regression: hashesMouseCapture (installed on r.properties.Pages itself
 // — see its own doc comment) used to swallow a click meant for Cancel
 // into computeHashes instead, and leave Properties open — because
-// tview.Pages gives every visible page (propertiesText included) the
+// tview.Pages gives every visible page (properties.Text included) the
 // same rect as the Pages itself, covering the Cancel/Save row too, not
-// just propertiesText's own content lines. Dispatched through
-// r.properties.MouseHandler() the way a real click arrives — the
+// just properties.Text's own content lines. Dispatched through
+// r.properties.Pages.MouseHandler() the way a real click arrives — the
 // existing TestCancelPropertiesEditDiscardsChanges calls
 // cancelPropertiesEdit directly, which bypasses this routing entirely
 // and so never would have caught it.
@@ -2239,17 +2239,17 @@ func TestPropertiesCancelButtonClickStillClosesOverlay(t *testing.T) {
 	screen := drawPropertiesAtCurrentRect(t, r)
 	defer screen.Fini()
 
-	x, y, w, h := r.propertiesCancelBtn.GetRect()
+	x, y, w, h := r.properties.CancelBtn.GetRect()
 	clickX, clickY := x+w/2, y+h/2
 
-	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	consumed, _ := r.properties.Pages.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0), func(tview.Primitive) {})
 	if !consumed {
 		t.Error("click on Cancel should be consumed")
 	}
 	if r.activePage != "" {
 		t.Errorf("activePage = %q after clicking Cancel, want closed", r.activePage)
 	}
-	if strings.Contains(r.propertiesText.GetText(true), "MD5:") {
+	if strings.Contains(r.properties.Text.GetText(true), "MD5:") {
 		t.Error("clicking Cancel should not have computed hashes")
 	}
 }
@@ -2276,10 +2276,10 @@ func TestPropertiesSaveButtonClickStillSaves(t *testing.T) {
 	screen := drawPropertiesAtCurrentRect(t, r)
 	defer screen.Fini()
 
-	x, y, w, h := r.propertiesSaveBtn.GetRect()
+	x, y, w, h := r.properties.SaveBtn.GetRect()
 	clickX, clickY := x+w/2, y+h/2
 
-	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	consumed, _ := r.properties.Pages.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0), func(tview.Primitive) {})
 	if !consumed {
 		t.Error("click on Save should be consumed")
 	}
@@ -2340,13 +2340,13 @@ func TestCaptureOutsideClickClosesPropertiesBeforeAnyEdit(t *testing.T) {
 }
 
 // outsidePropertiesClick returns a screen position guaranteed to fall
-// outside r.properties' actual rect — computed from that rect rather
-// than assumed (e.g. (0,0)), since r.properties is positioned relative to
+// outside r.properties.Pages' actual rect — computed from that rect rather
+// than assumed (e.g. (0,0)), since r.properties.Pages is positioned relative to
 // r.menu's own rect (see openProperties), which is wherever it happens
 // to default to when a test opens Properties directly instead of through
 // a real right-click (showMenu) first.
 func outsidePropertiesClick(r *Root) (x, y int) {
-	px, py, pw, ph := r.properties.GetRect()
+	px, py, pw, ph := r.properties.Pages.GetRect()
 	return px + pw + 10, py + ph + 10
 }
 
@@ -2365,10 +2365,10 @@ func TestPropertiesButtonsVisibleImmediately(t *testing.T) {
 	r.target = filepath.Join(dir, "apple.txt")
 	r.openProperties()
 
-	if r.propertiesDirty {
+	if r.properties.Dirty {
 		t.Fatal("setup: should not be dirty right after opening")
 	}
-	visible := r.properties.GetPageNames(true)
+	visible := r.properties.Pages.GetPageNames(true)
 	for _, p := range visible {
 		if p == "buttons" {
 			return
@@ -2399,8 +2399,8 @@ func TestCapturePropertiesKeyTabNavigatesInsteadOfClosing(t *testing.T) {
 	if r.activePage != propertiesPage {
 		t.Errorf("activePage = %q after Tab, want Properties to stay open", r.activePage)
 	}
-	if r.propertiesFocusIndex != 0 {
-		t.Errorf("propertiesFocusIndex = %d after Tab from nothing focused, want 0 (Name)", r.propertiesFocusIndex)
+	if r.properties.FocusIndex != 0 {
+		t.Errorf("properties.FocusIndex = %d after Tab from nothing focused, want 0 (Name)", r.properties.FocusIndex)
 	}
 }
 
@@ -2422,7 +2422,7 @@ func TestCapturePropertiesKeyEnterActivatesFocusedField(t *testing.T) {
 		t.Error("capturePropertiesKey should consume Enter")
 	}
 
-	if got := r.propertiesEditField.GetText(); got != "apple.txt" {
+	if got := r.properties.EditField.GetText(); got != "apple.txt" {
 		t.Errorf("Enter on the focused Name field should open the inline editor pre-filled with %q, got %q", "apple.txt", got)
 	}
 	if r.activePage != propertiesPage {
@@ -2432,7 +2432,7 @@ func TestCapturePropertiesKeyEnterActivatesFocusedField(t *testing.T) {
 
 // TestPropertiesFocusCyclesFieldsThenButtonsThenWraps drives Tab through
 // the real dispatch path all the way around the loop once: repeated
-// capturePropertiesKey calls (propertiesText has real focus) through
+// capturePropertiesKey calls (properties.Text has real focus) through
 // every field stop in propertyFieldOrder, then — once focus reaches a
 // button — that button's own InputHandler (see newPropertiesButtons'
 // SetExitFunc), through Cancel, Save, and the wrap back to the first
@@ -2441,11 +2441,11 @@ func TestCapturePropertiesKeyEnterActivatesFocusedField(t *testing.T) {
 // (see activateInlineTextField) is currently the one showing — used
 // below to decide whether the next Tab/Backtab should be dispatched
 // through it (finishPropertyEdit, the same as InputField's own
-// SetDoneFunc would) or through capturePropertiesKey (propertiesText's
+// SetDoneFunc would) or through capturePropertiesKey (properties.Text's
 // own navigation), matching whichever one actually holds real keyboard
 // focus in the real app at that point.
 func propertiesEditFieldOpen(r *Root) bool {
-	for _, p := range r.properties.GetPageNames(true) {
+	for _, p := range r.properties.Pages.GetPageNames(true) {
 		if p == "editfield" {
 			return true
 		}
@@ -2455,8 +2455,8 @@ func propertiesEditFieldOpen(r *Root) bool {
 
 // TestPropertiesFocusCyclesFieldsThenButtonsThenWraps drives Tab all the
 // way around the loop once, dispatching each press through whichever
-// widget would really have focus at that point — propertiesEditField
-// once a field has auto-opened (see isAutoEditField), propertiesText
+// widget would really have focus at that point — properties.EditField
+// once a field has auto-opened (see isAutoEditField), properties.Text
 // otherwise — through every field stop in propertyFieldOrder, Cancel,
 // Save, and the wrap back to the first field (auto-opening it again).
 func TestPropertiesFocusCyclesFieldsThenButtonsThenWraps(t *testing.T) {
@@ -2482,24 +2482,24 @@ func TestPropertiesFocusCyclesFieldsThenButtonsThenWraps(t *testing.T) {
 
 	for i := 0; i < n; i++ {
 		tabOnce()
-		if r.propertiesFocusIndex != i {
-			t.Fatalf("after %d Tabs, propertiesFocusIndex = %d, want %d", i+1, r.propertiesFocusIndex, i)
+		if r.properties.FocusIndex != i {
+			t.Fatalf("after %d Tabs, properties.FocusIndex = %d, want %d", i+1, r.properties.FocusIndex, i)
 		}
 	}
 
 	tabOnce() // off the last field -> Cancel
-	if r.propertiesFocusIndex != n {
-		t.Fatalf("propertiesFocusIndex = %d, want Cancel (%d)", r.propertiesFocusIndex, n)
+	if r.properties.FocusIndex != n {
+		t.Fatalf("properties.FocusIndex = %d, want Cancel (%d)", r.properties.FocusIndex, n)
 	}
 
-	r.propertiesCancelBtn.InputHandler()(tab, noSetFocus) // Cancel -> Save
-	if r.propertiesFocusIndex != n+1 {
-		t.Fatalf("propertiesFocusIndex = %d, want Save (%d)", r.propertiesFocusIndex, n+1)
+	r.properties.CancelBtn.InputHandler()(tab, noSetFocus) // Cancel -> Save
+	if r.properties.FocusIndex != n+1 {
+		t.Fatalf("properties.FocusIndex = %d, want Save (%d)", r.properties.FocusIndex, n+1)
 	}
 
-	r.propertiesSaveBtn.InputHandler()(tab, noSetFocus) // Save -> wraps to the first field
-	if r.propertiesFocusIndex != 0 {
-		t.Errorf("propertiesFocusIndex = %d after wrapping, want 0", r.propertiesFocusIndex)
+	r.properties.SaveBtn.InputHandler()(tab, noSetFocus) // Save -> wraps to the first field
+	if r.properties.FocusIndex != 0 {
+		t.Errorf("properties.FocusIndex = %d after wrapping, want 0", r.properties.FocusIndex)
 	}
 	if !propertiesEditFieldOpen(r) {
 		t.Error("wrapping back to Name should auto-open its inline editor again")
@@ -2529,17 +2529,17 @@ func TestSaveReachableViaKeyboardAfterEditingDate(t *testing.T) {
 	}
 	r.activatePropertyField(dateSpan) // click the date field, same as a real click
 	wantMtime := time.Date(2021, time.June, 15, r.stagedMtime.Hour(), r.stagedMtime.Minute(), r.stagedMtime.Second(), 0, time.Local)
-	r.propertiesEditField.SetText(wantMtime.Format("2006-01-02"))
-	r.finishPropertyEdit(tcell.KeyEnter) // commit, same as a real Enter — focus returns to propertiesText
+	r.properties.EditField.SetText(wantMtime.Format("2006-01-02"))
+	r.finishPropertyEdit(tcell.KeyEnter) // commit, same as a real Enter — focus returns to properties.Text
 
 	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
 	enter := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
 	noSetFocus := func(tview.Primitive) {}
 
-	r.capturePropertiesKey(tab)                           // date -> time
-	r.capturePropertiesKey(tab)                           // time -> Cancel
-	r.propertiesCancelBtn.InputHandler()(tab, noSetFocus) // Cancel -> Save
-	r.propertiesSaveBtn.InputHandler()(enter, noSetFocus) // activate Save
+	r.capturePropertiesKey(tab)                            // date -> time
+	r.capturePropertiesKey(tab)                            // time -> Cancel
+	r.properties.CancelBtn.InputHandler()(tab, noSetFocus) // Cancel -> Save
+	r.properties.SaveBtn.InputHandler()(enter, noSetFocus) // activate Save
 
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -2573,7 +2573,7 @@ func TestSpaceActivatesFocusedButton(t *testing.T) {
 	r.setPropertiesFocus(len(r.currentFieldOrder()) + 1) // Save
 
 	space := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
-	if got := r.propertiesSaveBtn.GetInputCapture()(space); got != nil {
+	if got := r.properties.SaveBtn.GetInputCapture()(space); got != nil {
 		t.Error("space should be consumed by the Save button's input capture")
 	}
 
@@ -2651,7 +2651,7 @@ func TestFinishPropertyEditEnterConcludesWithoutReopening(t *testing.T) {
 
 	nameSpan, _ := findPropertySpan(r, fieldName)
 	r.activatePropertyField(nameSpan)
-	r.propertiesEditField.SetText("renamed.txt")
+	r.properties.EditField.SetText("renamed.txt")
 	r.finishPropertyEdit(tcell.KeyEnter)
 
 	if r.stagedName != "renamed.txt" {
@@ -2661,8 +2661,8 @@ func TestFinishPropertyEditEnterConcludesWithoutReopening(t *testing.T) {
 		t.Error("Enter should close the inline editor, not immediately reopen it")
 	}
 	nameIdx, _ := r.propertyFieldIndex(fieldName)
-	if r.propertiesFocusIndex != nameIdx {
-		t.Errorf("propertiesFocusIndex = %d, want to stay on Name (%d)", r.propertiesFocusIndex, nameIdx)
+	if r.properties.FocusIndex != nameIdx {
+		t.Errorf("properties.FocusIndex = %d, want to stay on Name (%d)", r.properties.FocusIndex, nameIdx)
 	}
 }
 
@@ -2757,7 +2757,7 @@ func TestPropertiesDragCanMoveUpAndLeft(t *testing.T) {
 	// would otherwise clip the up/left move below and make it
 	// indistinguishable from the very bug this test exists to catch.
 	r.moveProperties(150, 20)
-	startX, startY, width, height := r.properties.GetRect()
+	startX, startY, width, height := r.properties.Pages.GetRect()
 
 	// Press on the title bar — the window's own top row — to start the
 	// drag, the same as a real click there does.
@@ -2765,11 +2765,11 @@ func TestPropertiesDragCanMoveUpAndLeft(t *testing.T) {
 	// this is the link Pages' own normal dispatch calls once it routes an
 	// in-bounds press to properties itself — captureOutsideClick's own
 	// primitiveContains gate lets an in-bounds press through unchanged
-	// (propertiesDragging is still false at this point), so it never
+	// (properties.Dragging is still false at this point), so it never
 	// starts the drag by itself; that always happens one level further
 	// in, exactly like the real pipeline.
 	r.hashesMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
-	if !r.propertiesDragging {
+	if !r.properties.Dragging {
 		t.Fatal("setup: pressing the title bar should have started a drag")
 	}
 
@@ -2779,15 +2779,15 @@ func TestPropertiesDragCanMoveUpAndLeft(t *testing.T) {
 	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(newX+2, newY, tcell.ButtonPrimary, 0))
 	r.captureOutsideClick(tview.MouseLeftUp, tcell.NewEventMouse(newX+2, newY, tcell.ButtonNone, 0))
 
-	gotX, gotY, gotWidth, gotHeight := r.properties.GetRect()
+	gotX, gotY, gotWidth, gotHeight := r.properties.Pages.GetRect()
 	if gotX != newX || gotY != newY {
 		t.Errorf("rect = (%d,%d), want (%d,%d) — dragging up/left should move the window exactly like dragging down/right does", gotX, gotY, newX, newY)
 	}
 	if gotWidth != width || gotHeight != height {
 		t.Errorf("size changed during a pure move: (%d,%d) -> (%d,%d), want unchanged", width, height, gotWidth, gotHeight)
 	}
-	if r.propertiesDragging {
-		t.Error("propertiesDragging should be false after MouseLeftUp")
+	if r.properties.Dragging {
+		t.Error("properties.Dragging should be false after MouseLeftUp")
 	}
 }
 
@@ -2806,13 +2806,13 @@ func TestPropertiesDragStopsOnStrayButtonRelease(t *testing.T) {
 	r.target = filepath.Join(dir, "apple.txt")
 	r.openProperties()
 
-	startX, startY, _, _ := r.properties.GetRect()
+	startX, startY, _, _ := r.properties.Pages.GetRect()
 	r.hashesMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
 
 	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(startX-5, startY-3, tcell.ButtonNone, 0))
 
-	if r.propertiesDragging {
-		t.Error("propertiesDragging should be false once a move arrives with no button held")
+	if r.properties.Dragging {
+		t.Error("properties.Dragging should be false once a move arrives with no button held")
 	}
 }
 
@@ -2821,7 +2821,7 @@ func TestPropertiesDragStopsOnStrayButtonRelease(t *testing.T) {
 // bar that behaves exactly like Cancel: clicking it must close the
 // dialog without starting a drag, even while a real, in-progress edit
 // would otherwise keep the dialog open for anything but Cancel/Save
-// (see propertiesDirty's own doc comment) — cancelPropertiesEdit itself
+// (see properties.Dirty's own doc comment) — cancelPropertiesEdit itself
 // has no such gate, and this must reach it directly, not the generic
 // "click outside" path that does.
 func TestPropertiesCloseGlyphActsLikeCancel(t *testing.T) {
@@ -2833,9 +2833,9 @@ func TestPropertiesCloseGlyphActsLikeCancel(t *testing.T) {
 	drawRoot(t, r, 120, 30)
 	r.target = filepath.Join(dir, "apple.txt")
 	r.openProperties()
-	r.propertiesDirty = true // an in-progress edit — Cancel must still work
+	r.properties.Dirty = true // an in-progress edit — Cancel must still work
 
-	wx, wy, width, _ := r.properties.GetRect()
+	wx, wy, width, _ := r.properties.Pages.GetRect()
 	closeX := wx + toolWindowCloseButtonCol(0, width)
 
 	captured, _, handled := r.dragPropertiesMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(closeX, wy, tcell.ButtonPrimary, 0))
@@ -2843,7 +2843,7 @@ func TestPropertiesCloseGlyphActsLikeCancel(t *testing.T) {
 	if !handled || captured != tview.MouseConsumed {
 		t.Fatal("clicking the close glyph should be handled and consume the click")
 	}
-	if r.propertiesDragging {
+	if r.properties.Dragging {
 		t.Error("clicking the close glyph should not start a drag")
 	}
 	if r.activePage == propertiesPage {
@@ -2903,7 +2903,7 @@ func TestPropertiesOpensOnTheRowItIsAbout(t *testing.T) {
 	if !ok {
 		t.Fatal("the target row has no rectangle even after drawing")
 	}
-	gotX, gotY, _, _ := r.properties.GetRect()
+	gotX, gotY, _, _ := r.properties.Pages.GetRect()
 
 	panelX, panelY, _, _ := r.panel.GetInnerRect()
 	if gotY == panelY && wantY != panelY {

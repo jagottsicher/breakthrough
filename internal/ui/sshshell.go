@@ -502,7 +502,7 @@ func (r *Root) newSSHShellButtons() *tview.Flex {
 			// Form.SetFocus(0), not a direct
 			// r.app.SetFocus(r.ssh.ShellHostField) — the identical real,
 			// user-reported bug connectdialog.go's own
-			// connectConnectBtn.SetExitFunc found and fixed first (see
+			// connect.ConnectBtn.SetExitFunc found and fixed first (see
 			// its own doc comment for the full tview.Form internals):
 			// naming the field directly here left ssh.ShellForm's own
 			// focusedElement counter stale, so the next Backtab from
@@ -652,10 +652,10 @@ func (r *Root) launchSSHShell(conn remotefs.Connection) {
 	switch outcome {
 	case sshshell.Succeeded:
 		_ = remotefs.RecordAttempt(conn, false)
-		r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s", conn.Label()))
+		r.activity.Logger.Action(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s", conn.Label()))
 	case sshshell.ConnectionFailed:
 		_ = remotefs.RecordAttempt(conn, true)
-		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s: connection failed", conn.Label()))
+		r.activity.Logger.Error(activitylog.CategoryRemote, fmt.Sprintf("ssh shell to %s: connection failed", conn.Label()))
 	case sshshell.LocalError:
 		// ssh itself never actually ran (missing binary, ...) — a local
 		// problem, not a connection attempt at all, so history is left

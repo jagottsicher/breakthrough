@@ -332,11 +332,11 @@ func (r *Root) applySSHKeysGenerate(command string) {
 	r.reloadSSHKeys()
 
 	if runErr != nil {
-		r.activityLog.Error(activitylog.CategorySSHKeys, fmt.Sprintf("generate key %q: %v", command, runErr))
+		r.activity.Logger.Error(activitylog.CategorySSHKeys, fmt.Sprintf("generate key %q: %v", command, runErr))
 		r.showError(fmt.Errorf("ssh-keygen: %w", runErr))
 		return
 	}
-	r.activityLog.Action(activitylog.CategorySSHKeys, fmt.Sprintf("generated key: %s", command))
+	r.activity.Logger.Action(activitylog.CategorySSHKeys, fmt.Sprintf("generated key: %s", command))
 }
 
 // runSSHKeysGenerateCommandFullScreen suspends the TUI and runs command

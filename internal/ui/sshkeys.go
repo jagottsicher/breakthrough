@@ -396,16 +396,16 @@ func (r *Root) captureSSHKeysKey(event *tcell.EventKey) *tcell.EventKey {
 	// startConsigliereChord's own doc comment in consigliere.go and
 	// captureLogAuditSelectionTableKey's own identical shape.
 	// ssh.KeysTable is this screen's only real focus target.
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.consigliereInput)
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		if event.Key() == tcell.KeyBacktab {
-			if r.consigliereScrollbar.maxOffset() > 0 {
-				r.app.SetFocus(r.consigliereHistory)
+			if r.consigliere.Scrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliere.History)
 			} else {
-				r.app.SetFocus(r.consigliereInput)
+				r.app.SetFocus(r.consigliere.Input)
 			}
 			return nil
 		}
@@ -437,7 +437,7 @@ func (r *Root) applySSHKeysTheme(theme config.ResolvedTheme) {
 	if r.ssh.KeysTable == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.ssh.KeysLayout.SetBackgroundColor(theme.PanelBackground)
 	r.ssh.KeysTable.SetBackgroundColor(theme.PanelBackground)
@@ -448,17 +448,17 @@ func (r *Root) applySSHKeysTheme(theme config.ResolvedTheme) {
 	// text, warning orange) that then paints the highlighted row in
 	// mismatched patches instead of one consistent selection bar, live-
 	// confirmed against a real run. The same fix connectionMenuTable/
-	// sedPreviewTable/tabSwitcher already apply for the identical reason.
+	// sed.PreviewTable/tabSwitcher already apply for the identical reason.
 	r.ssh.KeysTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
 
-	// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+	// FocusedBackground, fixed — same reasoning mounts.TitleBar's own
 	// fixed FocusedBackground follows.
 	r.ssh.KeysTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.ssh.KeysTitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.ssh.KeysHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.ssh.KeysHint.SetTextColor(theme.TextColor)
 	sshKeysHintText, hintSpans := buildListHint(theme, sshKeysHintEntries())

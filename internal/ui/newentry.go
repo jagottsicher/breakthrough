@@ -28,11 +28,11 @@ func (r *Root) openNewFile() {
 			_, err = fsops.CreateFile(r.panel.path, name)
 		}
 		if err != nil {
-			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("new file %q: %v", name, err))
+			r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("new file %q: %v", name, err))
 			r.showError(err)
 			return
 		}
-		r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("created file %q", name))
+		r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("created file %q", name))
 		r.showError(r.panel.load(r.panel.path))
 	})
 }
@@ -53,11 +53,11 @@ func (r *Root) openNewDir() {
 			_, err = fsops.CreateDir(r.panel.path, name)
 		}
 		if err != nil {
-			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("new dir %q: %v", name, err))
+			r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("new dir %q: %v", name, err))
 			r.showError(err)
 			return
 		}
-		r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("created directory %q", name))
+		r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("created directory %q", name))
 		r.showError(r.panel.load(r.panel.path))
 	})
 }

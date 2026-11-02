@@ -17,8 +17,8 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/replace"
 )
 
-// Flag labels, shared between resetSedForm (where sedFlagsList's items
-// are built) and r.sedFlags (where their state is read back) — constants
+// Flag labels, shared between resetSedForm (where sed.FlagsList's items
+// are built) and r.sed.Flags (where their state is read back) — constants
 // rather than repeated literals so a typo in one place can't silently
 // desync them. sedFlagOrder is the fixed display order.
 const (
@@ -30,6 +30,34 @@ const (
 )
 
 var sedFlagOrder = []string{sedLabelRegex, sedLabelExtendedRegex, sedLabelCaseInsensitive, sedLabelGlobal, sedLabelBackup}
+
+// sedState holds the "Sed Replace" dialog's widgets/form values and the
+// Preview dry-run's own widgets, pending changes, and progress
+// animation.
+type sedState struct {
+	Form              *tview.Form
+	FindField         *tview.InputField
+	ReplaceField      *tview.InputField
+	AdvancedField     *tview.InputField
+	Flags             map[string]bool
+	FlagsList         *tview.List
+	Actions           *tview.List
+	TitleBar          *tview.TextView
+	ContentLayout     *tview.Flex
+	Layout            *tview.Flex
+	Targets           []string
+	PreviewStatus     *tview.TextView
+	PreviewTable      *tview.Table
+	PreviewActions    *tview.List
+	PreviewTitleBar   *tview.TextView
+	PreviewLayout     *tview.Flex
+	PendingChanges    []replace.FileChange
+	PreviewCancel     context.CancelFunc
+	PreviewAnimFrame  int
+	PreviewProcessed  int
+	PreviewTotal      int
+	PreviewCurrentPos string
+}
 
 // openSedReplace is the context menu's "sed", and the plain-letter
 // layer's "S" (see keymap.go) action: opens a dialog to run a real
@@ -50,12 +78,12 @@ func (r *Root) openSedReplace() {
 	if len(targets) == 0 {
 		return
 	}
-	r.sedTargets = targets
+	r.sed.Targets = targets
 	r.resetSedForm()
 
-	// height fits sedTitleBar's own row plus sedContentLayout's three
-	// stacked widgets (sedForm's four fields, sedFlagsList's five
-	// toggles, sedActions' two buttons, plus spacing) — checked against a
+	// height fits sed.TitleBar's own row plus sed.ContentLayout's three
+	// stacked widgets (sed.Form's four fields, sed.FlagsList's five
+	// toggles, sed.Actions' two buttons, plus spacing) — checked against a
 	// real render, not guessed; a shorter value silently clipped the
 	// bottom rows.
 	width, height := 78, 18
@@ -68,8 +96,8 @@ func (r *Root) openSedReplace() {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.sedLayout.SetRect(x, y, width, height)
-	r.showOverlay(sedReplacePage, r.sedLayout)
+	r.sed.Layout.SetRect(x, y, width, height)
+	r.showOverlay(sedReplacePage, r.sed.Layout)
 }
 
 // newSedForm builds the (initially empty) "Sed Replace" text-field form
@@ -85,7 +113,7 @@ func (r *Root) openSedReplace() {
 // text field's — the checkbox always ends up with the same
 // "you can type here" highlight (FocusedBackground, see applyTheme)
 // real fields get, even though it isn't one. The five flags live in
-// sedFlagsList instead (see newSedFlagsList), the same plain List-item-
+// sed.FlagsList instead (see newSedFlagsList), the same plain List-item-
 // with-a-relabeling-glyph pattern this app's own context menu already
 // uses for "Hide/Show hidden files" — a List has no such per-item
 // styling fight, since it never forces one color onto every row.
@@ -105,8 +133,8 @@ func (r *Root) newSedForm() *tview.Form {
 	return f
 }
 
-// resetSedForm rebuilds sedForm's fields and sedFlagsList's toggles
-// fresh for the current r.sedTargets. Clear(true) first — Form has no
+// resetSedForm rebuilds sed.Form's fields and sed.FlagsList's toggles
+// fresh for the current r.sed.Targets. Clear(true) first — Form has no
 // other way to remove everything a previous open's field values left
 // behind.
 //
@@ -119,58 +147,58 @@ func (r *Root) newSedForm() *tview.Form {
 // still applies to an advanced script too — it is a real sed invocation
 // flag (see RunSed), not just a guided-mode escaping choice.
 func (r *Root) resetSedForm() {
-	r.sedForm.Clear(true)
+	r.sed.Form.Clear(true)
 
-	r.sedForm.AddTextView("Target", sedTargetsLabel(r.sedTargets), 0, 2, true, false)
+	r.sed.Form.AddTextView("Target", sedTargetsLabel(r.sed.Targets), 0, 2, true, false)
 
-	r.sedFindField = tview.NewInputField().SetLabel("Find")
-	r.sedForm.AddFormItem(r.sedFindField)
-	r.sedReplaceField = tview.NewInputField().SetLabel("Replace with")
-	r.sedForm.AddFormItem(r.sedReplaceField)
+	r.sed.FindField = tview.NewInputField().SetLabel("Find")
+	r.sed.Form.AddFormItem(r.sed.FindField)
+	r.sed.ReplaceField = tview.NewInputField().SetLabel("Replace with")
+	r.sed.Form.AddFormItem(r.sed.ReplaceField)
 
-	r.sedAdvancedField = tview.NewInputField().SetLabel("Advanced sed script (overrides Find/Replace above)")
+	r.sed.AdvancedField = tview.NewInputField().SetLabel("Advanced sed script (overrides Find/Replace above)")
 	// Tab/Enter on the form's own last field would otherwise just wrap
-	// back to Find instead of ever reaching sedFlagsList — the same
+	// back to Find instead of ever reaching sed.FlagsList — the same
 	// "verified directly against tview's own Form.Focus, not guessed"
 	// gap newConnectForm's own doc comment already found and fixed for
-	// the Connect dialog (and rsyncExtraArgsField for Rsync): Form.Focus
+	// the Connect dialog (and rsync.ExtraArgsField for Rsync): Form.Focus
 	// unconditionally overwrites any SetDoneFunc with its own
 	// SetFinishedFunc whenever the form gains focus, so SetInputCapture
 	// — which runs first — is the only place left to intercept it. Set
 	// fresh here, in resetSedForm, rather than once in newSedForm: this
 	// field is itself rebuilt fresh on every open (see resetSedForm's
-	// own doc comment), unlike connectTagsField/rsyncExtraArgsField,
+	// own doc comment), unlike connect.TagsField/rsync.ExtraArgsField,
 	// which are each built once and kept.
-	r.sedAdvancedField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	r.sed.AdvancedField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab, tcell.KeyEnter:
-			r.app.SetFocus(r.sedFlagsList)
+			r.app.SetFocus(r.sed.FlagsList)
 			return nil
 		}
 		return event
 	})
-	r.sedForm.AddFormItem(r.sedAdvancedField)
+	r.sed.Form.AddFormItem(r.sed.AdvancedField)
 
 	// Seeded from settings rather than these fixed literals —
 	// self-adapting, the same shape Duplicate's own settings and
 	// runRsync's own persistRsyncFlags already have (see
 	// runSedPreview): whatever combination Sed Replace last actually
 	// ran with becomes the new starting point here.
-	r.sedFlags = map[string]bool{
+	r.sed.Flags = map[string]bool{
 		sedLabelRegex:           r.settings.SedRegex,
 		sedLabelExtendedRegex:   r.settings.SedExtendedRegex,
 		sedLabelCaseInsensitive: r.settings.SedCaseInsensitive,
 		sedLabelGlobal:          r.settings.SedGlobal,
 		sedLabelBackup:          r.settings.SedBackup,
 	}
-	r.sedFlagsList.Clear()
+	r.sed.FlagsList.Clear()
 	for _, label := range sedFlagOrder {
 		label := label // capture for the closure below
-		r.sedFlagsList.AddItem(sedFlagItemText(label, r.sedFlags[label]), "", 0, func() { r.toggleSedFlag(label) })
+		r.sed.FlagsList.AddItem(sedFlagItemText(label, r.sed.Flags[label]), "", 0, func() { r.toggleSedFlag(label) })
 	}
 }
 
-// sedFlagItemText renders one sedFlagsList row: the same outline/filled
+// sedFlagItemText renders one sed.FlagsList row: the same outline/filled
 // circle (○/●) this app already uses for the panel's own checkbox
 // column (see checkboxText in panel.go), so a boolean toggle looks the
 // same everywhere in this app rather than switching styles depending on
@@ -179,7 +207,7 @@ func sedFlagItemText(label string, checked bool) string {
 	return fmt.Sprintf("%s  %s", checkboxText(checked), label)
 }
 
-// persistSedFlags writes sedFlags back to settings, self-adapting the
+// persistSedFlags writes sed.Flags back to settings, self-adapting the
 // same way persistRsyncFlags already does for Rsync: runSedPreview
 // calls this once buildSedScript has actually validated, so a rejected
 // script (a bad advanced script, an empty Find) never overwrites a
@@ -187,7 +215,7 @@ func sedFlagItemText(label string, checked bool) string {
 func (r *Root) persistSedFlags() {
 	apply := func(key, label string) {
 		if opt, ok := optionSpecByKey(key); ok {
-			opt.apply(r, strconv.FormatBool(r.sedFlags[label]))
+			opt.apply(r, strconv.FormatBool(r.sed.Flags[label]))
 		}
 	}
 	apply("sed_regex", sedLabelRegex)
@@ -201,28 +229,28 @@ func (r *Root) persistSedFlags() {
 // the same "selectedFunc flips state, then relabels" shape
 // Root.toggleHidden already uses for the context menu's own toggle.
 func (r *Root) toggleSedFlag(label string) {
-	r.sedFlags[label] = !r.sedFlags[label]
+	r.sed.Flags[label] = !r.sed.Flags[label]
 	for i, l := range sedFlagOrder {
 		if l == label {
-			r.sedFlagsList.SetItemText(i, sedFlagItemText(label, r.sedFlags[label]), "")
+			r.sed.FlagsList.SetItemText(i, sedFlagItemText(label, r.sed.Flags[label]), "")
 			return
 		}
 	}
 }
 
-// newSedFlagsList builds sedFlagsList once, from NewRoot — see
+// newSedFlagsList builds sed.FlagsList once, from NewRoot — see
 // newSedForm's own doc comment for why the five flag toggles live here
 // instead of as Form checkboxes. Repopulated fresh on every open (see
-// resetSedForm), the same as sedForm's own fields.
+// resetSedForm), the same as sed.Form's own fields.
 func (r *Root) newSedFlagsList() *tview.List {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetHighlightFullLine(true)
 	l.SetDoneFunc(r.hideOverlay) // Escape
-	// Tab/Backtab continue the chain sedAdvancedField's own
-	// SetInputCapture starts and sedActions' own SetInputCapture picks
+	// Tab/Backtab continue the chain sed.AdvancedField's own
+	// SetInputCapture starts and sed.Actions' own SetInputCapture picks
 	// back up below — a List has no SetExitFunc the way Button does,
 	// so this is the only place to intercept them (the identical shape
-	// rsyncFlagsList's own doc comment already establishes for Rsync);
+	// rsync.FlagsList's own doc comment already establishes for Rsync);
 	// Escape itself is deliberately left alone here (falls through via
 	// the final "return event"), reaching the List's own native
 	// handling and, through it, SetDoneFunc above. Previously missing
@@ -231,10 +259,10 @@ func (r *Root) newSedFlagsList() *tview.List {
 	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.sedActions)
+			r.app.SetFocus(r.sed.Actions)
 			return nil
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.sedAdvancedField)
+			r.app.SetFocus(r.sed.AdvancedField)
 			return nil
 		}
 		return event
@@ -242,9 +270,9 @@ func (r *Root) newSedFlagsList() *tview.List {
 	return l
 }
 
-// newSedActions builds sedForm's own action row once, from NewRoot — a
+// newSedActions builds sed.Form's own action row once, from NewRoot — a
 // List rather than Form.AddButton, purely for consistency with
-// sedFlagsList/sedPreviewActions right above and below it (a Form's own
+// sed.FlagsList/sed.PreviewActions right above and below it (a Form's own
 // buttons would have worked fine here since buttons aren't checkboxes
 // and don't hit the per-item-background problem newSedForm's own doc
 // comment describes — this is a style choice, not a workaround).
@@ -255,23 +283,23 @@ func (r *Root) newSedActions() *tview.List {
 	l.AddItem("Cancel", "", 0, r.hideOverlay)
 	l.SetDoneFunc(r.hideOverlay) // Escape
 	// Tab wraps back to the form's own first field — through
-	// sedForm.SetFocus(0) then r.app.SetFocus(r.sedForm), not a direct
-	// r.app.SetFocus(r.sedFindField): naming the field directly here
-	// would leave sedForm's own internal focusedElement counter stale,
+	// sed.Form.SetFocus(0) then r.app.SetFocus(r.sed.Form), not a direct
+	// r.app.SetFocus(r.sed.FindField): naming the field directly here
+	// would leave sed.Form's own internal focusedElement counter stale,
 	// the identical real, user-reported bug connectdialog.go's own
-	// connectConnectBtn.SetExitFunc found and fixed first (see its own
+	// connect.ConnectBtn.SetExitFunc found and fixed first (see its own
 	// doc comment for the full tview.Form internals) — the next
 	// Backtab from Find would then land on the wrong field instead of
 	// wrapping back to Advanced script. Backtab continues the chain
-	// sedFlagsList's own SetInputCapture starts.
+	// sed.FlagsList's own SetInputCapture starts.
 	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.sedForm.SetFocus(0)
-			r.app.SetFocus(r.sedForm)
+			r.sed.Form.SetFocus(0)
+			r.app.SetFocus(r.sed.Form)
 			return nil
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.sedFlagsList)
+			r.app.SetFocus(r.sed.FlagsList)
 			return nil
 		}
 		return event
@@ -279,37 +307,37 @@ func (r *Root) newSedActions() *tview.List {
 	return l
 }
 
-// newSedLayout wraps sedTitleBar (" Sed Replace ", per the user's own
+// newSedLayout wraps sed.TitleBar (" Sed Replace ", per the user's own
 // explicit request that every pane/overlay/dialog in this app get one)
-// above sedContentLayout — the same widget/layout split
+// above sed.ContentLayout — the same widget/layout split
 // menu/menuTitleBar/menuLayout already established. Focus still
-// cascades all the way down to sedForm regardless of this extra
+// cascades all the way down to sed.Form regardless of this extra
 // nesting level: tview.Flex.Focus delegates to whichever item was added
 // with focus=true, and Application.SetFocus's own callback recursively
 // re-invokes itself with that delegate, so a Flex-of-a-Flex resolves
 // exactly like a single flat one would (verified directly against
 // tview's own flex.go/application.go, not assumed).
 func (r *Root) newSedLayout() *tview.Flex {
-	r.sedTitleBar = newPlainTitleBar("Sed Replace")
-	r.sedContentLayout = r.newSedContentLayout()
+	r.sed.TitleBar = newPlainTitleBar("Sed Replace")
+	r.sed.ContentLayout = r.newSedContentLayout()
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.sedTitleBar, 1, 0, false).
-		AddItem(r.sedContentLayout, 0, 1, true)
+		AddItem(r.sed.TitleBar, 1, 0, false).
+		AddItem(r.sed.ContentLayout, 0, 1, true)
 }
 
-// newSedContentLayout stacks sedForm (Target/Find/Replace/advanced
-// script), sedFlagsList (the five toggles), and sedActions
+// newSedContentLayout stacks sed.Form (Target/Find/Replace/advanced
+// script), sed.FlagsList (the five toggles), and sed.Actions
 // (Preview/Cancel) — see newSedForm's own doc comment for why the flags
 // live in a separate List rather than as Form checkboxes. Initial focus
-// goes to sedForm: typing Find/Replace immediately, without an extra
+// goes to sed.Form: typing Find/Replace immediately, without an extra
 // click first, is the common case: reaching the flags or the buttons
 // instead is one click away, the same as moving between any two of this
 // app's other independent widgets (e.g. panel and bashLine) already is.
 func (r *Root) newSedContentLayout() *tview.Flex {
 	layout := tview.NewFlex().SetDirection(tview.FlexRow)
-	layout.AddItem(r.sedForm, 8, 0, true)
-	layout.AddItem(r.sedFlagsList, 5, 0, false)
-	layout.AddItem(r.sedActions, 2, 0, false)
+	layout.AddItem(r.sed.Form, 8, 0, true)
+	layout.AddItem(r.sed.FlagsList, 5, 0, false)
+	layout.AddItem(r.sed.Actions, 2, 0, false)
 	return layout
 }
 
@@ -336,17 +364,17 @@ func sedTargetsLabel(targets []string) string {
 // (see sedPreviewFunc's own doc comment on why that part isn't tested
 // the same direct way).
 func (r *Root) buildSedScript() (script string, extendedRegex bool, err error) {
-	extendedRegex = r.sedFlags[sedLabelExtendedRegex]
+	extendedRegex = r.sed.Flags[sedLabelExtendedRegex]
 
-	script = strings.TrimSpace(r.sedAdvancedField.GetText())
+	script = strings.TrimSpace(r.sed.AdvancedField.GetText())
 	if script != "" {
 		return script, extendedRegex, nil
 	}
 
 	script, err = replace.BuildScript(
-		r.sedFindField.GetText(), r.sedReplaceField.GetText(),
-		r.sedFlags[sedLabelRegex], extendedRegex,
-		r.sedFlags[sedLabelCaseInsensitive], r.sedFlags[sedLabelGlobal],
+		r.sed.FindField.GetText(), r.sed.ReplaceField.GetText(),
+		r.sed.Flags[sedLabelRegex], extendedRegex,
+		r.sed.Flags[sedLabelCaseInsensitive], r.sed.Flags[sedLabelGlobal],
 	)
 	return script, extendedRegex, err
 }
@@ -360,7 +388,7 @@ func (r *Root) buildSedScript() (script string, extendedRegex bool, err error) {
 // testable without needing that real event loop.
 var sedPreviewFunc = replace.Preview
 
-// runSedPreview is sedActions' own "Preview": builds the sed script
+// runSedPreview is sed.Actions' own "Preview": builds the sed script
 // (guided fields, or the advanced field verbatim if it has anything in
 // it) and runs it read-only, in the background, against every target —
 // nothing is written to disk yet, see confirmApplySed for that. Shows
@@ -378,16 +406,16 @@ func (r *Root) runSedPreview() {
 
 	r.cancelSedPreview() // stop an earlier run still in flight, if any
 	ctx, cancel := context.WithCancel(context.Background())
-	r.sedPreviewCancel = cancel
+	r.sed.PreviewCancel = cancel
 
-	targets := r.sedTargets
-	r.sedPreviewTotal = len(targets)
-	r.sedPreviewProcessed = 0
-	r.sedPreviewAnimFrame = 0
-	r.sedPreviewCurrentPos = ""
+	targets := r.sed.Targets
+	r.sed.PreviewTotal = len(targets)
+	r.sed.PreviewProcessed = 0
+	r.sed.PreviewAnimFrame = 0
+	r.sed.PreviewCurrentPos = ""
 	r.renderSedPreviewStatus()
-	r.sedPreviewTable.Clear()
-	r.showOverlay(sedPreviewPage, r.sedPreviewLayout)
+	r.sed.PreviewTable.Clear()
+	r.showOverlay(sedPreviewPage, r.sed.PreviewLayout)
 
 	// Both wrapped in safeGo (see its own doc comment): a panic in
 	// either one used to take the whole process down without even
@@ -416,8 +444,8 @@ func (r *Root) runSedPreview() {
 				if ctx.Err() != nil {
 					return
 				}
-				r.sedPreviewProcessed++
-				r.sedPreviewCurrentPos = path
+				r.sed.PreviewProcessed++
+				r.sed.PreviewCurrentPos = path
 				r.renderSedPreviewStatus()
 			})
 		})
@@ -433,17 +461,17 @@ func (r *Root) runSedPreview() {
 
 // cancelSedPreview stops whatever sedPreviewFunc call is currently in
 // flight, if any, and its paired animateSedPreviewProgress ticker (both
-// share the same ctx/sedPreviewCancel) — the same shape cancelSearch
+// share the same ctx/sed.PreviewCancel) — the same shape cancelSearch
 // already has, so a slow preview started by an earlier, already-closed
 // dialog never keeps updating a screen the user has moved on from.
 func (r *Root) cancelSedPreview() {
-	if r.sedPreviewCancel != nil {
-		r.sedPreviewCancel()
-		r.sedPreviewCancel = nil
+	if r.sed.PreviewCancel != nil {
+		r.sed.PreviewCancel()
+		r.sed.PreviewCancel = nil
 	}
 }
 
-// animateSedPreviewProgress advances sedPreviewAnimFrame every
+// animateSedPreviewProgress advances sed.PreviewAnimFrame every
 // hashAnimationInterval until ctx is done — the same ticker-driven "in
 // progress" animation animateSearchProgress/animateHashProgress already
 // use, reusing hashAnimationFrames directly rather than a second,
@@ -461,7 +489,7 @@ func (r *Root) animateSedPreviewProgress(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				r.sedPreviewAnimFrame++
+				r.sed.PreviewAnimFrame++
 				r.renderSedPreviewStatus()
 			})
 		case <-ctx.Done():
@@ -470,23 +498,23 @@ func (r *Root) animateSedPreviewProgress(ctx context.Context) {
 	}
 }
 
-// renderSedPreviewStatus paints sedPreviewStatus's one line while a
+// renderSedPreviewStatus paints sed.PreviewStatus's one line while a
 // preview is still running: the current animation frame, how many of
 // the targets have been looked at so far, and whichever one is current
 // — the "Zeilenzahl als Indikator" the user asked for, the same
 // "N of M, here's where" shape renderSearchStatus already reports for a
 // live search.
 func (r *Root) renderSedPreviewStatus() {
-	frame := hashAnimationFrames[r.sedPreviewAnimFrame%len(hashAnimationFrames)]
-	text := fmt.Sprintf("%s Checking %d of %d: %s", frame, r.sedPreviewProcessed, r.sedPreviewTotal, tview.Escape(r.sedPreviewCurrentPos))
-	r.sedPreviewStatus.SetText(text)
+	frame := hashAnimationFrames[r.sed.PreviewAnimFrame%len(hashAnimationFrames)]
+	text := fmt.Sprintf("%s Checking %d of %d: %s", frame, r.sed.PreviewProcessed, r.sed.PreviewTotal, tview.Escape(r.sed.PreviewCurrentPos))
+	r.sed.PreviewStatus.SetText(text)
 }
 
 // showSedPreviewResult renders sedPreviewFunc's own outcome. A bad sed
 // script fails identically for every file (see replace.Preview's own
 // doc comment), so that error closes the dialog and reports it via
 // showError rather than showing an empty table; otherwise populates
-// sedPreviewTable (see renderSedPreviewTable) and remembers changes for
+// sed.PreviewTable (see renderSedPreviewTable) and remembers changes for
 // confirmApplySed.
 //
 // Split out from runSedPreview specifically so it's callable directly,
@@ -498,11 +526,11 @@ func (r *Root) showSedPreviewResult(changes []replace.FileChange, skipped map[st
 		r.showError(err)
 		return
 	}
-	r.sedPendingChanges = changes
+	r.sed.PendingChanges = changes
 	r.renderSedPreviewTable(changes, skipped)
 }
 
-// sedPreviewRow is one line sedPreviewTable actually shows — either one
+// sedPreviewRow is one line sed.PreviewTable actually shows — either one
 // changed line within a file (name/line/excerpt all real), a summary row
 // for a file that changed without any single line lining up positionally
 // (see sedPreviewRows' own doc comment), or a skipped input (line "-",
@@ -512,7 +540,7 @@ type sedPreviewRow struct {
 	skipped             bool
 }
 
-// sedPreviewRows computes sedPreviewTable's own rows from Preview's
+// sedPreviewRows computes sed.PreviewTable's own rows from Preview's
 // result — kept as a pure function, separate from actually populating
 // the tview.Table, so the row content itself is testable without a
 // screen (see TestSedPreviewRows).
@@ -567,21 +595,21 @@ func sedPreviewRows(changes []replace.FileChange, skipped map[string]string) []s
 	return rows
 }
 
-// renderSedPreviewTable fills sedPreviewTable (Name/Line/Excerpt,
+// renderSedPreviewTable fills sed.PreviewTable (Name/Line/Excerpt,
 // header fixed via SetFixed so it never scrolls away) from
 // sedPreviewRows — the "looks like the Find results" layout the user
 // asked for, replacing the earlier free-form text summary.
 func (r *Root) renderSedPreviewTable(changes []replace.FileChange, skipped map[string]string) {
-	r.sedPreviewTable.Clear()
+	r.sed.PreviewTable.Clear()
 
 	header := func(col int, text string) {
-		r.sedPreviewTable.SetCell(0, col, tview.NewTableCell(text).
+		r.sed.PreviewTable.SetCell(0, col, tview.NewTableCell(text).
 			SetTextColor(r.theme.Text).SetAttributes(tcell.AttrBold).SetSelectable(false))
 	}
 	header(0, "Name")
 	header(1, "Line")
 	header(2, "Excerpt")
-	r.sedPreviewTable.SetFixed(1, 0)
+	r.sed.PreviewTable.SetFixed(1, 0)
 
 	rows := sedPreviewRows(changes, skipped)
 	for i, row := range rows {
@@ -589,17 +617,17 @@ func (r *Root) renderSedPreviewTable(changes []replace.FileChange, skipped map[s
 		if row.skipped {
 			color = r.theme.PlaceholderText // dimmer, same role it already has elsewhere
 		}
-		r.sedPreviewTable.SetCell(i+1, 0, tview.NewTableCell(row.name).SetTextColor(color))
-		r.sedPreviewTable.SetCell(i+1, 1, tview.NewTableCell(row.line).SetTextColor(color))
-		r.sedPreviewTable.SetCell(i+1, 2, tview.NewTableCell(row.excerpt).SetTextColor(color))
+		r.sed.PreviewTable.SetCell(i+1, 0, tview.NewTableCell(row.name).SetTextColor(color))
+		r.sed.PreviewTable.SetCell(i+1, 1, tview.NewTableCell(row.line).SetTextColor(color))
+		r.sed.PreviewTable.SetCell(i+1, 2, tview.NewTableCell(row.excerpt).SetTextColor(color))
 	}
 
 	if len(rows) == 0 {
-		r.sedPreviewTable.SetCell(1, 0, tview.NewTableCell("No files would change.").SetTextColor(r.theme.PlaceholderText).SetSelectable(false))
+		r.sed.PreviewTable.SetCell(1, 0, tview.NewTableCell("No files would change.").SetTextColor(r.theme.PlaceholderText).SetSelectable(false))
 	}
-	r.sedPreviewTable.ScrollToBeginning()
+	r.sed.PreviewTable.ScrollToBeginning()
 
-	r.sedPreviewStatus.SetText(fmt.Sprintf("%d file(s) changed, %d skipped", len(changes), len(skipped)))
+	r.sed.PreviewStatus.SetText(fmt.Sprintf("%d file(s) changed, %d skipped", len(changes), len(skipped)))
 }
 
 // newSedPreviewLayout builds Preview's own result screen once, from
@@ -608,39 +636,39 @@ func (r *Root) renderSedPreviewTable(changes []replace.FileChange, skipped map[s
 // Name/Line/Excerpt table itself, and Apply/Back/Cancel below it — the
 // same three-choice shape confirmDialog already has.
 func (r *Root) newSedPreviewLayout() *tview.Flex {
-	r.sedPreviewStatus = tview.NewTextView()
+	r.sed.PreviewStatus = tview.NewTextView()
 
-	r.sedPreviewTable = tview.NewTable()
-	r.sedPreviewTable.SetSelectable(true, false)
+	r.sed.PreviewTable = tview.NewTable()
+	r.sed.PreviewTable.SetSelectable(true, false)
 
-	r.sedPreviewActions = tview.NewList().ShowSecondaryText(false)
-	r.sedPreviewActions.SetHighlightFullLine(true)
-	r.sedPreviewActions.AddItem("Apply", "", 0, r.confirmApplySed)
-	r.sedPreviewActions.AddItem("Back", "", 0, r.backToSedForm)
-	r.sedPreviewActions.AddItem("Cancel", "", 0, r.closeSedPreview)
-	r.sedPreviewActions.SetDoneFunc(r.backToSedForm) // Esc back to Sed, like the search results' own Esc
+	r.sed.PreviewActions = tview.NewList().ShowSecondaryText(false)
+	r.sed.PreviewActions.SetHighlightFullLine(true)
+	r.sed.PreviewActions.AddItem("Apply", "", 0, r.confirmApplySed)
+	r.sed.PreviewActions.AddItem("Back", "", 0, r.backToSedForm)
+	r.sed.PreviewActions.AddItem("Cancel", "", 0, r.closeSedPreview)
+	r.sed.PreviewActions.SetDoneFunc(r.backToSedForm) // Esc back to Sed, like the search results' own Esc
 
-	r.sedPreviewTitleBar = newPlainTitleBar("Sed Preview")
+	r.sed.PreviewTitleBar = newPlainTitleBar("Sed Preview")
 
 	content := tview.NewFlex().SetDirection(tview.FlexRow)
-	content.AddItem(r.sedPreviewStatus, 1, 0, false)
-	content.AddItem(r.sedPreviewTable, 0, 1, false)
-	content.AddItem(r.sedPreviewActions, 3, 0, true)
+	content.AddItem(r.sed.PreviewStatus, 1, 0, false)
+	content.AddItem(r.sed.PreviewTable, 0, 1, false)
+	content.AddItem(r.sed.PreviewActions, 3, 0, true)
 
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.sedPreviewTitleBar, 1, 0, false).
+		AddItem(r.sed.PreviewTitleBar, 1, 0, false).
 		AddItem(content, 0, 1, true)
 }
 
 // backToSedForm is Preview's own "Back" (and Escape — see
 // newSedPreviewLayout): stops any preview computation still running
-// (see cancelSedPreview) and returns to sedLayout with whatever the user
+// (see cancelSedPreview) and returns to sed.Layout with whatever the user
 // already typed/toggled still in place (Clear/reset only happens on a
 // fresh openSedReplace, not here) so a Find/Replace typo spotted in the
 // preview can be fixed without starting over.
 func (r *Root) backToSedForm() {
 	r.cancelSedPreview()
-	r.showOverlay(sedReplacePage, r.sedLayout)
+	r.showOverlay(sedReplacePage, r.sed.Layout)
 }
 
 // closeSedPreview is Preview's own "Cancel": stops any preview
@@ -657,13 +685,13 @@ func (r *Root) closeSedPreview() {
 // preselected — reuses openPurgeConfirm exactly as Remove/Empty Trash
 // already do, see trash.go) before writing anything back, since Sed
 // Replace overwrites originals in place — optionally keeping a .bak,
-// see sedFlagsList's own toggle — just as permanently as those.
+// see sed.FlagsList's own toggle — just as permanently as those.
 func (r *Root) confirmApplySed() {
-	changes := r.sedPendingChanges
+	changes := r.sed.PendingChanges
 	if len(changes) == 0 {
 		return
 	}
-	backup := r.sedFlags[sedLabelBackup]
+	backup := r.sed.Flags[sedLabelBackup]
 
 	note := " Originals will be kept as .bak files."
 	if !backup {
@@ -673,13 +701,13 @@ func (r *Root) confirmApplySed() {
 
 	r.openPurgeConfirm(message, func() {
 		applied, err := replace.Apply(changes, backup)
-		r.sedPendingChanges = nil
+		r.sed.PendingChanges = nil
 		if err != nil {
-			r.activityLog.Error(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: %d of %d files updated, then: %v", applied, len(changes), err))
+			r.activity.Logger.Error(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: %d of %d files updated, then: %v", applied, len(changes), err))
 			r.showError(fmt.Errorf("sed replace: %d of %d files updated, then: %w", applied, len(changes), err))
 			return
 		}
-		r.activityLog.Action(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: updated %d file(s)", applied))
+		r.activity.Logger.Action(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: updated %d file(s)", applied))
 		r.reloadPanel(nil)
 	})
 }
@@ -697,21 +725,21 @@ func (r *Root) SedReplaceShortcut() {
 	}
 }
 
-// applySedTheme themes Sed Replace. sedForm and its siblings are built
+// applySedTheme themes Sed Replace. sed.Form and its siblings are built
 // unconditionally during NewRoot (unlike Batch Rename's/Search's own
 // lazily-built widgets), so no nil guard is needed — matches the
 // unconditional access applyTheme's own call site already had.
 func (r *Root) applySedTheme(theme config.ResolvedTheme) {
-	r.sedForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.sedForm.SetLabelColor(theme.TextColor)
-	r.sedForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.sedForm.SetFieldTextColor(theme.TextColor)
-	styleList(r.sedFlagsList, theme)
-	styleList(r.sedActions, theme)
+	r.sed.Form.SetBackgroundColor(theme.SurfaceBackground)
+	r.sed.Form.SetLabelColor(theme.TextColor)
+	r.sed.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.sed.Form.SetFieldTextColor(theme.TextColor)
+	styleList(r.sed.FlagsList, theme)
+	styleList(r.sed.Actions, theme)
 	// FocusedBackground, fixed — Sed Replace/Preview are single-layer,
 	// always-modal dialogs nothing else ever stacks on top of, the same
 	// reasoning confirmDialogTitleBar/quitConfirmTitleBar/chmodTitleBar
 	// already follow.
-	r.sedTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.sedTitleBar.SetTextColor(theme.TextColor)
+	r.sed.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.sed.TitleBar.SetTextColor(theme.TextColor)
 }

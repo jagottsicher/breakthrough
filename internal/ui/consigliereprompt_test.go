@@ -359,21 +359,21 @@ func TestTerminalContextSnapshotExplainsVisibilityWhenScreenIsBlankUnderMachiave
 
 // TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage pins the
 // advisor-flagged regression risk: dispatch must key off the *current*
-// r.activePage, not consigliereExitPage (the page captured when the
+// r.activePage, not consigliere.ExitPage (the page captured when the
 // sidebar was first opened) — otherwise navigating from Log Audit's
 // own overview into a specific log file (pushOverlay, which the
 // sidebar is explicitly meant to survive) would keep describing the
 // overview forever.
 func TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.consigliereExitPage = logAuditSelectionPage // stale: wherever it was opened from
-	root.activePage = logAuditViewerPage             // live: wherever it actually is now
+	root.consigliere.ExitPage = logAuditSelectionPage // stale: wherever it was opened from
+	root.activePage = logAuditViewerPage              // live: wherever it actually is now
 	root.logAuditDir = "/var/log/myapp"
 
 	got := root.consigliereContextSnapshot()
 
 	if !strings.Contains(got, "Log Holepunch") {
-		t.Errorf("snapshot = %q, want a Log Holepunch snapshot even though consigliereExitPage still names the selection screen", got)
+		t.Errorf("snapshot = %q, want a Log Holepunch snapshot even though consigliere.ExitPage still names the selection screen", got)
 	}
 }
 
@@ -384,7 +384,7 @@ func TestConsigliereContextSnapshotUsesLiveActivePageNotExitPage(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToFirewall(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = firewallPage
-	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendUFW}
+	root.firewall.Snapshot = firewall.Snapshot{Backend: firewall.BackendUFW}
 
 	got := root.consigliereContextSnapshot()
 
@@ -639,7 +639,7 @@ func TestGitBreachContextSnapshotCapsRecentCommits(t *testing.T) {
 // follow.
 func TestFirewallContextSnapshotOmitsRuleContentByDefault(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.firewallSnapshot = firewall.Snapshot{
+	root.firewall.Snapshot = firewall.Snapshot{
 		Backend: firewall.BackendUFW,
 		Rules: []firewall.Rule{
 			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow, Protocol: "tcp", PortFrom: 22, PortTo: 22, Source: "10.0.0.0/8"},
@@ -664,7 +664,7 @@ func TestFirewallContextSnapshotOmitsRuleContentByDefault(t *testing.T) {
 func TestFirewallContextSnapshotIncludesRulesUnderMachiavelliMode(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereHardcoreMode = true
-	root.firewallSnapshot = firewall.Snapshot{
+	root.firewall.Snapshot = firewall.Snapshot{
 		Backend: firewall.BackendUFW,
 		Rules: []firewall.Rule{
 			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow, Protocol: "tcp", PortFrom: 22, PortTo: 22, Source: "10.0.0.0/8"},
@@ -688,7 +688,7 @@ func TestFirewallContextSnapshotIncludesRulesUnderMachiavelliMode(t *testing.T) 
 // confusing snapshot.
 func TestFirewallContextSnapshotReportsNoBackendActive(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendNone}
+	root.firewall.Snapshot = firewall.Snapshot{Backend: firewall.BackendNone}
 
 	got := root.firewallContextSnapshot()
 
@@ -703,7 +703,7 @@ func TestFirewallContextSnapshotReportsNoBackendActive(t *testing.T) {
 // silently empty or misleading snapshot.
 func TestFirewallContextSnapshotReportsReadError(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.firewallErr = errors.New("permission denied (you must be root)")
+	root.firewall.Err = errors.New("permission denied (you must be root)")
 
 	got := root.firewallContextSnapshot()
 
@@ -723,7 +723,7 @@ func TestFirewallContextSnapshotCapsRuleList(t *testing.T) {
 	for i := 0; i < cap+5; i++ {
 		rules = append(rules, firewall.Rule{Order: i + 1, Action: firewall.ActionAllow, Source: "distinct-source"})
 	}
-	root.firewallSnapshot = firewall.Snapshot{Backend: firewall.BackendUFW, Rules: rules}
+	root.firewall.Snapshot = firewall.Snapshot{Backend: firewall.BackendUFW, Rules: rules}
 
 	got := root.firewallContextSnapshot()
 
@@ -738,7 +738,7 @@ func TestFirewallContextSnapshotCapsRuleList(t *testing.T) {
 // exactly as visible the moment the panel itself browses into it.
 func TestMountsContextSnapshotIncludesEntries(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.mountsEntries = []mounts.Entry{
+	root.mounts.Entries = []mounts.Entry{
 		{Target: "/mnt/home", Source: "family-nas:/export/home", Fstype: "nfs4", Persistent: true},
 	}
 
@@ -755,7 +755,7 @@ func TestMountsContextSnapshotIncludesEntries(t *testing.T) {
 // a failed findmnt read is surfaced, not a silently empty snapshot.
 func TestMountsContextSnapshotReportsReadError(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.mountsErr = errors.New("findmnt: command not found")
+	root.mounts.Err = errors.New("findmnt: command not found")
 
 	got := root.mountsContextSnapshot()
 
@@ -772,7 +772,7 @@ func TestMountsContextSnapshotCapsEntryList(t *testing.T) {
 	for i := 0; i < consigliereMaxMountEntries+5; i++ {
 		entries = append(entries, mounts.Entry{Target: "distinct-target", Source: "src", Fstype: "ext4"})
 	}
-	root.mountsEntries = entries
+	root.mounts.Entries = entries
 
 	got := root.mountsContextSnapshot()
 
@@ -786,7 +786,7 @@ func TestMountsContextSnapshotCapsEntryList(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToMounts(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = mountsPage
-	root.mountsEntries = []mounts.Entry{{Target: "/mnt/home"}}
+	root.mounts.Entries = []mounts.Entry{{Target: "/mnt/home"}}
 
 	got := root.consigliereContextSnapshot()
 
@@ -800,7 +800,7 @@ func TestConsigliereContextSnapshotDispatchesToMounts(t *testing.T) {
 // to a Git Breach commit subject, already sent by default.
 func TestSessionsContextSnapshotIncludesSessions(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.sessionsList = []multiplex.Session{
+	root.sessions.List = []multiplex.Session{
 		{Name: "work", Backend: multiplex.BackendTmux, Status: multiplex.StatusAttached},
 	}
 
@@ -818,7 +818,7 @@ func TestSessionsContextSnapshotIncludesSessions(t *testing.T) {
 // snapshot.
 func TestSessionsContextSnapshotReportsReadError(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.sessionsErr = errors.New("neither screen nor tmux nor zellij is installed")
+	root.sessions.Err = errors.New("neither screen nor tmux nor zellij is installed")
 
 	got := root.sessionsContextSnapshot()
 
@@ -835,7 +835,7 @@ func TestSessionsContextSnapshotCapsSessionList(t *testing.T) {
 	for i := 0; i < consigliereMaxSessions+5; i++ {
 		sessions = append(sessions, multiplex.Session{Name: "distinct-session", Backend: multiplex.BackendScreen})
 	}
-	root.sessionsList = sessions
+	root.sessions.List = sessions
 
 	got := root.sessionsContextSnapshot()
 
@@ -849,7 +849,7 @@ func TestSessionsContextSnapshotCapsSessionList(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToSessions(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = sessionsPage
-	root.sessionsList = []multiplex.Session{{Name: "work"}}
+	root.sessions.List = []multiplex.Session{{Name: "work"}}
 
 	got := root.consigliereContextSnapshot()
 
@@ -929,7 +929,7 @@ func TestConsigliereContextSnapshotDispatchesToSSHKeys(t *testing.T) {
 // same risk category a Log Holepunch log line already has.
 func TestActivityLogContextSnapshotOmitsMessagesByDefault(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.activityLogAllEntries = []activitylog.Entry{
+	root.activity.AllEntries = []activitylog.Entry{
 		{Level: activitylog.LevelActions, Category: activitylog.CategoryFileOps, Message: "copied /home/jens/topsecret123.txt"},
 	}
 
@@ -951,7 +951,7 @@ func TestActivityLogContextSnapshotOmitsMessagesByDefault(t *testing.T) {
 func TestActivityLogContextSnapshotIncludesMessagesUnderMachiavelliMode(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereHardcoreMode = true
-	root.activityLogAllEntries = []activitylog.Entry{
+	root.activity.AllEntries = []activitylog.Entry{
 		{Level: activitylog.LevelActions, Category: activitylog.CategoryFileOps, Message: "copied /home/jens/topsecret123.txt"},
 	}
 
@@ -967,7 +967,7 @@ func TestActivityLogContextSnapshotIncludesMessagesUnderMachiavelliMode(t *testi
 func TestConsigliereContextSnapshotDispatchesToActivityLog(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = activityLogPage
-	root.activityLogAllEntries = []activitylog.Entry{{Message: "copied a.txt"}}
+	root.activity.AllEntries = []activitylog.Entry{{Message: "copied a.txt"}}
 
 	got := root.consigliereContextSnapshot()
 
@@ -985,7 +985,7 @@ func TestConsigliereContextSnapshotDispatchesToActivityLog(t *testing.T) {
 // Message already has.
 func TestTransferCenterContextSnapshotOmitsPathsByDefault(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.transferCenterOps = []operations.Operation{
+	root.transfer.Ops = []operations.Operation{
 		{Type: "paste", Source: "/home/jens/topsecret123.txt", Target: "/mnt/backup"},
 	}
 
@@ -1008,7 +1008,7 @@ func TestTransferCenterContextSnapshotOmitsPathsByDefault(t *testing.T) {
 func TestTransferCenterContextSnapshotIncludesPathsUnderMachiavelliMode(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereHardcoreMode = true
-	root.transferCenterOps = []operations.Operation{
+	root.transfer.Ops = []operations.Operation{
 		{Type: "paste", Source: "/home/jens/topsecret123.txt", Target: "/mnt/backup"},
 	}
 
@@ -1026,7 +1026,7 @@ func TestTransferCenterContextSnapshotCapsOperationList(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereHardcoreMode = true
 	for i := 0; i < root.consigliereContextLineCap()+5; i++ {
-		root.transferCenterOps = append(root.transferCenterOps, operations.Operation{
+		root.transfer.Ops = append(root.transfer.Ops, operations.Operation{
 			Type:   "paste",
 			Source: fmt.Sprintf("/src/%d", i),
 			Target: "/dst",
@@ -1045,7 +1045,7 @@ func TestTransferCenterContextSnapshotCapsOperationList(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToTransferCenter(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = transferCenterPage
-	root.transferCenterOps = []operations.Operation{{Type: "paste", Source: "/a", Target: "/b"}}
+	root.transfer.Ops = []operations.Operation{{Type: "paste", Source: "/a", Target: "/b"}}
 
 	got := root.consigliereContextSnapshot()
 
@@ -1091,9 +1091,9 @@ func TestConsigliereContextSnapshotDispatchesToToolbox(t *testing.T) {
 // sends by default, so it is never withheld behind Machiavelli Mode.
 func TestCompareTreeContextSnapshotIncludesDifferingEntries(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.compareTreeA, root.compareTreeB = "/tmp/a", "/tmp/b"
-	root.compareTreeStats = compare.Stats{Differs: 1, OnlyInA: 1}
-	root.compareTreeEntries = []compare.Entry{
+	root.compare.TreeA, root.compare.TreeB = "/tmp/a", "/tmp/b"
+	root.compare.TreeStats = compare.Stats{Differs: 1, OnlyInA: 1}
+	root.compare.TreeEntries = []compare.Entry{
 		{RelPath: "changed.txt", Verdict: compare.Differs},
 		{RelPath: "only-a.txt", Verdict: compare.OnlyInA},
 		{RelPath: "same.txt", Verdict: compare.Identical},
@@ -1117,7 +1117,7 @@ func TestCompareTreeContextSnapshotIncludesDifferingEntries(t *testing.T) {
 func TestCompareTreeContextSnapshotCapsEntryList(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	for i := 0; i < consigliereMaxCompareTreeEntries+5; i++ {
-		root.compareTreeEntries = append(root.compareTreeEntries, compare.Entry{
+		root.compare.TreeEntries = append(root.compare.TreeEntries, compare.Entry{
 			RelPath: fmt.Sprintf("file-%d.txt", i),
 			Verdict: compare.Differs,
 		})
@@ -1135,7 +1135,7 @@ func TestCompareTreeContextSnapshotCapsEntryList(t *testing.T) {
 func TestConsigliereContextSnapshotDispatchesToCompareTree(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = compareTreePage
-	root.compareTreeEntries = []compare.Entry{{RelPath: "a.txt", Verdict: compare.Differs}}
+	root.compare.TreeEntries = []compare.Entry{{RelPath: "a.txt", Verdict: compare.Differs}}
 
 	got := root.consigliereContextSnapshot()
 
