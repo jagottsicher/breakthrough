@@ -711,12 +711,12 @@ func (r *Root) runDuplicate() {
 func (r *Root) finishDuplicate(created int, err error, targetCount int) {
 	r.reloadPanel(nil)
 	if err != nil {
-		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("duplicate: created %d, then: %v", created, err))
+		r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("duplicate: created %d, then: %v", created, err))
 		r.showError(fmt.Errorf("duplicate: created %d, then: %w", created, err))
 		return
 	}
 	if created > 0 {
-		r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("duplicated %d item(s) from %d target(s)", created, targetCount))
+		r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("duplicated %d item(s) from %d target(s)", created, targetCount))
 	}
 }
 

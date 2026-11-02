@@ -675,11 +675,11 @@ func (r *Root) confirmApplySed() {
 		applied, err := replace.Apply(changes, backup)
 		r.sedPendingChanges = nil
 		if err != nil {
-			r.activityLog.Error(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: %d of %d files updated, then: %v", applied, len(changes), err))
+			r.activity.Logger.Error(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: %d of %d files updated, then: %v", applied, len(changes), err))
 			r.showError(fmt.Errorf("sed replace: %d of %d files updated, then: %w", applied, len(changes), err))
 			return
 		}
-		r.activityLog.Action(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: updated %d file(s)", applied))
+		r.activity.Logger.Action(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: updated %d file(s)", applied))
 		r.reloadPanel(nil)
 	})
 }

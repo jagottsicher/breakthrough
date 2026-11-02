@@ -1726,11 +1726,11 @@ func (r *Root) runEditor(path string, line int) {
 // directory afterward, unchanged.
 func (r *Root) runCommandOnFileAndReload(command, path string, line int) {
 	if err := r.runCommandOnFile(command, path, line); err != nil {
-		r.activityLog.Error(activitylog.CategoryShell, fmt.Sprintf("run %s on %s: %v", command, path, err))
+		r.activity.Logger.Error(activitylog.CategoryShell, fmt.Sprintf("run %s on %s: %v", command, path, err))
 		r.showError(fmt.Errorf("run %s on %s: %w", command, path, err))
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryShell, fmt.Sprintf("ran %s on %s", command, path))
+	r.activity.Logger.Action(activitylog.CategoryShell, fmt.Sprintf("ran %s on %s", command, path))
 	if r.panel.searchMode {
 		return
 	}
@@ -1819,11 +1819,11 @@ func (r *Root) openRemoteEntryWithCommand(remote remotefs.Client, remotePath, co
 	}
 
 	if err := r.runCommandOnFile(command, localPath, 0); err != nil {
-		r.activityLog.Error(activitylog.CategoryShell, fmt.Sprintf("run %s on %s: %v", command, remotePath, err))
+		r.activity.Logger.Error(activitylog.CategoryShell, fmt.Sprintf("run %s on %s: %v", command, remotePath, err))
 		r.showError(fmt.Errorf("open %s: %w", remotePath, err))
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryShell, fmt.Sprintf("ran %s on %s", command, remotePath))
+	r.activity.Logger.Action(activitylog.CategoryShell, fmt.Sprintf("ran %s on %s", command, remotePath))
 
 	r.showError(r.finishRemoteEdit(remote, remotePath, localPath, before))
 }
@@ -1846,10 +1846,10 @@ func (r *Root) finishRemoteEdit(remote remotefs.Client, remotePath, localPath st
 	}
 
 	if err := copyTransferFile(transferSide{}, transferSide{client: remote}, localPath, remotePath); err != nil {
-		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("upload changes to %s: %v", remotePath, err))
+		r.activity.Logger.Error(activitylog.CategoryRemote, fmt.Sprintf("upload changes to %s: %v", remotePath, err))
 		return fmt.Errorf("uploading changes back to %s: %w", remotePath, err)
 	}
-	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("uploaded changes to %s", remotePath))
+	r.activity.Logger.Action(activitylog.CategoryRemote, fmt.Sprintf("uploaded changes to %s", remotePath))
 	return r.panel.load(r.panel.path)
 }
 

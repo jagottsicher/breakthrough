@@ -893,20 +893,20 @@ func (r *Root) savePropertiesEdit() {
 	if r.stagedName != r.properties.Stat.Name {
 		newPath, err := fsops.Rename(target, r.stagedName)
 		if err != nil {
-			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", target, r.stagedName, err))
+			r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", target, r.stagedName, err))
 			firstErr = err
 		} else {
-			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", target, r.stagedName))
+			r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", target, r.stagedName))
 			_ = r.labels.Rehome(target, newPath) // see internal/filelabels.Store.Rehome's own doc comment
 			target = newPath
 		}
 	}
 	if firstErr == nil && r.stagedMode != r.properties.Stat.Mode.Perm() {
 		if err := fsops.Chmod(target, r.stagedMode); err != nil {
-			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chmod %q: %v", target, err))
+			r.activity.Logger.Error(activitylog.CategoryPermissions, fmt.Sprintf("chmod %q: %v", target, err))
 			firstErr = err
 		} else {
-			r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed permissions on %q to %04o", target, r.stagedMode&os.ModePerm))
+			r.activity.Logger.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed permissions on %q to %04o", target, r.stagedMode&os.ModePerm))
 		}
 	}
 	// Compared at whole-second precision, not with Equal directly: the
@@ -920,10 +920,10 @@ func (r *Root) savePropertiesEdit() {
 	// here actually differs.
 	if firstErr == nil && !r.stagedMtime.Truncate(time.Second).Equal(r.properties.Stat.ModTime.Truncate(time.Second)) {
 		if err := fsops.SetModTime(target, r.stagedMtime); err != nil {
-			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("set modified time on %q: %v", target, err))
+			r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("set modified time on %q: %v", target, err))
 			firstErr = err
 		} else {
-			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("set modified time on %q", target))
+			r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("set modified time on %q", target))
 		}
 	}
 	// Owner and Group are applied as two separate Chown/ChownRecursive
@@ -942,7 +942,7 @@ func (r *Root) savePropertiesEdit() {
 	// isDirish), so no extra guard is needed here beyond reading them.
 	if firstErr == nil && r.stagedOwner != r.properties.Stat.Owner {
 		if uid, err := fsops.ResolveUID(r.stagedOwner); err != nil {
-			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q owner to %q: %v", target, r.stagedOwner, err))
+			r.activity.Logger.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q owner to %q: %v", target, r.stagedOwner, err))
 			firstErr = err
 		} else {
 			chown := fsops.Chown
@@ -950,16 +950,16 @@ func (r *Root) savePropertiesEdit() {
 				chown = fsops.ChownRecursive
 			}
 			if err := chown(target, uid, -1); err != nil {
-				r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q owner to %q: %v", target, r.stagedOwner, err))
+				r.activity.Logger.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q owner to %q: %v", target, r.stagedOwner, err))
 				firstErr = err
 			} else {
-				r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed owner of %q to %q", target, r.stagedOwner))
+				r.activity.Logger.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed owner of %q to %q", target, r.stagedOwner))
 			}
 		}
 	}
 	if firstErr == nil && r.stagedGroup != r.properties.Stat.Group {
 		if gid, err := fsops.ResolveGID(r.stagedGroup); err != nil {
-			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q group to %q: %v", target, r.stagedGroup, err))
+			r.activity.Logger.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q group to %q: %v", target, r.stagedGroup, err))
 			firstErr = err
 		} else {
 			chown := fsops.Chown
@@ -967,10 +967,10 @@ func (r *Root) savePropertiesEdit() {
 				chown = fsops.ChownRecursive
 			}
 			if err := chown(target, -1, gid); err != nil {
-				r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q group to %q: %v", target, r.stagedGroup, err))
+				r.activity.Logger.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q group to %q: %v", target, r.stagedGroup, err))
 				firstErr = err
 			} else {
-				r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed group of %q to %q", target, r.stagedGroup))
+				r.activity.Logger.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed group of %q to %q", target, r.stagedGroup))
 			}
 		}
 	}

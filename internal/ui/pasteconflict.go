@@ -111,7 +111,7 @@ type pasteJob struct {
 	// finishPasteJob/cancelPasteJob/cancelPastePauseKeepQueue (Finish)
 	// and requestPastePause/resumePastePause (SetState) — see root.go's
 	// own operations field doc comment for why this exists alongside
-	// activityLog/notify rather than instead of either.
+	// activity.Logger/notify rather than instead of either.
 	opID uint64
 
 	// pauseMu guards resumeCh below — pause/resume (see their own doc
@@ -1112,7 +1112,7 @@ func (r *Root) applyPasteOneResult(job *pasteJob, src, dst string, err error) {
 		return
 	}
 	job.succeeded++
-	r.activityLog.Detail(pasteLogCategory(job), fmt.Sprintf("%s %q -> %q", pasteLogVerb(job), src, dst))
+	r.activity.Logger.Detail(pasteLogCategory(job), fmt.Sprintf("%s %q -> %q", pasteLogVerb(job), src, dst))
 	if job.cut {
 		// Only for a successful Move, not Copy: src is untouched by a
 		// copy (still exactly what Details would already be showing, if
@@ -1157,7 +1157,7 @@ func (r *Root) applyPasteOneResult(job *pasteJob, src, dst string, err error) {
 // this item's outcome as final.
 func (r *Root) recordPasteError(job *pasteJob, err error) {
 	job.errors = append(job.errors, err)
-	r.activityLog.Error(pasteLogCategory(job), fmt.Sprintf("%s: %v", pasteLogVerb(job), err))
+	r.activity.Logger.Error(pasteLogCategory(job), fmt.Sprintf("%s: %v", pasteLogVerb(job), err))
 	r.pasteItemDone(job)
 }
 
@@ -1190,7 +1190,7 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 	}
 	r.pasteJob = nil
 	if job.succeeded > 0 {
-		r.activityLog.Action(pasteLogCategory(job), fmt.Sprintf("%s %d item(s)", pasteLogVerb(job), job.succeeded))
+		r.activity.Logger.Action(pasteLogCategory(job), fmt.Sprintf("%s %d item(s)", pasteLogVerb(job), job.succeeded))
 	}
 	// Stops pasteWorker/animatePasteProgress (both select on job.ctx.Done()
 	// — see their own doc comments): there's nothing left in job.work by

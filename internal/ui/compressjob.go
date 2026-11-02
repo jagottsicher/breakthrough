@@ -289,10 +289,10 @@ func (r *Root) finishCompressJob(job *compressJob, err error) {
 
 	switch {
 	case err != nil && !wasCancelled:
-		r.activityLog.Error(activitylog.CategoryArchive, fmt.Sprintf("%s %s: %v", compressPastTenseVerb(job.verb), job.label, err))
+		r.activity.Logger.Error(activitylog.CategoryArchive, fmt.Sprintf("%s %s: %v", compressPastTenseVerb(job.verb), job.label, err))
 		r.showError(err)
 	case !wasCancelled:
-		r.activityLog.Action(activitylog.CategoryArchive, fmt.Sprintf("%s %s", compressPastTenseVerb(job.verb), job.label))
+		r.activity.Logger.Action(activitylog.CategoryArchive, fmt.Sprintf("%s %s", compressPastTenseVerb(job.verb), job.label))
 		r.forEachTab(func(p *Panel) {
 			if p.path == job.destDir {
 				r.showError(p.load(p.path))

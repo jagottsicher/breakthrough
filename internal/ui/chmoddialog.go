@@ -1089,18 +1089,18 @@ func (r *Root) applyChmodDialog() {
 	changed := 0
 	for _, target := range r.chmodTargets {
 		if err := r.applyChmodToTarget(target); err != nil {
-			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chmod %q: %v", target, err))
+			r.activity.Logger.Error(activitylog.CategoryPermissions, fmt.Sprintf("chmod %q: %v", target, err))
 			if firstErr == nil {
 				firstErr = err
 			}
 		} else {
 			changed++
-			r.activityLog.Detail(activitylog.CategoryPermissions, fmt.Sprintf("chmod %q to %04o", target, r.stagedChmodMode&os.ModePerm))
+			r.activity.Logger.Detail(activitylog.CategoryPermissions, fmt.Sprintf("chmod %q to %04o", target, r.stagedChmodMode&os.ModePerm))
 		}
 		r.refreshDetailsIfShowing(target, target)
 	}
 	if changed > 0 {
-		r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed permissions on %d item(s) to %04o", changed, r.stagedChmodMode&os.ModePerm))
+		r.activity.Logger.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed permissions on %d item(s) to %04o", changed, r.stagedChmodMode&os.ModePerm))
 	}
 
 	r.hideOverlay()

@@ -929,7 +929,7 @@ func TestConsigliereContextSnapshotDispatchesToSSHKeys(t *testing.T) {
 // same risk category a Log Holepunch log line already has.
 func TestActivityLogContextSnapshotOmitsMessagesByDefault(t *testing.T) {
 	root := newPlainKeyRoot(t)
-	root.activityLogAllEntries = []activitylog.Entry{
+	root.activity.AllEntries = []activitylog.Entry{
 		{Level: activitylog.LevelActions, Category: activitylog.CategoryFileOps, Message: "copied /home/jens/topsecret123.txt"},
 	}
 
@@ -951,7 +951,7 @@ func TestActivityLogContextSnapshotOmitsMessagesByDefault(t *testing.T) {
 func TestActivityLogContextSnapshotIncludesMessagesUnderMachiavelliMode(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ConsigliereHardcoreMode = true
-	root.activityLogAllEntries = []activitylog.Entry{
+	root.activity.AllEntries = []activitylog.Entry{
 		{Level: activitylog.LevelActions, Category: activitylog.CategoryFileOps, Message: "copied /home/jens/topsecret123.txt"},
 	}
 
@@ -967,7 +967,7 @@ func TestActivityLogContextSnapshotIncludesMessagesUnderMachiavelliMode(t *testi
 func TestConsigliereContextSnapshotDispatchesToActivityLog(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.activePage = activityLogPage
-	root.activityLogAllEntries = []activitylog.Entry{{Message: "copied a.txt"}}
+	root.activity.AllEntries = []activitylog.Entry{{Message: "copied a.txt"}}
 
 	got := root.consigliereContextSnapshot()
 
