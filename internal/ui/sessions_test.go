@@ -72,8 +72,8 @@ func TestReloadSessionsShowsAnErrorWhenNeitherBackendIsInstalled(t *testing.T) {
 
 	r.openSessions()
 
-	if r.sessionsErr == nil {
-		t.Error("sessionsErr is nil, want the read error preserved")
+	if r.sessions.Err == nil {
+		t.Error("sessions.Err is nil, want the read error preserved")
 	}
 }
 
@@ -83,8 +83,8 @@ func TestReloadSessionsWithNoSessionsIsNotAnError(t *testing.T) {
 
 	r.openSessions()
 
-	if r.sessionsErr != nil {
-		t.Errorf("sessionsErr = %v, want nil for an empty-but-successful read", r.sessionsErr)
+	if r.sessions.Err != nil {
+		t.Errorf("sessions.Err = %v, want nil for an empty-but-successful read", r.sessions.Err)
 	}
 }
 
@@ -98,16 +98,16 @@ func TestSessionsHintRButtonClickReloadsTheList(t *testing.T) {
 	r := newTestRootForSessions(t)
 	isolateSessionsList(t, nil, nil)
 	r.openSessions()
-	if got := r.sessionsTable.GetRowCount(); got != 2 {
+	if got := r.sessions.Table.GetRowCount(); got != 2 {
 		t.Fatalf("setup: table has %d rows, want 2 (header + placeholder, no sessions yet)", got)
 	}
 
 	isolateSessionsList(t, []multiplex.Session{{Name: "work", Backend: multiplex.BackendTmux}}, nil)
 	// sessionsHintEntries: {↑,↓,←,→} group, then {Enter,Space} group, then r, Esc.
-	rSpan := r.sessionsHintSpans[6]
-	clickListHint(t, r, r.sessionsHint, &r.sessionsHintSpans, rSpan.startCol)
+	rSpan := r.sessions.HintSpans[6]
+	clickListHint(t, r, r.sessions.Hint, &r.sessions.HintSpans, rSpan.startCol)
 
-	if got, want := r.sessionsTable.GetRowCount(), 2; got != want {
+	if got, want := r.sessions.Table.GetRowCount(), 2; got != want {
 		t.Errorf("table has %d rows after clicking r, want %d (header + 1 session) — the click should have reloaded", got, want)
 	}
 }
@@ -127,8 +127,8 @@ func TestReloadSessionsSortsByBackendThenName(t *testing.T) {
 		{Name: "beta", Backend: multiplex.BackendScreen},
 		{Name: "zeta", Backend: multiplex.BackendTmux},
 	}
-	if !reflect.DeepEqual(r.sessionsList, want) {
-		t.Errorf("sessionsList = %+v, want %+v", r.sessionsList, want)
+	if !reflect.DeepEqual(r.sessions.List, want) {
+		t.Errorf("sessions.List = %+v, want %+v", r.sessions.List, want)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestRenderSessionsRowShowsStatusAsAPlainGlyph(t *testing.T) {
 
 	r.openSessions()
 
-	attachedCell := r.sessionsTable.GetCell(1, sessionsColStatus)
+	attachedCell := r.sessions.Table.GetCell(1, sessionsColStatus)
 	if !strings.Contains(attachedCell.Text, sessionsAttachedGlyph) {
 		t.Errorf("attached row's Status cell = %q, want it to contain %q", attachedCell.Text, sessionsAttachedGlyph)
 	}
@@ -156,7 +156,7 @@ func TestRenderSessionsRowShowsStatusAsAPlainGlyph(t *testing.T) {
 		t.Errorf("attached row's Status color = %v, want the plain theme.Text (%v), not a color-coded one", got, r.theme.Text)
 	}
 
-	detachedCell := r.sessionsTable.GetCell(2, sessionsColStatus)
+	detachedCell := r.sessions.Table.GetCell(2, sessionsColStatus)
 	if !strings.Contains(detachedCell.Text, sessionsDetachedGlyph) {
 		t.Errorf("detached row's Status cell = %q, want it to contain %q", detachedCell.Text, sessionsDetachedGlyph)
 	}
@@ -180,7 +180,7 @@ func TestRenderSessionsRowShowsUnknownStatusAsAMutedDash(t *testing.T) {
 
 	r.openSessions()
 
-	cell := r.sessionsTable.GetCell(1, sessionsColStatus)
+	cell := r.sessions.Table.GetCell(1, sessionsColStatus)
 	if !strings.Contains(cell.Text, sessionsUnknownGlyph) {
 		t.Errorf("unknown-status row's Status cell = %q, want it to contain %q", cell.Text, sessionsUnknownGlyph)
 	}
@@ -215,7 +215,7 @@ func TestRenderSessionsRowColorsBackendByStatusBarSegment(t *testing.T) {
 		{3, statusKernelColor, "zellij/statusKernelColor"},
 	}
 	for _, c := range cases {
-		cell := r.sessionsTable.GetCell(c.row, sessionsColBackend)
+		cell := r.sessions.Table.GetCell(c.row, sessionsColBackend)
 		if got := tableCellForeground(cell); got != c.want {
 			t.Errorf("%s: Backend color = %v, want %v", c.label, got, c.want)
 		}
@@ -253,7 +253,7 @@ func TestRenderSessionsKeepsColumnsSelectableWithRealRows(t *testing.T) {
 
 	r.openSessions()
 
-	rowsSelectable, columnsSelectable := r.sessionsTable.GetSelectable()
+	rowsSelectable, columnsSelectable := r.sessions.Table.GetSelectable()
 	if !rowsSelectable || !columnsSelectable {
 		t.Errorf("GetSelectable() = (%v, %v), want (true, true) — Left/Right must move between a row's own action cells", rowsSelectable, columnsSelectable)
 	}
@@ -276,11 +276,11 @@ func TestRenderSessionsRowTreatsNameBackendStatusAsOneKeyboardStop(t *testing.T)
 	r.openSessions()
 
 	for _, col := range []int{sessionsColBackend, sessionsColStatus} {
-		if !r.sessionsTable.GetCell(1, col).NotSelectable {
+		if !r.sessions.Table.GetCell(1, col).NotSelectable {
 			t.Errorf("column %d is keyboard-selectable, want it excluded (grouped under Name)", col)
 		}
 	}
-	if r.sessionsTable.GetCell(1, sessionsColName).NotSelectable {
+	if r.sessions.Table.GetCell(1, sessionsColName).NotSelectable {
 		t.Error("Name is not keyboard-selectable, want it to be the group's own one stop")
 	}
 }
@@ -339,7 +339,7 @@ func TestCaptureSessionsKeyXOpensCloseConfirmForTheSelectedRow(t *testing.T) {
 	r := newTestRootForSessions(t)
 	isolateSessionsList(t, []multiplex.Session{{Name: "foo", Backend: multiplex.BackendScreen}}, nil)
 	r.openSessions()
-	r.sessionsTable.Select(1, sessionsColName)
+	r.sessions.Table.Select(1, sessionsColName)
 
 	r.captureSessionsKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
@@ -441,21 +441,21 @@ func TestSessionsTitleBarReloadButtonClickReloads(t *testing.T) {
 	screen := simulationScreen(t, 100, 30)
 	r.handleBeforeDraw(screen) // establishes lastScreenWidth, which renderReloadTitleBar's own column math needs
 	r.renderSessions()
-	r.sessionsTitleBar.SetRect(0, 0, 100, 1) // the same rect a real Draw would have left it at
+	r.sessions.TitleBar.SetRect(0, 0, 100, 1) // the same rect a real Draw would have left it at
 
 	listMultiplexSessions = func() ([]multiplex.Session, error) {
 		return []multiplex.Session{{Name: "after", Backend: multiplex.BackendTmux}}, nil
 	}
 
-	_, y, width, _ := r.sessionsTitleBar.GetRect()
+	_, y, width, _ := r.sessions.TitleBar.GetRect()
 	col := reloadTitleBarButtonCol(width)
-	captured, _ := captureReloadTitleBarMouse(r.sessionsTitleBar, r.reloadSessions)(tview.MouseLeftClick, tcell.NewEventMouse(col, y, tcell.ButtonNone, 0))
+	captured, _ := captureReloadTitleBarMouse(r.sessions.TitleBar, r.reloadSessions)(tview.MouseLeftClick, tcell.NewEventMouse(col, y, tcell.ButtonNone, 0))
 
 	if captured != tview.MouseConsumed {
 		t.Error("clicking the reload glyph should consume the click")
 	}
-	if len(r.sessionsList) != 1 || r.sessionsList[0].Name != "after" {
-		t.Errorf("sessionsList = %v, want the click to have re-read the session list", r.sessionsList)
+	if len(r.sessions.List) != 1 || r.sessions.List[0].Name != "after" {
+		t.Errorf("sessions.List = %v, want the click to have re-read the session list", r.sessions.List)
 	}
 }
 
@@ -471,10 +471,10 @@ func TestSessionsTitleBarClickElsewhereDoesNothing(t *testing.T) {
 	screen := simulationScreen(t, 100, 30)
 	r.handleBeforeDraw(screen)
 	r.renderSessions()
-	r.sessionsTitleBar.SetRect(0, 0, 100, 1)
+	r.sessions.TitleBar.SetRect(0, 0, 100, 1)
 
 	reloaded := false
-	captured, _ := captureReloadTitleBarMouse(r.sessionsTitleBar, func() { reloaded = true })(tview.MouseLeftClick, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
+	captured, _ := captureReloadTitleBarMouse(r.sessions.TitleBar, func() { reloaded = true })(tview.MouseLeftClick, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
 
 	if captured == tview.MouseConsumed {
 		t.Error("a click away from the reload glyph should not be consumed")
