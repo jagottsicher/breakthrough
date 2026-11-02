@@ -18,7 +18,7 @@ import (
 //
 // Every entry either runs immediately (toolboxFixedEntry — lsblk,
 // lscpu, ...) or asks for one further argument first through
-// toolboxInput, a small field floated on top of this screen the same
+// toolbox.Input, a small field floated on top of this screen the same
 // way options.Input floats on top of Options (toolboxArgEntry — ping,
 // nmap, dig, ...). Either way, the command that actually runs is a real
 // external process, streamed live into a toolWindow via
@@ -35,7 +35,34 @@ const (
 	toolboxFormPage  = "toolbox-form"
 )
 
-// Column indices within toolboxTable.
+// toolboxState holds the Toolbox screen's widgets, the currently open
+// category's row list, and the Form-entry overlay's own widgets and
+// in-progress state.
+type toolboxState struct {
+	Layout          *tview.Flex
+	TitleBar        *tview.TextView
+	Hint            *tview.TextView
+	HintSpans       []listHintSpan
+	Table           *tview.Table
+	Scrollbar       *verticalScrollbar
+	Input           *tview.InputField
+	Rows            []toolboxDisplayRow
+	FormLayout      *tview.Flex
+	FormTitleBar    *tview.TextView
+	Form            *tview.Form
+	FormToggles     *tview.List
+	FormPreview     *tview.TextView
+	FormCancelBtn   *tview.Button
+	FormRunBtn      *tview.Button
+	FormButtons     *tview.Flex
+	FormFields      []toolboxFormField
+	FormBuild       func(toolboxFormValues) []string
+	FormName        string
+	FormWidgets     map[string]tview.Primitive
+	FormToggleState map[string]bool
+}
+
+// Column indices within toolbox.Table.
 const (
 	toolboxColLabel = iota
 	toolboxColHelp
@@ -78,7 +105,7 @@ func toolboxFixedEntry(label, help, name string, args ...string) toolboxEntry {
 
 // toolboxArgEntry builds an entry that first asks for one further
 // argument — a host, a URL, a domain, or a handful of free-form
-// flags/arguments — through the shared toolboxInput overlay (see
+// flags/arguments — through the shared toolbox.Input overlay (see
 // toolboxPromptForArg). The typed text is split on whitespace and
 // appended after fixedArgs, so "getent" (no fixed args) plus typed
 // "hosts example.com" runs "getent hosts example.com", and "tail -f"
@@ -99,7 +126,7 @@ func toolboxArgEntry(label, help, promptLabel, prefill, name string, fixedArgs .
 // toolboxFieldKind is one toolboxFormField's own shape — text (a plain
 // InputField), choice (a DropDown among a fixed set of options, e.g.
 // curl's Method), or toggle (a boolean, rendered as a row in
-// toolboxFormToggles rather than a Form checkbox — see toolboxFormEntry's
+// toolbox.FormToggles rather than a Form checkbox — see toolboxFormEntry's
 // own doc comment for why).
 type toolboxFieldKind int
 
@@ -112,7 +139,7 @@ const (
 // toolboxFormField describes one field of a toolboxFormEntry. name is a
 // stable key, never a positional index — renderToolboxForm/
 // buildToolboxFormValues read a field's current value back out of
-// toolboxFormWidgets/toolboxFormToggleState by this name, so inserting or
+// toolbox.FormWidgets/toolbox.FormToggleState by this name, so inserting or
 // reordering fields later can never silently shift which value lands in
 // which build() argument the way a positional []string would.
 type toolboxFormField struct {
@@ -146,9 +173,9 @@ type toolboxFormValues struct {
 
 // toolboxFormEntry builds an entry whose command genuinely needs more
 // than the single free-text argument toolboxArgEntry offers — curl's own
-// Method/Header/Follow redirects/Output, say. Opens toolboxForm (see
-// openToolboxForm) instead of toolboxInput: a real multi-field Form for
-// text/choice fields, plus a separate toolboxFormToggles List for any
+// Method/Header/Follow redirects/Output, say. Opens toolbox.Form (see
+// openToolboxForm) instead of toolbox.Input: a real multi-field Form for
+// text/choice fields, plus a separate toolbox.FormToggles List for any
 // boolean ones (never Form.AddCheckbox — see newSedForm's own doc
 // comment for the established reason: Form re-applies one uniform
 // FocusedBackground to every item it owns, so a checkbox added through
@@ -550,7 +577,7 @@ func (dr toolboxDisplayRow) isEntry() bool {
 // itself, so repeating "Networking"/"Hardware" right below it as a
 // second, redundant heading added nothing), a blank spacer between two
 // categories (never before the first one), then each category's own
-// entries. The screen currently open (see r.toolboxRows) decides which
+// entries. The screen currently open (see r.toolbox.Rows) decides which
 // categories that is.
 func toolboxDisplayRowsFor(categories []toolboxCategory) []toolboxDisplayRow {
 	var rows []toolboxDisplayRow
@@ -617,7 +644,7 @@ func toolboxHintEntries() []listHintEntry {
 			{"↓", simulateKeyOnFocused(tcell.KeyDown)},
 		}, label: "move"},
 		hintKey("Enter", "run", func(r *Root) {
-			row, _ := r.toolboxTable.GetSelection()
+			row, _ := r.toolbox.Table.GetSelection()
 			r.activateToolboxRow(row)
 		}),
 		hintKey("Esc", "close", func(r *Root) { r.closeToolbox() }),
@@ -630,46 +657,46 @@ func toolboxHintEntries() []listHintEntry {
 // renderToolbox); the widgets themselves live for the application's
 // lifetime.
 func (r *Root) newToolboxScreen() {
-	r.toolboxTable = tview.NewTable()
-	r.toolboxTable.SetBorders(false)
-	r.toolboxTable.SetBorderPadding(1, 0, 2, 1)
-	r.toolboxTable.SetSelectable(true, false) // whole rows: one tool per row
-	r.toolboxTable.SetSelectedFunc(func(row, _ int) { r.activateToolboxRow(row) })
-	r.toolboxTable.SetMouseCapture(r.captureToolboxTableMouse)
-	r.toolboxTable.SetInputCapture(r.captureToolboxKey)
+	r.toolbox.Table = tview.NewTable()
+	r.toolbox.Table.SetBorders(false)
+	r.toolbox.Table.SetBorderPadding(1, 0, 2, 1)
+	r.toolbox.Table.SetSelectable(true, false) // whole rows: one tool per row
+	r.toolbox.Table.SetSelectedFunc(func(row, _ int) { r.activateToolboxRow(row) })
+	r.toolbox.Table.SetMouseCapture(r.captureToolboxTableMouse)
+	r.toolbox.Table.SetInputCapture(r.captureToolboxKey)
 
-	r.toolboxTitleBar = tview.NewTextView()
-	r.toolboxTitleBar.SetWrap(false)
-	r.toolboxTitleBar.SetText(" Toolbox ")
+	r.toolbox.TitleBar = tview.NewTextView()
+	r.toolbox.TitleBar.SetWrap(false)
+	r.toolbox.TitleBar.SetText(" Toolbox ")
 	// Close only, no reload — Toolbox is a static catalog of commands
 	// (see openToolboxScreen's own doc comment); it never goes stale
 	// while open the way Mounts/Firewall's own live host state can, so
 	// there's nothing for a reload button to do.
-	r.toolboxTitleBar.SetMouseCapture(captureCloseTitleBarMouse(r.toolboxTitleBar, r.closeToolbox))
+	r.toolbox.TitleBar.SetMouseCapture(captureCloseTitleBarMouse(r.toolbox.TitleBar, r.closeToolbox))
 
-	r.toolboxHint = tview.NewTextView()
-	r.toolboxHint.SetWrap(false)
-	r.toolboxHint.SetDynamicColors(true)
-	toolboxHintText, toolboxHintSpans := buildListHint(r.theme, toolboxHintEntries())
-	r.toolboxHint.SetText(toolboxHintText)
-	r.toolboxHintSpans = toolboxHintSpans
-	r.toolboxHint.SetMouseCapture(r.captureListHintMouse(r.toolboxHint, &r.toolboxHintSpans))
+	r.toolbox.Hint = tview.NewTextView()
+	r.toolbox.Hint.SetWrap(false)
+	r.toolbox.Hint.SetDynamicColors(true)
+	toolboxHintText, hintSpans := buildListHint(r.theme, toolboxHintEntries())
+	r.toolbox.Hint.SetText(toolboxHintText)
+	r.toolbox.HintSpans = hintSpans
+	r.toolbox.Hint.SetMouseCapture(r.captureListHintMouse(r.toolbox.Hint, &r.toolbox.HintSpans))
 
-	r.toolboxScrollbar = newVerticalScrollbarForTable(r, r.toolboxTable)
+	r.toolbox.Scrollbar = newVerticalScrollbarForTable(r, r.toolbox.Table)
 	toolboxTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.toolboxTable, 0, 1, true).
-		AddItem(r.toolboxScrollbar, 1, 0, false)
-	toolboxTableRow.SetMouseCapture(r.toolboxScrollbar.captureMouse)
+		AddItem(r.toolbox.Table, 0, 1, true).
+		AddItem(r.toolbox.Scrollbar, 1, 0, false)
+	toolboxTableRow.SetMouseCapture(r.toolbox.Scrollbar.captureMouse)
 
-	r.toolboxLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.toolboxTitleBar, 1, 0, false).
+	r.toolbox.Layout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.toolbox.TitleBar, 1, 0, false).
 		AddItem(toolboxTableRow, 0, 1, true).
-		AddItem(r.toolboxHint, 1, 0, false)
+		AddItem(r.toolbox.Hint, 1, 0, false)
 
 	// The one small floating input this screen layers on top of itself
 	// (see toolboxPromptForArg) — the same "one shared, repopulated
 	// field" pattern r.prompt/r.options.Input already use elsewhere.
-	r.toolboxInput = tview.NewInputField()
+	r.toolbox.Input = tview.NewInputField()
 }
 
 // openToolboxScreen shows the Toolbox screen filled with categories and
@@ -681,10 +708,10 @@ func (r *Root) newToolboxScreen() {
 // here worth remembering across opens the way Options remembers its
 // last category.
 func (r *Root) openToolboxScreen(title string, categories []toolboxCategory) {
-	r.toolboxRows = toolboxDisplayRowsFor(categories)
-	renderCloseTitleBar(r.toolboxTitleBar, " "+title+" ", r.lastScreenWidth)
+	r.toolbox.Rows = toolboxDisplayRowsFor(categories)
+	renderCloseTitleBar(r.toolbox.TitleBar, " "+title+" ", r.lastScreenWidth)
 	r.renderToolbox()
-	r.showOverlay(toolboxPage, r.toolboxLayout)
+	r.showOverlay(toolboxPage, r.toolbox.Layout)
 }
 
 // openNetworkTools shows only the catalog's "Networking" category.
@@ -716,34 +743,34 @@ func (r *Root) closeToolbox() {
 // open), the same "don't reset a in-range, already-correct choice"
 // restraint renderOptions' own tail shows.
 func (r *Root) renderToolbox() {
-	r.toolboxTable.Clear()
+	r.toolbox.Table.Clear()
 
-	for row, dr := range r.toolboxRows {
+	for row, dr := range r.toolbox.Rows {
 		switch {
 		case dr.blank:
-			r.toolboxTable.SetCell(row, toolboxColLabel, tview.NewTableCell("").SetSelectable(false))
-			r.toolboxTable.SetCell(row, toolboxColHelp, tview.NewTableCell("").SetSelectable(false))
+			r.toolbox.Table.SetCell(row, toolboxColLabel, tview.NewTableCell("").SetSelectable(false))
+			r.toolbox.Table.SetCell(row, toolboxColHelp, tview.NewTableCell("").SetSelectable(false))
 		case dr.header != "":
-			r.toolboxTable.SetCell(row, toolboxColLabel,
+			r.toolbox.Table.SetCell(row, toolboxColLabel,
 				tview.NewTableCell(padRight(dr.header, toolboxLabelWidth)).
 					SetTextColor(r.theme.PlaceholderText).
 					SetAttributes(tcell.AttrBold).
 					SetSelectable(false))
-			r.toolboxTable.SetCell(row, toolboxColHelp, tview.NewTableCell("").SetSelectable(false))
+			r.toolbox.Table.SetCell(row, toolboxColHelp, tview.NewTableCell("").SetSelectable(false))
 		default:
-			r.toolboxTable.SetCell(row, toolboxColLabel,
+			r.toolbox.Table.SetCell(row, toolboxColLabel,
 				tview.NewTableCell(padRight(dr.entry.label, toolboxLabelWidth)).
 					SetTextColor(r.theme.Text).
 					SetSelectable(true))
-			r.toolboxTable.SetCell(row, toolboxColHelp,
+			r.toolbox.Table.SetCell(row, toolboxColHelp,
 				tview.NewTableCell(dr.entry.help).
 					SetTextColor(r.theme.PlaceholderText).
 					SetSelectable(true))
 		}
 	}
 
-	if row, _ := r.toolboxTable.GetSelection(); !isToolboxEntryRowIn(r.toolboxRows, row) {
-		r.toolboxTable.Select(firstSelectableToolboxRowIn(r.toolboxRows), 0)
+	if row, _ := r.toolbox.Table.GetSelection(); !isToolboxEntryRowIn(r.toolbox.Rows, row) {
+		r.toolbox.Table.Select(firstSelectableToolboxRowIn(r.toolbox.Rows), 0)
 	}
 }
 
@@ -763,7 +790,7 @@ func isToolboxEntryRow(row int) bool {
 
 // activateToolboxRow is Enter (or a click) on an entry: run it.
 func (r *Root) activateToolboxRow(row int) {
-	if entry, ok := toolboxEntryAtRowIn(r.toolboxRows, row); ok {
+	if entry, ok := toolboxEntryAtRowIn(r.toolbox.Rows, row); ok {
 		entry.run(r)
 	}
 }
@@ -806,15 +833,15 @@ func (r *Root) captureToolboxTableMouse(action tview.MouseAction, event *tcell.E
 		return action, event
 	}
 	x, y := event.Position()
-	if !r.toolboxTable.InRect(x, y) {
+	if !r.toolbox.Table.InRect(x, y) {
 		return action, event
 	}
 
-	row, _ := r.toolboxTable.CellAt(x, y)
-	if !isToolboxEntryRowIn(r.toolboxRows, row) {
+	row, _ := r.toolbox.Table.CellAt(x, y)
+	if !isToolboxEntryRowIn(r.toolbox.Rows, row) {
 		return action, event
 	}
-	r.toolboxTable.Select(row, 0)
+	r.toolbox.Table.Select(row, 0)
 	r.activateToolboxRow(row)
 	return tview.MouseConsumed, nil
 }
@@ -832,11 +859,11 @@ func (r *Root) captureToolboxTableMouse(action tview.MouseAction, event *tcell.E
 // screen everything here is meant to return to once the command has
 // started running in its own independent tool window.
 func (r *Root) toolboxPromptForArg(label, prefill string, onSubmit func(text string)) {
-	r.toolboxInput.SetLabel(" " + label + " ")
-	r.toolboxInput.SetText(prefill)
-	r.toolboxInput.SetAcceptanceFunc(nil)
-	r.toolboxInput.SetDoneFunc(func(key tcell.Key) {
-		text := strings.TrimSpace(r.toolboxInput.GetText())
+	r.toolbox.Input.SetLabel(" " + label + " ")
+	r.toolbox.Input.SetText(prefill)
+	r.toolbox.Input.SetAcceptanceFunc(nil)
+	r.toolbox.Input.SetDoneFunc(func(key tcell.Key) {
+		text := strings.TrimSpace(r.toolbox.Input.GetText())
 		r.hideOverlay()
 		if key != tcell.KeyEnter || text == "" {
 			return
@@ -847,20 +874,20 @@ func (r *Root) toolboxPromptForArg(label, prefill string, onSubmit func(text str
 	width, height := 64, 1
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
-	r.toolboxInput.SetRect(x, y, width, height)
-	r.pushOverlay(toolboxInputPage, r.toolboxInput, nil)
+	r.toolbox.Input.SetRect(x, y, width, height)
+	r.pushOverlay(toolboxInputPage, r.toolbox.Input, nil)
 }
 
-// newToolboxFormScreen builds toolboxForm and friends once, at startup —
+// newToolboxFormScreen builds toolbox.Form and friends once, at startup —
 // the same build-once/repopulate-on-open split newToolboxScreen itself
-// already establishes for the plain catalog screen. toolboxFormLayout
+// already establishes for the plain catalog screen. toolbox.FormLayout
 // itself is left empty here; renderToolboxForm rebuilds its rows fresh
 // on every openToolboxForm call, since how many rows it needs (whether
 // this entry has any toggle fields at all, and how many text/choice
 // fields) differs per entry.
 func (r *Root) newToolboxFormScreen() {
-	r.toolboxForm = tview.NewForm()
-	r.toolboxForm.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	r.toolbox.Form = tview.NewForm()
+	r.toolbox.Form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
 			r.hideOverlay()
 			return nil
@@ -874,27 +901,27 @@ func (r *Root) newToolboxFormScreen() {
 	// through it could never keep a look distinct from a real text
 	// field's (the same established reason newSedForm's own doc comment
 	// gives for sedFlagsList).
-	r.toolboxFormToggles = tview.NewList().ShowSecondaryText(false)
-	r.toolboxFormToggles.SetHighlightFullLine(true)
-	r.toolboxFormToggles.SetDoneFunc(r.hideOverlay) // Escape
+	r.toolbox.FormToggles = tview.NewList().ShowSecondaryText(false)
+	r.toolbox.FormToggles.SetHighlightFullLine(true)
+	r.toolbox.FormToggles.SetDoneFunc(r.hideOverlay) // Escape
 
-	r.toolboxFormPreview = tview.NewTextView()
-	r.toolboxFormPreview.SetWrap(false)
+	r.toolbox.FormPreview = tview.NewTextView()
+	r.toolbox.FormPreview.SetWrap(false)
 
 	// Real Cancel/Run buttons in a Flex row, not a List — the same
 	// established look newConnectButtons/newCompressButtons/
 	// newDuplicateButtons all already give their own dialogs' action
 	// rows (see newConnectButtons' own doc comment).
-	r.toolboxFormCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
-	r.toolboxFormRunBtn = tview.NewButton("Run").SetSelectedFunc(r.runToolboxForm)
-	r.toolboxFormCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
-	r.toolboxFormRunBtn.SetInputCapture(spaceAlsoActivates(r.runToolboxForm))
-	r.toolboxFormButtons = tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.toolboxFormCancelBtn, 0, 1, false).
-		AddItem(r.toolboxFormRunBtn, 0, 1, false)
+	r.toolbox.FormCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
+	r.toolbox.FormRunBtn = tview.NewButton("Run").SetSelectedFunc(r.runToolboxForm)
+	r.toolbox.FormCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
+	r.toolbox.FormRunBtn.SetInputCapture(spaceAlsoActivates(r.runToolboxForm))
+	r.toolbox.FormButtons = tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.toolbox.FormCancelBtn, 0, 1, false).
+		AddItem(r.toolbox.FormRunBtn, 0, 1, false)
 
-	r.toolboxFormTitleBar = newPlainTitleBar("Toolbox")
-	r.toolboxFormLayout = tview.NewFlex().SetDirection(tview.FlexRow)
+	r.toolbox.FormTitleBar = newPlainTitleBar("Toolbox")
+	r.toolbox.FormLayout = tview.NewFlex().SetDirection(tview.FlexRow)
 }
 
 // toolboxFormRowCounts splits fields into how many text/choice form rows
@@ -913,17 +940,17 @@ func toolboxFormRowCounts(fields []toolboxFormField) (textOrChoice, toggles int)
 	return textOrChoice, toggles
 }
 
-// openToolboxForm is toolboxFormEntry's own run: rebuilds toolboxForm/
-// toolboxFormToggles for fields (see renderToolboxForm), remembers name
+// openToolboxForm is toolboxFormEntry's own run: rebuilds toolbox.Form/
+// toolbox.FormToggles for fields (see renderToolboxForm), remembers name
 // and build for runToolboxForm/updateToolboxFormPreview, and floats the
 // whole thing over whatever's already open — pushOverlay, not
 // showOverlay: the identical reasoning toolboxPromptForArg's own doc
 // comment already gives for why closing the Toolbox screen underneath
 // (showOverlay's own closeAllOverlays) would be wrong here too.
 func (r *Root) openToolboxForm(name string, fields []toolboxFormField, build func(toolboxFormValues) []string) {
-	r.toolboxFormName = name
-	r.toolboxFormFields = fields
-	r.toolboxFormBuild = build
+	r.toolbox.FormName = name
+	r.toolbox.FormFields = fields
+	r.toolbox.FormBuild = build
 	r.renderToolboxForm()
 
 	// form rows: 2N+1 for N text/choice fields (N rows + (N-1) rows of
@@ -944,11 +971,11 @@ func (r *Root) openToolboxForm(name string, fields []toolboxFormField, build fun
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.toolboxFormLayout.SetRect(x, y, width, height)
-	r.pushOverlay(toolboxFormPage, r.toolboxFormLayout, nil)
+	r.toolbox.FormLayout.SetRect(x, y, width, height)
+	r.pushOverlay(toolboxFormPage, r.toolbox.FormLayout, nil)
 }
 
-// toolboxFormToggleItemText renders one toolboxFormToggles row — the
+// toolboxFormToggleItemText renders one toolbox.FormToggles row — the
 // same outline/filled circle sedFlagItemText already uses for Sed
 // Replace's own flags, so a boolean toggle looks the same everywhere in
 // this app regardless of which widget happens to implement it.
@@ -956,17 +983,17 @@ func toolboxFormToggleItemText(label string, checked bool) string {
 	return fmt.Sprintf("%s  %s", checkboxText(checked), label)
 }
 
-// renderToolboxForm (re)builds toolboxForm's fields and
-// toolboxFormToggles' rows fresh for r.toolboxFormFields, and rewires
+// renderToolboxForm (re)builds toolbox.Form's fields and
+// toolbox.FormToggles' rows fresh for r.toolbox.FormFields, and rewires
 // the whole Tab/Backtab chain across all four widgets (form, toggles,
 // Cancel, Run) — called by openToolboxForm on every single open, the
 // same "variable field set, nothing to keep from a previous open" shape
 // resetSedForm already establishes for Sed Replace.
 func (r *Root) renderToolboxForm() {
-	r.toolboxForm.Clear(true)
-	r.toolboxFormToggles.Clear()
-	r.toolboxFormWidgets = make(map[string]tview.Primitive, len(r.toolboxFormFields))
-	r.toolboxFormToggleState = make(map[string]bool)
+	r.toolbox.Form.Clear(true)
+	r.toolbox.FormToggles.Clear()
+	r.toolbox.FormWidgets = make(map[string]tview.Primitive, len(r.toolbox.FormFields))
+	r.toolbox.FormToggleState = make(map[string]bool)
 
 	// A plain title bar, no close glyph — the same style every other
 	// modal dialog overlay in this app uses (Sed Replace, Connect,
@@ -977,11 +1004,11 @@ func (r *Root) renderToolboxForm() {
 	// (see its own doc comment) — passing r.lastScreenWidth here placed
 	// the glyph far outside this overlay's own much narrower rect,
 	// invisible and unclickable.
-	r.toolboxFormTitleBar.SetText(" " + r.toolboxFormName + " ")
+	r.toolbox.FormTitleBar.SetText(" " + r.toolbox.FormName + " ")
 
 	var toggleFields []toolboxFormField
 	var lastField tview.Primitive
-	for _, field := range r.toolboxFormFields {
+	for _, field := range r.toolbox.FormFields {
 		field := field // capture for the closures below
 		switch field.kind {
 		case toolboxFieldToggle:
@@ -999,8 +1026,8 @@ func (r *Root) renderToolboxForm() {
 			}
 			dd.SetCurrentOption(index)
 			styleDropDown(dd, r.theme)
-			r.toolboxForm.AddFormItem(dd)
-			r.toolboxFormWidgets[field.name] = dd
+			r.toolbox.Form.AddFormItem(dd)
+			r.toolbox.FormWidgets[field.name] = dd
 			lastField = dd
 		default: // toolboxFieldText
 			input := tview.NewInputField().SetLabel(field.label)
@@ -1011,8 +1038,8 @@ func (r *Root) renderToolboxForm() {
 				input.SetText(field.defaultText)
 			}
 			input.SetChangedFunc(func(string) { r.updateToolboxFormPreview() })
-			r.toolboxForm.AddFormItem(input)
-			r.toolboxFormWidgets[field.name] = input
+			r.toolbox.Form.AddFormItem(input)
+			r.toolbox.FormWidgets[field.name] = input
 			lastField = input
 		}
 	}
@@ -1020,9 +1047,9 @@ func (r *Root) renderToolboxForm() {
 	hasToggles := len(toggleFields) > 0
 	for _, field := range toggleFields {
 		field := field
-		r.toolboxFormToggleState[field.name] = field.defaultBool
-		r.toolboxFormToggles.AddItem(toolboxFormToggleItemText(field.label, field.defaultBool), "", 0, func() {
-			r.toolboxFormToggleState[field.name] = !r.toolboxFormToggleState[field.name]
+		r.toolbox.FormToggleState[field.name] = field.defaultBool
+		r.toolbox.FormToggles.AddItem(toolboxFormToggleItemText(field.label, field.defaultBool), "", 0, func() {
+			r.toolbox.FormToggleState[field.name] = !r.toolbox.FormToggleState[field.name]
 			r.renderToolboxFormToggleRow(field.name, field.label)
 			r.updateToolboxFormPreview()
 		})
@@ -1033,11 +1060,11 @@ func (r *Root) renderToolboxForm() {
 	// identical, established gap this works around: a SetInputCapture on
 	// the last field, not a SetDoneFunc, since Form.Focus unconditionally
 	// overwrites the latter on every field whenever the form gains focus.
-	// Goes to toolboxFormToggles if this entry has any boolean fields,
+	// Goes to toolbox.FormToggles if this entry has any boolean fields,
 	// otherwise straight to Cancel.
-	nextAfterForm := tview.Primitive(r.toolboxFormCancelBtn)
+	nextAfterForm := tview.Primitive(r.toolbox.FormCancelBtn)
 	if hasToggles {
-		nextAfterForm = r.toolboxFormToggles
+		nextAfterForm = r.toolbox.FormToggles
 	}
 	captureTabTo := func(target tview.Primitive) func(event *tcell.EventKey) *tcell.EventKey {
 		return func(event *tcell.EventKey) *tcell.EventKey {
@@ -1056,14 +1083,14 @@ func (r *Root) renderToolboxForm() {
 	}
 
 	// Tab/Backtab continue the chain the form's own last field starts
-	// above and toolboxFormCancelBtn's own SetExitFunc picks back up
+	// above and toolbox.FormCancelBtn's own SetExitFunc picks back up
 	// below — a List has no SetExitFunc the way Button does, so this is
 	// the only place to intercept them (the identical shape
 	// sedFlagsList's own doc comment already establishes).
-	r.toolboxFormToggles.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	r.toolbox.FormToggles.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.toolboxFormCancelBtn)
+			r.app.SetFocus(r.toolbox.FormCancelBtn)
 			return nil
 		case tcell.KeyBacktab:
 			if lastField != nil {
@@ -1074,13 +1101,13 @@ func (r *Root) renderToolboxForm() {
 		return event
 	})
 
-	r.toolboxFormCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.toolbox.FormCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.toolboxFormRunBtn)
+			r.app.SetFocus(r.toolbox.FormRunBtn)
 		case tcell.KeyBacktab:
 			if hasToggles {
-				r.app.SetFocus(r.toolboxFormToggles)
+				r.app.SetFocus(r.toolbox.FormToggles)
 			} else if lastField != nil {
 				r.app.SetFocus(lastField)
 			}
@@ -1089,64 +1116,64 @@ func (r *Root) renderToolboxForm() {
 		}
 	})
 	// Tab wraps back to the form's own first field through
-	// toolboxForm.SetFocus(0) then r.app.SetFocus(r.toolboxForm), not a
+	// toolbox.Form.SetFocus(0) then r.app.SetFocus(r.toolbox.Form), not a
 	// direct named-field jump — the identical, real, previously-fixed
 	// bug connect.ConnectBtn's own doc comment (connectdialog.go) found
 	// first: a direct jump leaves the Form's own internal focusedElement
 	// counter stale, so the next Backtab from that field lands wrong.
-	r.toolboxFormRunBtn.SetExitFunc(func(key tcell.Key) {
+	r.toolbox.FormRunBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.toolboxForm.SetFocus(0)
-			r.app.SetFocus(r.toolboxForm)
+			r.toolbox.Form.SetFocus(0)
+			r.app.SetFocus(r.toolbox.Form)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.toolboxFormCancelBtn)
+			r.app.SetFocus(r.toolbox.FormCancelBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
 
-	textOrChoice, toggleCount := toolboxFormRowCounts(r.toolboxFormFields)
-	r.toolboxFormLayout.Clear()
-	r.toolboxFormLayout.AddItem(r.toolboxFormTitleBar, 1, 0, false)
-	r.toolboxFormLayout.AddItem(r.toolboxForm, 2*textOrChoice+1, 0, true)
+	textOrChoice, toggleCount := toolboxFormRowCounts(r.toolbox.FormFields)
+	r.toolbox.FormLayout.Clear()
+	r.toolbox.FormLayout.AddItem(r.toolbox.FormTitleBar, 1, 0, false)
+	r.toolbox.FormLayout.AddItem(r.toolbox.Form, 2*textOrChoice+1, 0, true)
 	if hasToggles {
-		r.toolboxFormLayout.AddItem(r.toolboxFormToggles, toggleCount, 0, false)
+		r.toolbox.FormLayout.AddItem(r.toolbox.FormToggles, toggleCount, 0, false)
 	}
-	r.toolboxFormLayout.AddItem(r.toolboxFormPreview, 1, 0, false)
-	r.toolboxFormLayout.AddItem(r.toolboxFormButtons, 1, 0, false)
+	r.toolbox.FormLayout.AddItem(r.toolbox.FormPreview, 1, 0, false)
+	r.toolbox.FormLayout.AddItem(r.toolbox.FormButtons, 1, 0, false)
 
 	r.updateToolboxFormPreview()
 }
 
-// renderToolboxFormToggleRow repaints one toolboxFormToggles row after
+// renderToolboxFormToggleRow repaints one toolbox.FormToggles row after
 // toggleSedFlag's own identical shape (toggleSedFlag, sedreplace.go) —
 // re-renders just the one row that changed rather than the whole list.
 func (r *Root) renderToolboxFormToggleRow(name, label string) {
-	for i, field := range r.toolboxFormFields {
+	for i, field := range r.toolbox.FormFields {
 		if field.kind == toolboxFieldToggle && field.name == name {
 			toggleIndex := 0
-			for _, f := range r.toolboxFormFields[:i] {
+			for _, f := range r.toolbox.FormFields[:i] {
 				if f.kind == toolboxFieldToggle {
 					toggleIndex++
 				}
 			}
-			r.toolboxFormToggles.SetItemText(toggleIndex, toolboxFormToggleItemText(label, r.toolboxFormToggleState[name]), "")
+			r.toolbox.FormToggles.SetItemText(toggleIndex, toolboxFormToggleItemText(label, r.toolbox.FormToggleState[name]), "")
 			return
 		}
 	}
 }
 
-// buildToolboxFormValues reads toolboxForm/toolboxFormToggles' current
+// buildToolboxFormValues reads toolbox.Form/toolbox.FormToggles' current
 // state back into a toolboxFormValues, keyed by each field's own stable
 // name (see toolboxFormField's own doc comment on why never by
-// position) — what r.toolboxFormBuild actually turns into real argv.
+// position) — what r.toolbox.FormBuild actually turns into real argv.
 func (r *Root) buildToolboxFormValues() toolboxFormValues {
 	values := toolboxFormValues{
-		Text:  make(map[string]string, len(r.toolboxFormWidgets)),
-		Flags: make(map[string]bool, len(r.toolboxFormToggleState)),
+		Text:  make(map[string]string, len(r.toolbox.FormWidgets)),
+		Flags: make(map[string]bool, len(r.toolbox.FormToggleState)),
 	}
-	for name, widget := range r.toolboxFormWidgets {
+	for name, widget := range r.toolbox.FormWidgets {
 		switch w := widget.(type) {
 		case *tview.InputField:
 			values.Text[name] = strings.TrimSpace(w.GetText())
@@ -1155,27 +1182,27 @@ func (r *Root) buildToolboxFormValues() toolboxFormValues {
 			values.Text[name] = text
 		}
 	}
-	for name, checked := range r.toolboxFormToggleState {
+	for name, checked := range r.toolbox.FormToggleState {
 		values.Flags[name] = checked
 	}
 	return values
 }
 
-// updateToolboxFormPreview repaints toolboxFormPreview with exactly the
-// argv r.toolboxFormBuild currently produces — the same slice
+// updateToolboxFormPreview repaints toolbox.FormPreview with exactly the
+// argv r.toolbox.FormBuild currently produces — the same slice
 // runToolboxForm goes on to actually execute, so the command shown here
 // is never anything other than the real one about to run (see
 // toolboxFormEntry's own doc comment).
 func (r *Root) updateToolboxFormPreview() {
-	args := r.toolboxFormBuild(r.buildToolboxFormValues())
-	line := r.toolboxFormName
+	args := r.toolbox.FormBuild(r.buildToolboxFormValues())
+	line := r.toolbox.FormName
 	if len(args) > 0 {
-		line = r.toolboxFormName + " " + strings.Join(args, " ")
+		line = r.toolbox.FormName + " " + strings.Join(args, " ")
 	}
-	r.toolboxFormPreview.SetText(line)
+	r.toolbox.FormPreview.SetText(line)
 }
 
-// runToolboxForm is toolboxFormButtons' own "Run": builds the exact same
+// runToolboxForm is toolbox.FormButtons' own "Run": builds the exact same
 // argv updateToolboxFormPreview just showed and hands it to
 // openToolCommand, the same real-process, never-reimplemented path
 // every other Toolbox entry already uses.
@@ -1192,20 +1219,20 @@ func (r *Root) runToolboxForm() {
 		r.hideOverlay()
 		return
 	}
-	args := r.toolboxFormBuild(values)
-	title := r.toolboxFormName
+	args := r.toolbox.FormBuild(values)
+	title := r.toolbox.FormName
 	if len(args) > 0 {
-		title = r.toolboxFormName + " " + strings.Join(args, " ")
+		title = r.toolbox.FormName + " " + strings.Join(args, " ")
 	}
 	r.hideOverlay()
-	r.openToolCommand(title, r.toolboxFormName, args)
+	r.openToolCommand(title, r.toolbox.FormName, args)
 }
 
 // toolboxFormRequiredFieldsFilled reports whether every field marked
 // required (see toolboxFormField's own doc comment) actually has a
 // non-empty value in values — runToolboxForm's own guard.
 func (r *Root) toolboxFormRequiredFieldsFilled(values toolboxFormValues) bool {
-	for _, field := range r.toolboxFormFields {
+	for _, field := range r.toolbox.FormFields {
 		if field.required && values.Text[field.name] == "" {
 			return false
 		}
@@ -1216,19 +1243,19 @@ func (r *Root) toolboxFormRequiredFieldsFilled(values toolboxFormValues) bool {
 // applyToolboxTheme themes the Toolbox screen — split out of applyTheme
 // (see its own doc comment). Guarded the same way applyOptionsTheme is.
 func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
-	if r.toolboxTable == nil {
+	if r.toolbox.Table == nil {
 		return
 	}
 	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
-	r.toolboxLayout.SetBackgroundColor(theme.PanelBackground)
-	r.toolboxTable.SetBackgroundColor(theme.PanelBackground)
+	r.toolbox.Layout.SetBackgroundColor(theme.PanelBackground)
+	r.toolbox.Table.SetBackgroundColor(theme.PanelBackground)
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
 	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
 	// gitBreach's tables, for the identical reason.
-	r.toolboxTable.SetSelectedStyle(tcell.StyleDefault.
+	r.toolbox.Table.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
 
@@ -1237,36 +1264,36 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	// further overlay stacks on top of in a way that should dim it,
 	// the same reasoning options.TitleBar's own fixed
 	// FocusedBackground already follows.
-	r.toolboxTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.toolboxTitleBar.SetTextColor(theme.TextColor)
+	r.toolbox.TitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.toolbox.TitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
 	// buttonBar/statusBar — see mounts.Hint's own identical comment.
-	r.toolboxHint.SetBackgroundColor(theme.SurfaceBackground)
-	r.toolboxHint.SetTextColor(theme.TextColor)
-	toolboxHintText, toolboxHintSpans := buildListHint(theme, toolboxHintEntries())
-	r.toolboxHint.SetText(toolboxHintText)
-	r.toolboxHintSpans = toolboxHintSpans
+	r.toolbox.Hint.SetBackgroundColor(theme.SurfaceBackground)
+	r.toolbox.Hint.SetTextColor(theme.TextColor)
+	toolboxHintText, hintSpans := buildListHint(theme, toolboxHintEntries())
+	r.toolbox.Hint.SetText(toolboxHintText)
+	r.toolbox.HintSpans = hintSpans
 
-	styleInput(r.toolboxInput, theme, true)
-	r.toolboxInput.SetLabelColor(theme.TextColor)
+	styleInput(r.toolbox.Input, theme, true)
+	r.toolbox.Input.SetLabelColor(theme.TextColor)
 
-	// toolboxForm and friends (see toolboxFormField's own doc comment in
+	// toolbox.Form and friends (see toolboxFormField's own doc comment in
 	// this file) — every new widget that overlay introduced needs its
 	// own explicit line here, the same rule sshShellForm's own block
 	// above spells out: nothing gets themed automatically just by
 	// existing.
-	if r.toolboxForm != nil {
-		r.toolboxForm.SetBackgroundColor(theme.SurfaceBackground)
-		r.toolboxForm.SetLabelColor(theme.TextColor)
-		r.toolboxForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-		r.toolboxForm.SetFieldTextColor(theme.TextColor)
-		styleList(r.toolboxFormToggles, theme)
-		styleButton(r.toolboxFormCancelBtn, theme)
-		styleButton(r.toolboxFormRunBtn, theme)
-		r.toolboxFormPreview.SetBackgroundColor(theme.SurfaceBackground)
-		r.toolboxFormPreview.SetTextColor(theme.TextColor)
-		r.toolboxFormTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.toolboxFormTitleBar.SetTextColor(theme.TextColor)
+	if r.toolbox.Form != nil {
+		r.toolbox.Form.SetBackgroundColor(theme.SurfaceBackground)
+		r.toolbox.Form.SetLabelColor(theme.TextColor)
+		r.toolbox.Form.SetFieldBackgroundColor(theme.InputFocusedBackground)
+		r.toolbox.Form.SetFieldTextColor(theme.TextColor)
+		styleList(r.toolbox.FormToggles, theme)
+		styleButton(r.toolbox.FormCancelBtn, theme)
+		styleButton(r.toolbox.FormRunBtn, theme)
+		r.toolbox.FormPreview.SetBackgroundColor(theme.SurfaceBackground)
+		r.toolbox.FormPreview.SetTextColor(theme.TextColor)
+		r.toolbox.FormTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.toolbox.FormTitleBar.SetTextColor(theme.TextColor)
 	}
 
 	r.renderToolbox() // cell colors are baked in per cell, not looked up live at draw time

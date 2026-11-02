@@ -1698,7 +1698,7 @@ func (r *Root) consigliereMachiavelliTransferCenterOperations() string {
 const consigliereMaxToolboxEntries = 50
 
 // toolboxContextSnapshot describes the Toolbox screen: the real
-// commands currently listed in r.toolboxRows (whichever category or
+// commands currently listed in r.toolbox.Rows (whichever category or
 // categories are open) and their own static help text. Unlike every
 // other gated screen above, this is never withheld behind Machiavelli
 // Mode — the catalog is a fixed, built-in list of tool names and
@@ -1708,7 +1708,7 @@ func (r *Root) toolboxContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Toolbox.\n")
 	var entries []string
-	for _, row := range r.toolboxRows {
+	for _, row := range r.toolbox.Rows {
 		switch {
 		case row.isEntry():
 			entries = append(entries, fmt.Sprintf("%s: %s", row.entry.label, row.entry.help))
@@ -1716,7 +1716,7 @@ func (r *Root) toolboxContextSnapshot() string {
 			entries = append(entries, "-- "+row.header+" --")
 		}
 	}
-	fmt.Fprintf(&b, "%d entries available:\n", countToolboxEntries(r.toolboxRows))
+	fmt.Fprintf(&b, "%d entries available:\n", countToolboxEntries(r.toolbox.Rows))
 	n := len(entries)
 	if n > consigliereMaxToolboxEntries {
 		n = consigliereMaxToolboxEntries
