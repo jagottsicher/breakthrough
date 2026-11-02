@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -486,6 +487,24 @@ func (r *Root) buildStatusBar() string {
 		compressCancelStart := col
 		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
 		r.compress.CancelSpan = buttonBarSpan{startCol: compressCancelStart, endCol: col, run: func(r *Root) { r.confirmCancelCurrentCompress() }}
+		sep()
+	}
+
+	// A remote archive's own in-flight download (see
+	// startRemoteArchiveDownload/remotearchive.go) — the same
+	// independent-segment treatment as rsync/Compress just above, for
+	// the same reason: nothing here shares state with either. Unlike
+	// those two, cancelling this one doesn't ask first (see
+	// archiveDownloadCancelSpan's own run func) — a download has
+	// nothing destructive riding on it the way a running rsync/Compress
+	// does, just a local temp file this app discards either way.
+	r.archiveDownloadCancelSpan = buttonBarSpan{}
+	if r.archiveDownloadCancel != nil {
+		write(fmt.Sprintf("Downloading %s…", path.Base(r.archiveDownloadPath)))
+		write(" ")
+		archiveDownloadCancelStart := col
+		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
+		r.archiveDownloadCancelSpan = buttonBarSpan{startCol: archiveDownloadCancelStart, endCol: col, run: func(r *Root) { r.cancelRemoteArchiveDownload() }}
 		sep()
 	}
 
@@ -1207,7 +1226,7 @@ func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.Even
 	x, _ := event.Position()
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
 	col := x - rectX
-	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsync.CancelSpan, r.compress.CancelSpan, r.labelScanCancelSpan, r.gitStatusSpan} {
+	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsync.CancelSpan, r.compress.CancelSpan, r.archiveDownloadCancelSpan, r.labelScanCancelSpan, r.gitStatusSpan} {
 		if span.run != nil && col >= span.startCol && col < span.endCol {
 			span.run(r)
 			break
@@ -1273,12 +1292,91 @@ func percentStatusColor(percent int, theme config.ResolvedTheme) tcell.Color {
 // the segment entirely (df run locally against a path that only
 // exists on the other end always fails) and System Info showed this
 // machine's own disk, mislabeled as the remote one.
+//
+// Local: unchanged, a direct, cheap fsops.FetchDiskUsage call — no
+// network, nothing worth caching. Remote: a pure cache read, never
+// blocks and never itself starts a fetch — returns whatever
+// refreshPanelDiskUsage last cached for panel's own current path
+// (ok=false until the first background fetch for it has landed).
+// Deliberately never triggers that fetch itself (see
+// refreshPanelDiskUsage's own doc comment on why only StartClock's
+// ticker is allowed to) — before this split, a remote panel's own
+// DiskUsage round trip ran synchronously right here, on the UI
+// goroutine, every single time this was called.
 func diskUsageFor(panel *Panel) (fsops.DiskUsage, bool) {
-	if remote := panel.remote; remote != nil {
-		u, err := remote.DiskUsage(panel.path)
-		return u, err == nil
+	if panel.remote == nil {
+		return fsops.FetchDiskUsage(panel.path)
 	}
-	return fsops.FetchDiskUsage(panel.path)
+	if panel.diskUsageForPath != panel.path {
+		return fsops.DiskUsage{}, false
+	}
+	return panel.diskUsage, panel.diskUsageOK
+}
+
+// diskUsageRefreshInterval is refreshPanelDiskUsage's own cooldown
+// between two real remote.DiskUsage round trips for the same path —
+// matches the status bar's own pre-existing once-a-second cadence
+// (StartClock), just no longer paid for on the UI goroutine.
+const diskUsageRefreshInterval = time.Second
+
+// refreshPanelDiskUsage kicks off a background remote.DiskUsage call
+// for panel's own current path if one isn't already running and the
+// last one that actually landed was at least diskUsageRefreshInterval
+// ago. Called only from StartClock's own once-a-second ticker — never
+// from diskUsageFor itself, and in particular never from
+// refreshStatusBar's own other caller, Panel.onLoad (wired in
+// NewRoot): triggering this from there too would mean the very first
+// refreshStatusBar a remote connectRemote call makes (before the
+// caller has finished setting up its own fake Client in a test, or
+// pointed livePath anywhere real) already spawns a real goroutine
+// reading that Client concurrently with whatever the caller does
+// to it next — confirmed as a genuine, reproducible data race via
+// TestRemoteSystemInfoHealthLinesReadsUptimeLoadMemorySwapAndDisk
+// before this comment existed. StartClock is deliberately never
+// started in tests (see its own doc comment), so keying the only
+// trigger point to it means no test ever spawns this goroutine by
+// surprise, while production still gets an effectively real-time
+// refresh (StartClock's own 1s cadence). Wrapped in safeGo (see its
+// own doc comment) like every other background goroutine in this app.
+func (r *Root) refreshPanelDiskUsage(panel *Panel) {
+	if panel.diskUsageFetching || time.Since(panel.diskUsageFetchedAt) < diskUsageRefreshInterval {
+		return
+	}
+	remote := panel.remote
+	path := panel.path
+	panel.diskUsageFetching = true
+	r.safeGo("remote disk usage refresh", nil, func() {
+		u, err := remote.DiskUsage(path)
+		r.app.QueueUpdateDraw(func() {
+			r.applyPanelDiskUsage(panel, remote, path, u, err)
+		})
+	})
+}
+
+// applyPanelDiskUsage is refreshPanelDiskUsage's own apply half, split
+// out so a test can call it directly with an already-known result
+// instead of draining QueueUpdateDraw (which blocks forever without a
+// running Application.Run — see this package's own established
+// convention, e.g. applyLogAuditRotatedFile in logaudit.go). Discards
+// a stale answer exactly like that same function does: panel may have
+// navigated away, reconnected, or disconnected entirely while the
+// real I/O was in flight — deliberately leaves diskUsageFetchedAt
+// untouched in that case, so whichever path the panel is actually on
+// now gets its own refresh right away rather than waiting out this
+// now-irrelevant answer's own cooldown.
+func (r *Root) applyPanelDiskUsage(panel *Panel, remote remotefs.Client, path string, u fsops.DiskUsage, err error) {
+	panel.diskUsageFetching = false
+	if panel.remote != remote || panel.path != path {
+		return
+	}
+	panel.diskUsageFetchedAt = time.Now()
+	panel.diskUsageForPath = path
+	panel.diskUsage = u
+	panel.diskUsageOK = err == nil
+	r.refreshStatusBar()
+	if r.detailsSidebarVisible && r.showingSystemInfo() {
+		r.renderDetailsSidebar()
+	}
 }
 
 // diskUsageText and inodeUsageText render one status-bar segment each,
@@ -1873,6 +1971,17 @@ func (r *Root) StartClock() (stop func()) {
 			select {
 			case <-ticker.C:
 				r.app.QueueUpdateDraw(func() {
+					// refreshPanelDiskUsage only ever starts a remote
+					// panel's own background fetch here — see its own
+					// doc comment for why no other call site is
+					// allowed to. Its result lands later, through its
+					// own separate QueueUpdateDraw call, which is what
+					// actually repaints the Disk/Inodes segment once
+					// the real round trip finishes — this tick's own
+					// refreshStatusBar call right after still paints
+					// everything else (clock, uptime, load, ...) on
+					// time regardless.
+					r.refreshPanelDiskUsage(r.panel)
 					r.refreshStatusBar()
 					// System Info (see systeminfo.go) shows the same
 					// kind of live figures (uptime, load, memory, ...)

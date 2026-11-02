@@ -394,6 +394,29 @@ type Panel struct {
 	remote     remotefs.Client
 	remoteConn remotefs.Connection
 
+	// diskUsage/diskUsageOK/diskUsageForPath are the last known
+	// DiskUsage a remote panel's own connection reported, and which
+	// path it was for — see refreshPanelDiskUsage (bottombar.go).
+	// Never written synchronously: diskUsageFor only ever reads these
+	// for a remote panel, the refresh that fills them always runs in
+	// the background, the same "never block the UI goroutine on
+	// network I/O" reasoning StartClock's own once-a-second ticker
+	// already has to respect. diskUsageForPath lets diskUsageFor tell
+	// a value that's actually current from one left over from before
+	// the last navigation — compared against path on every read.
+	diskUsage        fsops.DiskUsage
+	diskUsageOK      bool
+	diskUsageForPath string
+	// diskUsageFetching/diskUsageFetchedAt gate refreshPanelDiskUsage:
+	// fetching prevents a second request piling up on top of one
+	// already in flight over a slow connection; fetchedAt rate-limits
+	// to roughly diskUsageRefreshInterval apart — the exact cadence
+	// the status bar's own 1s ticker already drove this call at
+	// before, now off the UI goroutine's own critical path instead of
+	// blocking it there.
+	diskUsageFetching  bool
+	diskUsageFetchedAt time.Time
+
 	// archivePath is the real, on-disk archive file currently being
 	// browsed into — "" whenever path is an ordinary real directory.
 	// archiveEntries is that same archive's own full, flat member

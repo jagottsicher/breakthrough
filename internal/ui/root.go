@@ -1600,6 +1600,17 @@ type Root struct {
 	// without closing the previous one's overlay first).
 	viewerLookTempFile string
 
+	// viewerLookDownloadPath is openRemoteLook's own "this is the
+	// request currently in flight" marker — set fresh on every call,
+	// checked by applyRemoteLookDownload before doing anything with its
+	// own result, so Look opened again (a different file, or the same
+	// one re-opened) while an earlier download is still running never
+	// has that now-stale result clobber whatever the newer request
+	// already showed or is still waiting for — the same stale-result
+	// discard rule applyLogAuditRotatedFile/applyPanelDiskUsage already
+	// establish for the identical reason.
+	viewerLookDownloadPath string
+
 	// The directory picker (see dirpicker.go/openDirPicker) — the
 	// "Tree" browse action shared by the search dialog's Start-at field
 	// and, later, the planned Copy-to/Move-to target navigation.
@@ -1818,14 +1829,17 @@ type Root struct {
 	// indicator's own "✕" (clipboardClearSpan) — clears the clipboard —
 	// the mail badge (mailBadgeSpan, bottombar.go's own mailBadgeText)
 	// — launches the configured mail client, the same action "ge"
-	// already reaches — and each of the three background-job progress
+	// already reaches — and each of the four background-job progress
 	// segments' own "✕" (pasteCancelSpan/rsync.CancelSpan/
-	// compress.CancelSpan) — asks to stop just the currently running
-	// job, never its queue (see bgjobcancel.go's own
-	// confirmCancelCurrentPaste/Rsync/Compress). Each is zero-value (an
-	// empty, never-matching range) whenever its own segment isn't
-	// currently shown at all — the same way buttonBarSpans locate
-	// buttonBar's own many.
+	// compress.CancelSpan/archiveDownloadCancelSpan) — the first three
+	// ask to stop just the currently running job, never its queue (see
+	// bgjobcancel.go's own confirmCancelCurrentPaste/Rsync/Compress);
+	// archiveDownloadCancelSpan cancels immediately, no queue and
+	// nothing destructive riding on it to ask about first (see
+	// cancelRemoteArchiveDownload's own doc comment in remotearchive.go).
+	// Each is zero-value (an empty, never-matching range) whenever its
+	// own segment isn't currently shown at all — the same way
+	// buttonBarSpans locate buttonBar's own many.
 	// mailImapCount/mailImapOK are the IMAP mail badge's own cached
 	// unread count — written only from StartMailImapPoll's own
 	// QueueUpdateDraw callback (never read concurrently with that write
@@ -1839,17 +1853,38 @@ type Root struct {
 	mailImapCount int
 	mailImapOK    bool
 
-	bashConsole         *tview.Flex
-	bashLine            *tview.TextArea
-	bashHint            *tview.TextView
-	buttonBar           *tview.TextView
-	buttonBarSpans      []buttonBarSpan
-	notifyBadgeSpan     buttonBarSpan
-	clipboardClearSpan  buttonBarSpan
-	mailBadgeSpan       buttonBarSpan
-	pasteCancelSpan     buttonBarSpan
-	labelScanCancelSpan buttonBarSpan
-	gitStatusSpan       buttonBarSpan
+	bashConsole               *tview.Flex
+	bashLine                  *tview.TextArea
+	bashHint                  *tview.TextView
+	buttonBar                 *tview.TextView
+	buttonBarSpans            []buttonBarSpan
+	notifyBadgeSpan           buttonBarSpan
+	clipboardClearSpan        buttonBarSpan
+	mailBadgeSpan             buttonBarSpan
+	pasteCancelSpan           buttonBarSpan
+	archiveDownloadCancelSpan buttonBarSpan
+	labelScanCancelSpan       buttonBarSpan
+	gitStatusSpan             buttonBarSpan
+
+	// archiveDownloadPanel/Path/Cancel track whichever remote archive
+	// download (see startRemoteArchiveDownload/remotearchive.go) is
+	// currently in flight, if any — Path is what
+	// archiveDownloadCancelSpan's own progress text names and what
+	// clearRemoteArchiveDownloadState compares an arriving result
+	// against (the same stale-result discard every other background
+	// fetch in this app already follows), Panel is which tab it was
+	// opened from (closing that tab before the download lands is still
+	// a genuinely different panel's own problem to clean up — see
+	// finishRemoteArchiveDownload's own hasTab check). Cancel only ever
+	// stops *waiting* on the result, never the transfer itself —
+	// remotefs.Client has no context.Context anywhere in its own
+	// interface (see refreshPanelDiskUsage's own doc comment in
+	// bottombar.go for the identical constraint) — so a cancelled
+	// download still runs to completion in the background; its own
+	// result is just discarded once it lands instead of acted on.
+	archiveDownloadPanel  *Panel
+	archiveDownloadPath   string
+	archiveDownloadCancel context.CancelFunc
 
 	statusBar *tview.TextView
 
