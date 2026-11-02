@@ -22,7 +22,7 @@ const (
 )
 
 // batchRenameChoice is one option of an enum field — the value stored
-// on r.batchRenameRules and the label shown for it, the same split
+// on r.batch.Rules and the label shown for it, the same split
 // optionChoice already makes for the Options screen's own enums.
 type batchRenameChoice struct {
 	value, label string
@@ -30,7 +30,7 @@ type batchRenameChoice struct {
 
 // batchRenameField is one row of a step's own settings table: a label,
 // what kind of value it takes, and how to read/write it on
-// r.batchRenameRules. Modeled directly on optionSpec (see
+// r.batch.Rules. Modeled directly on optionSpec (see
 // optioncatalog.go) — same shape, because the table that renders it
 // (see batchrename.go) is the same table, reused for a Rules value
 // instead of a config.Settings one.
@@ -189,16 +189,16 @@ func batchRenameSteps() []batchRenameStep {
 			fields: []batchRenameField{
 				stringField("Find",
 					"Text to look for in the name (not the extension). Every occurrence is replaced. Leave empty to skip this step.",
-					func(r *Root) string { return r.batchRenameRules.Find },
-					func(r *Root, v string) { r.batchRenameRules.Find = v }),
+					func(r *Root) string { return r.batch.Rules.Find },
+					func(r *Root, v string) { r.batch.Rules.Find = v }),
 				stringField("Replace with",
 					"What each match becomes — may be empty to delete the match. With Regex on, $1 / ${name} / \\1 refer to capture groups.",
-					func(r *Root) string { return r.batchRenameRules.Replace },
-					func(r *Root, v string) { r.batchRenameRules.Replace = v }),
+					func(r *Root) string { return r.batch.Rules.Replace },
+					func(r *Root, v string) { r.batch.Rules.Replace = v }),
 				boolField("Regex (Find is a pattern, not literal text)",
 					"Treat Find as a Go regular expression: ^ $ . * + ? [ ] ( ) | \\d \\w \\s all work. Off: Find is matched literally, case-sensitive.",
-					func(r *Root) bool { return r.batchRenameRules.Regex },
-					func(r *Root, v bool) { r.batchRenameRules.Regex = v }),
+					func(r *Root) bool { return r.batch.Rules.Regex },
+					func(r *Root, v bool) { r.batch.Rules.Regex = v }),
 			},
 		},
 		{
@@ -208,8 +208,8 @@ func batchRenameSteps() []batchRenameStep {
 				enumField("Change case to",
 					"Applies to the name only, never the extension (see the Extension step for that). Title Case capitalizes each word; Sentence case only the first letter.",
 					caseModeChoices,
-					func(r *Root) string { return r.batchRenameRules.Case.String() },
-					func(r *Root, v string) { r.batchRenameRules.Case, _ = batchrename.ParseCaseMode(v) }),
+					func(r *Root) string { return r.batch.Rules.Case.String() },
+					func(r *Root, v string) { r.batch.Rules.Case, _ = batchrename.ParseCaseMode(v) }),
 			},
 		},
 		{
@@ -218,12 +218,12 @@ func batchRenameSteps() []batchRenameStep {
 			fields: []batchRenameField{
 				intField("Characters off the front",
 					"How many characters to drop from the start of the name. Runs after Search & Replace and Case, before Numbering.",
-					func(r *Root) int { return r.batchRenameRules.TrimFront },
-					func(r *Root, v int) { r.batchRenameRules.TrimFront = v }),
+					func(r *Root) int { return r.batch.Rules.TrimFront },
+					func(r *Root, v int) { r.batch.Rules.TrimFront = v }),
 				intField("Characters off the back",
 					"How many characters to drop from the end of the name, extension excluded. A count longer than the name just empties it (and is flagged in the preview).",
-					func(r *Root) int { return r.batchRenameRules.TrimBack },
-					func(r *Root, v int) { r.batchRenameRules.TrimBack = v }),
+					func(r *Root) int { return r.batch.Rules.TrimBack },
+					func(r *Root, v int) { r.batch.Rules.TrimBack = v }),
 			},
 		},
 		{
@@ -232,16 +232,16 @@ func batchRenameSteps() []batchRenameStep {
 			fields: []batchRenameField{
 				stringField("Template",
 					templateCheatsheet(),
-					func(r *Root) string { return r.batchRenameRules.Template },
-					func(r *Root, v string) { r.batchRenameRules.Template = v }),
+					func(r *Root) string { return r.batch.Rules.Template },
+					func(r *Root, v string) { r.batch.Rules.Template = v }),
 				stringField("Date format (for {date})",
 					"How {date} prints the file's modification time. A Go layout (2006-01-02 15:04) or, with the switch below, strftime (%Y-%m-%d %H:%M). Empty: 2006-01-02.",
-					func(r *Root) string { return r.batchRenameRules.DateFormat },
-					func(r *Root, v string) { r.batchRenameRules.DateFormat = v }),
+					func(r *Root) string { return r.batch.Rules.DateFormat },
+					func(r *Root, v string) { r.batch.Rules.DateFormat = v }),
 				boolField("Date format uses strftime (%Y, %m, %d...)",
 					"On: read \"Date format\" as a strftime pattern, the same %-directives Duplicate/Multiply accept. Off: Go's reference-time layout (Mon Jan 2 15:04:05 2006).",
-					func(r *Root) bool { return r.batchRenameRules.DateStrftime },
-					func(r *Root, v bool) { r.batchRenameRules.DateStrftime = v }),
+					func(r *Root) bool { return r.batch.Rules.DateStrftime },
+					func(r *Root, v bool) { r.batch.Rules.DateStrftime = v }),
 			},
 		},
 		{
@@ -251,29 +251,29 @@ func batchRenameSteps() []batchRenameStep {
 				enumField("Position",
 					"Where the counter goes: in front of the name (\"01-name\") or after it (\"name-01\"). Which file gets which number is \"Count in\" below.",
 					numberPositionChoices,
-					func(r *Root) string { return r.batchRenameRules.NumberPosition.String() },
-					func(r *Root, v string) { r.batchRenameRules.NumberPosition, _ = batchrename.ParseNumberPosition(v) }),
+					func(r *Root) string { return r.batch.Rules.NumberPosition.String() },
+					func(r *Root, v string) { r.batch.Rules.NumberPosition, _ = batchrename.ParseNumberPosition(v) }),
 				intField("Start at",
 					"The number the first file gets.",
-					func(r *Root) int { return r.batchRenameRules.NumberStart },
-					func(r *Root, v int) { r.batchRenameRules.NumberStart = v }),
+					func(r *Root) int { return r.batch.Rules.NumberStart },
+					func(r *Root, v int) { r.batch.Rules.NumberStart = v }),
 				intField("Step",
 					"How much the counter grows per file. 0 counts as 1.",
-					func(r *Root) int { return r.batchRenameRules.NumberStep },
-					func(r *Root, v int) { r.batchRenameRules.NumberStep = v }),
+					func(r *Root) int { return r.batch.Rules.NumberStep },
+					func(r *Root, v int) { r.batch.Rules.NumberStep = v }),
 				intField("Digits (zero-padded)",
 					"Minimum width of the counter, padded with leading zeros: 3 gives 001, 002, ... A number that needs more digits simply gets them.",
-					func(r *Root) int { return r.batchRenameRules.NumberDigits },
-					func(r *Root, v int) { r.batchRenameRules.NumberDigits = v }),
+					func(r *Root) int { return r.batch.Rules.NumberDigits },
+					func(r *Root, v int) { r.batch.Rules.NumberDigits = v }),
 				enumField("Count in",
 					"Which file gets the first number. \"As listed\" is the preview's own order — move rows there with u/d to arrange it by hand.",
 					numberOrderChoices,
-					func(r *Root) string { return r.batchRenameRules.NumberOrder.String() },
-					func(r *Root, v string) { r.batchRenameRules.NumberOrder, _ = batchrename.ParseNumberOrder(v) }),
+					func(r *Root) string { return r.batch.Rules.NumberOrder.String() },
+					func(r *Root, v string) { r.batch.Rules.NumberOrder, _ = batchrename.ParseNumberOrder(v) }),
 				boolField("Reversed",
 					"Count from the other end of whatever order is picked above: Z to A, newest first, or the preview bottom-up.",
-					func(r *Root) bool { return r.batchRenameRules.NumberReversed },
-					func(r *Root, v bool) { r.batchRenameRules.NumberReversed = v }),
+					func(r *Root) bool { return r.batch.Rules.NumberReversed },
+					func(r *Root, v bool) { r.batch.Rules.NumberReversed = v }),
 			},
 		},
 		{
@@ -285,16 +285,16 @@ func batchRenameSteps() []batchRenameStep {
 				enumField("Extension",
 					"What happens to the part after the last dot. \"Set to...\" replaces it with the value below. Dotfiles like .bashrc have no extension.",
 					extensionModeChoices,
-					func(r *Root) string { return r.batchRenameRules.ExtensionMode.String() },
-					func(r *Root, v string) { r.batchRenameRules.ExtensionMode, _ = batchrename.ParseExtensionMode(v) }),
+					func(r *Root) string { return r.batch.Rules.ExtensionMode.String() },
+					func(r *Root, v string) { r.batch.Rules.ExtensionMode, _ = batchrename.ParseExtensionMode(v) }),
 				stringField("Set to (used by \"Set to...\" above)",
 					"The new extension, with or without a leading dot. Empty removes the extension.",
-					func(r *Root) string { return r.batchRenameRules.ExtensionValue },
-					func(r *Root, v string) { r.batchRenameRules.ExtensionValue = v }),
+					func(r *Root) string { return r.batch.Rules.ExtensionValue },
+					func(r *Root, v string) { r.batch.Rules.ExtensionValue = v }),
 				boolField("Treat folder names as having extensions too",
 					"Off: a folder called \"my.project\" is just that — nothing after its dot is ever touched by any step. On: folders split into name + extension like files.",
-					func(r *Root) bool { return r.batchRenameRules.ExtensionOnDirs },
-					func(r *Root, v bool) { r.batchRenameRules.ExtensionOnDirs = v }),
+					func(r *Root) bool { return r.batch.Rules.ExtensionOnDirs },
+					func(r *Root, v bool) { r.batch.Rules.ExtensionOnDirs = v }),
 			},
 		},
 	}

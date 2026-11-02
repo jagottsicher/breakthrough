@@ -24,11 +24,11 @@ import (
 // already exists, since saving over one is also how it's updated and
 // shouldn't happen by a slip of the fingers.
 func (r *Root) openBatchRenameSavePreset() {
-	r.batchRenameInput.SetLabel(" Preset name: ")
-	r.batchRenameInput.SetText("")
-	r.batchRenameInput.SetAcceptanceFunc(nil)
-	r.batchRenameInput.SetDoneFunc(func(key tcell.Key) {
-		name := strings.TrimSpace(r.batchRenameInput.GetText())
+	r.batch.Input.SetLabel(" Preset name: ")
+	r.batch.Input.SetText("")
+	r.batch.Input.SetAcceptanceFunc(nil)
+	r.batch.Input.SetDoneFunc(func(key tcell.Key) {
+		name := strings.TrimSpace(r.batch.Input.GetText())
 		r.hideOverlay()
 		if key != tcell.KeyEnter || name == "" {
 			return
@@ -37,7 +37,7 @@ func (r *Root) openBatchRenameSavePreset() {
 			r.showError(fmt.Errorf("save preset: %w", err))
 			return
 		}
-		if batchrename.PresetExists(r.batchRenamePresetDir, name) {
+		if batchrename.PresetExists(r.batch.PresetDir, name) {
 			r.openConfirm(fmt.Sprintf("Replace the existing preset %q?", name), "Yes, replace", func() {
 				r.saveBatchRenamePreset(name)
 			})
@@ -49,8 +49,8 @@ func (r *Root) openBatchRenameSavePreset() {
 	width, height := 56, 1
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
-	r.batchRenameInput.SetRect(x, y, width, height)
-	r.pushOverlay(batchRenameInputPage, r.batchRenameInput, nil)
+	r.batch.Input.SetRect(x, y, width, height)
+	r.pushOverlay(batchRenameInputPage, r.batch.Input, nil)
 }
 
 // saveBatchRenamePreset writes the current rules as name, reporting a
@@ -58,15 +58,15 @@ func (r *Root) openBatchRenameSavePreset() {
 // status line — there's nothing else on screen that changes when a
 // preset is saved, so without that the button would seem to do nothing.
 func (r *Root) saveBatchRenamePreset(name string) {
-	if r.batchRenamePresetDir == "" {
+	if r.batch.PresetDir == "" {
 		r.showError(fmt.Errorf("save preset: no user config directory available"))
 		return
 	}
-	if err := batchrename.SavePreset(r.batchRenamePresetDir, name, r.batchRenameRules); err != nil {
+	if err := batchrename.SavePreset(r.batch.PresetDir, name, r.batch.Rules); err != nil {
 		r.showError(fmt.Errorf("save preset: %w", err))
 		return
 	}
-	r.batchRenameStatus.SetText(fmt.Sprintf(" Preset %q saved.", name))
+	r.batch.Status.SetText(fmt.Sprintf(" Preset %q saved.", name))
 }
 
 // openBatchRenamePresetPicker is the "Load preset..." button: lists
@@ -75,49 +75,49 @@ func (r *Root) saveBatchRenamePreset(name string) {
 // A preset file that can't be read is reported but doesn't stop the
 // rest from being listed (see batchrename.LoadPresets).
 func (r *Root) openBatchRenamePresetPicker() {
-	presets, err := batchrename.LoadPresets(r.batchRenamePresetDir)
+	presets, err := batchrename.LoadPresets(r.batch.PresetDir)
 	if err != nil {
 		r.showError(fmt.Errorf("load presets: %w", err))
 	}
 
-	r.batchRenamePresetList.Clear()
+	r.batch.PresetList.Clear()
 	if len(presets) == 0 {
-		r.batchRenamePresetList.AddItem("(no presets saved yet)", "", 0, func() { r.hideOverlay() })
+		r.batch.PresetList.AddItem("(no presets saved yet)", "", 0, func() { r.hideOverlay() })
 	}
 	for _, p := range presets {
 		preset := p // captured per item, not the shared loop variable
-		r.batchRenamePresetList.AddItem(preset.Name, "", 0, func() {
+		r.batch.PresetList.AddItem(preset.Name, "", 0, func() {
 			r.hideOverlay()
 			r.applyBatchRenamePreset(preset)
 		})
 	}
 
-	width, height := listSize(r.batchRenamePresetList)
-	if titleWidth := tview.TaggedStringWidth(r.batchRenamePresetTitleBar.GetText(false)); titleWidth > width {
+	width, height := listSize(r.batch.PresetList)
+	if titleWidth := tview.TaggedStringWidth(r.batch.PresetTitleBar.GetText(false)); titleWidth > width {
 		width = titleWidth
 	}
 	height++ // the title bar row
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
-	r.batchRenamePresetLayout.SetRect(x, y, width, height)
+	r.batch.PresetLayout.SetRect(x, y, width, height)
 	// The list's own rect is set to the same area too — captureOutsideClick
 	// reads r.activeWidget.GetRect(), and the list is what has focus (see
 	// openConfirm's identical note on its own dialog).
-	r.batchRenamePresetList.SetRect(x, y, width, height)
-	r.batchRenamePresetList.SetCurrentItem(0)
-	r.batchRenamePresetList.SetOffset(0, 0)
+	r.batch.PresetList.SetRect(x, y, width, height)
+	r.batch.PresetList.SetCurrentItem(0)
+	r.batch.PresetList.SetOffset(0, 0)
 
-	r.pushOverlay(batchRenamePresetPage, r.batchRenamePresetList, nil)
+	r.pushOverlay(batchRenamePresetPage, r.batch.PresetList, nil)
 }
 
 // applyBatchRenamePreset makes preset the screen's current rules and
 // re-renders everything that depends on them — the fields, the step
 // marks, the preview.
 func (r *Root) applyBatchRenamePreset(preset batchrename.Preset) {
-	r.batchRenameRules = preset.Rules
+	r.batch.Rules = preset.Rules
 	r.renderBatchRenameFields()
 	r.renderBatchRenamePreview()
-	r.batchRenameStatus.SetText(r.batchRenameStatus.GetText(false) + fmt.Sprintf(" · preset %q", preset.Name))
+	r.batch.Status.SetText(r.batch.Status.GetText(false) + fmt.Sprintf(" · preset %q", preset.Name))
 }
 
 // captureBatchRenamePresetKey is the picker's own extra key: d (or
@@ -129,13 +129,13 @@ func (r *Root) captureBatchRenamePresetKey(event *tcell.EventKey) *tcell.EventKe
 	if !isDelete {
 		return event
 	}
-	index := r.batchRenamePresetList.GetCurrentItem()
-	name, _ := r.batchRenamePresetList.GetItemText(index)
-	if !batchrename.PresetExists(r.batchRenamePresetDir, name) {
+	index := r.batch.PresetList.GetCurrentItem()
+	name, _ := r.batch.PresetList.GetItemText(index)
+	if !batchrename.PresetExists(r.batch.PresetDir, name) {
 		return nil // the "(no presets saved yet)" placeholder, or already gone
 	}
 	r.openConfirm(fmt.Sprintf("Delete the preset %q?", name), "Yes, delete", func() {
-		if err := batchrename.DeletePreset(r.batchRenamePresetDir, name); err != nil {
+		if err := batchrename.DeletePreset(r.batch.PresetDir, name); err != nil {
 			r.showError(fmt.Errorf("delete preset: %w", err))
 		}
 		// Rebuild the picker in place so the list reflects the deletion —

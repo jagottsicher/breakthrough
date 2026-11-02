@@ -15,7 +15,6 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/apikey"
-	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
@@ -1495,52 +1494,28 @@ type Root struct {
 
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
-	// Options screen already establishes (batchRenameStepsList plays
-	// options.Categories' own role, batchRenameFieldsTable plays
+	// Options screen already establishes (batch.StepsList plays
+	// options.Categories' own role, batch.FieldsTable plays
 	// options.Table's), plus a live preview table and status line
 	// underneath, which Options has no equivalent of.
 	//
-	// batchRenameRules/batchRenameTargets/batchRenameStep are this
-	// open's own working state — reset fresh by openBatchRename every
-	// time, never remembered across opens (see its own doc comment).
-	// batchRenamePendingChanges is what the preview most recently
-	// computed (see renderBatchRenamePreview); batchRenameUndo is what
+	// batch.Rules/batch.Targets/batch.Step are this open's own working
+	// state — reset fresh by openBatchRename every time, never
+	// remembered across opens (see its own doc comment).
+	// batch.PendingChanges is what the preview most recently computed
+	// (see renderBatchRenamePreview); batch.Undo is what
 	// confirmApplyBatchRename most recently actually applied, kept
 	// around only until undoLastBatchRename consumes it.
 	//
-	// batchRenameTargets is kept in the order the preview shows — the
-	// user can rearrange it by hand from the preview (see
-	// moveBatchRenamePreviewRow), which is what "as listed" numbering
-	// counts against. batchRenameExcluded marks targets the user has
+	// batch.Targets is kept in the order the preview shows — the user
+	// can rearrange it by hand from the preview (see
+	// moveBatchRenamePreviewRow), and that's what "as listed" numbering
+	// counts against. batch.Excluded marks a target the user has
 	// unticked in the preview: still listed, but left out of Plan (and
-	// so out of the numbering) entirely. batchRenamePresetDir is where
-	// saved presets live (see batchrename.SavePreset) — a field rather
-	// than a constant so tests can point it somewhere disposable.
-	batchRenameLayout         *tview.Flex
-	batchRenameTitleBar       *tview.TextView
-	batchRenameHint           *tview.TextView
-	batchRenameStepsList      *tview.List
-	batchRenameFieldsTable    *tview.Table
-	batchRenameFieldHelp      *tview.TextView
-	batchRenamePreviewTable   *tview.Table
-	batchRenameStatus         *tview.TextView
-	batchRenameButtons        *tview.Flex
-	batchRenameApplyBtn       *tview.Button
-	batchRenameSavePresetBtn  *tview.Button
-	batchRenameLoadPresetBtn  *tview.Button
-	batchRenameResetBtn       *tview.Button
-	batchRenameCancelBtn      *tview.Button
-	batchRenameInput          *tview.InputField
-	batchRenamePresetList     *tview.List
-	batchRenamePresetTitleBar *tview.TextView
-	batchRenamePresetLayout   *tview.Flex
-	batchRenamePresetDir      string
-	batchRenameStep           int
-	batchRenameRules          batchrename.Rules
-	batchRenameTargets        []string
-	batchRenameExcluded       map[string]bool
-	batchRenamePendingChanges []batchrename.Change
-	batchRenameUndo           []batchrename.Change
+	// so out of numbering) entirely. batch.PresetDir is where saved
+	// presets live (see batchrename.SavePreset) — a field rather than a
+	// constant so tests can point it somewhere disposable.
+	batch batchRenameState
 
 	// The Compare feature (see compare.go): file-vs-file is a compact
 	// overlay (comparePage) much like Properties; directory-vs-directory
@@ -3155,9 +3130,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just below gives.
-	r.AddPage(batchRenamePage, r.batchRenameLayout, true, false)
-	r.AddPage(batchRenameInputPage, r.batchRenameInput, false, false)
-	r.AddPage(batchRenamePresetPage, r.batchRenamePresetLayout, false, false)
+	r.AddPage(batchRenamePage, r.batch.Layout, true, false)
+	r.AddPage(batchRenameInputPage, r.batch.Input, false, false)
+	r.AddPage(batchRenamePresetPage, r.batch.PresetLayout, false, false)
 	r.AddPage(comparePage, r.compareLayout, false, false)
 	r.AddPage(compareTreePage, r.compareTreeLayout, true, false)
 	// resize=true: the diff view deliberately fills the whole terminal,
