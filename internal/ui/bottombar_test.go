@@ -2164,15 +2164,15 @@ func TestRsyncCancelSpanIsEmptyWithNoRsyncRunning(t *testing.T) {
 func TestCompressCancelSpanClickOpensAConfirmation(t *testing.T) {
 	r := newTestRootForCompressJob(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	r.compressJob = &compressJob{ctx: ctx, cancel: cancel, verb: "Compressing", label: "test.zip"}
+	r.compress.Job = &compressJob{ctx: ctx, cancel: cancel, verb: "Compressing", label: "test.zip"}
 	r.statusBar.SetRect(0, 0, 120, 1)
 	r.refreshStatusBar()
 
-	if r.compressCancelSpan.endCol <= r.compressCancelSpan.startCol {
-		t.Fatalf("compressCancelSpan = %+v, want a real, non-empty column range", r.compressCancelSpan)
+	if r.compress.CancelSpan.endCol <= r.compress.CancelSpan.startCol {
+		t.Fatalf("compress.CancelSpan = %+v, want a real, non-empty column range", r.compress.CancelSpan)
 	}
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
-	x := rectX + (r.compressCancelSpan.startCol+r.compressCancelSpan.endCol)/2
+	x := rectX + (r.compress.CancelSpan.startCol+r.compress.CancelSpan.endCol)/2
 	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
 
 	r.captureStatusBarMouse(tview.MouseLeftClick, event)
@@ -2190,8 +2190,8 @@ func TestCompressCancelSpanIsEmptyWithNoCompressRunning(t *testing.T) {
 	r.statusBar.SetRect(0, 0, 80, 1)
 	r.refreshStatusBar()
 
-	if r.compressCancelSpan.run != nil {
-		t.Error("compressCancelSpan has a run func with no Compress/Extract running, want the zero value")
+	if r.compress.CancelSpan.run != nil {
+		t.Error("compress.CancelSpan has a run func with no Compress/Extract running, want the zero value")
 	}
 }
 

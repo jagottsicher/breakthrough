@@ -93,12 +93,12 @@ func (r *Root) openRsyncCancelDialog() {
 // Extract counterpart — see its own doc comment for the shared
 // reasoning throughout.
 func (r *Root) openCompressCancelDialog() {
-	if r.compressJob == nil && len(r.compressQueue) == 0 {
+	if r.compress.Job == nil && len(r.compress.Queue) == 0 {
 		return
 	}
 	r.pendingBgJobCancelCurrent = r.cancelCompressKeepQueue
 	r.pendingBgJobCancelAll = r.cancelCompressJob
-	r.renderBgJobCancelDialog("Compress/Extract", len(r.compressQueue))
+	r.renderBgJobCancelDialog("Compress/Extract", len(r.compress.Queue))
 	r.resizeBgJobCancelDialog()
 	r.bgJobCancelDialog.SetCurrentItem(bgJobCancelNeverMindItem)
 	r.showOverlay(bgJobCancelPage, r.bgJobCancelDialog)
@@ -154,7 +154,7 @@ func (r *Root) confirmCancelCurrentRsync() {
 }
 
 func (r *Root) confirmCancelCurrentCompress() {
-	if r.compressJob == nil {
+	if r.compress.Job == nil {
 		return
 	}
 	r.openConfirm("Stop the current Compress/Extract job?", "Yes, stop it", r.cancelCompressKeepQueue)

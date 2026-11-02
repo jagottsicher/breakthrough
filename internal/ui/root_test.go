@@ -216,14 +216,14 @@ func TestRequestCancelAsksBeforeCancellingRsyncAndCompress(t *testing.T) {
 	rctx, rcancel := context.WithCancel(context.Background())
 	r.rsyncJob = &rsyncJob{ctx: rctx, cancel: rcancel}
 	cctx, ccancel := context.WithCancel(context.Background())
-	r.compressJob = &compressJob{ctx: cctx, cancel: ccancel}
+	r.compress.Job = &compressJob{ctx: cctx, cancel: ccancel}
 
 	r.RequestCancel()
 
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want the confirmation dialog open", r.activePage)
 	}
-	if r.rsyncJob == nil || r.compressJob == nil {
+	if r.rsyncJob == nil || r.compress.Job == nil {
 		t.Error("neither job should be cancelled yet — only asked about so far")
 	}
 }
@@ -241,8 +241,8 @@ func TestRequestCancelConfirmedCancelsBothRsyncAndCompressAndBothQueues(t *testi
 	r.rsyncQueue = []queuedRsync{{label: "queued rsync"}}
 	cctx, ccancel := context.WithCancel(context.Background())
 	cjob := &compressJob{ctx: cctx, cancel: ccancel}
-	r.compressJob = cjob
-	r.compressQueue = []compressRequest{{label: "queued compress"}}
+	r.compress.Job = cjob
+	r.compress.Queue = []compressRequest{{label: "queued compress"}}
 
 	r.RequestCancel()
 	r.acceptConfirm()
@@ -256,7 +256,7 @@ func TestRequestCancelConfirmedCancelsBothRsyncAndCompressAndBothQueues(t *testi
 	if len(r.rsyncQueue) != 0 {
 		t.Error("the rsync queue should have been dropped too")
 	}
-	if len(r.compressQueue) != 0 {
+	if len(r.compress.Queue) != 0 {
 		t.Error("the compress queue should have been dropped too")
 	}
 }
@@ -314,8 +314,8 @@ func TestUpdateOverlayTitleBarColorsTracksActiveOverlay(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
-		t.Errorf("propertiesTitleBar with nothing open = %v, want EditableBackground %v", got, want)
+	if got, want := r.properties.TitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("properties.TitleBar with nothing open = %v, want EditableBackground %v", got, want)
 	}
 	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
 		t.Errorf("menuTitleBar with nothing open = %v, want EditableBackground %v", got, want)
@@ -323,8 +323,8 @@ func TestUpdateOverlayTitleBarColorsTracksActiveOverlay(t *testing.T) {
 
 	r.target = filepath.Join(dir, "apple.txt")
 	r.openProperties()
-	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
-		t.Errorf("propertiesTitleBar while Properties is open = %v, want FocusedBackground %v", got, want)
+	if got, want := r.properties.TitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
+		t.Errorf("properties.TitleBar while Properties is open = %v, want FocusedBackground %v", got, want)
 	}
 	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
 		t.Errorf("menuTitleBar while Properties (not the menu) is open = %v, want EditableBackground %v", got, want)
@@ -337,8 +337,8 @@ func TestUpdateOverlayTitleBarColorsTracksActiveOverlay(t *testing.T) {
 	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
 		t.Errorf("menuTitleBar while the menu is open = %v, want FocusedBackground %v", got, want)
 	}
-	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
-		t.Errorf("propertiesTitleBar after Properties was closed = %v, want EditableBackground %v", got, want)
+	if got, want := r.properties.TitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("properties.TitleBar after Properties was closed = %v, want EditableBackground %v", got, want)
 	}
 
 	r.hideOverlay()
@@ -1226,7 +1226,7 @@ func TestHandleBeforeDrawRerendersPropertiesOnResize(t *testing.T) {
 	r.target = path
 	r.openProperties()
 
-	_, _, wideWidth, _ := r.properties.GetRect()
+	_, _, wideWidth, _ := r.properties.Pages.GetRect()
 
 	r.SetRect(0, 0, 40, 50)
 	r.panel.SetRect(0, 0, 40, 46) // as if a real draw had already cascaded the resize down to it
@@ -1234,7 +1234,7 @@ func TestHandleBeforeDrawRerendersPropertiesOnResize(t *testing.T) {
 
 	r.handleBeforeDraw(screen)
 
-	_, _, narrowWidth, _ := r.properties.GetRect()
+	_, _, narrowWidth, _ := r.properties.Pages.GetRect()
 	if narrowWidth >= wideWidth {
 		t.Errorf("properties width after shrinking the panel = %d, want less than the original %d (clamped to the now-narrower panel)", narrowWidth, wideWidth)
 	}

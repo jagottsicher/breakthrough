@@ -86,8 +86,8 @@ func TestRefreshConsigliereModelCacheFetchesForOllamaWithoutAnyKeyConfigured(t *
 	case <-time.After(2 * time.Second):
 		t.Fatal("fetch was never called — want it attempted even though nothing is configured in Options")
 	}
-	if err := r.consigliereModelFetchErr["ollama"]; err != nil {
-		t.Errorf("consigliereModelFetchErr[ollama] = %v, want none", err)
+	if err := r.consigliere.ModelFetchErr["ollama"]; err != nil {
+		t.Errorf("consigliere.ModelFetchErr[ollama] = %v, want none", err)
 	}
 }
 
@@ -234,31 +234,31 @@ func TestRefreshConsigliereModelCacheCallsFetchWithResolvedKey(t *testing.T) {
 
 func TestFinishConsigliereModelFetchPopulatesCacheAndRerenders(t *testing.T) {
 	r := newPlainKeyRoot(t)
-	r.consigliereModelFetchInFlight["anthropic"] = true
+	r.consigliere.ModelFetchInFlight["anthropic"] = true
 	want := []consigliere.ModelInfo{{ID: "claude-opus-5-5", EffortLevels: []string{"low", "high"}}}
 
 	r.finishConsigliereModelFetch("anthropic", want, nil)
 
-	if cached, ok := r.consigliereModelCache["anthropic"]; !ok || len(cached) != 1 || cached[0].ID != want[0].ID {
-		t.Errorf("consigliereModelCache[anthropic] = %+v, want %+v", cached, want)
+	if cached, ok := r.consigliere.ModelCache["anthropic"]; !ok || len(cached) != 1 || cached[0].ID != want[0].ID {
+		t.Errorf("consigliere.ModelCache[anthropic] = %+v, want %+v", cached, want)
 	}
-	if r.consigliereModelFetchInFlight["anthropic"] {
+	if r.consigliere.ModelFetchInFlight["anthropic"] {
 		t.Error("fetch should no longer be marked in-flight once it completes")
 	}
 }
 
 func TestFinishConsigliereModelFetchRecordsErrorWithoutTouchingCache(t *testing.T) {
 	r := newPlainKeyRoot(t)
-	r.consigliereModelFetchInFlight["anthropic"] = true
+	r.consigliere.ModelFetchInFlight["anthropic"] = true
 	wantErr := errors.New("network unreachable")
 
 	r.finishConsigliereModelFetch("anthropic", nil, wantErr)
 
-	if _, ok := r.consigliereModelCache["anthropic"]; ok {
+	if _, ok := r.consigliere.ModelCache["anthropic"]; ok {
 		t.Error("a failed fetch should not populate the cache")
 	}
-	if !errors.Is(r.consigliereModelFetchErr["anthropic"], wantErr) {
-		t.Errorf("consigliereModelFetchErr[anthropic] = %v, want %v", r.consigliereModelFetchErr["anthropic"], wantErr)
+	if !errors.Is(r.consigliere.ModelFetchErr["anthropic"], wantErr) {
+		t.Errorf("consigliere.ModelFetchErr[anthropic] = %v, want %v", r.consigliere.ModelFetchErr["anthropic"], wantErr)
 	}
 }
 
@@ -275,14 +275,14 @@ func TestRefreshConsigliereModelCacheSkipsWithoutAKey(t *testing.T) {
 	if called {
 		t.Error("should never call the fetch func when no API key is available at all")
 	}
-	if err := r.consigliereModelFetchErr["anthropic"]; !errors.Is(err, errConsigliereNoAPIKey) {
-		t.Errorf("consigliereModelFetchErr[anthropic] = %v, want errConsigliereNoAPIKey", err)
+	if err := r.consigliere.ModelFetchErr["anthropic"]; !errors.Is(err, errConsigliereNoAPIKey) {
+		t.Errorf("consigliere.ModelFetchErr[anthropic] = %v, want errConsigliereNoAPIKey", err)
 	}
 }
 
 func TestRefreshConsigliereModelCacheSkipsWhenAlreadyCached(t *testing.T) {
 	r := rootWithConsigliereKey(t)
-	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{{ID: "already-cached"}}
+	r.consigliere.ModelCache["anthropic"] = []consigliere.ModelInfo{{ID: "already-cached"}}
 	called := false
 	withFakeConsigliereModelList(t, func(ctx context.Context, providerName, key, ollamaBaseURLOverride string) ([]consigliere.ModelInfo, error) {
 		called = true
@@ -359,7 +359,7 @@ func TestConsigliereModelChoicesAlwaysIncludesStoredOverrideEvenWithoutACache(t 
 
 func TestConsigliereModelChoicesFromCacheIncludeEveryFetchedModel(t *testing.T) {
 	r := newPlainKeyRoot(t)
-	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{
+	r.consigliere.ModelCache["anthropic"] = []consigliere.ModelInfo{
 		{ID: "claude-opus-5-5"},
 		{ID: "claude-haiku-5-5"},
 	}
@@ -394,7 +394,7 @@ func TestConsigliereModelChoicesDefaultLabelIsNotAvailableBeforeFetch(t *testing
 // succeeded, the real built-in default model name is shown.
 func TestConsigliereModelChoicesDefaultLabelShowsRealDefaultOnceFetched(t *testing.T) {
 	r := newPlainKeyRoot(t)
-	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}
+	r.consigliere.ModelCache["anthropic"] = []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}
 
 	choices := r.consigliereModelChoices()
 
@@ -436,7 +436,7 @@ func TestConsigliereModelChoicesDefaultLabelDistinguishesLockedFromNoKey(t *test
 		t.Fatalf("Set: %v", err)
 	}
 	session.Lock()
-	delete(r.consigliereModelFetchErr, "anthropic")
+	delete(r.consigliere.ModelFetchErr, "anthropic")
 
 	r.refreshConsigliereModelCache()
 	choices = r.consigliereModelChoices()
@@ -465,8 +465,8 @@ func TestConsigliereModelRowBlankCommitResetsToDefault(t *testing.T) {
 	opt, _ := r.optionAtRow(row)
 
 	r.editOptionValue(opt)
-	r.optionsInput.SetText("")
-	r.optionsInput.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.options.Input.SetText("")
+	r.options.Input.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.settings.ConsigliereAnthropicModel != "" {
 		t.Errorf("ConsigliereAnthropicModel = %q, want a blank commit to reset it to the built-in default", r.settings.ConsigliereAnthropicModel)
@@ -483,7 +483,7 @@ func TestConsigliereModelRowApplyRetriggersTheFetch(t *testing.T) {
 	r := rootWithConsigliereKey(t)
 	for i, cat := range optionCategories() {
 		if cat.name == "AI Consigliere" {
-			r.optionsCategory = i
+			r.options.Category = i
 		}
 	}
 	calls := make(chan struct{}, 2)
@@ -509,7 +509,7 @@ func TestConsigliereModelRowApplyRetriggersTheFetch(t *testing.T) {
 func TestConsigliereModelChoicesDefaultLabelStaysNotAvailableForCustom(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	r.settings.ConsigliereProvider = "custom"
-	r.consigliereModelCache["custom"] = []consigliere.ModelInfo{{ID: "some-model"}}
+	r.consigliere.ModelCache["custom"] = []consigliere.ModelInfo{{ID: "some-model"}}
 
 	choices := r.consigliereModelChoices()
 
@@ -536,7 +536,7 @@ func TestConsigliereEffortChoicesDefaultLabelIsNotAvailableBeforeFetch(t *testin
 // succeeded, the usual "(model default)" sentinel is shown again.
 func TestConsigliereEffortChoicesDefaultLabelShowsModelDefaultOnceFetched(t *testing.T) {
 	r := newPlainKeyRoot(t)
-	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{{ID: consigliere.AnthropicDefaultModel}}
+	r.consigliere.ModelCache["anthropic"] = []consigliere.ModelInfo{{ID: consigliere.AnthropicDefaultModel}}
 
 	choices := r.consigliereEffortChoices()
 
@@ -590,7 +590,7 @@ func TestConsigliereEffortChoicesParsesTheRealAnthropicCapabilitiesShape(t *test
 	}
 
 	r := newPlainKeyRoot(t)
-	r.consigliereModelCache["anthropic"] = models
+	r.consigliere.ModelCache["anthropic"] = models
 	r.settings.ConsigliereAnthropicModel = "claude-opus-5-5"
 
 	choices := r.consigliereEffortChoices()
@@ -613,7 +613,7 @@ func TestConsigliereEffortChoicesParsesTheRealAnthropicCapabilitiesShape(t *test
 // sentinel — never an error, and never a stale/wrong set of levels.
 func TestConsigliereEffortChoicesFindsNothingForAnUncachedModelID(t *testing.T) {
 	r := newPlainKeyRoot(t)
-	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{
+	r.consigliere.ModelCache["anthropic"] = []consigliere.ModelInfo{
 		{ID: "claude-opus-5-5", EffortLevels: []string{"low", "high"}},
 	}
 	r.settings.ConsigliereAnthropicModel = "claude-sonnet-5-5" // not in the cache above
@@ -629,7 +629,7 @@ func TestConsigliereEffortChoicesFindsNothingForAnUncachedModelID(t *testing.T) 
 func TestConsigliereEffortChoicesUsesPerModelLevelsForAnthropic(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	r.settings.ConsigliereAnthropicModel = "claude-opus-5-5"
-	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{
+	r.consigliere.ModelCache["anthropic"] = []consigliere.ModelInfo{
 		{ID: "claude-opus-5-5", EffortLevels: []string{"low", "medium", "high"}},
 		{ID: "claude-haiku-5-5", EffortLevels: []string{"medium"}},
 	}
@@ -661,7 +661,7 @@ func TestConsigliereEffortChoicesUsesFixedSetForOpenAI(t *testing.T) {
 func TestConsigliereEffortChoicesIncludesStoredOverrideEvenIfNotInLevels(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	r.settings.ConsigliereAnthropicEffort = "some-future-level"
-	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{
+	r.consigliere.ModelCache["anthropic"] = []consigliere.ModelInfo{
 		{ID: consigliere.AnthropicDefaultModel, EffortLevels: []string{"low", "high"}},
 	}
 
@@ -687,7 +687,7 @@ func TestConsigliereEffortChoicesIncludesStoredOverrideEvenIfNotInLevels(t *test
 func TestConsigliereModelChoicesCycleNeverSilentlyDiscardsAnUnmatchedOverride(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	r.settings.ConsigliereAnthropicModel = "a-manually-typed-model-not-in-any-fetch"
-	r.consigliereModelCache["anthropic"] = []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}
+	r.consigliere.ModelCache["anthropic"] = []consigliere.ModelInfo{{ID: "claude-opus-5-5"}}
 
 	choices := r.consigliereModelChoices()
 
@@ -705,15 +705,15 @@ func TestConsigliereModelChoicesCycleNeverSilentlyDiscardsAnUnmatchedOverride(t 
 // just "(default: ...)"/"(model default)" with absolutely no
 // indication anything had failed — indistinguishable from a provider
 // that genuinely has nothing beyond its own default, since nothing
-// else in this screen ever read consigliereModelFetchErr.
+// else in this screen ever read consigliere.ModelFetchErr.
 func TestOptionDefaultHintSurfacesAModelFetchFailure(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	for i, cat := range optionCategories() {
 		if cat.name == "AI Consigliere" {
-			r.optionsCategory = i
+			r.options.Category = i
 		}
 	}
-	r.consigliereModelFetchInFlight["anthropic"] = true
+	r.consigliere.ModelFetchInFlight["anthropic"] = true
 	r.finishConsigliereModelFetch("anthropic", nil, errors.New("Anthropic: invalid x-api-key"))
 
 	modelRow, ok := optionRowByKey(r, "consigliere_anthropic_model")
@@ -745,11 +745,11 @@ func TestOptionDefaultHintTruncatesALongModelFetchFailure(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	for i, cat := range optionCategories() {
 		if cat.name == "AI Consigliere" {
-			r.optionsCategory = i
+			r.options.Category = i
 		}
 	}
 	long := "consigliere: Anthropic: the parameter name is `lifecycle[]`, not `lifecycle` — a much longer message than any ordinary default hint"
-	r.consigliereModelFetchInFlight["anthropic"] = true
+	r.consigliere.ModelFetchInFlight["anthropic"] = true
 	r.finishConsigliereModelFetch("anthropic", nil, errors.New(long))
 
 	modelRow, ok := optionRowByKey(r, "consigliere_anthropic_model")
@@ -771,11 +771,11 @@ func TestShowOptionInfoIncludesTheFullModelFetchFailure(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	for i, cat := range optionCategories() {
 		if cat.name == "AI Consigliere" {
-			r.optionsCategory = i
+			r.options.Category = i
 		}
 	}
 	long := "consigliere: Anthropic: the parameter name is `lifecycle[]`, not `lifecycle` — a much longer message than any ordinary default hint"
-	r.consigliereModelFetchInFlight["anthropic"] = true
+	r.consigliere.ModelFetchInFlight["anthropic"] = true
 	r.finishConsigliereModelFetch("anthropic", nil, errors.New(long))
 
 	modelRow, ok := optionRowByKey(r, "consigliere_anthropic_model")
@@ -785,8 +785,8 @@ func TestShowOptionInfoIncludesTheFullModelFetchFailure(t *testing.T) {
 	opt, _ := r.optionAtRow(modelRow)
 	r.showOptionInfo(opt)
 
-	if got := r.optionsInfo.GetText(true); !strings.Contains(got, long) {
-		t.Errorf("optionsInfo text = %q, want it to include the full, untruncated error %q", got, long)
+	if got := r.options.Info.GetText(true); !strings.Contains(got, long) {
+		t.Errorf("options.Info text = %q, want it to include the full, untruncated error %q", got, long)
 	}
 }
 
@@ -800,10 +800,10 @@ func TestOptionDefaultHintSurfacesAnEmptyModelList(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	for i, cat := range optionCategories() {
 		if cat.name == "AI Consigliere" {
-			r.optionsCategory = i
+			r.options.Category = i
 		}
 	}
-	r.consigliereModelFetchInFlight["anthropic"] = true
+	r.consigliere.ModelFetchInFlight["anthropic"] = true
 	r.finishConsigliereModelFetch("anthropic", []consigliere.ModelInfo{}, nil)
 
 	modelRow, ok := optionRowByKey(r, "consigliere_anthropic_model")

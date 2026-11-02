@@ -327,11 +327,11 @@ func (r *Root) applySSHKeysCopy(host string, port int, user, privateKeyPath, ins
 
 	runErr := r.runSSHKeysCommandFullScreen(installCommand)
 	if runErr != nil {
-		r.activityLog.Error(activitylog.CategorySSHKeys, fmt.Sprintf("copy key to %s@%s: %v", user, host, runErr))
+		r.activity.Logger.Error(activitylog.CategorySSHKeys, fmt.Sprintf("copy key to %s@%s: %v", user, host, runErr))
 		r.showError(fmt.Errorf("ssh: %w", runErr))
 		return
 	}
-	r.activityLog.Action(activitylog.CategorySSHKeys, fmt.Sprintf("copied key to %s@%s:~/.ssh/authorized_keys", user, host))
+	r.activity.Logger.Action(activitylog.CategorySSHKeys, fmt.Sprintf("copied key to %s@%s:~/.ssh/authorized_keys", user, host))
 
 	if privateKeyPath == "" {
 		return
@@ -341,11 +341,11 @@ func (r *Root) applySSHKeysCopy(host string, port int, user, privateKeyPath, ins
 		return
 	}
 	if testErr := runSSHKeysTestCommand(testCommand); testErr != nil {
-		r.activityLog.Action(activitylog.CategorySSHKeys, fmt.Sprintf("passwordless access to %s@%s not yet working: %v", user, host, testErr))
+		r.activity.Logger.Action(activitylog.CategorySSHKeys, fmt.Sprintf("passwordless access to %s@%s not yet working: %v", user, host, testErr))
 		r.openConfirm(fmt.Sprintf("Key installed, but passwordless access to %s@%s does not work yet (%v). Unlock/load the private key, or check the server's own sshd config.", user, host, testErr), "OK", func() {})
 		return
 	}
-	r.activityLog.Action(activitylog.CategorySSHKeys, fmt.Sprintf("confirmed passwordless access to %s@%s", user, host))
+	r.activity.Logger.Action(activitylog.CategorySSHKeys, fmt.Sprintf("confirmed passwordless access to %s@%s", user, host))
 	r.openConfirm(fmt.Sprintf("Passwordless access to %s@%s confirmed working.", user, host), "OK", func() {})
 }
 

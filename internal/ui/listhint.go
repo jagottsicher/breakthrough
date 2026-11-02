@@ -192,7 +192,7 @@ func listHintActionAt(hint *tview.TextView, spans []listHintSpan, x, y int) (lis
 
 // captureListHintMouse builds hint's own mouse-capture handler, reading
 // *spans fresh on every call (a pointer to the Root field the caller
-// stores its own listHintEntry's spans in, e.g. &r.activityLogHintSpans)
+// stores its own listHintEntry's spans in, e.g. &r.activity.HintSpans)
 // rather than a snapshot taken once at construction — applyTheme
 // rebuilds that field's own value on every live theme switch (see
 // buildListHint), and a stale, once-captured slice would otherwise keep

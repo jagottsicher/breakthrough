@@ -231,7 +231,7 @@ func TestRunTestCloudRemoteShowsTestingImmediately(t *testing.T) {
 
 	r.runTestCloudRemote()
 
-	if got := r.cloudRemoteDialogStatus.GetText(true); got != "Testing…" {
+	if got := r.cloud.RemoteDialogStatus.GetText(true); got != "Testing…" {
 		t.Errorf("status right after calling runTestCloudRemote = %q, want %q", got, "Testing…")
 	}
 }
@@ -249,7 +249,7 @@ func TestRunSaveCloudRemoteLenientPersistsIncompleteRemote(t *testing.T) {
 	requireRclone(t)
 	r := newTestRootForCloudMount(t)
 	r.openCloudRemoteDialog()
-	r.cloudRemoteDialogNameField.SetText("incomplete-s3")
+	r.cloud.RemoteDialogNameField.SetText("incomplete-s3")
 	// Leave every field empty — S3's own access_key_id/secret_access_key
 	// are both required, per cloudRemoteBackends' own table.
 
