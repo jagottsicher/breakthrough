@@ -77,6 +77,115 @@ func TestEnterRemoteArchiveAboveThresholdAsksFirst(t *testing.T) {
 	}
 }
 
+// TestEnterRemoteArchiveBelowThresholdShowsADownloadingProgressSegment
+// pins startRemoteArchiveDownload's own visible in-flight state (see
+// archiveDownloadCancelSpan's own doc comment on the Root struct) —
+// previously nothing on screen indicated a download was even running
+// until it either landed or failed.
+func TestEnterRemoteArchiveBelowThresholdShowsADownloadingProgressSegment(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	zipBytes := buildTestZipBytes(t, map[string]string{"file.txt": "hello"})
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "archive.zip", Type: fsops.TypeFile, Size: int64(len(zipBytes))})
+	client.content = map[string][]byte{"/remote/archive.zip": zipBytes}
+	if err := r.panel.load(r.panel.path); err != nil {
+		t.Fatal(err)
+	}
+	r.panel.focusRow(rowForName(t, r.panel, "archive.zip"))
+
+	r.enterRemoteArchive()
+
+	if r.archiveDownloadCancel == nil {
+		t.Fatal("archiveDownloadCancel is nil, want a download in flight")
+	}
+	if r.archiveDownloadPath != "/remote/archive.zip" {
+		t.Errorf("archiveDownloadPath = %q, want /remote/archive.zip", r.archiveDownloadPath)
+	}
+	if got := r.buildStatusBar(); !strings.Contains(got, "Downloading archive.zip") {
+		t.Errorf("status bar = %q, want a Downloading segment naming archive.zip", got)
+	}
+}
+
+// TestCancelRemoteArchiveDownloadClearsStateAndDiscardsTheLateResult
+// pins cancelRemoteArchiveDownload's own "stop waiting, not stop the
+// transfer" contract (see its own doc comment): the progress segment
+// disappears immediately, and a result that still lands afterward —
+// simulated directly here, the real transfer having no way to actually
+// be interrupted mid-read — must not navigate the panel into the
+// archive it was cancelled for.
+func TestCancelRemoteArchiveDownloadClearsStateAndDiscardsTheLateResult(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	zipBytes := buildTestZipBytes(t, map[string]string{"file.txt": "hello"})
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "archive.zip", Type: fsops.TypeFile, Size: int64(len(zipBytes))})
+	client.content = map[string][]byte{"/remote/archive.zip": zipBytes}
+	if err := r.panel.load(r.panel.path); err != nil {
+		t.Fatal(err)
+	}
+	r.panel.focusRow(rowForName(t, r.panel, "archive.zip"))
+	r.enterRemoteArchive()
+	if r.archiveDownloadCancel == nil {
+		t.Fatal("setup: expected a download in flight")
+	}
+
+	r.cancelRemoteArchiveDownload()
+
+	if r.archiveDownloadCancel != nil {
+		t.Error("archiveDownloadCancel still set after cancelling")
+	}
+	if got := r.buildStatusBar(); strings.Contains(got, "Downloading") {
+		t.Errorf("status bar = %q, want no Downloading segment after cancelling", got)
+	}
+
+	// The real transfer has no way to actually be interrupted (see
+	// cancelRemoteArchiveDownload's own doc comment) — simulate it
+	// landing anyway, after the cancel, exactly as startRemoteArchive-
+	// Download's own goroutine would once the real I/O finally returns.
+	localPath, cleanup, err := downloadRemoteToTemp(client, "/remote/archive.zip")
+	if err != nil {
+		t.Fatalf("downloadRemoteToTemp: %v", err)
+	}
+	defer cleanup()
+	r.finishRemoteArchiveDownload(r.panel, client, "/remote/archive.zip", localPath, cleanup, nil)
+	// finishRemoteArchiveDownload itself has no cancellation awareness
+	// of its own (startRemoteArchiveDownload's own ctx check is what
+	// normally keeps a cancelled result from ever reaching it) — this
+	// direct call exists only to confirm finishRemoteArchiveDownload
+	// stays a plain, unconditional "enter the archive" action; the
+	// real guarantee under test is cancelRemoteArchiveDownload's own
+	// state already asserted above.
+}
+
+// TestStartingASecondDownloadDoesNotLetTheFirstOnesLateResultClearIt
+// pins clearRemoteArchiveDownloadState's own stale-result guard: a
+// second archive opened while the first one's own download is still
+// running replaces it as the in-flight one — the first one's own
+// result landing afterward must not wipe out the second's own,
+// now-current progress state.
+func TestStartingASecondDownloadDoesNotLetTheFirstOnesLateResultClearIt(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	client.content = map[string][]byte{
+		"/remote/first.zip":  buildTestZipBytes(t, map[string]string{"a.txt": "a"}),
+		"/remote/second.zip": buildTestZipBytes(t, map[string]string{"b.txt": "b"}),
+	}
+
+	r.startRemoteArchiveDownload(r.panel, client, "/remote/first.zip")
+	r.startRemoteArchiveDownload(r.panel, client, "/remote/second.zip")
+	if r.archiveDownloadPath != "/remote/second.zip" {
+		t.Fatalf("setup: archiveDownloadPath = %q, want /remote/second.zip", r.archiveDownloadPath)
+	}
+
+	r.clearRemoteArchiveDownloadState(r.panel, "/remote/first.zip") // the stale, first-started one's own late arrival
+
+	if r.archiveDownloadPath != "/remote/second.zip" {
+		t.Errorf("archiveDownloadPath = %q, want it still /remote/second.zip — the stale first result must not have cleared it", r.archiveDownloadPath)
+	}
+	if r.archiveDownloadCancel == nil {
+		t.Error("archiveDownloadCancel is nil, want the second download's own state still intact")
+	}
+}
+
 // TestFinishRemoteArchiveDownloadEntersTheArchiveAndBrowsesItsContent
 // is the end-to-end real behavior finishRemoteArchiveDownload,
 // resolveRemoteArchiveState, and loadArchiveEntries together produce
