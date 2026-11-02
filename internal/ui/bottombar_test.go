@@ -1581,7 +1581,7 @@ func TestChangeDirectoryBareGoesHome(t *testing.T) {
 		t.Skipf("no home directory in this environment: %v", err)
 	}
 
-	if err := r.changeDirectory(""); err != nil {
+	if err := syncChangeDirectory(r, ""); err != nil {
 		t.Fatalf("changeDirectory(\"\"): %v", err)
 	}
 	if r.panel.path != home {
@@ -1598,11 +1598,11 @@ func TestChangeDirectoryDashGoesToPreviousPath(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	sub := filepath.Join(dir, "app-data")
-	if err := r.panel.navigate(sub); err != nil {
+	if err := syncNavigate(r.panel, sub); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 
-	if err := r.changeDirectory("-"); err != nil {
+	if err := syncChangeDirectory(r, "-"); err != nil {
 		t.Fatalf("changeDirectory(\"-\"): %v", err)
 	}
 	if r.panel.path != dir {
@@ -1620,7 +1620,7 @@ func TestChangeDirectoryDashWithNoHistoryErrors(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	if err := r.changeDirectory("-"); err == nil {
+	if err := syncChangeDirectory(r, "-"); err == nil {
 		t.Error("changeDirectory(\"-\") with no previous directory should return an error")
 	}
 }
@@ -1639,7 +1639,7 @@ func TestPanelPreviousPath(t *testing.T) {
 	}
 
 	sub := filepath.Join(dir, "app-data")
-	if err := r.panel.navigate(sub); err != nil {
+	if err := syncNavigate(r.panel, sub); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 	got, ok := r.panel.previousPath()

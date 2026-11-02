@@ -214,7 +214,7 @@ func TestStartButtonReturnsToLaunchDirectory(t *testing.T) {
 	}
 
 	sub := filepath.Join(dir, "app-data")
-	if err := p.navigate(sub); err != nil {
+	if err := syncNavigate(p, sub); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 	if p.path != sub {
@@ -1044,10 +1044,10 @@ func TestSetSortKeyReversesOrderAndPersistsAcrossNavigation(t *testing.T) {
 		t.Errorf("after sort toggle: row 1 = %q, want Omega", ref.name)
 	}
 
-	if err := p.navigate(sub); err != nil {
+	if err := syncNavigate(p, sub); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
-	if err := p.navigate(dir); err != nil {
+	if err := syncNavigate(p, dir); err != nil {
 		t.Fatalf("navigate back: %v", err)
 	}
 	if ref, _ := p.rowRef(1); ref.name != "Omega" {
@@ -2427,7 +2427,7 @@ func TestLoadResetsCursorToTopOnNewDirectory(t *testing.T) {
 	r.panel.focusRow(3) // move away from the top, simulating having browsed around first
 
 	sub := filepath.Join(dir, "app-data")
-	if err := r.panel.navigate(sub); err != nil {
+	if err := syncNavigate(r.panel, sub); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 
@@ -2843,7 +2843,7 @@ func TestRunHeaderActionDuringSearchModeNavigatesAndLeavesSearchMode(t *testing.
 		t.Fatalf("NewPanel: %v", err)
 	}
 	sub := filepath.Join(dir, "app-data")
-	if err := p.navigate(sub); err != nil {
+	if err := syncNavigate(p, sub); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 
@@ -3130,7 +3130,7 @@ func TestBackFromSearchJumpRestoresFrozenResultsNotALiveRerun(t *testing.T) {
 	p.focusRow(1) // the second result, before jumping
 
 	target := filepath.Join(dir, "apple.txt")
-	if err := p.navigateAndSelect(target); err != nil {
+	if err := syncNavigateAndSelect(p, target); err != nil {
 		t.Fatalf("navigateAndSelect: %v", err)
 	}
 	if p.path != dir || p.searchMode {
@@ -3175,7 +3175,7 @@ func TestForwardReplaysSearchThenJumpDestination(t *testing.T) {
 
 	p.showSearchResults()
 	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
-	if err := p.navigateAndSelect(filepath.Join(dir, "apple.txt")); err != nil {
+	if err := syncNavigateAndSelect(p, filepath.Join(dir, "apple.txt")); err != nil {
 		t.Fatalf("navigateAndSelect: %v", err)
 	}
 	p.back() // -> frozen search
@@ -3210,7 +3210,7 @@ func TestBackForwardAlwaysLandsOnTopForPlainDirectories(t *testing.T) {
 	p.focusRow(2) // some row in the starting directory, before ever leaving it
 
 	sub := filepath.Join(dir, "app-data")
-	if err := p.navigate(sub); err != nil {
+	if err := syncNavigate(p, sub); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 
@@ -3287,12 +3287,12 @@ func TestUpAndBackResetScrollToTopNotJustTheCursorRow(t *testing.T) {
 		t.Fatal("setup: expected to be scrolled down before entering the subfolder")
 	}
 
-	if err := r.panel.navigate(sub); err != nil {
+	if err := syncNavigate(r.panel, sub); err != nil {
 		t.Fatalf("navigate into sub: %v", err)
 	}
 	r.Draw(screen) // sub fits entirely on screen — this is what leaves tview's own trackEnd stuck true
 
-	if err := r.panel.navigate(filepath.Dir(r.panel.path)); err != nil {
+	if err := syncNavigate(r.panel, filepath.Dir(r.panel.path)); err != nil {
 		t.Fatalf("navigate back up: %v", err)
 	}
 	r.Draw(screen)

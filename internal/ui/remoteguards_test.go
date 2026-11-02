@@ -38,11 +38,67 @@ func newTestRemoteRoot(t *testing.T) *Root {
 	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com"}); err != nil {
 		t.Fatalf("connectRemote: %v", err)
 	}
+	// The real onFetchEntries (wired by wirePanel) dispatches through
+	// safeGo and r.app.QueueUpdateDraw, which blocks forever here —
+	// nothing in this process drains it without a running
+	// Application.Run (see this package's own established convention,
+	// e.g. applyLogAuditRotatedFile's own doc comment in logaudit.go).
+	// fakeRemoteClient's own ListDir is already synchronous and
+	// in-memory, so every ordinary test against a remote panel can
+	// just call it directly instead — a test that specifically wants
+	// to exercise the real async/staleness behavior wires its own
+	// panel.onFetchEntries (or calls applyEntries directly) rather
+	// than using this helper.
+	syncOnFetchEntries(r.panel)
 	r.panel.focusRow(1) // off the "/remote" root row onto the one real entry
 	if row, path, ok := r.panel.CurrentRowPath(); ok {
 		r.target, r.targetRow = path, row
 	}
 	return r
+}
+
+// syncOnFetchEntries replaces panel's own real onFetchEntries (see its
+// doc comment on the Panel struct) with one that calls remote.ListDir
+// directly, inline — no goroutine, no QueueUpdateDraw — so navigate/
+// loadAsync's own callback fires synchronously for every test that
+// uses newTestRemoteRoot, exactly as it always did before loadAsync
+// existed. See newTestRemoteRoot's own call site for why this is the
+// right default rather than the real, genuinely-async hook.
+func syncOnFetchEntries(p *Panel) {
+	p.onFetchEntries = func(abs string, remote remotefs.Client, done func([]fsops.Entry, error)) {
+		entries, err := remote.ListDir(abs)
+		done(entries, err)
+	}
+}
+
+// syncNavigate is navigate's own synchronous test convenience —
+// correct for any panel whose own loadAsync callback is guaranteed to
+// fire before loadAsync returns: a local panel always qualifies (see
+// loadAsync's own doc comment), and a remote one does too once
+// syncOnFetchEntries has replaced its real hook (see
+// newTestRemoteRoot). Never reach for this against a panel still
+// using the real, genuinely-async onFetchEntries — the callback simply
+// never runs in that case, and err would stay a misleading nil.
+func syncNavigate(p *Panel, dir string) error {
+	var err error
+	p.navigate(dir, func(e error) { err = e })
+	return err
+}
+
+// syncNavigateAndSelect is syncNavigate's own navigateAndSelect twin —
+// see its doc comment for the same synchronous-callback precondition.
+func syncNavigateAndSelect(p *Panel, target string) error {
+	var err error
+	p.navigateAndSelect(target, func(e error) { err = e })
+	return err
+}
+
+// syncChangeDirectory is syncNavigate's own changeDirectory twin — see
+// its doc comment for the same synchronous-callback precondition.
+func syncChangeDirectory(r *Root, target string) error {
+	var err error
+	r.changeDirectory(target, func(e error) { err = e })
+	return err
 }
 
 // assertRefusedAsRemote runs action against a remote-connected Root
