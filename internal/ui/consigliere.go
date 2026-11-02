@@ -1393,16 +1393,16 @@ func (r *Root) consigliereMachiavelliGitBreachDiff() string {
 func (r *Root) firewallContextSnapshot() string {
 	var b strings.Builder
 	b.WriteString("Current view: Firewall.\n")
-	if r.firewallErr != nil {
-		fmt.Fprintf(&b, "Could not read the current ruleset: %v\n", r.firewallErr)
+	if r.firewall.Err != nil {
+		fmt.Fprintf(&b, "Could not read the current ruleset: %v\n", r.firewall.Err)
 		return strings.TrimSpace(b.String())
 	}
-	if r.firewallSnapshot.Backend == firewall.BackendNone {
+	if r.firewall.Snapshot.Backend == firewall.BackendNone {
 		b.WriteString("No supported firewall backend (ufw/nftables/iptables) is currently active on this host.\n")
 		return strings.TrimSpace(b.String())
 	}
-	fmt.Fprintf(&b, "Backend: %s\n", r.firewallSnapshot.Backend)
-	fmt.Fprintf(&b, "%d rules configured.\n", len(r.firewallSnapshot.Rules))
+	fmt.Fprintf(&b, "Backend: %s\n", r.firewall.Snapshot.Backend)
+	fmt.Fprintf(&b, "%d rules configured.\n", len(r.firewall.Snapshot.Rules))
 	if r.settings.ConsigliereHardcoreMode {
 		b.WriteString(r.consigliereMachiavelliFirewallRules())
 	}
@@ -1419,7 +1419,7 @@ func (r *Root) firewallContextSnapshot() string {
 // hand to a third-party provider on every single question asked from
 // this screen, not just ones actually about the ruleset.
 func (r *Root) consigliereMachiavelliFirewallRules() string {
-	rules := r.firewallSnapshot.Rules
+	rules := r.firewall.Snapshot.Rules
 	if len(rules) == 0 {
 		return ""
 	}
@@ -1440,7 +1440,7 @@ func (r *Root) consigliereMachiavelliFirewallRules() string {
 		}
 		fmt.Fprintf(&b, "#%d %s %s %s port=%s from=%s to=%s via=%s%s\n",
 			rule.Order, rule.Direction, rule.Action, protocol,
-			rule.PortLabel(r.firewallServices), rule.SourceLabel(), rule.DestinationLabel(), rule.InterfaceLabel(), shadowed)
+			rule.PortLabel(r.firewall.Services), rule.SourceLabel(), rule.DestinationLabel(), rule.InterfaceLabel(), shadowed)
 	}
 	if len(rules) > n {
 		fmt.Fprintf(&b, "(%d further rules not shown)\n", len(rules)-n)

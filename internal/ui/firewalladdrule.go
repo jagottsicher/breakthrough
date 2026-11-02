@@ -115,8 +115,8 @@ func firewallActionConfigValue(a firewall.Action) string {
 
 // firewallDirectionFromConfigValue/firewallActionFromConfigValue are
 // firewallDirectionConfigValue/firewallActionConfigValue's own inverse —
-// openFirewallAddRule's own way of seeding firewallAddRuleDirection/
-// firewallAddRuleAction from settings.FirewallDefaultDirection/
+// openFirewallAddRule's own way of seeding firewall.AddRuleDirection/
+// firewall.AddRuleAction from settings.FirewallDefaultDirection/
 // FirewallDefaultAction. Forgiving of an unrecognized or empty value
 // (a stale config predating this setting, a hand-edited typo) the same
 // way archiveFormatIndexByID already is — falls back to
@@ -157,7 +157,7 @@ func firewallActionFromConfigValue(v string) firewall.Action {
 // guessed) and for no active backend at all, rather than let the user
 // fill in a form that could never actually submit.
 func (r *Root) openFirewallAddRule() {
-	switch r.firewallSnapshot.Backend {
+	switch r.firewall.Snapshot.Backend {
 	case firewall.BackendNone:
 		r.showError(fmt.Errorf("firewall: no supported backend (ufw, nftables, or iptables) is active on this system"))
 		return
@@ -166,13 +166,13 @@ func (r *Root) openFirewallAddRule() {
 		return
 	}
 
-	r.firewallAddRuleDirection = firewallDirectionFromConfigValue(r.settings.FirewallDefaultDirection)
-	r.firewallAddRuleAction = firewallActionFromConfigValue(r.settings.FirewallDefaultAction)
-	r.firewallAddRuleProtocol = r.settings.FirewallDefaultProtocol
-	r.firewallAddRulePortText = ""
-	r.firewallAddRuleSourceText = ""
-	r.firewallAddRuleDestText = ""
-	r.firewallAddRuleIfaceText = ""
+	r.firewall.AddRuleDirection = firewallDirectionFromConfigValue(r.settings.FirewallDefaultDirection)
+	r.firewall.AddRuleAction = firewallActionFromConfigValue(r.settings.FirewallDefaultAction)
+	r.firewall.AddRuleProtocol = r.settings.FirewallDefaultProtocol
+	r.firewall.AddRulePortText = ""
+	r.firewall.AddRuleSourceText = ""
+	r.firewall.AddRuleDestText = ""
+	r.firewall.AddRuleIfaceText = ""
 	r.setFirewallAddRuleStatus("", r.theme.Text)
 	r.renderFirewallAddRuleForm()
 
@@ -193,11 +193,11 @@ func (r *Root) openFirewallAddRule() {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.firewallAddRuleLayout.SetRect(x, y, width, height)
+	r.firewall.AddRuleLayout.SetRect(x, y, width, height)
 	// pushOverlay, not showOverlay: this opens on top of the still-open
 	// Firewall screen (see pushOverlay's own doc comment), the same
 	// layering openOwnerGroupPicker uses over Properties.
-	r.pushOverlay(firewallAddRulePage, r.firewallAddRuleLayout, nil)
+	r.pushOverlay(firewallAddRulePage, r.firewall.AddRuleLayout, nil)
 }
 
 // newFirewallAddRuleForm builds the (initially empty) "Add rule" form —
@@ -216,7 +216,7 @@ func (r *Root) newFirewallAddRuleForm() *tview.Form {
 	return f
 }
 
-// renderFirewallAddRuleForm (re)builds firewallAddRuleForm's own items:
+// renderFirewallAddRuleForm (re)builds firewall.AddRuleForm's own items:
 // Direction/Action/Protocol dropdowns, then Port/Source/Destination/
 // Interface plain text fields — each one just writes straight back into
 // its own firewallAddRuleXxx mirror field on every change, the same
@@ -230,13 +230,13 @@ func (r *Root) newFirewallAddRuleForm() *tview.Form {
 // between its own items (verified there against tview's own form.go),
 // never reaching a sibling button row built outside the Form itself.
 func (r *Root) renderFirewallAddRuleForm() {
-	r.firewallAddRuleForm.Clear(true)
+	r.firewall.AddRuleForm.Clear(true)
 
 	dirLabels := make([]string, len(firewallDirectionChoices))
 	dirCurrent := 0
 	for i, c := range firewallDirectionChoices {
 		dirLabels[i] = c.label
-		if c.value == r.firewallAddRuleDirection {
+		if c.value == r.firewall.AddRuleDirection {
 			dirCurrent = i
 		}
 	}
@@ -244,17 +244,17 @@ func (r *Root) renderFirewallAddRuleForm() {
 		if index < 0 || index >= len(firewallDirectionChoices) {
 			return
 		}
-		r.firewallAddRuleDirection = firewallDirectionChoices[index].value
+		r.firewall.AddRuleDirection = firewallDirectionChoices[index].value
 	})
 	dirField.SetCurrentOption(dirCurrent)
 	styleDropDown(dirField, r.theme)
-	r.firewallAddRuleForm.AddFormItem(dirField)
+	r.firewall.AddRuleForm.AddFormItem(dirField)
 
 	actionLabels := make([]string, len(firewallActionChoices))
 	actionCurrent := 0
 	for i, c := range firewallActionChoices {
 		actionLabels[i] = c.label
-		if c.value == r.firewallAddRuleAction {
+		if c.value == r.firewall.AddRuleAction {
 			actionCurrent = i
 		}
 	}
@@ -262,17 +262,17 @@ func (r *Root) renderFirewallAddRuleForm() {
 		if index < 0 || index >= len(firewallActionChoices) {
 			return
 		}
-		r.firewallAddRuleAction = firewallActionChoices[index].value
+		r.firewall.AddRuleAction = firewallActionChoices[index].value
 	})
 	actionField.SetCurrentOption(actionCurrent)
 	styleDropDown(actionField, r.theme)
-	r.firewallAddRuleForm.AddFormItem(actionField)
+	r.firewall.AddRuleForm.AddFormItem(actionField)
 
 	protoLabels := make([]string, len(firewallProtocolChoices))
 	protoCurrent := 0
 	for i, c := range firewallProtocolChoices {
 		protoLabels[i] = c.label
-		if c.value == r.firewallAddRuleProtocol {
+		if c.value == r.firewall.AddRuleProtocol {
 			protoCurrent = i
 		}
 	}
@@ -280,30 +280,30 @@ func (r *Root) renderFirewallAddRuleForm() {
 		if index < 0 || index >= len(firewallProtocolChoices) {
 			return
 		}
-		r.firewallAddRuleProtocol = firewallProtocolChoices[index].value
+		r.firewall.AddRuleProtocol = firewallProtocolChoices[index].value
 	})
 	protoField.SetCurrentOption(protoCurrent)
 	styleDropDown(protoField, r.theme)
-	r.firewallAddRuleForm.AddFormItem(protoField)
+	r.firewall.AddRuleForm.AddFormItem(protoField)
 
-	portField := tview.NewInputField().SetLabel("Port (blank = any, e.g. 22 or 6000-6063)").SetText(r.firewallAddRulePortText)
-	portField.SetChangedFunc(func(v string) { r.firewallAddRulePortText = v })
-	r.firewallAddRuleForm.AddFormItem(portField)
+	portField := tview.NewInputField().SetLabel("Port (blank = any, e.g. 22 or 6000-6063)").SetText(r.firewall.AddRulePortText)
+	portField.SetChangedFunc(func(v string) { r.firewall.AddRulePortText = v })
+	r.firewall.AddRuleForm.AddFormItem(portField)
 
-	sourceField := tview.NewInputField().SetLabel("Source (blank = any)").SetText(r.firewallAddRuleSourceText)
-	sourceField.SetChangedFunc(func(v string) { r.firewallAddRuleSourceText = v })
-	r.firewallAddRuleForm.AddFormItem(sourceField)
+	sourceField := tview.NewInputField().SetLabel("Source (blank = any)").SetText(r.firewall.AddRuleSourceText)
+	sourceField.SetChangedFunc(func(v string) { r.firewall.AddRuleSourceText = v })
+	r.firewall.AddRuleForm.AddFormItem(sourceField)
 
-	destField := tview.NewInputField().SetLabel("Destination (blank = any)").SetText(r.firewallAddRuleDestText)
-	destField.SetChangedFunc(func(v string) { r.firewallAddRuleDestText = v })
-	r.firewallAddRuleForm.AddFormItem(destField)
+	destField := tview.NewInputField().SetLabel("Destination (blank = any)").SetText(r.firewall.AddRuleDestText)
+	destField.SetChangedFunc(func(v string) { r.firewall.AddRuleDestText = v })
+	r.firewall.AddRuleForm.AddFormItem(destField)
 
-	ifaceField := tview.NewInputField().SetLabel("Interface (blank = any)").SetText(r.firewallAddRuleIfaceText)
-	ifaceField.SetChangedFunc(func(v string) { r.firewallAddRuleIfaceText = v })
+	ifaceField := tview.NewInputField().SetLabel("Interface (blank = any)").SetText(r.firewall.AddRuleIfaceText)
+	ifaceField.SetChangedFunc(func(v string) { r.firewall.AddRuleIfaceText = v })
 	ifaceField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.firewallAddRuleCancelBtn)
+			r.app.SetFocus(r.firewall.AddRuleCancelBtn)
 			return nil
 		case tcell.KeyEnter:
 			r.submitFirewallAddRule()
@@ -311,65 +311,65 @@ func (r *Root) renderFirewallAddRuleForm() {
 		}
 		return event
 	})
-	r.firewallAddRuleForm.AddFormItem(ifaceField)
+	r.firewall.AddRuleForm.AddFormItem(ifaceField)
 }
 
-// newFirewallAddRuleButtons builds firewallAddRuleForm's own action row
+// newFirewallAddRuleButtons builds firewall.AddRuleForm's own action row
 // once, from NewRoot — the same Cancel/action button pair
 // newConnectButtons already establishes, including its own Tab/Backtab
 // cycling between the two buttons and back into the form.
 func (r *Root) newFirewallAddRuleButtons() *tview.Flex {
-	r.firewallAddRuleCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelFirewallAddRule)
-	r.firewallAddRuleAddBtn = tview.NewButton("Add rule").SetSelectedFunc(r.submitFirewallAddRule)
-	r.firewallAddRuleCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelFirewallAddRule))
-	r.firewallAddRuleAddBtn.SetInputCapture(spaceAlsoActivates(r.submitFirewallAddRule))
+	r.firewall.AddRuleCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelFirewallAddRule)
+	r.firewall.AddRuleAddBtn = tview.NewButton("Add rule").SetSelectedFunc(r.submitFirewallAddRule)
+	r.firewall.AddRuleCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelFirewallAddRule))
+	r.firewall.AddRuleAddBtn.SetInputCapture(spaceAlsoActivates(r.submitFirewallAddRule))
 
-	r.firewallAddRuleCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.firewall.AddRuleCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.firewallAddRuleAddBtn)
+			r.app.SetFocus(r.firewall.AddRuleAddBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.firewallAddRuleForm)
+			r.app.SetFocus(r.firewall.AddRuleForm)
 		case tcell.KeyEscape:
 			r.cancelFirewallAddRule()
 		}
 	})
-	r.firewallAddRuleAddBtn.SetExitFunc(func(key tcell.Key) {
+	r.firewall.AddRuleAddBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.firewallAddRuleForm)
+			r.app.SetFocus(r.firewall.AddRuleForm)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.firewallAddRuleCancelBtn)
+			r.app.SetFocus(r.firewall.AddRuleCancelBtn)
 		case tcell.KeyEscape:
 			r.cancelFirewallAddRule()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.firewallAddRuleCancelBtn, 0, 1, false).
-		AddItem(r.firewallAddRuleAddBtn, 0, 1, false)
+		AddItem(r.firewall.AddRuleCancelBtn, 0, 1, false).
+		AddItem(r.firewall.AddRuleAddBtn, 0, 1, false)
 }
 
-// newFirewallAddRuleLayout wraps firewallAddRuleTitleBar over the form,
+// newFirewallAddRuleLayout wraps firewall.AddRuleTitleBar over the form,
 // a one-line status area (blank until submitFirewallAddRule has
 // something to say — a validation error), and the Cancel/Add rule
 // buttons — the same title-bar-over-content-over-status-over-buttons
 // shape newConnectLayout already establishes.
 func (r *Root) newFirewallAddRuleLayout() *tview.Flex {
-	r.firewallAddRuleTitleBar = newPlainTitleBar("Add rule")
-	r.firewallAddRuleStatus = tview.NewTextView().SetDynamicColors(true)
+	r.firewall.AddRuleTitleBar = newPlainTitleBar("Add rule")
+	r.firewall.AddRuleStatus = tview.NewTextView().SetDynamicColors(true)
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.firewallAddRuleForm, 12, 0, true).
-		AddItem(r.firewallAddRuleStatus, 1, 0, false).
-		AddItem(r.firewallAddRuleButtons, 1, 0, false)
+		AddItem(r.firewall.AddRuleForm, 12, 0, true).
+		AddItem(r.firewall.AddRuleStatus, 1, 0, false).
+		AddItem(r.firewall.AddRuleButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.firewallAddRuleTitleBar, 1, 0, false).
+		AddItem(r.firewall.AddRuleTitleBar, 1, 0, false).
 		AddItem(content, 0, 1, true)
 }
 
 func (r *Root) setFirewallAddRuleStatus(text string, color tcell.Color) {
-	r.firewallAddRuleStatus.SetTextColor(color)
-	r.firewallAddRuleStatus.SetText(text)
+	r.firewall.AddRuleStatus.SetTextColor(color)
+	r.firewall.AddRuleStatus.SetText(text)
 }
 
 func (r *Root) cancelFirewallAddRule() {
@@ -382,19 +382,19 @@ func (r *Root) cancelFirewallAddRule() {
 // submitFirewallAddRule itself only ever deals with a real
 // NewRuleSpec, never raw form text.
 func (r *Root) buildFirewallAddRuleSpec() (firewall.NewRuleSpec, error) {
-	from, to, err := parseFirewallPortField(r.firewallAddRulePortText)
+	from, to, err := parseFirewallPortField(r.firewall.AddRulePortText)
 	if err != nil {
 		return firewall.NewRuleSpec{}, err
 	}
 	return firewall.NewRuleSpec{
-		Direction:   r.firewallAddRuleDirection,
-		Action:      r.firewallAddRuleAction,
-		Protocol:    r.firewallAddRuleProtocol,
+		Direction:   r.firewall.AddRuleDirection,
+		Action:      r.firewall.AddRuleAction,
+		Protocol:    r.firewall.AddRuleProtocol,
 		PortFrom:    from,
 		PortTo:      to,
-		Source:      strings.TrimSpace(r.firewallAddRuleSourceText),
-		Destination: strings.TrimSpace(r.firewallAddRuleDestText),
-		Interface:   strings.TrimSpace(r.firewallAddRuleIfaceText),
+		Source:      strings.TrimSpace(r.firewall.AddRuleSourceText),
+		Destination: strings.TrimSpace(r.firewall.AddRuleDestText),
+		Interface:   strings.TrimSpace(r.firewall.AddRuleIfaceText),
 	}, nil
 }
 
@@ -435,7 +435,7 @@ func parseFirewallPortField(text string) (from, to int, err error) {
 // running anything before the user has seen and accepted exactly what
 // will run. A validation failure (a malformed port, or a port with no
 // protocol on iptables — see IPTablesAddRuleCommand's own doc comment)
-// is reported in place, in firewallAddRuleStatus, without closing the
+// is reported in place, in firewall.AddRuleStatus, without closing the
 // form, so a typo can be fixed and resubmitted immediately.
 func (r *Root) submitFirewallAddRule() {
 	spec, err := r.buildFirewallAddRuleSpec()
@@ -447,7 +447,7 @@ func (r *Root) submitFirewallAddRule() {
 		r.setFirewallAddRuleStatus(err.Error(), r.theme.CriticalText)
 		return
 	}
-	backend := r.firewallSnapshot.Backend
+	backend := r.firewall.Snapshot.Backend
 	command, err := firewall.AddRuleCommand(backend, spec)
 	if err != nil {
 		r.setFirewallAddRuleStatus(err.Error(), r.theme.CriticalText)
@@ -525,28 +525,28 @@ func (r *Root) runFirewallCommandFullScreen(command string) error {
 // countdown overlay offering "Keep this rule" to cancel it early.
 // Called only once per applied rule — a second SSH-relevant rule
 // applied while one rollback is already armed replaces it outright
-// (see its own r.firewallRollbackTimer.Stop() below) rather than
+// (see its own r.firewall.RollbackTimer.Stop() below) rather than
 // stacking two independent rollbacks that could race each other's own
 // DeleteRuleCommand.
 func (r *Root) armFirewallRollback(backend firewall.Backend, spec firewall.NewRuleSpec) {
-	if r.firewallRollbackTimer != nil {
-		r.firewallRollbackTimer.Stop()
+	if r.firewall.RollbackTimer != nil {
+		r.firewall.RollbackTimer.Stop()
 	}
-	if r.firewallRollbackCancel != nil {
-		r.firewallRollbackCancel()
+	if r.firewall.RollbackCancel != nil {
+		r.firewall.RollbackCancel()
 	}
 
-	r.firewallRollbackBackend = backend
-	r.firewallRollbackSpec = spec
-	r.firewallRollbackDeadline = time.Now().Add(firewallRollbackTimeout)
-	r.firewallRollbackTimer = time.AfterFunc(firewallRollbackTimeout, func() {
+	r.firewall.RollbackBackend = backend
+	r.firewall.RollbackSpec = spec
+	r.firewall.RollbackDeadline = time.Now().Add(firewallRollbackTimeout)
+	r.firewall.RollbackTimer = time.AfterFunc(firewallRollbackTimeout, func() {
 		r.app.QueueUpdateDraw(func() {
 			r.rollbackFirewallRule()
 		})
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	r.firewallRollbackCancel = cancel
+	r.firewall.RollbackCancel = cancel
 	r.updateFirewallRollbackText()
 	onPanic := func() { cancel() }
 	r.safeGo("firewall rollback countdown", onPanic, func() { r.animateFirewallRollbackCountdown(ctx) })
@@ -558,11 +558,11 @@ func (r *Root) armFirewallRollback(backend firewall.Backend, spec firewall.NewRu
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.firewallRollbackLayout.SetRect(x, y, width, height)
-	r.pushOverlay(firewallRollbackPage, r.firewallRollbackLayout, nil)
+	r.firewall.RollbackLayout.SetRect(x, y, width, height)
+	r.pushOverlay(firewallRollbackPage, r.firewall.RollbackLayout, nil)
 }
 
-// animateFirewallRollbackCountdown refreshes firewallRollbackText once
+// animateFirewallRollbackCountdown refreshes firewall.RollbackText once
 // a second until ctx is cancelled (by keepFirewallRule or
 // rollbackFirewallRule, whichever runs first) — the same ticker-driven
 // live-update shape animateConnectProgress already establishes for its
@@ -593,11 +593,11 @@ func (r *Root) animateFirewallRollbackCountdown(ctx context.Context) {
 // callback is what actually fires the rollback once the deadline
 // passes, this just reflects however much time is left until then.
 func (r *Root) updateFirewallRollbackText() {
-	remaining := time.Until(r.firewallRollbackDeadline).Round(time.Second)
+	remaining := time.Until(r.firewall.RollbackDeadline).Round(time.Second)
 	if remaining < 0 {
 		remaining = 0
 	}
-	r.firewallRollbackText.SetText(fmt.Sprintf(
+	r.firewall.RollbackText.SetText(fmt.Sprintf(
 		"SSH-relevant rule applied.\nReverts automatically in %s unless kept.", remaining))
 }
 
@@ -607,9 +607,9 @@ func (r *Root) updateFirewallRollbackText() {
 // this file's own doc comment on why the timer itself keeps running
 // regardless).
 func (r *Root) newFirewallRollbackLayout() *tview.Flex {
-	r.firewallRollbackTitleBar = newPlainTitleBar("Self-lockout protection")
-	r.firewallRollbackText = tview.NewTextView()
-	r.firewallRollbackText.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	r.firewall.RollbackTitleBar = newPlainTitleBar("Self-lockout protection")
+	r.firewall.RollbackText = tview.NewTextView()
+	r.firewall.RollbackText.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
 			r.hideOverlay()
 			return nil
@@ -618,13 +618,13 @@ func (r *Root) newFirewallRollbackLayout() *tview.Flex {
 	})
 	buttons := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(r.firewallRollbackKeepBtn, 20, 0, false).
+		AddItem(r.firewall.RollbackKeepBtn, 20, 0, false).
 		AddItem(tview.NewBox(), 0, 1, false)
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.firewallRollbackText, 2, 0, true).
+		AddItem(r.firewall.RollbackText, 2, 0, true).
 		AddItem(buttons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.firewallRollbackTitleBar, 1, 0, false).
+		AddItem(r.firewall.RollbackTitleBar, 1, 0, false).
 		AddItem(content, 0, 1, true)
 }
 
@@ -633,13 +633,13 @@ func (r *Root) newFirewallRollbackLayout() *tview.Flex {
 // goroutine) and closes the overlay — the rule stays exactly as
 // applied, no DeleteRuleCommand ever runs.
 func (r *Root) keepFirewallRule() {
-	if r.firewallRollbackTimer != nil {
-		r.firewallRollbackTimer.Stop()
-		r.firewallRollbackTimer = nil
+	if r.firewall.RollbackTimer != nil {
+		r.firewall.RollbackTimer.Stop()
+		r.firewall.RollbackTimer = nil
 	}
-	if r.firewallRollbackCancel != nil {
-		r.firewallRollbackCancel()
-		r.firewallRollbackCancel = nil
+	if r.firewall.RollbackCancel != nil {
+		r.firewall.RollbackCancel()
+		r.firewall.RollbackCancel = nil
 	}
 	r.activity.Logger.Action(activitylog.CategoryFirewall, "kept SSH-relevant rule (self-lockout rollback cancelled)")
 	r.hideOverlay()
@@ -654,16 +654,16 @@ func (r *Root) keepFirewallRule() {
 // one case this app must never swallow silently: whoever is watching
 // needs to know the rule is still in place.
 func (r *Root) rollbackFirewallRule() {
-	if r.firewallRollbackCancel != nil {
-		r.firewallRollbackCancel()
-		r.firewallRollbackCancel = nil
+	if r.firewall.RollbackCancel != nil {
+		r.firewall.RollbackCancel()
+		r.firewall.RollbackCancel = nil
 	}
-	r.firewallRollbackTimer = nil
+	r.firewall.RollbackTimer = nil
 	if r.activePage == firewallRollbackPage {
 		r.hideOverlay()
 	}
 
-	backend, spec := r.firewallRollbackBackend, r.firewallRollbackSpec
+	backend, spec := r.firewall.RollbackBackend, r.firewall.RollbackSpec
 	command, err := firewall.DeleteRuleCommand(backend, spec)
 	if err != nil {
 		r.activity.Logger.Error(activitylog.CategoryFirewall, fmt.Sprintf("self-lockout rollback: %v", err))
