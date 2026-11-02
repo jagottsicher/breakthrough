@@ -81,11 +81,11 @@ func (r *Root) finishOrphanLabelScan(ctx context.Context, orphans []string) {
 // applyLabel already does for an ordinary label change.
 func (r *Root) removeOrphanLabels(orphans []string) {
 	if err := r.labels.SetMany(orphans, 0); err != nil {
-		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove orphaned labels: %v", err))
+		r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove orphaned labels: %v", err))
 		r.showError(err)
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("removed %d orphaned label(s)", len(orphans)))
+	r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("removed %d orphaned label(s)", len(orphans)))
 	r.notify.Push(notify.LevelSuccess, notify.CategoryLabel, fmt.Sprintf("Removed %d orphaned label(s)", len(orphans)))
 	r.forEachTab(func(p *Panel) { p.repaintLabels() })
 }

@@ -172,11 +172,11 @@ func (r *Root) newLogAuditViewerScreen() {
 		// logAuditViewerFieldDone call, so its own ordinary
 		// prev (logAuditViewerTable) is only ever reached once the
 		// sidebar isn't open.
-		if key == tcell.KeyBacktab && r.consigliereVisible {
-			if r.consigliereScrollbar.maxOffset() > 0 {
-				r.app.SetFocus(r.consigliereHistory)
+		if key == tcell.KeyBacktab && r.consigliere.Visible {
+			if r.consigliere.Scrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliere.History)
 			} else {
-				r.app.SetFocus(r.consigliereInput)
+				r.app.SetFocus(r.consigliere.Input)
 			}
 			return
 		}
@@ -1201,7 +1201,7 @@ func (r *Root) moveLogAuditDetail(x, y int) {
 // own, considerably longer doc comment for the full reasoning,
 // including why captureOutsideClick needs its own
 // logAuditDetailDragging check the same way it already has one for
-// searchDragging/propertiesDragging). Deliberately no close glyph,
+// searchDragging/properties.Dragging). Deliberately no close glyph,
 // unlike Search/Properties — see logAuditDetailDragging's own doc
 // comment in root.go.
 func (r *Root) dragLogAuditDetailMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
@@ -1244,23 +1244,23 @@ func (r *Root) captureLogAuditSelectionTableKey(event *tcell.EventKey) *tcell.Ev
 	}
 	// Tab/Backtab reach the AI Consigliere sidebar — see
 	// startConsigliereChord's own doc comment in consigliere.go. The
-	// global focus cycle excludes consigliereInput/consigliereHistory
+	// global focus cycle excludes consigliere.Input/consigliere.History
 	// while this screen is open (see focusCycleStops' own doc comment
 	// in detailssidebar.go), so this table — the only real stop here —
 	// is responsible for its own entry point into it, same reasoning
 	// gitBreachFocusNext/gitBreachFocusPrev already give. A no-op
 	// (falls through unchanged) whenever the sidebar isn't even open:
 	// nothing else to cycle to on this screen.
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		if event.Key() == tcell.KeyTab {
-			r.app.SetFocus(r.consigliereInput)
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		if event.Key() == tcell.KeyBacktab {
-			if r.consigliereScrollbar.maxOffset() > 0 {
-				r.app.SetFocus(r.consigliereHistory)
+			if r.consigliere.Scrollbar.maxOffset() > 0 {
+				r.app.SetFocus(r.consigliere.History)
 			} else {
-				r.app.SetFocus(r.consigliereInput)
+				r.app.SetFocus(r.consigliere.Input)
 			}
 			return nil
 		}
@@ -1320,8 +1320,8 @@ func (r *Root) captureLogAuditViewerTableKey(event *tcell.EventKey) *tcell.Event
 		// (the ordinary case) is what gives way to it instead,
 		// exactly the same reasoning the Keyword field's own backward
 		// edge (SetDoneFunc above) gives for Backtab.
-		if r.consigliereVisible {
-			r.app.SetFocus(r.consigliereInput)
+		if r.consigliere.Visible {
+			r.app.SetFocus(r.consigliere.Input)
 			return nil
 		}
 		r.app.SetFocus(r.logAuditKeywordField)
@@ -1620,11 +1620,11 @@ func (r *Root) captureLogAuditDetailKey(event *tcell.EventKey) *tcell.EventKey {
 	// Neither key was ever a built-in TextView binding to begin with
 	// (tview's own vi-style keys are 'g'/'G'/'j'/'k'/'h'/'l', not
 	// Tab/Backtab — see textview.go), so nothing existing is lost.
-	if r.consigliereVisible && (event.Key() == tcell.KeyTab || event.Key() == tcell.KeyBacktab) {
-		if event.Key() == tcell.KeyBacktab && r.consigliereScrollbar.maxOffset() > 0 {
-			r.app.SetFocus(r.consigliereHistory)
+	if r.consigliere.Visible && (event.Key() == tcell.KeyTab || event.Key() == tcell.KeyBacktab) {
+		if event.Key() == tcell.KeyBacktab && r.consigliere.Scrollbar.maxOffset() > 0 {
+			r.app.SetFocus(r.consigliere.History)
 		} else {
-			r.app.SetFocus(r.consigliereInput)
+			r.app.SetFocus(r.consigliere.Input)
 		}
 		return nil
 	}
@@ -1637,7 +1637,7 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	if r.logAuditTable == nil {
 		return
 	}
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.logAuditSelectionLayout.SetBackgroundColor(theme.PanelBackground)
 	r.logAuditTable.SetBackgroundColor(theme.PanelBackground)
@@ -1652,7 +1652,7 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	r.logAuditTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.logAuditTitleBar.SetTextColor(theme.TextColor)
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.logAuditHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.logAuditHint.SetTextColor(theme.TextColor)
 	hintText, hintSpans := buildListHint(theme, logAuditSelectionHintEntries())
@@ -1660,7 +1660,7 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	r.logAuditHintSpans = hintSpans
 	r.renderLogAuditSelection() // cell colors are baked in per cell, not looked up live at draw time
 
-	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// PanelBackground, not SurfaceBackground — see mounts.Layout's own
 	// identical comment (mounts.go) for the full reasoning.
 	r.logAuditViewerLayout.SetBackgroundColor(theme.PanelBackground)
 	r.logAuditViewerTable.SetBackgroundColor(theme.PanelBackground)
@@ -1692,7 +1692,7 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	// to pass in (see logAuditCurrentlyFocused's own doc comment).
 	r.restyleLogAuditFocusTargets(r.logAuditCurrentlyFocused())
 	// SurfaceBackground/TextColor, matching the main screen's own
-	// buttonBar/statusBar — see mountsHint's own identical comment.
+	// buttonBar/statusBar — see mounts.Hint's own identical comment.
 	r.logAuditViewerHint.SetBackgroundColor(theme.SurfaceBackground)
 	r.logAuditViewerHint.SetTextColor(theme.TextColor)
 	viewerHintText, viewerHintSpans := buildListHint(theme, logAuditViewerHintEntries())

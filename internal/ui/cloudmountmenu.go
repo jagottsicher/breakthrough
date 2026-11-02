@@ -176,9 +176,9 @@ func (r *Root) deleteCloudRemoteByName(remoteName string, mountEntry *rclone.Mou
 		}
 	}
 	if err := rclone.DeleteRemote(remoteName); err != nil {
-		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("removed cloud mount %q but failed to delete its remote: %v", remoteName, err))
+		r.activity.Logger.Error(activitylog.CategoryRemote, fmt.Sprintf("removed cloud mount %q but failed to delete its remote: %v", remoteName, err))
 		r.showError(err)
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("deleted cloud remote %q", remoteName))
+	r.activity.Logger.Action(activitylog.CategoryRemote, fmt.Sprintf("deleted cloud remote %q", remoteName))
 }

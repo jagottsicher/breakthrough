@@ -20,9 +20,9 @@ import (
 // menu's old "Mass rename" placeholder — same overall shape as the
 // Options screen (see optionsscreen.go), reused deliberately rather
 // than invented fresh: a list of "steps" down the left plays the same
-// role optionsCategories does, and the selected step's own settings
+// role options.Categories does, and the selected step's own settings
 // table on the right is rendered and driven exactly the same way
-// optionsTable is (see batchRenameField/batchRenameStep in
+// options.Table is (see batchRenameField/batchRenameStep in
 // batchrenamecatalog.go, the direct counterpart of optionSpec/
 // optionCategory). Someone who has already used the Options screen
 // needs to learn nothing new here.
@@ -136,7 +136,7 @@ func (r *Root) newBatchRenameScreen() {
 		AddItem(r.batchRenameHint, 1, 0, false)
 
 	// One shared input field for a typed value, the same
-	// one-widget-reused-per-edit pattern r.optionsInput already follows
+	// one-widget-reused-per-edit pattern r.options.Input already follows
 	// (see editOptionValue's own doc comment). Enum fields need no
 	// widget of their own — activating the row cycles them in place
 	// (see cycleBatchRenameChoice).
@@ -929,11 +929,11 @@ func (r *Root) confirmApplyBatchRename() {
 			applied, err := batchrename.Apply(result.Changes)
 			r.batchRenameUndo = applied
 			if err != nil {
-				r.activityLog.Error(activitylog.CategoryTextOps, fmt.Sprintf("batch rename: %d of %d files renamed, then: %v", len(applied), len(result.Changes), err))
+				r.activity.Logger.Error(activitylog.CategoryTextOps, fmt.Sprintf("batch rename: %d of %d files renamed, then: %v", len(applied), len(result.Changes), err))
 				r.showError(fmt.Errorf("batch rename: %d of %d files renamed, then: %w", len(applied), len(result.Changes), err))
 				return
 			}
-			r.activityLog.Action(activitylog.CategoryTextOps, fmt.Sprintf("batch renamed %d file(s)", len(applied)))
+			r.activity.Logger.Action(activitylog.CategoryTextOps, fmt.Sprintf("batch renamed %d file(s)", len(applied)))
 			r.reloadPanel(nil)
 		},
 	)
@@ -955,9 +955,9 @@ func (r *Root) undoLastBatchRename() {
 	r.batchRenameUndo = nil
 	undone, err := batchrename.Undo(changes)
 	if err != nil {
-		r.activityLog.Error(activitylog.CategoryTextOps, fmt.Sprintf("undo batch rename: %d of %d files reverted, then: %v", len(undone), len(changes), err))
+		r.activity.Logger.Error(activitylog.CategoryTextOps, fmt.Sprintf("undo batch rename: %d of %d files reverted, then: %v", len(undone), len(changes), err))
 	} else {
-		r.activityLog.Action(activitylog.CategoryTextOps, fmt.Sprintf("undid batch rename of %d file(s)", len(undone)))
+		r.activity.Logger.Action(activitylog.CategoryTextOps, fmt.Sprintf("undid batch rename of %d file(s)", len(undone)))
 	}
 	r.reloadPanel(err)
 }
@@ -990,7 +990,7 @@ func (r *Root) applyBatchRenameTheme(theme config.ResolvedTheme) {
 	// applied to sshKeysTable/connectionMenuTable/sed.PreviewTable/
 	// tabSwitcher/gitBreach's tables, for the identical reason.
 	// batchRenameFieldsTable doesn't need this: setOptionsPaneFocused
-	// already covers it, the same way it covers optionsTable.
+	// already covers it, the same way it covers options.Table.
 	r.batchRenamePreviewTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))

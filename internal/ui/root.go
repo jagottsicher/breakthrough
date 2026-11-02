@@ -27,8 +27,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/logview"
-	"github.com/jagottsicher/breakthrough/internal/mounts"
-	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/operations"
 	"github.com/jagottsicher/breakthrough/internal/rclone"
@@ -86,7 +84,7 @@ const (
 // again after whatever was layered on top of it closes. Properties is
 // the only current user (see showOverlayWithRestore/restoreProperties)
 // — it keeps several sub-widgets simultaneously visible (see
-// newPropertiesView), so simply refocusing r.properties itself isn't
+// newPropertiesView), so simply refocusing r.properties.Pages itself isn't
 // precise enough to land keyboard focus back on the right one.
 //
 // emptyStackFocus is a second, separate override — see
@@ -113,7 +111,7 @@ type overlayFrame struct {
 // showOverlay/hideOverlay), and closing whichever one is open when the
 // user clicks outside it (captureOutsideClick) — except Properties while
 // it has unsaved edits in progress, which blocks that instead (see
-// propertiesDirty).
+// properties.Dirty).
 //
 // The context menu itself (its registry, rendering, and drill-down
 // submenu navigation) lives in contextmenu.go — see that file's own
@@ -213,7 +211,7 @@ type Root struct {
 	settings     config.Settings
 	colorSchemes []config.NamedTheme
 
-	// activityLog is the optional activity log's own live sink (see
+	// activity.Logger is the optional activity log's own live sink (see
 	// internal/activitylog's own doc comment) — built once at startup
 	// from settings, and rebuilt (see reopenActivityLog) whenever
 	// Options changes LogLevel or a log_category_* toggle, since the
@@ -223,14 +221,13 @@ type Root struct {
 	// all nil-receiver-safe regardless, the same convention every call
 	// site relies on to log unconditionally without asking "is logging
 	// even on" first.
-	activityLog *activitylog.Logger
-	// activityLogFallbackWarned tracks whether this run has already
+	// activity.FallbackWarned tracks whether this run has already
 	// told the user once that /var/log/breakthrough isn't writable and
 	// logging fell back to a per-user directory instead (see
 	// newActivityLogger) — shown once per run, not repeated every time
 	// Options reopens the log (a category toggle, say) with the same
 	// unchanged fallback still in effect.
-	activityLogFallbackWarned bool
+	activity activityLogState
 
 	// notify is the in-process notification service's own live Store
 	// (see internal/notify's own doc comment) — a short, curated list
@@ -238,7 +235,7 @@ type Root struct {
 	// queue, the firewall screen's own self-lockout rollback) pushes
 	// here at their own completion, so the outcome survives past the
 	// moment their status-bar line disappears. Never nil (see NewRoot):
-	// internal/notify's own Store, unlike activityLog, has no "off"
+	// internal/notify's own Store, unlike activity.Logger, has no "off"
 	// setting to honor, so every call site reaches for it
 	// unconditionally. Built via NewWithPersistence, not New — see
 	// internal/notify's own persist.go — so a Message also survives
@@ -253,7 +250,7 @@ type Root struct {
 	// (Start/SetState/Finish), not live progress: each job type still
 	// owns its own progress state exactly as it already did, this just
 	// additionally reports its own start/pause-resume/end alongside the
-	// activityLog/notify calls already sitting at the same call sites.
+	// activity.Logger/notify calls already sitting at the same call sites.
 	// Never nil (see NewRoot), the same "no off switch to honor, always
 	// call it" shape notify itself already has. Built via
 	// NewTrackerWithPersistence, not NewTracker — finished Operations
@@ -306,15 +303,12 @@ type Root struct {
 	// failing the question.
 	docSearchIndex *docsearch.Index
 
-	// consigliereModelCache/consigliereModelFetchInFlight/
-	// consigliereModelFetchErr back the Options screen's own "Model"/
+	// consigliere.ModelCache/consigliere.ModelFetchInFlight/
+	// consigliere.ModelFetchErr back the Options screen's own "Model"/
 	// "Effort" rows (see consiglieremodels.go) — keyed by provider
 	// name, populated only by refreshConsigliereModelCache, never by
 	// the rows' own choices functions (see that function's own doc
 	// comment on why a render-path network call would be wrong).
-	consigliereModelCache         map[string][]consigliere.ModelInfo
-	consigliereModelFetchInFlight map[string]bool
-	consigliereModelFetchErr      map[string]error
 
 	// apiKeyDialog* is the "API key (encrypted)" row's own dialog (see
 	// apikeydialog.go) — a fixed widget set, built once, whose actual
@@ -336,103 +330,54 @@ type Root struct {
 	apiKeyDialogLayout          *tview.Flex
 
 	// The Options screen (see optionsscreen.go) — a full-screen editor
-	// with the categories down the left (optionsCategories) and the
-	// selected one's settings on the right (optionsTable), the action
-	// buttons beneath them, and optionsLayout stacking the lot.
-	// optionsCategory is the currently selected category's index, kept
+	// with the categories down the left (options.Categories) and the
+	// selected one's settings on the right (options.Table), the action
+	// buttons beneath them, and options.Layout stacking the lot.
+	// options.Category is the currently selected category's index, kept
 	// across opens so reopening returns to where you were.
 	//
-	// optionsInfo/optionsInput are the two small windows it layers on
+	// options.Info/options.Input are the two small windows it layers on
 	// top of itself: a setting's explanation, and a one-line editor for
 	// a typed value. Enum settings need no window of their own —
 	// activating the row cycles them in place (see cycleOptionChoice).
-	optionsLayout                *tview.Flex
-	optionsTitleBar              *tview.TextView
-	optionsHint                  *tview.TextView
-	optionsHintSpans             []listHintSpan
-	optionsCategories            *tview.List
-	optionsTable                 *tview.Table
-	optionsButtons               *tview.Flex
-	optionsResetCategoryBtn      *tview.Button
-	optionsResetAllBtn           *tview.Button
-	optionsEditFileBtn           *tview.Button
-	optionsNewSchemeBtn          *tview.Button
-	optionsRemoveOrphanLabelsBtn *tview.Button
-	optionsEditSystemPromptBtn   *tview.Button
-	optionsResetSystemPromptBtn  *tview.Button
-	optionsCategory              int
-	optionsInfo                  *tview.TextView
-	optionsInput                 *tview.InputField
+	options optionsState
 
 	// The Toolbox screen (see toolbox.go) — a full-screen catalog of
 	// real external networking/hardware tools, each one either run
 	// immediately (toolboxFixedEntry) or after asking for one further
-	// argument through toolboxInput, the same "small floating field over
-	// a full-screen list" shape optionsInput already establishes for
+	// argument through toolbox.Input, the same "small floating field over
+	// a full-screen list" shape options.Input already establishes for
 	// Options. Every entry ends up in openToolCommand (toolwindow.go),
 	// the same draggable, non-modal window Ping already used before this
 	// screen gave it (and everything else here) a real home.
-	toolboxLayout    *tview.Flex
-	toolboxTitleBar  *tview.TextView
-	toolboxHint      *tview.TextView
-	toolboxHintSpans []listHintSpan
-	toolboxTable     *tview.Table
-	toolboxScrollbar *verticalScrollbar
-	toolboxInput     *tview.InputField
-
-	// toolboxForm and friends are toolboxFormEntry's own overlay — a
+	//
+	// toolbox.Form and friends are toolboxFormEntry's own overlay — a
 	// second way into Toolbox's own openToolCommand, next to
-	// toolboxInput's single free-text field, for an entry whose
+	// toolbox.Input's single free-text field, for an entry whose
 	// command genuinely needs more than one piece of input (curl's
 	// own Method/Header/Follow redirects/Output, say). See
 	// toolboxFormEntry's own doc comment in toolbox.go for the full
-	// design. toolboxFormToggles holds whichever of the entry's own
+	// design. toolbox.FormToggles holds whichever of the entry's own
 	// fields are boolean — a real tview.List, not a Form checkbox, the
 	// same "Form re-applies one uniform FocusedBackground to every
 	// item it owns, a checkbox can never keep its own distinct look"
 	// reasoning newSedForm's own doc comment already establishes for
 	// Sed Replace's five flags — empty (and given zero rect height)
-	// for an entry with no boolean fields at all. toolboxFormFields/
+	// for an entry with no boolean fields at all. toolbox.FormFields/
 	// Build/Name/Widgets are the current open's own state, rebuilt
 	// fresh by renderToolboxForm on every openToolboxForm call, the
 	// same "independent widgets, state kept on Root, not the widgets
 	// themselves" shape resetSedForm already establishes.
-	toolboxFormLayout      *tview.Flex
-	toolboxFormTitleBar    *tview.TextView
-	toolboxForm            *tview.Form
-	toolboxFormToggles     *tview.List
-	toolboxFormPreview     *tview.TextView
-	toolboxFormCancelBtn   *tview.Button
-	toolboxFormRunBtn      *tview.Button
-	toolboxFormButtons     *tview.Flex
-	toolboxFormFields      []toolboxFormField
-	toolboxFormBuild       func(toolboxFormValues) []string
-	toolboxFormName        string
-	toolboxFormWidgets     map[string]tview.Primitive
-	toolboxFormToggleState map[string]bool
-
-	// toolboxRows is the currently open screen's own row list — one
-	// single category, for "jn" (openNetworkTools) or "jh"
-	// (openHardwareTools). One table/rendering implementation
-	// (renderToolbox et al.) driven by whichever rows this holds, rather
-	// than a separate near-identical screen per category.
-	toolboxRows []toolboxDisplayRow
+	toolbox toolboxState
 
 	// The Mounts screen (see mounts.go) — a third full-screen catalog,
 	// kept deliberately separate from the Toolbox rather than folded in
 	// as one more entry there, per the user's own explicit request:
 	// this one shows live, structured data (with a computed "would this
 	// survive a reboot" column) rather than a list of commands to run.
-	// mountsEntries/mountsErr hold the last read result, refreshed by
+	// mounts.Entries/mounts.Err hold the last read result, refreshed by
 	// reloadMounts (on open, and on "r").
-	mountsLayout    *tview.Flex
-	mountsTitleBar  *tview.TextView
-	mountsHint      *tview.TextView
-	mountsHintSpans []listHintSpan
-	mountsTable     *tview.Table
-	mountsScrollbar *verticalScrollbar
-	mountsEntries   []mounts.Entry
-	mountsErr       error
+	mounts mountsState
 
 	// The Firewall screen (see firewall.go) — a fourth full-screen
 	// catalog, showing this host's own actual firewall rules (whichever
@@ -456,7 +401,7 @@ type Root struct {
 	// dropdowns, so the form is rebuilt fresh on every open via
 	// renderFirewallAddRuleForm, the same "Clear(true) then
 	// AddFormItem" shape newCompressForm's own doc comment establishes,
-	// rather than kept in sync in place the way connectForm's own fixed
+	// rather than kept in sync in place the way connect.Form's own fixed
 	// set of plain input fields is. The plain firewallAddRuleXxx fields
 	// below mirror the form's own current values, the same "value
 	// mirror" shape duplicateStrategy and friends already establish.
@@ -527,16 +472,9 @@ type Root struct {
 	// after the Tab switcher/Connection menu's own per-row action-cell
 	// table rather than Mounts/Firewall's own plain read-only rows: each
 	// session carries three independent actions (Attach, Attach in new
-	// window, Close). sessionsList/sessionsErr hold the last read
+	// window, Close). sessions.List/sessions.Err hold the last read
 	// result, refreshed by reloadSessions (on open, and on "r").
-	sessionsLayout    *tview.Flex
-	sessionsTitleBar  *tview.TextView
-	sessionsHint      *tview.TextView
-	sessionsHintSpans []listHintSpan
-	sessionsTable     *tview.Table
-	sessionsScrollbar *verticalScrollbar
-	sessionsList      []multiplex.Session
-	sessionsErr       error
+	sessions sessionsState
 
 	// The Messages screen ("gm", see messages.go and feature_ideas.txt's
 	// own "3a. Benachrichtigungen", Stufen 3-5) — a full-screen catalog
@@ -652,20 +590,10 @@ type Root struct {
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
 	// internal/activitylog) rather than a second, parallel recording of
-	// it. activityLogAllEntries holds the last real read (newest first),
+	// it. activity.AllEntries holds the last real read (newest first),
 	// refreshed by reloadActivityLog (on open, and on "r"); the keyword/
 	// time fields filter it live, the same "narrows as you type" feel
 	// the panel's own filter dropdown already has.
-	activityLogLayout       *tview.Flex
-	activityLogTitleBar     *tview.TextView
-	activityLogKeywordField *tview.InputField
-	activityLogTimeField    *tview.InputField
-	activityLogTable        *tview.Table
-	activityLogScrollbar    *verticalScrollbar
-	activityLogHint         *tview.TextView
-	activityLogHintSpans    []listHintSpan
-	activityLogAllEntries   []activitylog.Entry
-	activityLogReadErr      error
 
 	// The Log Audit screen (see logaudit.go/logauditscreen.go) — "jL",
 	// opened on whichever directory the active panel currently shows
@@ -1167,7 +1095,7 @@ type Root struct {
 	scrollAcknowledgeList        *tview.List
 	scrollAcknowledgeOnConfirm   func()
 
-	// activityLogNotice*/activityLogNoticeDontShowAgain back the
+	// activityLogNotice*/activity.NoticeDontShowAgain back the
 	// startup notice shown when the activity log falls back to a
 	// per-user directory (see newActivityLogger's own doc comment) —
 	// its own small dialog rather than the generic confirmDialog
@@ -1190,16 +1118,9 @@ type Root struct {
 	// every ordinary dialog already uses, unlike the dialog's own first
 	// cut, before the user's explicit follow-up request for a real
 	// Cancel distinct from OK.
-	activityLogNoticeLayout        *tview.Flex
-	activityLogNoticeTitleBar      *tview.TextView
-	activityLogNoticeMessageView   *tview.TextView
-	activityLogNoticeList          *tview.List
-	activityLogNoticeCancelButton  *tview.Button
-	activityLogNoticeOKButton      *tview.Button
-	activityLogNoticeDontShowAgain bool
 	// activityLogNoticeSpacer1/2 are the blank rows between header/
 	// message/checkbox/buttons — named and styled the same way
-	// duplicateSpacer/compressSpacer/rsyncSpacer already are (see their
+	// duplicateSpacer/compress.Spacer/rsyncSpacer already are (see their
 	// own doc comments) rather than left as anonymous tview.NewBox()
 	// calls, since a plain Box defaults to tview's own built-in
 	// PrimitiveBackgroundColor, not this dialog's SurfaceBackground —
@@ -1249,44 +1170,29 @@ type Root struct {
 	// have for a live search.
 	sed sedState
 
-	// connectForm/connectButtons/connectLayout make up the "Connect"
+	// connect.Form/connect.Buttons/connect.Layout make up the "Connect"
 	// dialog (see connectdialog.go) — a fixed field set (Host/Port/
 	// User/Password/Identifier/Tags), so it's built once here rather
 	// than rebuilt fresh per open the way Sed Replace's own variable
 	// field set is (see newSedForm's own doc comment on that
 	// distinction).
-	// connectStatus is the one-line area below the form showing either
+	// connect.Status is the one-line area below the form showing either
 	// an in-progress "Connecting…" animation or the last attempt's own
-	// error, in place, without closing the dialog. connectCancelBtn/
-	// connectConnectBtn are a real button pair (see newConnectButtons'
+	// error, in place, without closing the dialog. connect.CancelBtn/
+	// connect.ConnectBtn are a real button pair (see newConnectButtons'
 	// own doc comment for why, not a List).
-	connectForm            *tview.Form
-	connectHostField       *tview.InputField
-	connectPortField       *tview.InputField
-	connectUserField       *tview.InputField
-	connectPasswordField   *tview.InputField
-	connectIdentifierField *tview.InputField
-	connectTagsField       *tview.InputField
-	connectStatus          *tview.TextView
-	connectCancelBtn       *tview.Button
-	// connectOKBtn/connectConnectBtn and connectMode (see
+	//
+	// connect.OKBtn/connect.ConnectBtn and connect.Mode (see
 	// connectDialogMode) are the "Cancel/OK/Connect" buttons'
 	// own current-mode switch — see setConnectButtonsMode's own doc
 	// comment on why the Flex's own contents and wiring change per
 	// open rather than staying fixed.
-	connectOKBtn      *tview.Button
-	connectConnectBtn *tview.Button
-	connectMode       connectDialogMode
-	connectButtons    *tview.Flex
-	connectTitleBar   *tview.TextView
-	connectLayout     *tview.Flex
-	connectCancel     context.CancelFunc
-	connectAnimFrame  int
+	connect connectDialogState
 
 	// cloudMountDialog* is the "New cloud mount" dialog (see
 	// cloudmountdialog.go), reached via the "+ New" chooser
 	// (openNewConnectionChooser) rather than its own key, same shape as
-	// connectLayout above just with a remote picker instead of Host/
+	// connect.Layout above just with a remote picker instead of Host/
 	// Port/User/Password.
 	cloudMountDialogForm            *tview.Form
 	cloudMountDialogRemoteField     *tview.DropDown
@@ -1340,7 +1246,7 @@ type Root struct {
 	cloudRemoteDialogContent      *tview.Flex
 	cloudRemoteDialogLayout       *tview.Flex
 
-	// connectPendingSkipHostKey/connectPendingSkipHostKeyConn back the
+	// connect.PendingSkipHostKey/connect.PendingSkipHostKeyConn back the
 	// "Connect anyway" retry after a HostKeyMismatchError (see
 	// connectdialog.go's own finishConnect/runConnect) — set only once
 	// finishConnect has actually shown the mismatch, consumed (and
@@ -1348,8 +1254,6 @@ type Root struct {
 	// for the exact same Connection it was shown for, so editing a
 	// field first can never silently carry an accepted bypass over to
 	// a different host.
-	connectPendingSkipHostKey     bool
-	connectPendingSkipHostKeyConn remotefs.Connection
 
 	// hostKeyConfirmDialog/Layout is the trust-on-first-use prompt a
 	// Dial attempt can raise mid-connection (see hostkeyconfirm.go's
@@ -1464,7 +1368,7 @@ type Root struct {
 
 	// sshShellForm/.../sshShellLayout make up "Add new ssh connection"
 	// (see sshshell.go) — Host/Port/User, the same three fields
-	// connectForm already has, plus four checkboxes for the one-off
+	// connect.Form already has, plus four checkboxes for the one-off
 	// ssh flags a saved entry can carry (see remotefs.Connection's own
 	// Shell* fields; plainFormCheckbox for why these are that type, not
 	// a bare *tview.Checkbox). No password field: a real `ssh` process
@@ -1583,29 +1487,30 @@ type Root struct {
 	duplicateLayout                      *tview.Flex
 	duplicateTargets                     []string
 
-	// compressForm/compressButtons/compressLayout together make up the
+	// compress.Form/compress.Buttons/compress.Layout together make up the
 	// "Compress" dialog (compress.go) — the same Target/live-preview/
 	// Cancel-Action shape newDuplicateLayout's own doc comment already
 	// establishes, just with a fixed Format dropdown and an Output name
 	// field instead of Multiply's own strategy-dependent ones.
-	// compressTargets is the file(s) this open is for; compressFormatIndex
-	// indexes archiveFormats(); compressOutputName mirrors the Output
+	// compress.Targets is the file(s) this open is for; compress.FormatIndex
+	// indexes archiveFormats(); compress.OutputName mirrors the Output
 	// name field's own current text (needed across renderCompressForm's
 	// own rebuilds the same reason every duplicateXxxValue mirror is).
-	compressForm            *tview.Form
-	compressFormatField     *tview.DropDown
-	compressOutputNameField *tview.InputField
-	compressPreviewView     *tview.TextView
-	compressSpacer          *tview.Box
-	compressCancelBtn       *tview.Button
-	compressApplyBtn        *tview.Button
-	compressButtons         *tview.Flex
-	compressTitleBar        *tview.TextView
-	compressContentLayout   *tview.Flex
-	compressLayout          *tview.Flex
-	compressTargets         []string
-	compressFormatIndex     int
-	compressOutputName      string
+	//
+	// compress.CancelSpan asks to stop just the currently running job,
+	// never its queue (see bgjobcancel.go's own
+	// confirmCancelCurrentCompress) — zero-value (an empty, never-
+	// matching range) whenever the Compress segment isn't shown at all.
+	//
+	// compressJob is the currently-running backgrounded Compress or
+	// Extract, if any (see startCompressJob's own doc comment in
+	// compressjob.go) — entirely independent of pasteJob/rsyncJob for
+	// the same reason those two are independent of each other: a
+	// separate process tree with nothing to serialize against either.
+	// nil whenever no background Compress/Extract is currently running.
+	// compress.Queue mirrors rsyncQueue for a further Compress/Extract
+	// asked for while one is already running — see advanceCompressQueue.
+	compress compressState
 
 	// The "Rsync" dialog (see rsync.go) — source/destination and the
 	// free-text Excludes/Extra flags fields live in rsyncForm; the five
@@ -1674,8 +1579,8 @@ type Root struct {
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
 	// Options screen already establishes (batchRenameStepsList plays
-	// optionsCategories' own role, batchRenameFieldsTable plays
-	// optionsTable's), plus a live preview table and status line
+	// options.Categories' own role, batchRenameFieldsTable plays
+	// options.Table's), plus a live preview table and status line
 	// underneath, which Options has no equivalent of.
 	//
 	// batchRenameRules/batchRenameTargets/batchRenameStep are this
@@ -1822,52 +1727,45 @@ type Root struct {
 	helpTitleBar *tview.TextView
 	helpLayout   *tview.Flex
 
-	// consigliereHistory/consigliereScrollbar/consigliereTitleBar/
-	// consigliereInput/consigliereLayout are the AI Consigliere's own
+	// consigliere.History/consigliere.Scrollbar/consigliere.TitleBar/
+	// consigliere.Input/consigliere.Layout are the AI Consigliere's own
 	// chat sidebar ("gC", see keymap.go and internal/consigliere) —
 	// docked against the right edge, the same non-modal shape Details
 	// (detailsSidebar/detailsSidebarLayout above) uses, plus
-	// consigliereInput as a second, fixed-height row beneath the
-	// history for the next question. consigliereMessages/
-	// consigliereCancel are this session's own chat state — see
+	// consigliere.Input as a second, fixed-height row beneath the
+	// history for the next question. consigliere.Messages/
+	// consigliere.Cancel are this session's own chat state — see
 	// consigliere.go. The Provider itself is never cached on Root —
 	// buildConsigliereProvider constructs one fresh per question (see
 	// its own doc comment).
-	consigliereHistory   *tview.TextView
-	consigliereScrollbar *verticalScrollbar
-	consigliereTitleBar  *tview.TextView
-	consigliereInput     *tview.InputField
-	consigliereLayout    *tview.Flex
-	consigliereVisible   bool // mirrors detailsSidebarVisible — see showConsigliere/hideConsigliere
-	consigliereMessages  []consigliere.Message
-	consigliereCancel    context.CancelFunc
-	// consigliereAwaitingPassphrase is whether consigliereInput is
+	//
+	// consigliere.AwaitingPassphrase is whether consigliere.Input is
 	// currently in passphrase-entry mode (masked, Enter tries
 	// Session.Unlock instead of asking a question) — see
 	// showConsigliere's own doc comment on when that starts, and
 	// submitConsigliereUnlock on what ends it.
-	consigliereAwaitingPassphrase bool
-	// consigliereReturnFocus is captured once, in showConsigliere,
+	//
+	// consigliere.ReturnFocus is captured once, in showConsigliere,
 	// before anything changes focus — see hideConsigliere's own doc
 	// comment.
-	consigliereReturnFocus tview.Primitive
-	// consigliereExitPage is r.activePage at that exact same moment —
+	//
+	// consigliere.ExitPage is r.activePage at that exact same moment —
 	// NOT for the auto-close behavior removed in the previous commit
 	// (that used a similarly-named consigliereHostPage field; this is
 	// a different purpose, not a revival), but so
 	// consigliereBackwardExit/consigliereForwardExitTarget can tell
-	// whether consigliereReturnFocus/consigliereForwardExit are still
-	// valid at all: both name a specific widget on whatever page was
-	// active when the sidebar opened, which the user can now navigate
-	// away from (pushing further pages) while leaving the sidebar
-	// open — per the user's own explicit request in the previous
-	// commit. A widget on a page that is no longer active is still a
-	// perfectly real tview.Primitive (nothing frees it), so without
-	// this check, Tab/Backtab out of the sidebar would keep landing on
-	// it anyway — covered, unreachable, and indistinguishable from a
-	// dead end (a real, reported bug).
-	consigliereExitPage string
-	// consigliereForwardExit is where Tab leaving consigliere's own
+	// whether consigliere.ReturnFocus/consigliere.ForwardExit are
+	// still valid at all: both name a specific widget on whatever page
+	// was active when the sidebar opened, which the user can now
+	// navigate away from (pushing further pages) while leaving the
+	// sidebar open — per the user's own explicit request in the
+	// previous commit. A widget on a page that is no longer active is
+	// still a perfectly real tview.Primitive (nothing frees it), so
+	// without this check, Tab/Backtab out of the sidebar would keep
+	// landing on it anyway — covered, unreachable, and
+	// indistinguishable from a dead end (a real, reported bug).
+	//
+	// consigliere.ForwardExit is where Tab leaving consigliere's own
 	// input/history pair lands — the fixed stop that follows wherever
 	// the host screen that opened it (see startConsigliereChord's own
 	// doc comment in consigliere.go) splices it into its own ring.
@@ -1875,28 +1773,24 @@ type Root struct {
 	// selection/detail screens, or consigliere opened from the bare
 	// panel, where the global focus cycle handles it instead — see
 	// focusCycleStops' own doc comment) falls back to
-	// consigliereReturnFocus in consigliereExitFocus, since Backtab
+	// consigliere.ReturnFocus in consigliereExitFocus, since Backtab
 	// and Tab then both lead to the same, single other node either
 	// way.
-	consigliereForwardExit tview.Primitive
-
-	// consigliereManuallyPositioned/consigliereDragging/
-	// consigliereDragOffsetX/Y make the sidebar's own title bar
+	//
+	// consigliere.ManuallyPositioned/consigliere.Dragging/
+	// consigliere.DragOffsetX/Y make the sidebar's own title bar
 	// draggable, per the user's own explicit request that it become
 	// movable the way a Toolbox tool window already is — no resizing,
 	// just position. Mirrors dragPropertiesMouseCapture's own
 	// dragging/dragOffsetX/Y exactly (see its own doc comment in
 	// properties.go) for the drag mechanics themselves;
-	// consigliereManuallyPositioned is this sidebar's own addition —
+	// consigliere.ManuallyPositioned is this sidebar's own addition —
 	// once a drag has actually happened, repositionConsigliereSidebar
 	// stops re-docking it flush right on every resize/reshow and just
 	// re-clamps the position the user chose. Reset to false every
 	// time showConsigliere opens a fresh session, so a drag never
 	// outlives the sidebar being closed and reopened.
-	consigliereManuallyPositioned bool
-	consigliereDragging           bool
-	consigliereDragOffsetX        int
-	consigliereDragOffsetY        int
+	consigliere consigliereState
 
 	// detailsSidebar is the right-hand Details layer toggled by "I"
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
@@ -1919,7 +1813,7 @@ type Root struct {
 	detailsSidebarVisible bool
 
 	// detailsTarget/Stat/StatErr/Image cache what the sidebar is
-	// currently showing — mirrors propertiesTarget/propertiesStat above,
+	// currently showing — mirrors properties.Target/properties.Stat above,
 	// but reloaded on every selection change (see refreshDetailsSidebar),
 	// not just once when opened. detailsTarget is "" whenever nothing
 	// meaningfully selected (the ".." row, or an empty listing) — see
@@ -1964,7 +1858,7 @@ type Root struct {
 	detailsMetaRowEnd         int
 
 	// detailsHashes/InProgress/AnimFrame/Cancel/BytesRead/RowStart mirror
-	// propertiesHashes/hashInProgress/hashAnimFrame/hashCancel/
+	// properties.Hashes/hashInProgress/hashAnimFrame/hashCancel/
 	// hashBytesRead/hashSectionRow above exactly (see computeDetailsHashes'
 	// own doc comment on why this is a second, independent copy rather
 	// than shared state) — detailsHashRowStart is -1 whenever the current
@@ -2101,7 +1995,7 @@ type Root struct {
 	// and searchEditField, the one shared inline editor repositioned
 	// over whichever field is currently being edited (see
 	// activateSearchTextField) — the same "one shared field,
-	// repositioned per use" approach propertiesEditField/Root.rename/
+	// repositioned per use" approach properties.EditField/Root.rename/
 	// Root.prompt all already use. searchEditCommit is that field's own
 	// pending commit callback, set fresh each time (see
 	// activateSearchTextField/finishSearchEdit).
@@ -2155,7 +2049,7 @@ type Root struct {
 	// otherwise — the exact opposite scoping of searchIncludeArchives).
 	searchPages             *tview.Pages
 	searchFieldsPages       *tview.Pages
-	searchTitleBar          *tview.TextView // " Search " — see newSearchDialog, the same absolutely-positioned extra Pages page propertiesTitleBar/chmodTitleBar already are
+	searchTitleBar          *tview.TextView // " Search " — see newSearchDialog, the same absolutely-positioned extra Pages page properties.TitleBar/chmodTitleBar already are
 	searchTop               *tview.TextView
 	searchLeft              *tview.TextView
 	searchRight             *tview.TextView
@@ -2246,7 +2140,7 @@ type Root struct {
 	chmodEditField  *tview.InputField
 	chmodEditTarget chmodField
 	chmodButtons    *tview.Flex
-	chmodTitleBar   *tview.TextView // " Permissions " — see newChmodDialog, the same absolutely-positioned extra Pages page propertiesTitleBar already is
+	chmodTitleBar   *tview.TextView // " Permissions " — see newChmodDialog, the same absolutely-positioned extra Pages page properties.TitleBar already is
 	chmodCancelBtn  *tview.Button
 	chmodApplyBtn   *tview.Button
 	chmodSpans      []chmodSpan
@@ -2297,7 +2191,7 @@ type Root struct {
 	// — launches the configured mail client, the same action "ge"
 	// already reaches — and each of the three background-job progress
 	// segments' own "✕" (pasteCancelSpan/rsyncCancelSpan/
-	// compressCancelSpan) — asks to stop just the currently running
+	// compress.CancelSpan) — asks to stop just the currently running
 	// job, never its queue (see bgjobcancel.go's own
 	// confirmCancelCurrentPaste/Rsync/Compress). Each is zero-value (an
 	// empty, never-matching range) whenever its own segment isn't
@@ -2326,7 +2220,6 @@ type Root struct {
 	mailBadgeSpan       buttonBarSpan
 	pasteCancelSpan     buttonBarSpan
 	rsyncCancelSpan     buttonBarSpan
-	compressCancelSpan  buttonBarSpan
 	labelScanCancelSpan buttonBarSpan
 	gitStatusSpan       buttonBarSpan
 
@@ -2397,23 +2290,15 @@ type Root struct {
 	// (see refreshStatusBar).
 	currentUser string
 
-	// properties is the Properties overlay's own nested Pages (see
-	// newPropertiesView) — propertiesText is the always-visible read-only
-	// display; propertiesEditField is shown/positioned on top of it only
-	// while a field is being text-edited; propertiesButtons (and its two
-	// buttons, propertiesCancelBtn/propertiesSaveBtn — kept individually
+	// properties.Pages is the Properties overlay's own nested Pages (see
+	// newPropertiesView) — properties.Text is the always-visible read-only
+	// display; properties.EditField is shown/positioned on top of it only
+	// while a field is being text-edited; properties.Buttons (and its two
+	// buttons, properties.CancelBtn/properties.SaveBtn — kept individually
 	// addressable so setPropertiesFocus can give either one real keyboard
 	// focus) are visible the whole time Properties is open.
-	properties           *tview.Pages
-	propertiesTitleBar   *tview.TextView
-	propertiesText       *tview.TextView
-	propertiesEditField  *tview.InputField
-	propertiesEditTarget propertyField
-	propertiesButtons    *tview.Flex
-	propertiesCancelBtn  *tview.Button
-	propertiesSaveBtn    *tview.Button
-
-	// propertiesDragging/propertiesDragOffsetX/Y make Properties'
+	//
+	// properties.Dragging/properties.DragOffsetX/Y make Properties'
 	// own title bar draggable — the same "click position minus the
 	// window's own x/y at drag-start, kept constant for the rest of the
 	// drag" shape toolWindow's own dragging/dragOffsetX/Y already
@@ -2424,11 +2309,10 @@ type Root struct {
 	// user's own explicit request: still opens at the exact same anchor
 	// as before (see openProperties/resizeProperties, both untouched),
 	// only draggable afterward.
-	propertiesDragging                           bool
-	propertiesDragOffsetX, propertiesDragOffsetY int
+	properties propertiesState
 
 	// searchDragging/searchDragOffsetX/Y are dragSearchMouseCapture's
-	// own equivalent of propertiesDragging/propertiesDragOffsetX/Y just
+	// own equivalent of properties.Dragging/properties.DragOffsetX/Y just
 	// above, for the search dialog's own title bar (search.go) — same
 	// shape, same reasoning, per the user's own explicit request that
 	// it become movable (with a close glyph) too.
@@ -2447,16 +2331,6 @@ type Root struct {
 	// another way to close it.
 	logAuditDetailDragging                               bool
 	logAuditDetailDragOffsetX, logAuditDetailDragOffsetY int
-
-	// propertiesFocusIndex is Properties' own keyboard-navigation cursor
-	// (see setPropertiesFocus/movePropertiesFocus/capturePropertiesKey):
-	// -1 (nothing focused, Properties' state right after opening) or an
-	// index into propertyFieldOrder for a field span, or
-	// len(propertyFieldOrder)/len(propertyFieldOrder)+1 for the Cancel/
-	// Save buttons. Clicking a field (see activatePropertyField) sets it
-	// too, so keyboard navigation continues naturally from wherever the
-	// mouse last landed.
-	propertiesFocusIndex int
 
 	// promptSubmit is what the currently-open prompt overlay (see
 	// openPrompt/finishPrompt) runs with the typed text if the user
@@ -2514,17 +2388,6 @@ type Root struct {
 	// rsyncQueue mirrors pasteQueue for a background rsync asked for
 	// while one is already running — see advanceRsyncQueue.
 	rsyncQueue []queuedRsync
-
-	// compressJob is the currently-running backgrounded Compress or
-	// Extract, if any (see startCompressJob's own doc comment in
-	// compressjob.go) — entirely independent of pasteJob/rsyncJob above
-	// for the same reason those two are independent of each other: a
-	// separate process tree with nothing to serialize against either.
-	// nil whenever no background Compress/Extract is currently running.
-	compressJob *compressJob
-	// compressQueue mirrors rsyncQueue for a further Compress/Extract
-	// asked for while one is already running — see advanceCompressQueue.
-	compressQueue []compressRequest
 
 	// labelScanCancel is set for as long as the Options screen's own
 	// "Remove orphaned labels" background scan is running (see
@@ -2597,12 +2460,12 @@ type Root struct {
 	target    string
 	targetRow int
 
-	// propertiesTarget/propertiesStat cache what the Properties overlay is
+	// properties.Target/properties.Stat cache what the Properties overlay is
 	// currently showing, so computeHashes (triggered separately, after
 	// Properties is already open — see capturePropertiesKey/
 	// capturePropertiesMouse) knows what to hash and can re-render the
 	// same text with the results appended, without re-running fsops.Stat.
-	// propertiesHashes holds the computed digests once that's happened,
+	// properties.Hashes holds the computed digests once that's happened,
 	// nil until then — renderProperties reads it directly rather than
 	// taking it as a parameter, since it's re-run after every kind of
 	// edit, not just this one. hashSectionRow is the 0-based row, within
@@ -2615,11 +2478,8 @@ type Root struct {
 	// right row and a column inside this width, per the user's own
 	// explicit request that this be a real button, not "click anywhere
 	// on this line or below it" the way it used to be.
-	propertiesTarget string
-	propertiesStat   fsops.Info
-	propertiesHashes *fsops.Hashes
-	hashSectionRow   int
-	hashButtonWidth  int
+	hashSectionRow  int
+	hashButtonWidth int
 
 	// hashInProgress/hashAnimFrame/hashCancel back computeHashes' own
 	// "in progress" animation (see hashAnimationFrames): hashInProgress
@@ -2650,7 +2510,7 @@ type Root struct {
 	// hashBytesRead is how many bytes hashFile's in-flight call has
 	// streamed so far (see computeHashes' own onProgress callback),
 	// read by renderProperties to show a percentage alongside the
-	// animation whenever propertiesStat.Size is known. Unlike
+	// animation whenever properties.Stat.Size is known. Unlike
 	// hashInProgress/hashAnimFrame/hashCancel above — which are only
 	// ever touched from within the tview event loop, either directly or
 	// via QueueUpdateDraw — this one is also written from hashFile's
@@ -2663,16 +2523,16 @@ type Root struct {
 	// renderProperties call.
 	propertySpans []propertySpan
 
-	// propertiesDirty/stagedName/stagedMode/stagedMtime/stagedOwner/
+	// properties.Dirty/stagedName/stagedMode/stagedMtime/stagedOwner/
 	// stagedGroup hold the Properties overlay's in-progress edit, if any
 	// — see markPropertiesDirty and savePropertiesEdit. The staged values
-	// start out equal to propertiesStat's own (set in openProperties) and
+	// start out equal to properties.Stat's own (set in openProperties) and
 	// only diverge as fields are edited; nothing here is written to the
 	// real file until Save. stagedOwner/stagedGroup are plain name
 	// strings either way — chosen via the owner/group picker or typed
 	// into its text fallback — resolved to a uid/gid via
 	// fsops.ResolveUID/ResolveGID only at Save time, the same as
-	// propertiesStat.Owner/Group are themselves already just names.
+	// properties.Stat.Owner/Group are themselves already just names.
 	//
 	// stagedRecursiveOwner/stagedRecursiveGroup are the directory-only
 	// "apply recursively" toggles (see recursiveApplyField/
@@ -2682,7 +2542,6 @@ type Root struct {
 	// Always reset to false in openProperties, never carried over from a
 	// previous Properties session, since each describes what this
 	// particular Save should do, not a standing preference.
-	propertiesDirty      bool
 	stagedName           string
 	stagedMode           os.FileMode
 	stagedMtime          time.Time
@@ -2733,16 +2592,10 @@ type Root struct {
 	// r.operations (internal/operations), the Aufgaben-/Transferzentrale
 	// feature_ideas.txt's own "3." describes, same build-once/
 	// repopulate-on-open shape every other full-screen catalog here
-	// already uses. transferCenterOps holds the last rendered snapshot
+	// already uses. transfer.Ops holds the last rendered snapshot
 	// (newest first), refreshed by reloadTransferCenter on open, on "r",
 	// and live via r.operations.Subscribe while the screen is open.
-	transferCenterLayout    *tview.Flex
-	transferCenterTitleBar  *tview.TextView
-	transferCenterHint      *tview.TextView
-	transferCenterHintSpans []listHintSpan
-	transferCenterTable     *tview.Table
-	transferCenterScrollbar *verticalScrollbar
-	transferCenterOps       []operations.Operation
+	transfer transferCenterState
 
 	// easterEggView/easterEggCancel back the hidden "follow the white
 	// rabbit" overlay (see easteregg.go) — built once like every other
@@ -2823,23 +2676,25 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	}
 
 	r := &Root{
-		Pages:                         tview.NewPages(),
-		app:                           app,
-		startDir:                      path,
-		mouseEnabled:                  settings.MouseEnabled,
-		panel:                         panel,
-		settings:                      settings,
-		colorSchemes:                  colorSchemes,
-		settingOrigins:                settingOrigins,
-		theme:                         theme,
-		apiKeySession:                 apiKeySession,
-		docSearchIndex:                docSearchIndex,
-		consigliereModelCache:         map[string][]consigliere.ModelInfo{},
-		consigliereModelFetchInFlight: map[string]bool{},
-		consigliereModelFetchErr:      map[string]error{},
-		notify:                        notify.NewWithPersistence(notifyPersistPath()),
-		operations:                    operations.NewTrackerWithPersistence(operationsPersistPath()),
-		labels:                        filelabels.NewWithPersistence(labelsPersistPath()),
+		Pages:          tview.NewPages(),
+		app:            app,
+		startDir:       path,
+		mouseEnabled:   settings.MouseEnabled,
+		panel:          panel,
+		settings:       settings,
+		colorSchemes:   colorSchemes,
+		settingOrigins: settingOrigins,
+		theme:          theme,
+		apiKeySession:  apiKeySession,
+		docSearchIndex: docSearchIndex,
+		consigliere: consigliereState{
+			ModelCache:         map[string][]consigliere.ModelInfo{},
+			ModelFetchInFlight: map[string]bool{},
+			ModelFetchErr:      map[string]error{},
+		},
+		notify:     notify.NewWithPersistence(notifyPersistPath()),
+		operations: operations.NewTrackerWithPersistence(operationsPersistPath()),
+		labels:     filelabels.NewWithPersistence(labelsPersistPath()),
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
 		// doc comment and the struct field comment above.
@@ -2852,7 +2707,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		// so it's already correct for anything that renders Properties
 		// without going through openProperties (e.g. seedProperties in
 		// the test suite).
-		propertiesFocusIndex: -1,
+		properties: propertiesState{FocusIndex: -1},
 
 		// Seeded from settings.OpenWithCommand rather than left at its
 		// zero value — see that setting's own doc comment: this is
@@ -2900,7 +2755,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.prompt = tview.NewInputField()
 	r.prompt.SetDoneFunc(r.finishPrompt) // Enter or Escape
 
-	r.properties = r.newPropertiesView()
+	r.properties.Pages = r.newPropertiesView()
 	r.errorView = r.newErrorView()
 
 	// Panel reports its own failures (unreadable directory, bad path
@@ -2963,37 +2818,37 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// SetDrawFunc-free path (this dialog's width never changes after
 	// opening, unlike Git breach's own panes, so a one-time computation
 	// at open time is enough).
-	r.activityLogNoticeTitleBar = newPlainTitleBar("")
-	r.activityLogNoticeTitleBar.SetMouseCapture(r.activityLogNoticeTitleBarMouseCapture)
+	r.activity.NoticeTitleBar = newPlainTitleBar("")
+	r.activity.NoticeTitleBar.SetMouseCapture(r.activityLogNoticeTitleBarMouseCapture)
 
-	r.activityLogNoticeMessageView = tview.NewTextView()
-	r.activityLogNoticeMessageView.SetWrap(true)
-	r.activityLogNoticeMessageView.SetBorderPadding(0, 0, 1, 1)
+	r.activity.NoticeMessageView = tview.NewTextView()
+	r.activity.NoticeMessageView.SetWrap(true)
+	r.activity.NoticeMessageView.SetBorderPadding(0, 0, 1, 1)
 
-	r.activityLogNoticeList = tview.NewList().ShowSecondaryText(false)
-	r.activityLogNoticeList.SetHighlightFullLine(true)
-	r.activityLogNoticeList.SetBorderPadding(0, 0, 1, 1)
+	r.activity.NoticeList = tview.NewList().ShowSecondaryText(false)
+	r.activity.NoticeList.SetHighlightFullLine(true)
+	r.activity.NoticeList.SetBorderPadding(0, 0, 1, 1)
 	// Only highlight the checkbox while the List itself actually holds
 	// focus — the default (always-on) highlight is right for
 	// quitConfirm/confirmDialog, where the List is the dialog's only
 	// focus target, but wrong here: with Cancel/OK as two further Tab
 	// stops, an always-on highlight kept painting this row as if it
 	// still had focus even after Tab moved on to a button.
-	r.activityLogNoticeList.SetSelectedFocusOnly(true)
-	r.activityLogNoticeList.AddItem(activityLogNoticeCheckboxText(false), "", 0, r.toggleActivityLogNoticeDontShowAgain)
+	r.activity.NoticeList.SetSelectedFocusOnly(true)
+	r.activity.NoticeList.AddItem(activityLogNoticeCheckboxText(false), "", 0, r.toggleActivityLogNoticeDontShowAgain)
 
-	r.activityLogNoticeCancelButton = tview.NewButton("Cancel")
-	r.activityLogNoticeCancelButton.SetSelectedFunc(r.cancelActivityLogNotice)
-	r.activityLogNoticeOKButton = tview.NewButton("OK")
-	r.activityLogNoticeOKButton.SetSelectedFunc(r.acceptActivityLogNotice)
+	r.activity.NoticeCancelButton = tview.NewButton("Cancel")
+	r.activity.NoticeCancelButton.SetSelectedFunc(r.cancelActivityLogNotice)
+	r.activity.NoticeOKButton = tview.NewButton("OK")
+	r.activity.NoticeOKButton.SetSelectedFunc(r.acceptActivityLogNotice)
 
 	// Tab/Backtab cycle the three real focus targets (the checkbox
 	// List, Cancel, OK) in a fixed three-way ring — small and fixed
 	// enough that a Git-breach-style data-driven focusables list would
 	// be more machinery than this dialog ever needs.
-	r.activityLogNoticeList.SetInputCapture(r.captureActivityLogNoticeListKey)
-	r.activityLogNoticeCancelButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeOKButton, r.activityLogNoticeList))
-	r.activityLogNoticeOKButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeList, r.activityLogNoticeCancelButton))
+	r.activity.NoticeList.SetInputCapture(r.captureActivityLogNoticeListKey)
+	r.activity.NoticeCancelButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activity.NoticeOKButton, r.activity.NoticeList))
+	r.activity.NoticeOKButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activity.NoticeList, r.activity.NoticeCancelButton))
 
 	// Equal proportion (0, 1) each, filling the row edge to edge — the
 	// exact shape newSearchButtons' own Cancel/Find row already uses
@@ -3004,16 +2859,16 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// it's given, so two equal halves read as two evenly matched
 	// buttons.
 	buttonRow := tview.NewFlex().
-		AddItem(r.activityLogNoticeCancelButton, 0, 1, true).
-		AddItem(r.activityLogNoticeOKButton, 0, 1, false)
+		AddItem(r.activity.NoticeCancelButton, 0, 1, true).
+		AddItem(r.activity.NoticeOKButton, 0, 1, false)
 
 	r.activityLogNoticeSpacer1 = tview.NewBox()
 	r.activityLogNoticeSpacer2 = tview.NewBox()
-	r.activityLogNoticeLayout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.activityLogNoticeTitleBar, 1, 0, false).
-		AddItem(r.activityLogNoticeMessageView, 0, 1, false).
+	r.activity.NoticeLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.activity.NoticeTitleBar, 1, 0, false).
+		AddItem(r.activity.NoticeMessageView, 0, 1, false).
 		AddItem(r.activityLogNoticeSpacer1, 1, 0, false).
-		AddItem(r.activityLogNoticeList, 1, 0, true).
+		AddItem(r.activity.NoticeList, 1, 0, true).
 		AddItem(r.activityLogNoticeSpacer2, 1, 0, false).
 		AddItem(buttonRow, 1, 0, false)
 
@@ -3072,11 +2927,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The Compress dialog (see compress.go/openCompress) — same
 	// build-once/repopulate-on-open shape as Duplicate just above.
-	r.compressForm = r.newCompressForm()
-	r.compressPreviewView = r.newCompressPreviewView()
-	r.compressSpacer = tview.NewBox()
-	r.compressButtons = r.newCompressButtons()
-	r.compressLayout = r.newCompressLayout()
+	r.compress.Form = r.newCompressForm()
+	r.compress.PreviewView = r.newCompressPreviewView()
+	r.compress.Spacer = tview.NewBox()
+	r.compress.Buttons = r.newCompressButtons()
+	r.compress.Layout = r.newCompressLayout()
 
 	// The "Rsync" dialog (see rsync.go) — same "built once here,
 	// contents rebuilt fresh per open" shape as Multiply just above.
@@ -3093,9 +2948,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// connectdialog.go/hostkeyconfirm.go) — a fixed field set, built
 	// once here the same way Sed Replace's own form is (see
 	// newConnectForm's own doc comment).
-	r.connectForm = r.newConnectForm()
-	r.connectButtons = r.newConnectButtons()
-	r.connectLayout = r.newConnectLayout()
+	r.connect.Form = r.newConnectForm()
+	r.connect.Buttons = r.newConnectButtons()
+	r.connect.Layout = r.newConnectLayout()
 
 	// The "API key (encrypted)" dialog (see apikeydialog.go) — the
 	// Options screen's own "AI Consigliere" category.
@@ -3167,7 +3022,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The generic picker (see openOwnerGroupPicker and, unrelated,
 	// openRsyncTabPicker) — one shared List, repopulated and
 	// repositioned per open, the same pattern rename/prompt/
-	// propertiesEditField already use. The two callers are never open
+	// properties.EditField already use. The two callers are never open
 	// at the same time, so neither has to know about the other's own
 	// state.
 	r.picker = tview.NewList().ShowSecondaryText(false)
@@ -3377,20 +3232,20 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(contextMenuPage, r.menuLayout, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
 	r.AddPage(promptPage, r.prompt, false, false)
-	r.AddPage(propertiesPage, r.properties, false, false)
+	r.AddPage(propertiesPage, r.properties.Pages, false, false)
 	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirmLayout, false, false)
 	r.AddPage(confirmPage, r.confirmDialogLayout, false, false)
 	r.AddPage(scrollAcknowledgePage, r.scrollAcknowledgeLayout, false, false)
-	r.AddPage(activityLogNoticePage, r.activityLogNoticeLayout, false, false)
+	r.AddPage(activityLogNoticePage, r.activity.NoticeLayout, false, false)
 	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
 	r.AddPage(pastePausePage, r.pastePauseDialogLayout, false, false)
 	r.AddPage(bgJobCancelPage, r.bgJobCancelDialogLayout, false, false)
 	r.AddPage(sedReplacePage, r.sed.Layout, false, false)
 	r.AddPage(sedPreviewPage, r.sed.PreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
-	r.AddPage(compressPage, r.compressLayout, false, false)
+	r.AddPage(compressPage, r.compress.Layout, false, false)
 	r.AddPage(rsyncPage, r.rsyncLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
@@ -3408,19 +3263,19 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.
-	r.AddPage(optionsPage, r.optionsLayout, true, false)
-	r.AddPage(optionsInfoPage, r.optionsInfo, false, false)
-	r.AddPage(optionsInputPage, r.optionsInput, false, false)
+	r.AddPage(optionsPage, r.options.Layout, true, false)
+	r.AddPage(optionsInfoPage, r.options.Info, false, false)
+	r.AddPage(optionsInputPage, r.options.Input, false, false)
 	// resize=true: the Toolbox screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just above gives.
-	r.AddPage(toolboxPage, r.toolboxLayout, true, false)
-	r.AddPage(toolboxInputPage, r.toolboxInput, false, false)
-	r.AddPage(toolboxFormPage, r.toolboxFormLayout, false, false)
+	r.AddPage(toolboxPage, r.toolbox.Layout, true, false)
+	r.AddPage(toolboxInputPage, r.toolbox.Input, false, false)
+	r.AddPage(toolboxFormPage, r.toolbox.FormLayout, false, false)
 	// resize=true: the Mounts screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox screens' own
 	// comments above give.
-	r.AddPage(mountsPage, r.mountsLayout, true, false)
+	r.AddPage(mountsPage, r.mounts.Layout, true, false)
 	// resize=true: the Firewall screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts
 	// screens' own comments above give.
@@ -3431,11 +3286,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Transfer-Zentrale screen deliberately fills the
 	// whole terminal too, the same reasoning every other full-screen
 	// catalog above gives.
-	r.AddPage(transferCenterPage, r.transferCenterLayout, true, false)
+	r.AddPage(transferCenterPage, r.transfer.Layout, true, false)
 	// resize=true: the Sessions screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
-	r.AddPage(sessionsPage, r.sessionsLayout, true, false)
+	r.AddPage(sessionsPage, r.sessions.Layout, true, false)
 	// resize=true: the SSH Keys screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall/Sessions screens' own comments above give.
@@ -3450,7 +3305,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
-	r.AddPage(activityLogPage, r.activityLogLayout, true, false)
+	r.AddPage(activityLogPage, r.activity.Layout, true, false)
 	// resize=true: the Log Audit screen's own selection and viewer
 	// layers both deliberately fill the whole terminal too, the same
 	// reasoning the Options/Toolbox/Mounts/Firewall/Sessions/SSH Keys/
@@ -3469,12 +3324,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpLayout, false, false)
-	r.AddPage(consiglierePage, r.consigliereLayout, false, false)
+	r.AddPage(consiglierePage, r.consigliere.Layout, false, false)
 	r.AddPage(viewerPage, r.viewerLayout, false, false)
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
-	r.AddPage(connectDialogPage, r.connectLayout, false, false)
+	r.AddPage(connectDialogPage, r.connect.Layout, false, false)
 	r.AddPage(apiKeyDialogPage, r.apiKeyDialogLayout, false, false)
 	r.AddPage(cloudMountDialogPage, r.cloudMountDialogLayout, false, false)
 	r.AddPage(cloudRemoteDialogPage, r.cloudRemoteDialogLayout, false, false)
@@ -3520,7 +3375,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// immediate attention the way a config warning does.
 	r.pruneTrashAtStartup()
 	logger, activityLogNotice, activityLogIsFallback := r.newActivityLogger()
-	r.activityLog = logger
+	r.activity.Logger = logger
 
 	// The activity-log fallback notice gets its own dialog (see
 	// openActivityLogFallbackNotice's own doc comment) only when it's
@@ -3892,13 +3747,13 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 	// Z-index, so without this, navigating from one full-screen page
 	// to another (e.g. Log Audit's own selection screen into a
 	// specific file's viewer) while the sidebar is open would redraw
-	// it on top of consigliereLayout, completely covering it — even
+	// it on top of consigliere.Layout, completely covering it — even
 	// though the sidebar itself is still fully open (per the user's
 	// own explicit request that it survive exactly this kind of
 	// ordinary within-task navigation). Keyboard focus is deliberately
 	// left on whatever this call already focused below, not pulled
 	// back onto the sidebar — only its own draw order needs fixing.
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		r.SendToFront(consiglierePage)
 	}
 	r.updateOverlayTitleBarColors()
@@ -3912,7 +3767,7 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 // updateOverlayTitleBarColors recolors every modal overlay's own title
 // bar that doesn't already track its own focus state the way
 // toolWindow's/Details' do (see toolwindow.go/detailssidebar.go) —
-// currently propertiesTitleBar/menuTitleBar/helpTitleBar — based on
+// currently properties.TitleBar/menuTitleBar/helpTitleBar — based on
 // which one, if any, is currently the topmost overlay (r.activePage):
 // FocusedBackground for that one, EditableBackground for every other,
 // per the user's own explicit request that this same active/inactive
@@ -3931,7 +3786,7 @@ func (r *Root) updateOverlayTitleBarColors() {
 			bar.SetBackgroundColor(r.theme.InputBackground)
 		}
 	}
-	set(r.propertiesTitleBar, propertiesPage)
+	set(r.properties.TitleBar, propertiesPage)
 	set(r.menuTitleBar, contextMenuPage)
 	set(r.helpTitleBar, helpPage)
 }
@@ -4040,7 +3895,7 @@ func (r *Root) closeAllOverlays() {
 // kept in sync here by hand.
 //
 // The Properties overlay is one exception to "click outside closes it":
-// once propertiesDirty is true (see markPropertiesDirty), an outside
+// once properties.Dirty is true (see markPropertiesDirty), an outside
 // click is consumed and otherwise ignored instead — Cancel or Save is
 // the only way out from there, so an in-progress edit (a permission bit
 // already toggled, a name half-typed) can't be silently discarded, or
@@ -4096,24 +3951,24 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// dragPropertiesMouseCapture at all, silently dropping the rest of
 	// the drag. A real, user-reported bug: Properties could only ever be
 	// dragged down/right, never up/left, for exactly this reason.
-	if r.propertiesDragging {
+	if r.properties.Dragging {
 		out, outEvent, _ := r.dragPropertiesMouseCapture(action, event)
 		return out, outEvent
 	}
 
 	// A search-dialog drag in progress — same reasoning as
-	// propertiesDragging just above (dragSearchMouseCapture's own doc
+	// properties.Dragging just above (dragSearchMouseCapture's own doc
 	// comment has the details): must keep receiving every subsequent
 	// move/release itself regardless of whether the cursor still falls
 	// inside the dialog's own rect, or an upward/leftward drag could
-	// only ever move it down/right, the same bug propertiesDragging's
+	// only ever move it down/right, the same bug properties.Dragging's
 	// own check exists to prevent.
 	if r.searchDragging {
 		return r.dragSearchMouseCapture(action, event)
 	}
 
 	// A Log entry detail dialog drag in progress — same reasoning as
-	// searchDragging/propertiesDragging above: dragging up/left past
+	// searchDragging/properties.Dragging above: dragging up/left past
 	// the not-yet-updated rect would otherwise stop reaching
 	// dragLogAuditDetailMouseCapture at all.
 	if r.logAuditDetailDragging {
@@ -4121,7 +3976,7 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	}
 
 	// A Log Audit timeline drag in progress — same reasoning as
-	// searchDragging/propertiesDragging just above: the bar is a
+	// searchDragging/properties.Dragging just above: the bar is a
 	// single thin row, so a drag that so much as jitters one pixel up
 	// or down off it would otherwise fall through to ordinary
 	// position-based dispatch mid-drag, leaving logAuditTimelineDragging
@@ -4134,8 +3989,8 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// An AI Consigliere title-bar drag in progress — same reasoning as
 	// every guard above: dragging the sidebar up or left would
 	// otherwise fall through to ordinary position-based dispatch
-	// mid-drag, leaving consigliereDragging stuck true forever.
-	if r.consigliereDragging {
+	// mid-drag, leaving consigliere.Dragging stuck true forever.
+	if r.consigliere.Dragging {
 		out, outEvent, _ := r.dragConsigliereMouseCapture(action, event)
 		return out, outEvent
 	}
@@ -4148,7 +4003,7 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// real bug: a click landing on the sidebar itself, while some other
 	// modal (Log Audit, Git Breach, ...) is the active overlay, used to
 	// read as "outside that overlay" and close *it* — never
-	// consigliereLayout's own rect, which this now checks first, same
+	// consigliere.Layout's own rect, which this now checks first, same
 	// priority the drag guards above already get.
 	//
 	// Deliberately does *not* close the sidebar on a click outside it,
@@ -4159,7 +4014,7 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	// to see in context), so only the title bar's own close glyph
 	// (dragConsigliereMouseCapture) or Escape (handleConsigliereInputDone)
 	// closes it.
-	if r.consigliereVisible && primitiveContains(r.consigliereLayout, x, y) {
+	if r.consigliere.Visible && primitiveContains(r.consigliere.Layout, x, y) {
 		return action, event // landed on the sidebar itself
 	}
 
@@ -4179,8 +4034,8 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	}
 
 	if action == tview.MouseLeftClick || action == tview.MouseRightClick {
-		if r.activePage == propertiesPage && r.propertiesDirty {
-			return tview.MouseConsumed, nil // Cancel/Save only, see propertiesDirty's own doc comment above
+		if r.activePage == propertiesPage && r.properties.Dirty {
+			return tview.MouseConsumed, nil // Cancel/Save only, see properties.Dirty's own doc comment above
 		}
 		if r.activePage == pasteConflictPage {
 			return tview.MouseConsumed, nil // its own buttons (or Escape) only, see this function's own doc comment above
@@ -4341,7 +4196,7 @@ func (r *Root) handleBeforeDraw(screen tcell.Screen) bool {
 	if r.detailsSidebarVisible {
 		r.repositionDetailsSidebar()
 	}
-	if r.consigliereVisible {
+	if r.consigliere.Visible {
 		r.repositionConsigliereSidebar()
 	}
 	if r.activePage == propertiesPage {
@@ -4505,7 +4360,7 @@ func (r *Root) RequestCancel() {
 	// Ctrl+C path deliberately stays coarse. Unaffected by, and unaware
 	// of, Paste's own pause dialog above — see pastepause.go's own
 	// package doc comment.
-	if r.rsyncJob != nil || r.compressJob != nil {
+	if r.rsyncJob != nil || r.compress.Job != nil {
 		r.openConfirm("Cancel the running Rsync and/or Compress/Extract job(s)? Their own queued jobs are dropped too.", "Yes, cancel them", func() {
 			r.cancelRsyncJob()
 			r.cancelCompressJob()
@@ -4565,7 +4420,7 @@ func (r *Root) setMouseEnabled(enabled bool) {
 func (r *Root) confirmQuit() {
 	r.saveTabs()
 	r.closeAllShells()
-	_ = r.activityLog.Close()
+	_ = r.activity.Logger.Close()
 	r.app.Stop()
 }
 
@@ -5194,14 +5049,14 @@ func (r *Root) finishRename(key tcell.Key) {
 		newPath, err = fsops.Rename(r.target, newName)
 	}
 	if err != nil {
-		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", r.target, newName, err))
+		r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", r.target, newName, err))
 		r.showError(err)
 		return
 	}
 	if r.panel.remote == nil {
 		_ = r.labels.Rehome(r.target, newPath) // see internal/filelabels.Store.Rehome's own doc comment
 	}
-	r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", r.target, newName))
+	r.activity.Logger.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", r.target, newName))
 	r.refreshDetailsIfShowing(r.target, newPath)
 	r.showError(r.panel.load(r.panel.path))
 }
@@ -5679,11 +5534,11 @@ func (r *Root) openChown() {
 // failure — the common tail of every path through openChown.
 func (r *Root) applyChown(target string, uid, gid int) {
 	if err := fsops.Chown(target, uid, gid); err != nil {
-		r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q to %d:%d: %v", target, uid, gid, err))
+		r.activity.Logger.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q to %d:%d: %v", target, uid, gid, err))
 		r.showError(err)
 		return
 	}
-	r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed owner/group of %q to %d:%d", target, uid, gid))
+	r.activity.Logger.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed owner/group of %q to %d:%d", target, uid, gid))
 	r.refreshDetailsIfShowing(target, target)
 	r.showError(r.panel.load(r.panel.path))
 }

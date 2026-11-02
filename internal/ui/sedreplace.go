@@ -167,7 +167,7 @@ func (r *Root) resetSedForm() {
 	// — which runs first — is the only place left to intercept it. Set
 	// fresh here, in resetSedForm, rather than once in newSedForm: this
 	// field is itself rebuilt fresh on every open (see resetSedForm's
-	// own doc comment), unlike connectTagsField/rsyncExtraArgsField,
+	// own doc comment), unlike connect.TagsField/rsyncExtraArgsField,
 	// which are each built once and kept.
 	r.sed.AdvancedField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
@@ -287,7 +287,7 @@ func (r *Root) newSedActions() *tview.List {
 	// r.app.SetFocus(r.sed.FindField): naming the field directly here
 	// would leave sed.Form's own internal focusedElement counter stale,
 	// the identical real, user-reported bug connectdialog.go's own
-	// connectConnectBtn.SetExitFunc found and fixed first (see its own
+	// connect.ConnectBtn.SetExitFunc found and fixed first (see its own
 	// doc comment for the full tview.Form internals) — the next
 	// Backtab from Find would then land on the wrong field instead of
 	// wrapping back to Advanced script. Backtab continues the chain
@@ -703,11 +703,11 @@ func (r *Root) confirmApplySed() {
 		applied, err := replace.Apply(changes, backup)
 		r.sed.PendingChanges = nil
 		if err != nil {
-			r.activityLog.Error(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: %d of %d files updated, then: %v", applied, len(changes), err))
+			r.activity.Logger.Error(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: %d of %d files updated, then: %v", applied, len(changes), err))
 			r.showError(fmt.Errorf("sed replace: %d of %d files updated, then: %w", applied, len(changes), err))
 			return
 		}
-		r.activityLog.Action(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: updated %d file(s)", applied))
+		r.activity.Logger.Action(activitylog.CategoryTextOps, fmt.Sprintf("sed replace: updated %d file(s)", applied))
 		r.reloadPanel(nil)
 	})
 }
