@@ -332,39 +332,23 @@ type Root struct {
 	apiKeyDialogLayout          *tview.Flex
 
 	// The Options screen (see optionsscreen.go) — a full-screen editor
-	// with the categories down the left (optionsCategories) and the
-	// selected one's settings on the right (optionsTable), the action
-	// buttons beneath them, and optionsLayout stacking the lot.
-	// optionsCategory is the currently selected category's index, kept
+	// with the categories down the left (options.Categories) and the
+	// selected one's settings on the right (options.Table), the action
+	// buttons beneath them, and options.Layout stacking the lot.
+	// options.Category is the currently selected category's index, kept
 	// across opens so reopening returns to where you were.
 	//
-	// optionsInfo/optionsInput are the two small windows it layers on
+	// options.Info/options.Input are the two small windows it layers on
 	// top of itself: a setting's explanation, and a one-line editor for
 	// a typed value. Enum settings need no window of their own —
 	// activating the row cycles them in place (see cycleOptionChoice).
-	optionsLayout                *tview.Flex
-	optionsTitleBar              *tview.TextView
-	optionsHint                  *tview.TextView
-	optionsHintSpans             []listHintSpan
-	optionsCategories            *tview.List
-	optionsTable                 *tview.Table
-	optionsButtons               *tview.Flex
-	optionsResetCategoryBtn      *tview.Button
-	optionsResetAllBtn           *tview.Button
-	optionsEditFileBtn           *tview.Button
-	optionsNewSchemeBtn          *tview.Button
-	optionsRemoveOrphanLabelsBtn *tview.Button
-	optionsEditSystemPromptBtn   *tview.Button
-	optionsResetSystemPromptBtn  *tview.Button
-	optionsCategory              int
-	optionsInfo                  *tview.TextView
-	optionsInput                 *tview.InputField
+	options optionsState
 
 	// The Toolbox screen (see toolbox.go) — a full-screen catalog of
 	// real external networking/hardware tools, each one either run
 	// immediately (toolboxFixedEntry) or after asking for one further
 	// argument through toolboxInput, the same "small floating field over
-	// a full-screen list" shape optionsInput already establishes for
+	// a full-screen list" shape options.Input already establishes for
 	// Options. Every entry ends up in openToolCommand (toolwindow.go),
 	// the same draggable, non-modal window Ping already used before this
 	// screen gave it (and everything else here) a real home.
@@ -1659,8 +1643,8 @@ type Root struct {
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
 	// Options screen already establishes (batchRenameStepsList plays
-	// optionsCategories' own role, batchRenameFieldsTable plays
-	// optionsTable's), plus a live preview table and status line
+	// options.Categories' own role, batchRenameFieldsTable plays
+	// options.Table's), plus a live preview table and status line
 	// underneath, which Options has no equivalent of.
 	//
 	// batchRenameRules/batchRenameTargets/batchRenameStep are this
@@ -3378,9 +3362,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.
-	r.AddPage(optionsPage, r.optionsLayout, true, false)
-	r.AddPage(optionsInfoPage, r.optionsInfo, false, false)
-	r.AddPage(optionsInputPage, r.optionsInput, false, false)
+	r.AddPage(optionsPage, r.options.Layout, true, false)
+	r.AddPage(optionsInfoPage, r.options.Info, false, false)
+	r.AddPage(optionsInputPage, r.options.Input, false, false)
 	// resize=true: the Toolbox screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just above gives.

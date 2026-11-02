@@ -216,7 +216,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// quitConfirm/confirmDialog are single-layer, always-modal blocking
 	// dialogs, never themselves the base a further overlay stacks on top
 	// of the way Properties/Menu/Help can be — the same reasoning
-	// optionsTitleBar's own fixed FocusedBackground already follows.
+	// options.TitleBar's own fixed FocusedBackground already follows.
 	styleList(r.quitConfirm, theme)
 	r.quitConfirmTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.quitConfirmTitleBar.SetTextColor(theme.TextColor)
@@ -423,7 +423,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.chmodButtons.SetBackgroundColor(theme.SurfaceBackground)
 		// FocusedBackground, fixed — chmod is a single-layer, always-modal
 		// dialog nothing else ever stacks on top of, the same reasoning
-		// optionsTitleBar's own fixed FocusedBackground already follows
+		// options.TitleBar's own fixed FocusedBackground already follows
 		// (see confirmDialogTitleBar/quitConfirmTitleBar just above for
 		// the identical choice on the same grounds).
 		r.chmodTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
