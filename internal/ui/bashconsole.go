@@ -535,7 +535,7 @@ func (r *Root) runBashCommand(command string) {
 
 	if target, ok := parseCdCommand(command); ok {
 		r.bashLine.SetText("", true)
-		r.showError(r.changeDirectory(target))
+		r.changeDirectory(target, r.showError)
 		return
 	}
 
@@ -735,21 +735,23 @@ func parseCdCommand(command string) (target string, ok bool) {
 // otherwise resolved exactly the way typing it into the path header's
 // own edit field would be (Panel.resolvePath: "~" expansion, relative
 // paths resolved against the panel's current directory).
-func (r *Root) changeDirectory(target string) error {
+func (r *Root) changeDirectory(target string, done func(error)) {
 	switch target {
 	case "":
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return err
+			done(err)
+			return
 		}
-		return r.panel.navigate(home)
+		r.panel.navigate(home, done)
 	case "-":
 		prev, ok := r.panel.previousPath()
 		if !ok {
-			return fmt.Errorf("cd: no previous directory")
+			done(fmt.Errorf("cd: no previous directory"))
+			return
 		}
-		return r.panel.navigate(prev)
+		r.panel.navigate(prev, done)
 	default:
-		return r.panel.navigate(r.panel.resolvePath(target))
+		r.panel.navigate(r.panel.resolvePath(target), done)
 	}
 }

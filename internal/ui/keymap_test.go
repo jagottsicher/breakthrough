@@ -347,7 +347,7 @@ func TestChordGoUpNavigatesToParent(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	dir := root.panel.path
 	sub := filepath.Join(dir, "app-data")
-	if err := root.panel.navigate(sub); err != nil {
+	if err := syncNavigate(root.panel, sub); err != nil {
 		t.Fatalf("setup: navigate(sub): %v", err)
 	}
 
@@ -367,7 +367,7 @@ func TestChordGoBackAndGoForwardStepThroughHistory(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	original := root.panel.path
 	sub := filepath.Join(original, "app-data")
-	if err := root.panel.navigate(sub); err != nil {
+	if err := syncNavigate(root.panel, sub); err != nil {
 		t.Fatalf("setup: navigate(sub): %v", err)
 	}
 

@@ -257,7 +257,7 @@ func TestConnectRemoteSwitchesToTheRemoteRootAndResetsHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
-	if err := p.navigate(dir); err != nil { // give the local history more than one entry first
+	if err := syncNavigate(p, dir); err != nil { // give the local history more than one entry first
 		t.Fatalf("navigate: %v", err)
 	}
 
@@ -385,7 +385,8 @@ func TestActionHomeUsesTheRemoteRootWhenConnected(t *testing.T) {
 	if err := p.connectRemote(client, remotefs.Connection{Host: "example.com"}); err != nil {
 		t.Fatalf("connectRemote: %v", err)
 	}
-	if err := p.navigate("/other"); err != nil {
+	syncOnFetchEntries(p)
+	if err := syncNavigate(p, "/other"); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 

@@ -185,12 +185,20 @@ func (r *Root) finishRemoteArchiveDownload(panel *Panel, remote remotefs.Client,
 
 	panel.archiveLocalPath = localPath
 	panel.archiveRemoteClient = remote
-	if err := panel.navigate(archivePath); err != nil {
-		panel.archiveLocalPath = ""
-		panel.archiveRemoteClient = nil
-		cleanup()
-		r.showError(err)
-	}
+	// navigate, not loadAsync: archivePath always resolves through
+	// resolveRemoteArchiveState's own first branch here (archiveLocalPath
+	// is already set, archivePath itself still "" at this point — see
+	// its own doc comment), which only ever reads the already-staged,
+	// in-memory archiveEntries — never a real network round trip — so
+	// this callback still fires synchronously, same as before.
+	panel.navigate(archivePath, func(err error) {
+		if err != nil {
+			panel.archiveLocalPath = ""
+			panel.archiveRemoteClient = nil
+			cleanup()
+			r.showError(err)
+		}
+	})
 }
 
 // remoteArchiveExtractionFor is archiveExtractionFor's own remote

@@ -470,7 +470,7 @@ func TestContextMenuCopyPasteRoundTrip(t *testing.T) {
 	openMenuOnRow(t, r, 2) // apple.txt
 	selectMenuItem(t, r, "Copy")
 
-	if err := r.panel.navigate(dst); err != nil {
+	if err := syncNavigate(r.panel, dst); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 	openMenuOnRow(t, r, 0) // ".." — Paste doesn't need a real file target

@@ -3080,6 +3080,24 @@ func (r *Root) wirePanel(panel *Panel) {
 	// one tab (see Panel's own labels field doc comment).
 	panel.setLabels(r.labels)
 
+	// loadAsync's own real remote.ListDir call (see Panel.onFetchEntries'
+	// own doc comment for why Panel never spawns this goroutine itself)
+	// — wrapped in safeGo like every other background goroutine in this
+	// app, result delivered back through QueueUpdateDraw.
+	panel.onFetchEntries = func(abs string, remote remotefs.Client, done func([]fsops.Entry, error)) {
+		// Panel.loadAsync already set loading/loadingPath before
+		// calling this — repaint now so the status bar's own "Loading
+		// …" segment (see buildStatusBar) appears right away, rather
+		// than waiting for StartClock's next once-a-second tick.
+		r.refreshStatusBar()
+		r.safeGo("panel load", nil, func() {
+			entries, err := remote.ListDir(abs)
+			r.app.QueueUpdateDraw(func() {
+				done(entries, err)
+			})
+		})
+	}
+
 	// "Esc: leave search entirely" while search results are showing
 	// (see Panel.onSearchEscape's own doc comment, and closeSearch's —
 	// per the user's own explicit request this closes the results and

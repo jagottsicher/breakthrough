@@ -490,6 +490,19 @@ func (r *Root) buildStatusBar() string {
 		sep()
 	}
 
+	// A remote panel's own in-flight directory load (see Panel.loading's
+	// own doc comment, panel.go) — no cancel of its own (see loadAsync's
+	// own doc comment: cancelling the UI side of a navigation mid-flight
+	// has nowhere sensible to land the user back on), just a plain
+	// "something's happening" notice so a real network round trip never
+	// reads as a dropped keypress the way it would with no indicator at
+	// all — the table itself stays showing whatever it already had the
+	// whole time (see loadAsync's own doc comment on why that's free).
+	if r.panel.loading {
+		write(fmt.Sprintf("Loading %s…", path.Base(r.panel.loadingPath)))
+		sep()
+	}
+
 	// A remote archive's own in-flight download (see
 	// startRemoteArchiveDownload/remotearchive.go) — the same
 	// independent-segment treatment as rsync/Compress just above, for

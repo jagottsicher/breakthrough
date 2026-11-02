@@ -209,9 +209,7 @@ func (r *Root) openTrash() {
 		r.showError(err)
 		return
 	}
-	if err := r.panel.navigate(fsops.FilesDir(dir)); err != nil {
-		r.showError(err)
-	}
+	r.panel.navigate(fsops.FilesDir(dir), r.showError)
 }
 
 // openRemoveConfirm is the context menu's "Remove", the plain-letter

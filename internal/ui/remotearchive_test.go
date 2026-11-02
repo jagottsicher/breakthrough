@@ -235,7 +235,7 @@ func TestFinishRemoteArchiveDownloadEntersTheArchiveAndBrowsesItsContent(t *test
 
 	// Navigate one level deeper inside the archive — resolveRemoteArchiveState's
 	// own "already inside, prefix-match" branch.
-	if err := r.panel.navigate("/remote/archive.zip/sub"); err != nil {
+	if err := syncNavigate(r.panel, "/remote/archive.zip/sub"); err != nil {
 		t.Fatalf("navigate into sub: %v", err)
 	}
 	var subNames []string
@@ -267,7 +267,7 @@ func TestLeavingARemoteArchiveRemovesItsOwnTempFile(t *testing.T) {
 		t.Fatal("setup: expected to be inside the archive")
 	}
 
-	if err := r.panel.navigate("/remote"); err != nil {
+	if err := syncNavigate(r.panel, "/remote"); err != nil {
 		t.Fatalf("navigate back out: %v", err)
 	}
 

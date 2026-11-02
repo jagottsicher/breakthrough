@@ -417,6 +417,38 @@ type Panel struct {
 	diskUsageFetching  bool
 	diskUsageFetchedAt time.Time
 
+	// onFetchEntries is how loadAsync's own real remote.ListDir call
+	// actually runs — wired by Root.wirePanel, never nil in real use.
+	// Exists so Panel itself never needs to spawn a goroutine or touch
+	// QueueUpdateDraw directly (neither of which it has the means to
+	// do safely on its own — see refreshPanelDiskUsage's own identical
+	// "Root owns concurrency, Panel stays plain data" split in
+	// bottombar.go). Takes remote explicitly rather than reading
+	// p.remote itself from whatever goroutine ends up running this: a
+	// disconnect mid-fetch must never have the fetch read a Client
+	// that's already been Close()'d out from under it.
+	onFetchEntries func(abs string, remote remotefs.Client, done func([]fsops.Entry, error))
+	// loadToken increments on every loadAsync call — its own captured
+	// value is what the result callback compares against before ever
+	// calling done, discarding a result for any fetch that's no longer
+	// the most recent one requested (see loadAsync's own doc comment
+	// for the full reasoning) — the same per-target staleness guard
+	// applyPanelDiskUsage/applyLogAuditRotatedFile already follow
+	// elsewhere in this app.
+	loadToken int
+	// loading/loadingPath are set together for exactly as long as a
+	// real, in-flight loadAsync fetch hasn't landed yet — read by
+	// buildStatusBar (bottombar.go) to show a "Loading <dir>…" segment
+	// naming the directory actually being fetched (p.path itself still
+	// names the *old* one throughout — see applyEntries's own doc
+	// comment on why it isn't updated until the fetch lands). The table
+	// itself deliberately keeps showing whatever it already had the
+	// whole time (see loadAsync's own doc comment on why that needs no
+	// code of its own: table.Clear() already only ever runs from
+	// applyEntries).
+	loading     bool
+	loadingPath string
+
 	// archivePath is the real, on-disk archive file currently being
 	// browsed into — "" whenever path is an ordinary real directory.
 	// archiveEntries is that same archive's own full, flat member
@@ -1192,8 +1224,15 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	p.AddItem(p.columnHeader, 1, 0, false) // fixed one-line column header
 	p.AddItem(tableRow, 0, 1, true)        // fills the rest, holds focus
 
-	if err := p.navigate(path); err != nil {
-		return nil, err
+	// navigate, not loadAsync: the initial path is always local at
+	// construction time (a remote connection only ever attaches later,
+	// via connectRemote — see its own doc comment), so the callback
+	// below runs synchronously before this returns, exactly as a plain
+	// load(path) did before navigate/loadAsync existed.
+	var initErr error
+	p.navigate(path, func(err error) { initErr = err })
+	if initErr != nil {
+		return nil, initErr
 	}
 
 	return p, nil
@@ -1400,12 +1439,145 @@ func (p *Panel) applyTheme(theme config.ResolvedTheme) {
 // setSortKey, and the filter box would all keep taking their own
 // searchMode branch against rows that, by then, are not search results
 // at all.
+// load is always fully synchronous, including a real remote ListDir
+// round trip — unlike loadAsync just below, which is what
+// navigate/navigateAndSelect/back/forward actually use. Kept, deliberately
+// unchanged in behavior and signature, for every caller that depends
+// on a real, settled answer the instant this returns: the ~35
+// X(p.load(p.path)) same-directory refresh idioms scattered across
+// this package (a Trash/Remove, a "zr" manual refresh, a Globals
+// toggle, ...), connectRemote/disconnectRemote (see their own doc
+// comments on why a one-off RTT right after an already-explicitly-
+// waited-for connection is a reasonable, bounded cost), NewPanel's own
+// initial navigate call, and every existing test that calls load (or
+// navigate, on a local path) directly. Never dispatches through
+// onFetchEntries — calls remote.ListDir inline, blocking, exactly as
+// the single load() this package had before loadAsync existed always
+// did.
 func (p *Panel) load(dir string) error {
-	p.searchMode = false
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return err
 	}
+
+	switch {
+	case p.remote != nil:
+		if archivePath, internalDir, ok := p.resolveRemoteArchiveState(abs); ok {
+			entries, err := p.loadArchiveEntries(archivePath, internalDir)
+			return p.applyEntries(abs, entries, err)
+		}
+		entries, err := p.remote.ListDir(abs)
+		return p.applyEntries(abs, entries, err)
+	default:
+		if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
+			entries, err := p.loadArchiveEntries(archivePath, internalDir)
+			return p.applyEntries(abs, entries, err)
+		}
+		entries, err := fsops.ListDir(abs)
+		return p.applyEntries(abs, entries, err)
+	}
+}
+
+// loadAsync is load's own async-capable twin — the entry point
+// navigate/navigateAndSelect/back/forward use (see their own doc
+// comments) for exactly the paths where a remote panel's own ListDir
+// round trip used to block the whole UI goroutine. done is always
+// called, exactly once, with the real outcome.
+//
+// For a local panel, or a remote one already resolving into an
+// archive already staged in memory (see resolveRemoteArchiveState —
+// never a real network read), done runs synchronously, before
+// loadAsync itself returns — navigate's own doc comment depends on
+// this for every existing "act on the result right after calling
+// navigate" caller that only ever targets a local path (NewPanel's
+// own initial call, restoreSession's tab 0). Only a real remote
+// ListDir call actually dispatches through onFetchEntries and returns
+// before done fires — table.Clear() only ever runs from applyEntries,
+// which doesn't run until then, so the panel keeps showing its old
+// listing for the whole round trip rather than going blank — the same
+// "paint what you have, fill in behind" shape Log Holepunch's own
+// progressive load established, here free of charge rather than
+// needing its own cache.
+//
+// loadToken/loading (see their own doc comments on the Panel struct)
+// guard against a result landing after a newer request (a second
+// Enter before the first one's own fetch returned) or after a
+// disconnect — onFetchEntries itself is handed remote explicitly
+// rather than reading p.remote again once the fetch lands, for the
+// identical reason.
+func (p *Panel) loadAsync(dir string, done func(error)) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		done(err)
+		return
+	}
+
+	if p.remote == nil {
+		// resolveArchiveState (see its own doc comment) is what lets
+		// activateRow's plain p.navigate(ref.path) — unchanged from
+		// entering a real directory — also dive into a recognized
+		// archive file, or a subdirectory already inside one; always
+		// an in-memory/local read either way, so this stays
+		// synchronous same as the plain ListDir case just below.
+		if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
+			entries, err := p.loadArchiveEntries(archivePath, internalDir)
+			done(p.applyEntries(abs, entries, err))
+			return
+		}
+		entries, err := fsops.ListDir(abs)
+		done(p.applyEntries(abs, entries, err))
+		return
+	}
+
+	// resolveRemoteArchiveState is resolveArchiveState's own remote-
+	// panel counterpart (see its own doc comment on why it's
+	// narrower) — a connected panel still browsing into an archive
+	// already staged in memory by enterRemoteArchive's own earlier
+	// download; never a real network read, so this stays synchronous
+	// same as the local branch above.
+	if archivePath, internalDir, ok := p.resolveRemoteArchiveState(abs); ok {
+		entries, err := p.loadArchiveEntries(archivePath, internalDir)
+		done(p.applyEntries(abs, entries, err))
+		return
+	}
+
+	remote := p.remote
+	p.loadToken++
+	token := p.loadToken
+	p.loading = true
+	p.loadingPath = abs
+	p.onFetchEntries(abs, remote, func(entries []fsops.Entry, err error) {
+		if p.remote != remote || p.loadToken != token {
+			return // superseded by a newer load, or disconnected, while this fetch was in flight
+		}
+		p.loading = false
+		done(p.applyEntries(abs, entries, err))
+	})
+}
+
+// applyEntries is loadAsync's own apply half — fast, local,
+// synchronous work only: filtering, sorting, rebuilding the table,
+// positioning the cursor, and onLoad. Called exactly once per
+// loadAsync request, with abs the real directory this result is for
+// and entries/err whatever fetching it actually produced (err already
+// means "nothing else below ran" — see the early return just below).
+//
+// p.searchMode = false and the leavingArchive teardown both live here
+// now, not at the top of loadAsync — moved deliberately: a remote
+// fetch can take a real round trip, and both of those used to run
+// before it even started, widening a once-microsecond window (tear
+// down the old state, then immediately show the new one) into a full
+// RTT during which activateRow/resolveArchiveState would see search
+// mode already off or the archive already torn down while the table
+// still showed the old content. leavingArchive(abs) only ever depends
+// on abs and p.archivePath, neither of which loadAsync's own dispatch
+// decision above needs settled first, so moving it here is safe
+// regardless of outcome: it always runs, exactly once, right before
+// the panel is about to actually show abs — on a failed fetch too,
+// matching load's own original "always tear down, regardless of
+// whether the new directory could actually be read" contract.
+func (p *Panel) applyEntries(abs string, entries []fsops.Entry, err error) error {
+	p.searchMode = false
 	if p.leavingArchive(abs) {
 		p.archivePath = ""
 		p.archiveEntries = nil
@@ -1418,34 +1590,6 @@ func (p *Panel) load(dir string) error {
 			p.archiveLocalPath = ""
 		}
 		p.archiveRemoteClient = nil
-	}
-
-	// resolveArchiveState (see its own doc comment) is what lets
-	// activateRow's plain p.navigate(ref.path) — unchanged from
-	// entering a real directory — also dive into a recognized archive
-	// file, or a subdirectory already inside one: load() itself is the
-	// one place that has to know the difference, everything upstream of
-	// it (navigate, the ".." row, Root's tab/history plumbing) just
-	// keeps treating abs as an ordinary path. resolveRemoteArchiveState
-	// is that same idea's remote-panel counterpart (see its own doc
-	// comment on why it's narrower) — a connected panel can still browse
-	// into a recognized archive file, just always by way of
-	// enterRemoteArchive's own real download first (see
-	// Panel.onEnterRemoteArchive), never cold from this switch alone.
-	var entries []fsops.Entry
-	switch {
-	case p.remote != nil:
-		if archivePath, internalDir, ok := p.resolveRemoteArchiveState(abs); ok {
-			entries, err = p.loadArchiveEntries(archivePath, internalDir)
-		} else {
-			entries, err = p.remote.ListDir(abs)
-		}
-	default:
-		if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
-			entries, err = p.loadArchiveEntries(archivePath, internalDir)
-		} else {
-			entries, err = fsops.ListDir(abs)
-		}
 	}
 	if err != nil {
 		return err
@@ -3895,7 +4039,7 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 		if p.onExitSearchResults != nil {
 			p.onExitSearchResults()
 		}
-		p.reportError(p.navigateAndSelect(ref.path))
+		p.navigateAndSelect(ref.path, p.reportError)
 		return true
 	}
 	if !ref.isDir {
@@ -3915,7 +4059,7 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 					}
 					return true
 				}
-				p.reportError(p.navigate(ref.path))
+				p.navigate(ref.path, p.reportError)
 				return true
 			}
 		}
@@ -3924,7 +4068,7 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 		}
 		return false
 	}
-	p.reportError(p.navigate(ref.path))
+	p.navigate(ref.path, p.reportError)
 	return true
 }
 
@@ -4175,7 +4319,7 @@ func (p *Panel) pushHistoryEntry(entry historyEntry) {
 // search might behave differently or take a while by the time anyone
 // comes back to it. Used by back/forward, which — unlike navigate —
 // must not push a new history entry for where they land.
-func (p *Panel) restoreHistoryEntry(entry historyEntry) error {
+func (p *Panel) restoreHistoryEntry(entry historyEntry, done func(error)) {
 	if entry.isSearch() {
 		p.searchMode = true
 		p.searchEntries = append([]searchResultEntry(nil), entry.searchEntries...)
@@ -4188,7 +4332,8 @@ func (p *Panel) restoreHistoryEntry(entry historyEntry) error {
 		p.setSearchStatus(entry.searchStatus)
 		p.setSearchStatusColor(entry.searchColor)
 		p.focusRowClamped(entry.cursorRow)
-		return nil
+		done(nil)
+		return
 	}
 
 	// No focusRowClamped(entry.cursorRow) here, unlike the search branch
@@ -4200,7 +4345,10 @@ func (p *Panel) restoreHistoryEntry(entry historyEntry) error {
 	// to go). Landing on the old cursor row used to be the whole point
 	// of tracking it at all here — now it's just load's own ordinary
 	// "opening a directory" behavior, nothing extra to add on top.
-	return p.load(entry.path)
+	// loadAsync, not load: Back/Forward across a remote connection is
+	// exactly the keystroke-driven navigation loadAsync exists for —
+	// see its own doc comment.
+	p.loadAsync(entry.path, done)
 }
 
 // focusRowClamped is focusRow, clamped to the table's own current row
@@ -4230,13 +4378,16 @@ func (p *Panel) focusRowClamped(row int) {
 // searchMode branch via navigateAndSelect) goes through this; back()
 // and forward() call restoreHistoryEntry directly instead, since they
 // must not themselves push new history entries.
-func (p *Panel) navigate(dir string) error {
+func (p *Panel) navigate(dir string, done func(error)) {
 	p.snapshotCurrentEntry()
-	if err := p.load(dir); err != nil {
-		return err
-	}
-	p.pushHistoryEntry(historyEntry{path: p.path})
-	return nil
+	p.loadAsync(dir, func(err error) {
+		if err != nil {
+			done(err)
+			return
+		}
+		p.pushHistoryEntry(historyEntry{path: p.path})
+		done(nil)
+	})
 }
 
 // navigateAndSelect is navigate's own "and land on this specific entry"
@@ -4248,18 +4399,21 @@ func (p *Panel) navigate(dir string) error {
 // cursor. Used by activateRow's own searchMode branch to jump straight
 // to a search result instead of just opening the directory it's in and
 // leaving the cursor wherever load()'s own top-of-listing reset put it.
-func (p *Panel) navigateAndSelect(target string) error {
-	if err := p.navigate(filepath.Dir(target)); err != nil {
-		return err
-	}
-	name := filepath.Base(target)
-	for row := 0; row < p.table.GetRowCount(); row++ {
-		if ref, ok := p.rowRef(row); ok && ref.name == name {
-			p.focusRow(row)
-			break
+func (p *Panel) navigateAndSelect(target string, done func(error)) {
+	p.navigate(filepath.Dir(target), func(err error) {
+		if err != nil {
+			done(err)
+			return
 		}
-	}
-	return nil
+		name := filepath.Base(target)
+		for row := 0; row < p.table.GetRowCount(); row++ {
+			if ref, ok := p.rowRef(row); ok && ref.name == name {
+				p.focusRow(row)
+				break
+			}
+		}
+		done(nil)
+	})
 }
 
 // connectRemote attaches client — already dialed and authenticated,
@@ -4361,11 +4515,13 @@ func (p *Panel) back() {
 		return
 	}
 	p.snapshotCurrentEntry()
-	if err := p.restoreHistoryEntry(p.history[p.historyIdx-1]); err != nil {
-		p.reportError(err) // stay put rather than lie about where we are
-		return
-	}
-	p.historyIdx--
+	p.restoreHistoryEntry(p.history[p.historyIdx-1], func(err error) {
+		if err != nil {
+			p.reportError(err) // stay put rather than lie about where we are
+			return
+		}
+		p.historyIdx--
+	})
 }
 
 // forward steps one entry forward in history, if possible. As in back(),
@@ -4376,11 +4532,13 @@ func (p *Panel) forward() {
 		return
 	}
 	p.snapshotCurrentEntry()
-	if err := p.restoreHistoryEntry(p.history[p.historyIdx+1]); err != nil {
-		p.reportError(err)
-		return
-	}
-	p.historyIdx++
+	p.restoreHistoryEntry(p.history[p.historyIdx+1], func(err error) {
+		if err != nil {
+			p.reportError(err)
+			return
+		}
+		p.historyIdx++
+	})
 }
 
 // previousPath returns the directory navigate() most recently moved
@@ -4750,20 +4908,20 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// Always a real directory, never a search snapshot (see
 		// historyEntry.isSearch): nothing can search before ever having
 		// navigated anywhere at all.
-		p.reportError(p.navigate(p.history[0].path))
+		p.navigate(p.history[0].path, p.reportError)
 	case actionRoot:
 		// Same target the breadcrumb's own leading "/" (actionNavigate,
 		// target "/") already jumps to — this is a second, dedicated,
 		// consistently-styled button for it, at the user's own explicit
 		// request, rather than relying on that first "/" alone being
 		// discoverable as a click target in the first place.
-		p.reportError(p.navigate("/"))
+		p.navigate("/", p.reportError)
 	case actionHome:
 		// A connected panel's own "home" is the remote account's own
 		// home directory (Root(), fixed for the session's whole
 		// lifetime — see Client's own doc comment), not this machine's.
 		if p.remote != nil {
-			p.reportError(p.navigate(p.remote.Root()))
+			p.navigate(p.remote.Root(), p.reportError)
 			return
 		}
 		home, err := os.UserHomeDir()
@@ -4771,7 +4929,7 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 			p.reportError(err)
 			return
 		}
-		p.reportError(p.navigate(home))
+		p.navigate(home, p.reportError)
 	case actionOpenConnectionMenu:
 		if p.onOpenConnectionMenu != nil {
 			p.onOpenConnectionMenu()
@@ -4787,7 +4945,7 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// at their own edges (already at the start directory, already
 		// home). Mirrors the ".." row's own identical parent-or-self
 		// check in load, just without needing a visible row for it.
-		p.reportError(p.navigate(filepath.Dir(p.path)))
+		p.navigate(filepath.Dir(p.path), p.reportError)
 	case actionReload:
 		// Straight to load, not navigate: navigate exists to move
 		// somewhere and record that move in history (see its own doc
@@ -4807,7 +4965,7 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 			p.onToggleFileIcons()
 		}
 	case actionNavigate:
-		p.reportError(p.navigate(span.target))
+		p.navigate(span.target, p.reportError)
 	}
 }
 
@@ -4890,7 +5048,7 @@ func (p *Panel) finishEdit(key tcell.Key) {
 	switch key {
 	case tcell.KeyEnter:
 		if typed := p.headerEdit.GetText(); typed != "" {
-			p.reportError(p.navigate(p.resolvePath(typed)))
+			p.navigate(p.resolvePath(typed), p.reportError)
 		}
 		p.closeEdit()
 	case tcell.KeyTab:

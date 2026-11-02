@@ -96,7 +96,7 @@ func TestTabsKeepIndependentDirectories(t *testing.T) {
 	r.newTab(other)
 
 	// Navigate the second tab somewhere else entirely.
-	if err := r.panel.navigate(dir); err != nil {
+	if err := syncNavigate(r.panel, dir); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 
@@ -111,7 +111,7 @@ func TestTabsKeepIndependentDirectories(t *testing.T) {
 
 	// And the reverse: moving tab 1 doesn't disturb tab 2.
 	r.switchToTab(0)
-	if err := r.panel.navigate(other); err != nil {
+	if err := syncNavigate(r.panel, other); err != nil {
 		t.Fatalf("navigate: %v", err)
 	}
 	r.switchToTab(1)
