@@ -25,7 +25,7 @@
 //
 // Deliberately still just one background rsync at a time, queued the
 // same way Paste already queues a second request behind a running one
-// (see r.rsyncQueue/advanceRsyncQueue): showing more than one rsync's
+// (see r.rsync.Queue/advanceRsyncQueue): showing more than one rsync's
 // own live progress at once would need its own multi-row status-bar
 // design this first version doesn't attempt.
 //
@@ -74,7 +74,7 @@ type rsyncJob struct {
 	// opID is this job's own internal/operations.Tracker entry — set
 	// once, right after r.operations.Start in reallyStartRsyncBackground,
 	// closed out by finishRsyncJob — see root.go's own operations field
-	// doc comment for why this exists alongside activityLog/notify
+	// doc comment for why this exists alongside activity.Logger/notify
 	// rather than instead of either.
 	opID uint64
 
@@ -135,8 +135,8 @@ var rsyncProgressLineRegexp = regexp.MustCompile(`^\s*\S+\s+(\d+)%\s+(.*\S)\s*$`
 // startPaste already queues a second Paste (see advanceRsyncQueue), or
 // starts job immediately otherwise.
 func (r *Root) startRsyncBackground(job rsync.Job, label string) {
-	if r.rsyncJob != nil {
-		r.rsyncQueue = append(r.rsyncQueue, queuedRsync{job: job, label: label})
+	if r.rsync.Job != nil {
+		r.rsync.Queue = append(r.rsync.Queue, queuedRsync{job: job, label: label})
 		r.refreshStatusBar()
 		return
 	}
@@ -217,14 +217,14 @@ func (r *Root) reallyStartRsyncBackground(job rsync.Job, label string) {
 	}
 	rj.percent.Store(-1)
 	rj.opID = r.operations.Start(string(notify.CategoryRsync), job.Source.Path, job.Destination.Path)
-	r.rsyncJob = rj
+	r.rsync.Job = rj
 
 	if err := cmd.Start(); err != nil {
 		cancel()
 		_ = ptyMaster.Close()
 		_ = ptySlave.Close()
 		r.showError(fmt.Errorf("rsync: %w", err))
-		r.rsyncJob = nil
+		r.rsync.Job = nil
 		return
 	}
 	// The child has its own copy of the slave now (inherited across
@@ -381,7 +381,7 @@ func scanLinesOrCR(data []byte, atEOF bool) (advance int, token []byte, err erro
 // simplification reloadPasteAffectedTabs already accepts for a remote
 // destination), and starts the next queued run, if any.
 func (r *Root) finishRsyncJob(job *rsyncJob, err error) {
-	if r.rsyncJob != job {
+	if r.rsync.Job != job {
 		return // already superseded/cancelled
 	}
 	// Read before job.cancel() below, which would otherwise make this
@@ -389,7 +389,7 @@ func (r *Root) finishRsyncJob(job *rsyncJob, err error) {
 	// context.CancelFunc, called unconditionally right here as this
 	// job's own cleanup, not only from a deliberate cancelRsyncJob.
 	wasCancelled := job.ctx.Err() != nil
-	r.rsyncJob = nil
+	r.rsync.Job = nil
 	job.cancel()
 
 	switch {
@@ -399,11 +399,11 @@ func (r *Root) finishRsyncJob(job *rsyncJob, err error) {
 		// what makes cmd.Wait return an error too — that one is
 		// expected, already handled by cancelRsyncJob itself, and must
 		// not also show as a spurious error overlay).
-		r.activityLog.Error(activitylog.CategoryRsync, fmt.Sprintf("rsync %s: %v", job.label, err))
+		r.activity.Logger.Error(activitylog.CategoryRsync, fmt.Sprintf("rsync %s: %v", job.label, err))
 		r.notify.Push(notify.LevelError, notify.CategoryRsync, fmt.Sprintf("rsync %s failed: %v", job.label, err))
 		r.showError(err)
 	case !wasCancelled:
-		r.activityLog.Action(activitylog.CategoryRsync, fmt.Sprintf("rsync %s", job.label))
+		r.activity.Logger.Action(activitylog.CategoryRsync, fmt.Sprintf("rsync %s", job.label))
 		r.notify.Push(notify.LevelSuccess, notify.CategoryRsync, fmt.Sprintf("rsync %s finished", job.label))
 	}
 	switch {
@@ -430,11 +430,11 @@ func (r *Root) finishRsyncJob(job *rsyncJob, err error) {
 // own goroutine then calls finishRsyncJob — the ctx.Err() check there
 // is what tells that expected wait-error apart from a genuine failure.
 func (r *Root) cancelRsyncJob() {
-	if r.rsyncJob == nil {
+	if r.rsync.Job == nil {
 		return
 	}
-	r.rsyncJob.cancel()
-	r.rsyncQueue = nil
+	r.rsync.Job.cancel()
+	r.rsync.Queue = nil
 }
 
 // cancelRsyncKeepQueue is cancelRsyncJob's narrower sibling — stops only
@@ -450,20 +450,20 @@ func (r *Root) cancelRsyncJob() {
 // confirmCancelCurrentRsync): the same "if there's nothing left to do,
 // do nothing" contract cancelRsyncJob's own nil check already has.
 func (r *Root) cancelRsyncKeepQueue() {
-	if r.rsyncJob == nil {
+	if r.rsync.Job == nil {
 		return
 	}
-	r.rsyncJob.cancel()
+	r.rsync.Job.cancel()
 	r.advanceRsyncQueue()
 }
 
 // advanceRsyncQueue starts the next queued background rsync, if any —
 // the same shape advancePasteQueue already has for Paste.
 func (r *Root) advanceRsyncQueue() {
-	if len(r.rsyncQueue) == 0 {
+	if len(r.rsync.Queue) == 0 {
 		return
 	}
-	next := r.rsyncQueue[0]
-	r.rsyncQueue = r.rsyncQueue[1:]
+	next := r.rsync.Queue[0]
+	r.rsync.Queue = r.rsync.Queue[1:]
 	r.reallyStartRsyncBackground(next.job, next.label)
 }

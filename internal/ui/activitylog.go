@@ -8,7 +8,7 @@
 //
 // Every real call site elsewhere in this package (Copy/Cut/Paste,
 // Rename, Trash/Remove, Compress/Extract, chmod/chown, Rsync, ...)
-// reaches r.activityLog directly and calls its own Error/Action/
+// reaches r.activity.Logger directly and calls its own Error/Action/
 // Detail/Debug methods unconditionally — all nil-receiver-safe, and a
 // no-op whenever the configured level or category says so — so none of
 // those call sites need to ask "is logging even on" themselves.
@@ -32,7 +32,7 @@ import (
 // the one-time "fell back to a per-user directory instead of
 // /var/log/breakthrough" case (see activitylog.ResolvePath's own doc
 // comment) — never repeated on a later reopen once already reported
-// (see activityLogFallbackWarned).
+// (see activity.FallbackWarned).
 func (r *Root) newActivityLogger() (logger *activitylog.Logger, notice string, isFallbackNotice bool) {
 	level := activitylog.ParseLevel(r.settings.LogLevel)
 	categories := map[activitylog.Category]bool{
@@ -59,8 +59,8 @@ func (r *Root) newActivityLogger() (logger *activitylog.Logger, notice string, i
 		return activitylog.New(level, categories, nil),
 			fmt.Sprintf("activity log: %v — logging stays off until this is fixed", err), false
 	}
-	if fellBack && !r.activityLogFallbackWarned {
-		r.activityLogFallbackWarned = true
+	if fellBack && !r.activity.FallbackWarned {
+		r.activity.FallbackWarned = true
 		if !r.settings.HideActivityLogFallbackNotice {
 			return activitylog.New(level, categories, w),
 				fmt.Sprintf("activity log: /var/log/breakthrough isn't writable — logging to %s instead", path), true
@@ -71,7 +71,7 @@ func (r *Root) newActivityLogger() (logger *activitylog.Logger, notice string, i
 
 // activityLogNoticeCheckboxText renders the "Don't show this again" list
 // item — checkboxText's own ●/○ prefix (see panel.go), the same
-// pattern sedFlagsList already uses for a toggle that lives in a List
+// pattern sed.FlagsList already uses for a toggle that lives in a List
 // rather than a tview.Form (see this file's own activityLogNotice*
 // field doc comment on Root for why).
 func activityLogNoticeCheckboxText(checked bool) string {
@@ -82,8 +82,8 @@ func activityLogNoticeCheckboxText(checked bool) string {
 // state and re-renders it — selecting this item never closes the
 // dialog itself, only "OK" (or Escape, the same thing here) does.
 func (r *Root) toggleActivityLogNoticeDontShowAgain() {
-	r.activityLogNoticeDontShowAgain = !r.activityLogNoticeDontShowAgain
-	r.activityLogNoticeList.SetItemText(0, activityLogNoticeCheckboxText(r.activityLogNoticeDontShowAgain), "")
+	r.activity.NoticeDontShowAgain = !r.activity.NoticeDontShowAgain
+	r.activity.NoticeList.SetItemText(0, activityLogNoticeCheckboxText(r.activity.NoticeDontShowAgain), "")
 }
 
 // acceptActivityLogNotice is "OK" (and Escape — see newRoot's own
@@ -94,7 +94,7 @@ func (r *Root) toggleActivityLogNoticeDontShowAgain() {
 // Options screen's own matching toggle, since this dialog may not even
 // appear again once the setting is on.
 func (r *Root) acceptActivityLogNotice() {
-	if r.activityLogNoticeDontShowAgain {
+	if r.activity.NoticeDontShowAgain {
 		r.settings.HideActivityLogFallbackNotice = true
 		r.persistSetting("hide_activity_log_fallback_notice", "true")
 	}
@@ -112,15 +112,15 @@ func (r *Root) acceptActivityLogNotice() {
 // already is for the identical "called before Root's first real Draw"
 // reason (see showError's own doc comment).
 func (r *Root) openActivityLogFallbackNotice(message string) {
-	r.activityLogNoticeDontShowAgain = false
-	r.activityLogNoticeList.SetItemText(0, activityLogNoticeCheckboxText(false), "")
+	r.activity.NoticeDontShowAgain = false
+	r.activity.NoticeList.SetItemText(0, activityLogNoticeCheckboxText(false), "")
 
 	// Message area sized exactly the way showError's own errorView
 	// already is: wrapped at errorWidth() (which itself already leaves
 	// room for the one-column padding on each side SetBorderPadding
 	// above adds back), measured via textSize.
 	wrapped := strings.Join(wrapText(message, r.errorWidth()), "\n")
-	r.activityLogNoticeMessageView.SetText(wrapped)
+	r.activity.NoticeMessageView.SetText(wrapped)
 	messageWidth, messageHeight := textSize(wrapped)
 	messageWidth += 2 // the message view's own SetBorderPadding(0, 0, 1, 1)
 
@@ -146,18 +146,18 @@ func (r *Root) openActivityLogFallbackNotice(message string) {
 	if padding := width - tview.TaggedStringWidth(headerText) - tview.TaggedStringWidth(closeLabel); padding > 0 {
 		headerText += strings.Repeat(" ", padding)
 	}
-	r.activityLogNoticeTitleBar.SetText(headerText + closeLabel)
+	r.activity.NoticeTitleBar.SetText(headerText + closeLabel)
 
 	_, _, screenWidth, screenHeight := r.GetRect()
 	x, y, width, height := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
 
-	r.activityLogNoticeLayout.SetRect(x, y, width, height)
-	// r.activityLogNoticeList's own rect is also set, to the same full
+	r.activity.NoticeLayout.SetRect(x, y, width, height)
+	// r.activity.NoticeList's own rect is also set, to the same full
 	// area — see openConfirm's own identical line for why
 	// captureOutsideClick's bounds check needs this even though
-	// activityLogNoticeLayout is what's actually drawn/positioned.
-	r.activityLogNoticeList.SetRect(x, y, width, height)
-	r.pushOverlay(activityLogNoticePage, r.activityLogNoticeOKButton, nil) // OK, not the checkbox — the safe, common "just acknowledge it" default for an informational notice
+	// activity.NoticeLayout is what's actually drawn/positioned.
+	r.activity.NoticeList.SetRect(x, y, width, height)
+	r.pushOverlay(activityLogNoticePage, r.activity.NoticeOKButton, nil) // OK, not the checkbox — the safe, common "just acknowledge it" default for an informational notice
 }
 
 // activityLogNoticeTitleBarMouseCapture makes the header's own "✕"
@@ -173,7 +173,7 @@ func (r *Root) activityLogNoticeTitleBarMouseCapture(action tview.MouseAction, e
 	if action != tview.MouseLeftDown {
 		return action, event
 	}
-	x, y, width, _ := r.activityLogNoticeTitleBar.GetRect()
+	x, y, width, _ := r.activity.NoticeTitleBar.GetRect()
 	clickX, clickY := event.Position()
 	if clickY == y && clickX == x+width-2 {
 		r.cancelActivityLogNotice()
@@ -205,10 +205,10 @@ func (r *Root) captureActivityLogNoticeListKey(event *tcell.EventKey) *tcell.Eve
 		r.cancelActivityLogNotice()
 		return nil
 	case tcell.KeyTab:
-		r.app.SetFocus(r.activityLogNoticeCancelButton)
+		r.app.SetFocus(r.activity.NoticeCancelButton)
 		return nil
 	case tcell.KeyBacktab:
-		r.app.SetFocus(r.activityLogNoticeOKButton)
+		r.app.SetFocus(r.activity.NoticeOKButton)
 		return nil
 	}
 	return event
@@ -238,15 +238,15 @@ func (r *Root) captureActivityLogNoticeButtonKey(next, prev tview.Primitive) fun
 	}
 }
 
-// reopenActivityLog closes r.activityLog (if any) and replaces it with
+// reopenActivityLog closes r.activity.Logger (if any) and replaces it with
 // a fresh one built from the current settings — called whenever
 // Options changes LogLevel or a log_category_* toggle (see
 // optioncatalog.go), since newActivityLogger's own Logger is an
 // immutable snapshot, not a live view of r.settings.
 func (r *Root) reopenActivityLog() {
-	_ = r.activityLog.Close()
+	_ = r.activity.Logger.Close()
 	logger, notice, isFallbackNotice := r.newActivityLogger()
-	r.activityLog = logger
+	r.activity.Logger = logger
 	switch {
 	case notice == "":
 		return

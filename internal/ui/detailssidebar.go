@@ -435,14 +435,14 @@ func (r *Root) focusCycleStops() []tview.Primitive {
 	if r.detailsSidebarVisible {
 		stops = append(stops, r.detailsSidebar)
 	}
-	// consigliereVisible alone isn't enough here — unlike
+	// consigliere.Visible alone isn't enough here — unlike
 	// detailsSidebar/toolWindows above, Consigliere is also reachable
 	// from inside a full-screen modal (Log Audit, Git Breach, ... — see
 	// startConsigliereChord in consigliere.go), and this list is read
 	// globally, for every Tab press, regardless of what's currently
 	// open (see cmd/breakthrough's own SetInputCapture). Including it
 	// here unconditionally was a real, reported bug: the moment
-	// consigliereInput/consigliereHistory actually had focus, this
+	// consigliere.Input/consigliere.History actually had focus, this
 	// list matched them before the host screen's own local Tab
 	// handling (Git Breach's own toggleGitBreachFocus, Log Audit's own
 	// per-field chain) ever got a chance to run, so Tab always landed
@@ -455,33 +455,33 @@ func (r *Root) focusCycleStops() []tview.Primitive {
 	// is responsible for its own local entry point instead (see
 	// gitBreachFocusables/captureLogAuditSelectionTableKey/
 	// captureLogAuditViewerTableKey/captureLogAuditDetailKey), with
-	// handleConsigliereInputDone's own consigliereReturnFocus as the
+	// handleConsigliereInputDone's own consigliere.ReturnFocus as the
 	// one, host-agnostic way back out.
-	if r.consigliereVisible && r.activePage == "" {
-		// consigliereInput first — Tab from the panel reaches the
+	if r.consigliere.Visible && r.activePage == "" {
+		// consigliere.Input first — Tab from the panel reaches the
 		// question field directly (answering the user's own explicit
 		// question: once focus has left it, e.g. via a mouse click
 		// back into the panel, or by tabbing on into
-		// consigliereHistory, this is the real keyboard path back in,
+		// consigliere.History, this is the real keyboard path back in,
 		// not just closing and reopening the sidebar).
-		stops = append(stops, r.consigliereInput)
-		// consigliereHistory only joins the cycle once there's
+		stops = append(stops, r.consigliere.Input)
+		// consigliere.History only joins the cycle once there's
 		// actually something in it to scroll to (the same
-		// maxOffset() > 0 condition consigliereScrollbar's own Draw
+		// maxOffset() > 0 condition consigliere.Scrollbar's own Draw
 		// already uses to decide whether to even render a thumb — see
 		// scrollbar.go) — per the user's own explicit request: a stop
 		// Tab can land on with nothing to scroll once there is would
 		// just be a dead end to tab past, not a real destination. Tab
-		// from the field itself still reaches consigliereHistory the
+		// from the field itself still reaches consigliere.History the
 		// same way it already did (handleConsigliereInputDone's own
 		// direct SetFocus, not this list — InputField's own
 		// SetDoneFunc claims Tab before CycleFocusShortcut could ever
-		// see it while consigliereInput itself has focus, same as
+		// see it while consigliere.Input itself has focus, same as
 		// every other SetDoneFunc field in this app), using the exact
 		// same condition to decide whether to land there or wrap
 		// straight back to the panel instead.
-		if r.consigliereScrollbar.maxOffset() > 0 {
-			stops = append(stops, r.consigliereHistory)
+		if r.consigliere.Scrollbar.maxOffset() > 0 {
+			stops = append(stops, r.consigliere.History)
 		}
 	}
 	for _, tw := range r.toolWindows {
@@ -1248,7 +1248,7 @@ func (r *Root) renderDetailsSidebar() {
 // Mirrors Properties' own computeHashes exactly (see its doc comment
 // for the full reasoning on the background goroutine/animation/
 // cancellation shape) — duplicated rather than shared because the two
-// track independent state (detailsHashes vs propertiesHashes) for what
+// track independent state (detailsHashes vs properties.Hashes) for what
 // can, deliberately, be two different displays of the very same file at
 // once (Details isn't modal — see newDetailsSidebarView's own doc
 // comment — so it can stay open behind Properties).
@@ -1338,8 +1338,8 @@ func (r *Root) finishDetailsHashComputation(target string, hashes fsops.Hashes, 
 // needing the two independent progress states to stay synchronized
 // while a computation is still in flight.
 func (r *Root) propagateHashResult(target string, hashes fsops.Hashes) {
-	if r.activePage == propertiesPage && r.propertiesTarget == target {
-		r.propertiesHashes = &hashes
+	if r.activePage == propertiesPage && r.properties.Target == target {
+		r.properties.Hashes = &hashes
 		r.rerenderProperties()
 	}
 	if r.detailsSidebarVisible && r.detailsTarget == target {
@@ -1372,8 +1372,8 @@ func (r *Root) detailsHashesFor(target string) *fsops.Hashes {
 // that's guaranteed, not just usually true) adopts that result
 // immediately too, rather than needing its own separate computation.
 func (r *Root) propertiesHashesFor(target string) *fsops.Hashes {
-	if r.activePage == propertiesPage && r.propertiesTarget == target {
-		return r.propertiesHashes
+	if r.activePage == propertiesPage && r.properties.Target == target {
+		return r.properties.Hashes
 	}
 	return nil
 }

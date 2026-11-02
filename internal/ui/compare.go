@@ -98,7 +98,7 @@ func (r *Root) newCompareFileScreen() {
 // matter which color scheme was active — a real gap, not a rendering
 // artifact. SurfaceBackground/styleButton here match the same "popup
 // floating over the main panel" convention batch.Layout and
-// mountsLayout's own doc comments already establish.
+// mounts.Layout's own doc comments already establish.
 func (r *Root) applyCompareFileTheme(theme config.ResolvedTheme) {
 	if r.compareLayout == nil {
 		return

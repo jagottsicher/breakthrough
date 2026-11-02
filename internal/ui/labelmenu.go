@@ -229,7 +229,7 @@ func labelSubmenuEntries() []menuEntry {
 // than one tab (see Panel's own labels field doc comment).
 func (r *Root) applyLabel(targets []string, id int) {
 	if err := r.labels.SetMany(targets, id); err != nil {
-		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("set color label: %v", err))
+		r.activity.Logger.Error(activitylog.CategoryFileOps, fmt.Sprintf("set color label: %v", err))
 		r.showError(err)
 		return
 	}
@@ -237,7 +237,7 @@ func (r *Root) applyLabel(targets []string, id int) {
 	if id == 0 {
 		verb = "cleared"
 	}
-	r.activityLog.Detail(activitylog.CategoryFileOps, fmt.Sprintf("%s color label on %d item(s)", verb, len(targets)))
+	r.activity.Logger.Detail(activitylog.CategoryFileOps, fmt.Sprintf("%s color label on %d item(s)", verb, len(targets)))
 	r.forEachTab(func(p *Panel) { p.repaintLabels() })
 }
 

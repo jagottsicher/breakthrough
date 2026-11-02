@@ -220,16 +220,16 @@ func (r *Root) newCloudRemoteDialogForm() *tview.Form {
 }
 
 // styleCloudRemoteDialogForm applies the current theme's own Form-
-// level colors to cloudRemoteDialogForm — called from applyTheme (a
+// level colors to cloud.RemoteDialogForm — called from applyTheme (a
 // live color-scheme switch) and from rebuildCloudRemoteDialogFields
 // (which rebuilds the form from scratch on every backend-type change,
 // via Form.Clear(true), wiping out whatever this already set), so the
 // two can never drift out of sync with each other.
 func (r *Root) styleCloudRemoteDialogForm() {
-	r.cloudRemoteDialogForm.SetBackgroundColor(r.theme.SurfaceBackground)
-	r.cloudRemoteDialogForm.SetLabelColor(r.theme.TextColor)
-	r.cloudRemoteDialogForm.SetFieldBackgroundColor(r.theme.InputFocusedBackground)
-	r.cloudRemoteDialogForm.SetFieldTextColor(r.theme.TextColor)
+	r.cloud.RemoteDialogForm.SetBackgroundColor(r.theme.SurfaceBackground)
+	r.cloud.RemoteDialogForm.SetLabelColor(r.theme.TextColor)
+	r.cloud.RemoteDialogForm.SetFieldBackgroundColor(r.theme.InputFocusedBackground)
+	r.cloud.RemoteDialogForm.SetFieldTextColor(r.theme.TextColor)
 }
 
 // newCloudRemoteDialogButtons mirrors newCloudMountDialogButtons'
@@ -238,7 +238,7 @@ func (r *Root) styleCloudRemoteDialogForm() {
 //
 //   - Test runs rclone.TestRemote against whatever the form currently
 //     holds — real connectivity, nothing persisted — and reports the
-//     result in cloudRemoteDialogStatus. Never blocks on missing
+//     result in cloud.RemoteDialogStatus. Never blocks on missing
 //     required fields itself: a real connection failure ("host
 //     required") is more honest feedback than a pre-check duplicating
 //     what the attempt itself will say anyway.
@@ -252,62 +252,62 @@ func (r *Root) styleCloudRemoteDialogForm() {
 //   - Create keeps the original, strict behavior: refuses if anything
 //     required is missing.
 func (r *Root) newCloudRemoteDialogButtons() *tview.Flex {
-	r.cloudRemoteDialogCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
-	r.cloudRemoteDialogTestBtn = tview.NewButton("Test").SetSelectedFunc(r.runTestCloudRemote)
-	r.cloudRemoteDialogOKBtn = tview.NewButton("OK").SetSelectedFunc(r.runSaveCloudRemoteLenient)
-	r.cloudRemoteDialogCreateBtn = tview.NewButton("Create").SetSelectedFunc(r.runCreateCloudRemote)
-	r.cloudRemoteDialogCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
-	r.cloudRemoteDialogTestBtn.SetInputCapture(spaceAlsoActivates(r.runTestCloudRemote))
-	r.cloudRemoteDialogOKBtn.SetInputCapture(spaceAlsoActivates(r.runSaveCloudRemoteLenient))
-	r.cloudRemoteDialogCreateBtn.SetInputCapture(spaceAlsoActivates(r.runCreateCloudRemote))
+	r.cloud.RemoteDialogCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
+	r.cloud.RemoteDialogTestBtn = tview.NewButton("Test").SetSelectedFunc(r.runTestCloudRemote)
+	r.cloud.RemoteDialogOKBtn = tview.NewButton("OK").SetSelectedFunc(r.runSaveCloudRemoteLenient)
+	r.cloud.RemoteDialogCreateBtn = tview.NewButton("Create").SetSelectedFunc(r.runCreateCloudRemote)
+	r.cloud.RemoteDialogCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
+	r.cloud.RemoteDialogTestBtn.SetInputCapture(spaceAlsoActivates(r.runTestCloudRemote))
+	r.cloud.RemoteDialogOKBtn.SetInputCapture(spaceAlsoActivates(r.runSaveCloudRemoteLenient))
+	r.cloud.RemoteDialogCreateBtn.SetInputCapture(spaceAlsoActivates(r.runCreateCloudRemote))
 
-	r.cloudRemoteDialogCancelBtn.SetExitFunc(func(key tcell.Key) {
+	r.cloud.RemoteDialogCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.cloudRemoteDialogTestBtn)
+			r.app.SetFocus(r.cloud.RemoteDialogTestBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.cloudRemoteDialogCreateBtn)
+			r.app.SetFocus(r.cloud.RemoteDialogCreateBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-	r.cloudRemoteDialogTestBtn.SetExitFunc(func(key tcell.Key) {
+	r.cloud.RemoteDialogTestBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.cloudRemoteDialogOKBtn)
+			r.app.SetFocus(r.cloud.RemoteDialogOKBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.cloudRemoteDialogCancelBtn)
+			r.app.SetFocus(r.cloud.RemoteDialogCancelBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-	r.cloudRemoteDialogOKBtn.SetExitFunc(func(key tcell.Key) {
+	r.cloud.RemoteDialogOKBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.cloudRemoteDialogCreateBtn)
+			r.app.SetFocus(r.cloud.RemoteDialogCreateBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.cloudRemoteDialogTestBtn)
+			r.app.SetFocus(r.cloud.RemoteDialogTestBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
-	r.cloudRemoteDialogCreateBtn.SetExitFunc(func(key tcell.Key) {
+	r.cloud.RemoteDialogCreateBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.cloudRemoteDialogForm.SetFocus(0)
-			r.app.SetFocus(r.cloudRemoteDialogForm)
+			r.cloud.RemoteDialogForm.SetFocus(0)
+			r.app.SetFocus(r.cloud.RemoteDialogForm)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.cloudRemoteDialogOKBtn)
+			r.app.SetFocus(r.cloud.RemoteDialogOKBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
 	})
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(r.cloudRemoteDialogCancelBtn, 0, 1, false).
-		AddItem(r.cloudRemoteDialogTestBtn, 0, 1, false).
-		AddItem(r.cloudRemoteDialogOKBtn, 0, 1, false).
-		AddItem(r.cloudRemoteDialogCreateBtn, 0, 1, false)
+		AddItem(r.cloud.RemoteDialogCancelBtn, 0, 1, false).
+		AddItem(r.cloud.RemoteDialogTestBtn, 0, 1, false).
+		AddItem(r.cloud.RemoteDialogOKBtn, 0, 1, false).
+		AddItem(r.cloud.RemoteDialogCreateBtn, 0, 1, false)
 }
 
 // newCloudRemoteDialogLayout mirrors newCloudMountDialogLayout's own
@@ -315,15 +315,15 @@ func (r *Root) newCloudRemoteDialogButtons() *tview.Flex {
 // recomputed on every rebuild (see resizeCloudRemoteDialog), not
 // fixed here, since it genuinely changes per backend.
 func (r *Root) newCloudRemoteDialogLayout() *tview.Flex {
-	r.cloudRemoteDialogTitleBar = newPlainTitleBar("New cloud remote")
-	r.cloudRemoteDialogStatus = tview.NewTextView().SetDynamicColors(true)
-	r.cloudRemoteDialogContent = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.cloudRemoteDialogForm, 9, 0, true).
-		AddItem(r.cloudRemoteDialogStatus, 1, 0, false).
-		AddItem(r.cloudRemoteDialogButtons, 1, 0, false)
+	r.cloud.RemoteDialogTitleBar = newPlainTitleBar("New cloud remote")
+	r.cloud.RemoteDialogStatus = tview.NewTextView().SetDynamicColors(true)
+	r.cloud.RemoteDialogContent = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.cloud.RemoteDialogForm, 9, 0, true).
+		AddItem(r.cloud.RemoteDialogStatus, 1, 0, false).
+		AddItem(r.cloud.RemoteDialogButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.cloudRemoteDialogTitleBar, 1, 0, false).
-		AddItem(r.cloudRemoteDialogContent, 0, 1, true)
+		AddItem(r.cloud.RemoteDialogTitleBar, 1, 0, false).
+		AddItem(r.cloud.RemoteDialogContent, 0, 1, true)
 }
 
 // cloudRemoteDialogFormHeight is tview.Form's own top/bottom border
@@ -341,7 +341,7 @@ func cloudRemoteDialogFormHeight(backend cloudRemoteBackend) int {
 	return 2 + rows + (rows - 1)
 }
 
-// rebuildCloudRemoteDialogFields rebuilds cloudRemoteDialogForm from
+// rebuildCloudRemoteDialogFields rebuilds cloud.RemoteDialogForm from
 // scratch against cloudRemoteBackends[backendIndex] — tview.Form has
 // no clean way to add/remove fields in place, so the whole form is
 // cleared and re-added every time the backend selection changes, the
@@ -349,10 +349,10 @@ func cloudRemoteDialogFormHeight(backend cloudRemoteBackend) int {
 // an identical "the field set itself depends on a choice made inside
 // the form" problem.
 func (r *Root) rebuildCloudRemoteDialogFields(backendIndex int) {
-	r.cloudRemoteDialogBackendIndex = backendIndex
+	r.cloud.RemoteDialogBackendIndex = backendIndex
 	backend := cloudRemoteBackends[backendIndex]
 
-	r.cloudRemoteDialogForm.Clear(true)
+	r.cloud.RemoteDialogForm.Clear(true)
 	// Clear(true) wipes any Form-level color Set*Color call already
 	// made (background/label/field colors are themselves just Form
 	// state, the same as its items) — re-applied every rebuild, not
@@ -360,40 +360,40 @@ func (r *Root) rebuildCloudRemoteDialogFields(backendIndex int) {
 	// silently reverts to tview's own unthemed default colors.
 	r.styleCloudRemoteDialogForm()
 
-	r.cloudRemoteDialogBackendField = tview.NewDropDown().SetLabel("Type")
+	r.cloud.RemoteDialogBackendField = tview.NewDropDown().SetLabel("Type")
 	labels := make([]string, len(cloudRemoteBackends))
 	for i, b := range cloudRemoteBackends {
 		labels[i] = b.label
 	}
-	r.cloudRemoteDialogBackendField.SetOptions(labels, func(text string, index int) {
-		if index < 0 || index == r.cloudRemoteDialogBackendIndex {
+	r.cloud.RemoteDialogBackendField.SetOptions(labels, func(text string, index int) {
+		if index < 0 || index == r.cloud.RemoteDialogBackendIndex {
 			return
 		}
 		r.rebuildCloudRemoteDialogFields(index)
 		r.resizeCloudRemoteDialog()
 	})
-	r.cloudRemoteDialogBackendField.SetCurrentOption(backendIndex)
-	r.cloudRemoteDialogForm.AddFormItem(r.cloudRemoteDialogBackendField)
+	r.cloud.RemoteDialogBackendField.SetCurrentOption(backendIndex)
+	r.cloud.RemoteDialogForm.AddFormItem(r.cloud.RemoteDialogBackendField)
 
-	r.cloudRemoteDialogNameField = tview.NewInputField().SetLabel("Name")
-	r.cloudRemoteDialogNameField.SetPlaceholder("a-z/0-9/_/-/./+/@/space, max 32 chars")
-	r.cloudRemoteDialogNameField.SetAcceptanceFunc(cloudRemoteNameAcceptanceFunc)
-	r.cloudRemoteDialogForm.AddFormItem(r.cloudRemoteDialogNameField)
+	r.cloud.RemoteDialogNameField = tview.NewInputField().SetLabel("Name")
+	r.cloud.RemoteDialogNameField.SetPlaceholder("a-z/0-9/_/-/./+/@/space, max 32 chars")
+	r.cloud.RemoteDialogNameField.SetAcceptanceFunc(cloudRemoteNameAcceptanceFunc)
+	r.cloud.RemoteDialogForm.AddFormItem(r.cloud.RemoteDialogNameField)
 
 	if backend.subOptionKey != "" {
-		r.cloudRemoteDialogSubField = tview.NewDropDown().SetLabel(backend.subOptionLabel)
+		r.cloud.RemoteDialogSubField = tview.NewDropDown().SetLabel(backend.subOptionLabel)
 		subLabels := make([]string, len(backend.subOptions))
 		for i, opt := range backend.subOptions {
 			subLabels[i] = opt.display
 		}
-		r.cloudRemoteDialogSubField.SetOptions(subLabels, nil)
-		r.cloudRemoteDialogSubField.SetCurrentOption(0)
-		r.cloudRemoteDialogForm.AddFormItem(r.cloudRemoteDialogSubField)
+		r.cloud.RemoteDialogSubField.SetOptions(subLabels, nil)
+		r.cloud.RemoteDialogSubField.SetCurrentOption(0)
+		r.cloud.RemoteDialogForm.AddFormItem(r.cloud.RemoteDialogSubField)
 	} else {
-		r.cloudRemoteDialogSubField = nil
+		r.cloud.RemoteDialogSubField = nil
 	}
 
-	r.cloudRemoteDialogFields = make([]*tview.InputField, len(backend.fields))
+	r.cloud.RemoteDialogFields = make([]*tview.InputField, len(backend.fields))
 	for i, spec := range backend.fields {
 		field := tview.NewInputField().SetLabel(spec.label)
 		placeholder := spec.placeholder
@@ -404,8 +404,8 @@ func (r *Root) rebuildCloudRemoteDialogFields(backendIndex int) {
 		if spec.masked {
 			field.SetMaskCharacter('*')
 		}
-		r.cloudRemoteDialogFields[i] = field
-		r.cloudRemoteDialogForm.AddFormItem(field)
+		r.cloud.RemoteDialogFields[i] = field
+		r.cloud.RemoteDialogForm.AddFormItem(field)
 	}
 
 	// Last field's own Tab/Enter would otherwise wrap back to the
@@ -413,12 +413,12 @@ func (r *Root) rebuildCloudRemoteDialogFields(backendIndex int) {
 	// gap newConnectForm's own doc comment already found and fixed for
 	// the Connect dialog's own last field. Re-wired here, every
 	// rebuild, since which field is actually last changes per backend.
-	if n := len(r.cloudRemoteDialogFields); n > 0 {
-		last := r.cloudRemoteDialogFields[n-1]
+	if n := len(r.cloud.RemoteDialogFields); n > 0 {
+		last := r.cloud.RemoteDialogFields[n-1]
 		last.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			switch event.Key() {
 			case tcell.KeyTab:
-				r.app.SetFocus(r.cloudRemoteDialogCancelBtn)
+				r.app.SetFocus(r.cloud.RemoteDialogCancelBtn)
 				return nil
 			case tcell.KeyEnter:
 				// OK, not Create — the same "OK is the default,
@@ -444,9 +444,9 @@ func (r *Root) rebuildCloudRemoteDialogFields(backendIndex int) {
 // every field from scratch) and from applyTheme (a live color-scheme
 // switch while already open).
 func (r *Root) styleCloudRemoteDialogFields() {
-	styleDropDown(r.cloudRemoteDialogBackendField, r.theme)
-	if r.cloudRemoteDialogSubField != nil {
-		styleDropDown(r.cloudRemoteDialogSubField, r.theme)
+	styleDropDown(r.cloud.RemoteDialogBackendField, r.theme)
+	if r.cloud.RemoteDialogSubField != nil {
+		styleDropDown(r.cloud.RemoteDialogSubField, r.theme)
 	}
 	// false, not a per-field focused state — see
 	// styleCloudMountDialogFields' own doc comment in
@@ -457,8 +457,8 @@ func (r *Root) styleCloudRemoteDialogFields() {
 	// true for every Form-based dialog in this app, not specific to
 	// this one. false still matters for the parts Form.Draw doesn't
 	// touch: placeholder style and the label's own background.
-	styleInput(r.cloudRemoteDialogNameField, r.theme, false)
-	for _, field := range r.cloudRemoteDialogFields {
+	styleInput(r.cloud.RemoteDialogNameField, r.theme, false)
+	for _, field := range r.cloud.RemoteDialogFields {
 		styleInput(field, r.theme, false)
 	}
 }
@@ -470,7 +470,7 @@ func (r *Root) styleCloudRemoteDialogFields() {
 // "content-driven resize" resizeProperties already establishes for a
 // window whose size depends on what's actually in it right now.
 func (r *Root) resizeCloudRemoteDialog() {
-	formHeight := cloudRemoteDialogFormHeight(cloudRemoteBackends[r.cloudRemoteDialogBackendIndex])
+	formHeight := cloudRemoteDialogFormHeight(cloudRemoteBackends[r.cloud.RemoteDialogBackendIndex])
 	// 90, not the Connect dialog's own 64 — this form's own longest
 	// label ("Secret Access Key", 18 chars) is almost twice
 	// Connect's own longest ("Identifier", 10), and tview.Form sizes
@@ -488,8 +488,8 @@ func (r *Root) resizeCloudRemoteDialog() {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.cloudRemoteDialogLayout.SetRect(x, y, width, height)
-	r.cloudRemoteDialogContent.ResizeItem(r.cloudRemoteDialogForm, formHeight, 0)
+	r.cloud.RemoteDialogLayout.SetRect(x, y, width, height)
+	r.cloud.RemoteDialogContent.ResizeItem(r.cloud.RemoteDialogForm, formHeight, 0)
 }
 
 // openCloudRemoteDialog shows the dialog, fresh — backend reset to
@@ -508,9 +508,9 @@ func (r *Root) resizeCloudRemoteDialog() {
 // Cancel.
 func (r *Root) openCloudRemoteDialog() {
 	r.rebuildCloudRemoteDialogFields(0)
-	r.cloudRemoteDialogNameField.SetText("")
+	r.cloud.RemoteDialogNameField.SetText("")
 	r.resizeCloudRemoteDialog()
-	r.pushOverlay(cloudRemoteDialogPage, r.cloudRemoteDialogLayout, nil)
+	r.pushOverlay(cloudRemoteDialogPage, r.cloud.RemoteDialogLayout, nil)
 }
 
 // cloudRemoteParams builds the "key=value" params
@@ -550,7 +550,7 @@ func cloudRemoteParams(backend cloudRemoteBackend, subOptionIndex int, fieldValu
 // that dialog's own doc comment on why creating and mounting stay two
 // separate steps regardless).
 func (r *Root) runCreateCloudRemote() {
-	name := strings.TrimSpace(r.cloudRemoteDialogNameField.GetText())
+	name := strings.TrimSpace(r.cloud.RemoteDialogNameField.GetText())
 	if !validCloudRemoteName(name) {
 		r.showError(fmt.Errorf("%q is not a valid remote name", name))
 		return
@@ -577,13 +577,13 @@ func (r *Root) runCreateCloudRemote() {
 // runSaveCloudRemoteLenient/runTestCloudRemote so the three can never
 // drift apart in how they read the form.
 func (r *Root) currentCloudRemoteFields() (backend cloudRemoteBackend, subIndex int, fieldValues []string) {
-	backend = cloudRemoteBackends[r.cloudRemoteDialogBackendIndex]
+	backend = cloudRemoteBackends[r.cloud.RemoteDialogBackendIndex]
 	subIndex = -1
-	if backend.subOptionKey != "" && r.cloudRemoteDialogSubField != nil {
-		subIndex, _ = r.cloudRemoteDialogSubField.GetCurrentOption()
+	if backend.subOptionKey != "" && r.cloud.RemoteDialogSubField != nil {
+		subIndex, _ = r.cloud.RemoteDialogSubField.GetCurrentOption()
 	}
-	fieldValues = make([]string, len(r.cloudRemoteDialogFields))
-	for i, f := range r.cloudRemoteDialogFields {
+	fieldValues = make([]string, len(r.cloud.RemoteDialogFields))
+	for i, f := range r.cloud.RemoteDialogFields {
 		fieldValues[i] = f.GetText()
 	}
 	return backend, subIndex, fieldValues
@@ -601,7 +601,7 @@ func (r *Root) currentCloudRemoteFields() (backend cloudRemoteBackend, subIndex 
 // "Create", not a silent side effect of a tool that never warned
 // about it.
 func (r *Root) runSaveCloudRemoteLenient() {
-	name := strings.TrimSpace(r.cloudRemoteDialogNameField.GetText())
+	name := strings.TrimSpace(r.cloud.RemoteDialogNameField.GetText())
 	if !validCloudRemoteName(name) {
 		r.showError(fmt.Errorf("%q is not a valid remote name", name))
 		return
@@ -630,8 +630,8 @@ const cloudRemoteTestTimeout = 10 * time.Second
 // setCloudRemoteDialogStatus mirrors setConnectStatus's own shape
 // exactly, for this dialog's own status line.
 func (r *Root) setCloudRemoteDialogStatus(text string, color tcell.Color) {
-	r.cloudRemoteDialogStatus.SetTextColor(color)
-	r.cloudRemoteDialogStatus.SetText(text)
+	r.cloud.RemoteDialogStatus.SetTextColor(color)
+	r.cloud.RemoteDialogStatus.SetText(text)
 }
 
 // obscureTestParams re-obscures the value of every "key=value" entry
