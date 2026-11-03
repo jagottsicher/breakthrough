@@ -1946,7 +1946,7 @@ func TestScheduleLogAuditFilterRescanDiscardsAStaleResult(t *testing.T) {
 		t.Fatal("setup: second scan never dispatched")
 	}
 
-	secondDone(nil) // the newer request's own (empty, for simplicity) result
+	secondDone(nil)                                       // the newer request's own (empty, for simplicity) result
 	if got := r.log.ViewerTable.GetRowCount(); got != 2 { // header + placeholder (showTablePlaceholder sets row 1, header stays at row 0)
 		t.Fatalf("setup: GetRowCount() after the second (empty) result landed = %d, want 2 (header + placeholder)", got)
 	}
