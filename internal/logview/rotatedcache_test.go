@@ -77,8 +77,7 @@ func TestRotatedCacheZeroMaxBytesDisablesCaching(t *testing.T) {
 // inserted after it but never read again.
 func TestRotatedCacheEvictsLeastRecentlyUsedNotLeastRecentlyInserted(t *testing.T) {
 	c := NewRotatedCache()
-	const itemSize = 100 // entryBaseOverhead(96) + 4
-	const budget = 250   // room for two items, not three
+	const budget = 250 // room for two 100-byte items (entryBaseOverhead+4), not three
 
 	c.Put("a", fixedSizeEntries(4), budget)
 	c.Put("b", fixedSizeEntries(4), budget)
