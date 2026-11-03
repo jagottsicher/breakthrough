@@ -1227,7 +1227,7 @@ func (r *Root) consigliereContextDiffLineCap() int {
 // table itself is showing, never a separately-computed approximation
 // of it.
 func (r *Root) consigliereMachiavelliLogLines() string {
-	shown, _, _ := r.logAuditVisibleEntries()
+	shown := r.logAuditVisibleEntries()
 	if len(shown) == 0 {
 		return ""
 	}
