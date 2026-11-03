@@ -164,6 +164,15 @@ func (r *Root) refreshLogAuditCurrentFile() {
 // failed.
 func (r *Root) recomputeLogAuditCombined() {
 	r.log.AllEntries = logview.Merge(r.log.CurrentEntries, r.log.RotatedEntries)
+	r.log.ErrCount, r.log.WarnCount = 0, 0
+	for _, e := range r.log.AllEntries {
+		switch e.Level {
+		case logview.LevelError, logview.LevelFatal:
+			r.log.ErrCount++
+		case logview.LevelWarn:
+			r.log.WarnCount++
+		}
+	}
 	r.log.Files = r.log.CurrentFiles + r.log.RotatedFiles
 	r.log.Skipped = r.log.CurrentSkipped + r.log.RotatedSkipped
 	r.log.ParseErr = r.log.RotatedErr

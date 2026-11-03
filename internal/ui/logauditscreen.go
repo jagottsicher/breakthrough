@@ -76,24 +76,55 @@ type logAuditState struct {
 	ViewerSpans         []listHintSpan
 	GroupOpen           logview.FileGroup // the group the viewer is currently showing — see reopenLogAuditViewer
 	AllEntries          []logview.Entry
-	Files               int
-	Skipped             int
-	ParseErr            error
-	NewestFirst         bool
-	Following           bool
-	FollowCancel        context.CancelFunc
-	DetailTitleBar      *tview.TextView
-	DetailView          *tview.TextView
-	DetailLayout        *tview.Flex
-	StatsTitleBar       *tview.TextView
-	StatsView           *tview.TextView
-	StatsScrollbar      *verticalScrollbar
-	StatsHScrollbar     *horizontalScrollbar
-	StatsSpacer         *tview.Box
-	StatsLayout         *tview.Flex
-	DetailDragging      bool
-	DetailDragOffsetX   int
-	DetailDragOffsetY   int
+	// ErrCount/WarnCount are AllEntries' own Error+Fatal/Warn counts —
+	// filter-independent (every entry counts, regardless of whether it
+	// currently matches Keyword/Time/Level), so computed once by
+	// recomputeLogAuditCombined whenever AllEntries itself changes
+	// (logaudit.go), not recomputed on every keystroke the way they
+	// used to be inside logAuditVisibleEntries' own scan loop — a real
+	// cost on a multi-million-entry family, confirmed by benchmark (see
+	// that function's own doc comment).
+	ErrCount  int
+	WarnCount int
+	// FilterScanToken increments on every scheduleLogAuditFilterRescan
+	// call — its own captured value is what the background scan's
+	// result callback compares against before ever applying, the same
+	// per-request staleness guard loadToken/diskUsageForPath/
+	// viewerLookDownloadPath already establish elsewhere in this app
+	// (see scheduleLogAuditFilterRescan's own doc comment).
+	FilterScanToken int
+	// ScanFn is how scheduleLogAuditFilterRescan's own background scan
+	// actually runs — nil falls back to the real implementation
+	// (defaultLogAuditScanFn: safeGo + QueueUpdateDraw), the same
+	// "Root owns concurrency" shape Panel.onFetchEntries establishes
+	// for remote navigation, just lazily defaulted here instead of
+	// wired once in NewRoot, since this one has no construction-order
+	// dependency to respect. Overridable in tests so a test can make
+	// the scan resolve synchronously (syncLogAuditScanFn) or capture
+	// its own completion callback to fire on demand
+	// (controlledLogAuditScanFn) — tests never drain QueueUpdateDraw
+	// (this package's own established convention), so the real
+	// implementation's result would otherwise never be observable at
+	// all, not just delayed.
+	ScanFn            func(entries []logview.Entry, filters logAuditParsedFilters, done func([]logview.Entry))
+	Files             int
+	Skipped           int
+	ParseErr          error
+	NewestFirst       bool
+	Following         bool
+	FollowCancel      context.CancelFunc
+	DetailTitleBar    *tview.TextView
+	DetailView        *tview.TextView
+	DetailLayout      *tview.Flex
+	StatsTitleBar     *tview.TextView
+	StatsView         *tview.TextView
+	StatsScrollbar    *verticalScrollbar
+	StatsHScrollbar   *horizontalScrollbar
+	StatsSpacer       *tview.Box
+	StatsLayout       *tview.Flex
+	DetailDragging    bool
+	DetailDragOffsetX int
+	DetailDragOffsetY int
 
 	// CurrentEntries/CurrentFiles/CurrentSkipped/CurrentErr hold
 	// GroupOpen's own current (first, unrotated) file's last read
@@ -276,7 +307,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	// color already addresses — per the user's own explicit follow-up
 	// request to extend it here too.
 	r.log.KeywordField.SetChangedFunc(func(string) {
-		r.renderLogAuditViewer()
+		r.scheduleLogAuditFilterRescan()
 		r.restyleLogAuditKeywordFieldLabel()
 	})
 	r.log.KeywordField.SetDoneFunc(func(key tcell.Key) {
@@ -360,7 +391,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	// addresses — per the user's own explicit follow-up request to
 	// extend it here too.
 	r.log.LevelField.SetChangedFunc(func(string) {
-		r.renderLogAuditViewer()
+		r.scheduleLogAuditFilterRescan()
 		r.restyleLogAuditLevelFieldLabel()
 	})
 	r.log.LevelField.SetDoneFunc(func(key tcell.Key) {
@@ -1176,43 +1207,129 @@ func (r *Root) tickLogAuditLoadAnimation() {
 // logAuditVisibleEntries filters r.log.AllEntries down to whatever
 // currently matches the Keyword/Time/Level fields — factored out of
 // renderLogAuditViewer so consigliereLogAuditMatchedLines (Machiavelli
-// Mode's own context snapshot addition) can reuse the exact same
-// filtering the table itself shows, rather than risking the two
-// drifting apart. Also returns the real error/warning counts across
-// every entry (not just the shown ones) — renderLogAuditViewer's own
-// title bar needs those regardless of the current filter.
-func (r *Root) logAuditVisibleEntries() (shown []logview.Entry, errCount, warnCount int) {
+// Mode's own context snapshot addition) and Statistics
+// (logAuditViewerVisibleEntries, logauditstats.go) can reuse the exact
+// same filtering the table itself shows, rather than risking the two
+// drifting apart. Error/warning counts for the title bar come from
+// r.log.ErrCount/WarnCount instead (recomputeLogAuditCombined,
+// logaudit.go) — filter-independent, so computed once whenever
+// AllEntries itself changes, not here on every call.
+//
+// A real, reported performance bug on a multi-million-entry family
+// (4.4M events confirmed): this is a single O(n) pass with no per-
+// entry string parsing any more (see parseLogAuditFilters' own doc
+// comment for the two things that used to be re-parsed per entry
+// instead of once), but n itself is still enough to take a real,
+// measurable fraction of a second — confirmed by benchmark
+// (BenchmarkLogAuditVisibleEntries). Callers driven by live typing
+// (Keyword/Level's own SetChangedFunc) must not call this directly on
+// the UI goroutine at that scale — see scheduleLogAuditFilterRescan's
+// own doc comment for why and how.
+func (r *Root) logAuditVisibleEntries() []logview.Entry {
 	filters := parseLogAuditFilters(r.log.KeywordField.GetText(), r.log.TimeField.GetText(), r.log.LevelField.GetText(), time.Now())
+	return scanLogAuditEntries(r.log.AllEntries, filters)
+}
 
-	for _, e := range r.log.AllEntries {
-		switch e.Level {
-		case logview.LevelError, logview.LevelFatal:
-			errCount++
-		case logview.LevelWarn:
-			warnCount++
-		}
+// scanLogAuditEntries is logAuditVisibleEntries' own pure, Root-free
+// half — entries and filters already known, no tview/Root field
+// touched — so scheduleLogAuditFilterRescan can run it from a
+// background goroutine against a captured snapshot instead of
+// r.log.AllEntries directly (see its own doc comment on why that
+// matters).
+func scanLogAuditEntries(entries []logview.Entry, filters logAuditParsedFilters) []logview.Entry {
+	var shown []logview.Entry
+	for _, e := range entries {
 		if logAuditEntryVisible(e, filters) {
 			shown = append(shown, e)
 		}
 	}
-	return shown, errCount, warnCount
+	return shown
 }
 
-// renderLogAuditViewer fills the viewer table with every entry
-// matching the keyword field, Time/Level/Source/Message columns, the
-// matched keyword highlighted in Source/Message via logAuditHighlight
-// — and updates the title bar with the running counts the original
-// conversation's own mockup called for ("4,812 events │ 3 files │ 2
-// compressed │ 1 error"). The Time column header is clickable (see
-// above) and toggles log.NewestFirst, the same "click to sort,
-// click again to reverse" convention the panel's own column headers
-// already use (see sortArrow, panel.go) — applied here by reversing
-// shown before logAuditMaxRenderedRows truncates it, so a truncated
-// view always keeps the chronological end that direction actually
-// means to show (the newest entries, not whichever happened to come
-// first in file order) rather than silently biasing toward one end
-// regardless of what the arrow says.
+// renderLogAuditViewer is the ordinary, synchronous entry point —
+// see renderLogAuditViewerFor's own doc comment for what it actually
+// builds, and scheduleLogAuditFilterRescan's for the live-typing
+// alternative this is deliberately not.
 func (r *Root) renderLogAuditViewer() {
+	r.renderLogAuditViewerFor(r.logAuditVisibleEntries())
+}
+
+// scheduleLogAuditFilterRescan is the Keyword/Level fields' own live
+// SetChangedFunc hook — unlike renderLogAuditViewer's own ordinary,
+// synchronous callers (opening the viewer, "r", follow, toggling
+// sort, a Time field edit...), live typing needs the scan itself off
+// the UI goroutine: see logAuditVisibleEntries' own doc comment for
+// the real-world cost on a multi-million-entry family — a real,
+// reported case where typing into Keyword felt "unglaublich träge"
+// even after the per-entry parsing fixes, because the scan is a
+// genuine, unavoidable O(n) pass over all of AllEntries regardless.
+//
+// entries is captured here, on the UI goroutine, before dispatch —
+// logview.Merge (logaudit.go) always allocates a fresh slice rather
+// than mutating an existing one in place, so this snapshot stays
+// valid for the goroutine's own read even if the progressive loader
+// replaces r.log.AllEntries with a newer slice while the scan is
+// still running; the two can never alias the same backing array.
+//
+// FilterScanToken guards against a result landing after a newer
+// keystroke superseded it — the same per-request staleness guard
+// loadToken/diskUsageForPath/viewerLookDownloadPath already establish
+// elsewhere in this app (see the async-ui skill). The table and
+// timeline simply keep showing whatever they already had until the
+// newest request's own result lands — no placeholder, no "loading"
+// state of its own: a 330ms-on-4.4M scan landing shortly after the
+// last keystroke is the same "results settle a moment after you stop
+// typing" shape search-as-you-type already has everywhere else, not
+// something that needs its own visible affordance.
+func (r *Root) scheduleLogAuditFilterRescan() {
+	entries := r.log.AllEntries
+	filters := parseLogAuditFilters(r.log.KeywordField.GetText(), r.log.TimeField.GetText(), r.log.LevelField.GetText(), time.Now())
+	r.log.FilterScanToken++
+	token := r.log.FilterScanToken
+	scan := r.log.ScanFn
+	if scan == nil {
+		scan = r.defaultLogAuditScanFn
+	}
+	scan(entries, filters, func(shown []logview.Entry) {
+		if r.log.FilterScanToken != token {
+			return // superseded by a newer keystroke while this scan was running
+		}
+		r.renderLogAuditViewerFor(shown)
+	})
+}
+
+// defaultLogAuditScanFn is log.ScanFn's own real implementation —
+// wrapped in safeGo (see its own doc comment) like every other
+// background goroutine in this app, result delivered back through
+// QueueUpdateDraw.
+func (r *Root) defaultLogAuditScanFn(entries []logview.Entry, filters logAuditParsedFilters, done func([]logview.Entry)) {
+	r.safeGo("log audit filter scan", nil, func() {
+		shown := scanLogAuditEntries(entries, filters)
+		r.app.QueueUpdateDraw(func() {
+			done(shown)
+		})
+	})
+}
+
+// renderLogAuditViewerFor is renderLogAuditViewer's own apply half —
+// shown already computed, by either of its two callers above (inline
+// for the ordinary synchronous case, or scheduleLogAuditFilterRescan's
+// own QueueUpdateDraw callback for a live keystroke at scale) — fills
+// the viewer table with every entry matching the keyword field,
+// Time/Level/Source/Message columns, the matched keyword highlighted
+// in Source/Message via logAuditHighlight — and updates the title bar
+// with the running counts the original conversation's own mockup
+// called for ("4,812 events │ 3 files │ 2 compressed │ 1 error"). The
+// Time column header is clickable (see above) and toggles
+// log.NewestFirst, the same "click to sort, click again to reverse"
+// convention the panel's own column headers already use (see
+// sortArrow, panel.go) — applied here by reversing shown before
+// logAuditMaxRenderedRows truncates it, so a truncated view always
+// keeps the chronological end that direction actually means to show
+// (the newest entries, not whichever happened to come first in file
+// order) rather than silently biasing toward one end regardless of
+// what the arrow says.
+func (r *Root) renderLogAuditViewerFor(shown []logview.Entry) {
 	r.log.ViewerTable.Clear()
 
 	header := func(col int, text string) {
@@ -1245,9 +1362,7 @@ func (r *Root) renderLogAuditViewer() {
 		highlightTerms = logAuditLowerTerms(query.PositiveTerms())
 	}
 
-	shown, errCount, warnCount := r.logAuditVisibleEntries()
-
-	title := r.buildLogAuditViewerTitle(shown, errCount, warnCount)
+	title := r.buildLogAuditViewerTitle(shown, r.log.ErrCount, r.log.WarnCount)
 	if r.log.LoadingMore {
 		r.log.ViewerTitleTemplate = title
 	} else {
