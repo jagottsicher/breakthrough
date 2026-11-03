@@ -165,8 +165,21 @@ jobs:
           git clone "https://x-access-token:${PKG_REPO_GITHUB_TOKEN}@github.com/jagottsicher/breakthrough-pkg.git" pkg-repo
 
       - name: Update apt repository
+        # Idempotent against a re-tag of the same version (the
+        # documented "delete bad tag, fix, re-tag" recovery path in
+        # the merge-release skill): reprepro's own behavior on an
+        # exact-duplicate include depends on whether the rebuilt file
+        # is byte-identical to what's already there, which isn't
+        # guaranteed across two separate GoReleaser builds even for
+        # the same source commit (embedded build timestamps). Removing
+        # each package name first, then including the full set fresh,
+        # means this step never depends on that distinction.
         run: |
           cd pkg-repo
+          for f in ../assets/*.deb; do
+            pkg="$(dpkg-deb -f "$f" Package)"
+            reprepro -b apt removefilter stable "Package (== $pkg)" || true
+          done
           for f in ../assets/*.deb; do
             reprepro -b apt includedeb stable "$f"
           done
@@ -188,15 +201,29 @@ jobs:
             [arm64]=aarch64
             [armv7]=armhfp
           )
+          # new_rpms collects only files actually (re-)copied this run
+          # -- re-signing an rpm already signed by a prior run of this
+          # same tag (the "delete bad tag, fix, re-tag" recovery path)
+          # is unverified territory for this rpm version, so the safer
+          # scope is "only what we just touched", not every file that
+          # happens to already be sitting in the directory.
+          new_rpms=()
           for suffix in "${!rpm_dirs[@]}"; do
             dir="rpm/stable/${rpm_dirs[$suffix]}"
             mkdir -p "$dir"
             for f in ../assets/*_"$suffix".rpm; do
               [ -e "$f" ] || continue
-              cp "$f" "$dir/"
+              dest="$dir/$(basename "$f")"
+              if [ -e "$dest" ] && cmp -s "$f" "$dest"; then
+                continue # identical to what's already published, skip re-copy/re-sign
+              fi
+              cp "$f" "$dest"
+              new_rpms+=("$dest")
             done
           done
-          rpm --addsign rpm/stable/*/*.rpm
+          if [ "${#new_rpms[@]}" -gt 0 ]; then
+            rpm --addsign "${new_rpms[@]}"
+          fi
           for dir in rpm/stable/*/; do
             createrepo_c --update "$dir"
           done
