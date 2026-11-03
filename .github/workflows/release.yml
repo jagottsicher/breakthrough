@@ -26,6 +26,11 @@ jobs:
   # right here, regardless of what already ran (or didn't) on develop.
   test:
     runs-on: ubuntu-latest
+    # Only ever reads this repo's own checkout — narrower than the
+    # workflow-level `contents: write` the goreleaser job below
+    # actually needs.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -111,6 +116,13 @@ jobs:
   publish-pkg-repo:
     needs: goreleaser
     runs-on: ubuntu-latest
+    # Only ever reads from this repo (gh release download) — every
+    # write this job does goes to the separate jagottsicher/breakthrough-pkg
+    # repo, over its own PAT (PKG_REPO_GITHUB_TOKEN), not GITHUB_TOKEN.
+    # Narrower than the workflow-level `contents: write` the goreleaser
+    # job above actually needs.
+    permissions:
+      contents: read
     steps:
       - name: Install repo tooling
         run: sudo apt-get update && sudo apt-get install -y reprepro createrepo-c rpm gnupg
