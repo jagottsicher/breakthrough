@@ -39,7 +39,9 @@ jobs:
         with:
           version: v2.13.0
 
-      - run: go test ./... -race -cover
+      # See test-linux.yml's own identical comment for why this is
+      # explicit rather than Go's 600s default.
+      - run: go test ./... -race -cover -timeout 20m
 
   goreleaser:
     needs: test

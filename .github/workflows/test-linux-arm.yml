@@ -28,4 +28,10 @@ jobs:
         with:
           version: v2.13.0
 
-      - run: go test ./... -race -cover
+      # Explicit timeout, not Go's own 600s default: a hang here used to
+      # surface as a 600s goroutine-dump panic indistinguishable from a
+      # real deadlock, on a runner already close to that ceiling with
+      # -race (internal/ui alone: ~120s locally, slower on a loaded CI
+      # box) — 20m is headroom above the real runtime, not a tolerance
+      # for an actual hang.
+      - run: go test ./... -race -cover -timeout 20m

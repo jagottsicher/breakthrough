@@ -28,23 +28,23 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "size": 7692,
-      "sha256": "3091ed5f9f80be27f88c41288c9999e6efa841da46b09df9db39b79bacae2ecd"
+      "size": 7820,
+      "sha256": "6e15580c0ad2285bd1da9de0a67a1b09d899c6bf82c57e00ad5a149cb81c8af0"
     },
     {
       "path": ".github/workflows/test-linux-arm.yml",
-      "size": 494,
-      "sha256": "281d719fc476d3a175862c2f388397a53dad45414e6540dd1bb449b614523498"
+      "size": 894,
+      "sha256": "2f8d9b2cb97917718ac809a95a8e2801cf511f23f2cb183c4442fdb2ceef70e1"
     },
     {
       "path": ".github/workflows/test-linux.yml",
-      "size": 485,
-      "sha256": "2385f9d97994044d569899dd363e5eadc1fa8d21406e4f13d22aab22ae180f09"
+      "size": 885,
+      "sha256": "5021f1237ac220bc17487a2d5b17e2b7794b4d07e591b2ca944a90a63c0a4be9"
     },
     {
       "path": ".github/workflows/test-macos.yml",
-      "size": 484,
-      "sha256": "6d1d5ab680f9363d0ab59dad6aef4834eb20b1910dc006027d1f8b911229ecc7"
+      "size": 884,
+      "sha256": "42ea7b7964b59f37340b056d1ab26b6a04b1948f807c6c4ae7aa7337fd65874a"
     },
     {
       "path": ".gitignore",
@@ -63874,5 +63874,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "c63c4b884cb2998f34801e0ce33150d8189cf4411415be40a494d1854d7e360d"
+  "merkle_root": "901d2a5945be32f0887c48651c3ba583105b81d88460a0d98135ccb3cc855f5d"
 }
