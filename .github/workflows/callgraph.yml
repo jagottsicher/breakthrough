@@ -10,6 +10,12 @@ on:
     tags:
       - "v*.*.*"
 
+# See test-linux.yml's own identical comment. github.ref is distinct
+# per tag, so this never cancels a different release's own run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

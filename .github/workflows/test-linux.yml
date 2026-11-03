@@ -9,6 +9,14 @@ on:
     branches:
       - develop
 
+# A second push to the same branch while this is still running used
+# to let both runs go to completion instead of the newer one
+# superseding the older — wasted runner time on every force-push or
+# quick follow-up commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
