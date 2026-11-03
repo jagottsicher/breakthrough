@@ -288,7 +288,14 @@ func TestRenderLogAuditViewerFiltersByKeyword(t *testing.T) {
 	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
+	// SetText's own SetChangedFunc hook now dispatches the real scan
+	// through scheduleLogAuditFilterRescan (see its own doc comment) —
+	// tests never drain QueueUpdateDraw (this package's own established
+	// convention), so the result is applied directly here instead,
+	// exactly the already-computed-result shape applyLogAuditRotatedFile's
+	// own tests already use.
 	r.log.KeywordField.SetText("timeout")
+	r.renderLogAuditViewer()
 	if got := r.log.ViewerTable.GetRowCount(); got != 2 { // header + 1 match
 		t.Fatalf("GetRowCount() after filter = %d, want 2 (header + 1 match)", got)
 	}
@@ -1806,5 +1813,147 @@ func BenchmarkLogAuditVisibleEntries(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		r.logAuditVisibleEntries()
+	}
+}
+
+// BenchmarkRenderLogAuditViewer measures the full per-keystroke path —
+// not just logAuditVisibleEntries (see BenchmarkLogAuditVisibleEntries
+// just above), but also renderLogAuditTimeline's own bucketing over
+// every matching entry (uncapped — logAuditMaxRenderedRows only caps
+// the table, not the timeline or the title bar's own counts) and the
+// up-to-2000-row table rebuild itself, including logAuditHighlight's
+// per-row keyword search. Uses a real *Root (newTestRootForLogAudit's
+// own construction, via a minimal on-disk fixture) with AllEntries
+// swapped out for the large synthetic set, so every widget
+// renderLogAuditViewer touches is real, not nil. Run with
+// `go test -bench RenderLogAuditViewer -benchtime=10x ./internal/ui`.
+func BenchmarkRenderLogAuditViewer(b *testing.B) {
+	const n = 75000
+	start := time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC)
+	entries := make([]logview.Entry, n)
+	for i := range entries {
+		entries[i] = logview.Entry{
+			Time:    start.Add(time.Duration(i) * time.Minute),
+			Level:   logview.LevelInfo,
+			Source:  "benchd",
+			Message: "connection established",
+		}
+	}
+
+	dir := b.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.log"), []byte("placeholder\n"), 0o644); err != nil {
+		b.Fatal(err)
+	}
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		b.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 200, 60)
+	r.openLogAudit()
+	r.log.Table.Select(1, 0)
+	r.openLogAuditViewer()
+
+	r.log.AllEntries = entries
+	r.log.KeywordField.SetText("connection")
+	r.log.TimeField.SetText("between 2026-09-18 00:00:00 and 2026-11-02 00:00:00")
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r.renderLogAuditViewer()
+	}
+}
+
+// controlledLogAuditScanFn wires r.log.ScanFn to a hook that never
+// calls done on its own — it captures the call instead, so a test can
+// dispatch scheduleLogAuditFilterRescan and then decide when (and
+// with what result) to let it "land", exactly mirroring what the real
+// implementation (defaultLogAuditScanFn) would eventually do via
+// QueueUpdateDraw, just without a real goroutine or Application.Run
+// to drain it — the same shape controlledOnFetchEntries already
+// establishes for remote navigation (panelload_test.go).
+func controlledLogAuditScanFn(r *Root) (fire func(shown []logview.Entry)) {
+	var done func([]logview.Entry)
+	r.log.ScanFn = func(entries []logview.Entry, filters logAuditParsedFilters, d func([]logview.Entry)) {
+		done = d
+	}
+	return func(shown []logview.Entry) {
+		if done == nil {
+			panic("fire called before ScanFn was ever invoked")
+		}
+		done(shown)
+	}
+}
+
+// TestScheduleLogAuditFilterRescanAppliesTheResultOnceItLands pins the
+// basic shape: the table keeps showing whatever it already had until
+// the background scan's own result lands, then renderLogAuditViewerFor
+// applies it.
+func TestScheduleLogAuditFilterRescanAppliesTheResultOnceItLands(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.log.Table.Select(1, 0)
+	r.openLogAuditViewer()
+	fire := controlledLogAuditScanFn(r)
+
+	r.log.KeywordField.SetText("timeout")
+	if got := r.log.ViewerTable.GetRowCount(); got == 2 {
+		t.Fatal("table already shows the filtered result before the scan landed")
+	}
+
+	entries := r.log.AllEntries
+	var want []logview.Entry
+	for _, e := range entries {
+		if strings.Contains(strings.ToLower(e.Message), "timeout") {
+			want = append(want, e)
+		}
+	}
+	fire(want)
+
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 { // header + 1 match
+		t.Errorf("GetRowCount() after the scan landed = %d, want 2 (header + 1 match)", got)
+	}
+}
+
+// TestScheduleLogAuditFilterRescanDiscardsAStaleResult pins the same
+// "a background answer for a target that's no longer current gets
+// thrown away" rule applyPanelDiskUsage/applyLogAuditRotatedFile's own
+// stale-result guards already establish: typing a second character
+// before the first keystroke's own scan landed must mean the first
+// scan's eventual result never overwrites the second's.
+func TestScheduleLogAuditFilterRescanDiscardsAStaleResult(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.log.Table.Select(1, 0)
+	r.openLogAuditViewer()
+
+	var firstDone func([]logview.Entry)
+	r.log.ScanFn = func(entries []logview.Entry, filters logAuditParsedFilters, done func([]logview.Entry)) {
+		firstDone = done
+	}
+	r.log.KeywordField.SetText("t")
+	if firstDone == nil {
+		t.Fatal("setup: first scan never dispatched")
+	}
+
+	var secondDone func([]logview.Entry)
+	r.log.ScanFn = func(entries []logview.Entry, filters logAuditParsedFilters, done func([]logview.Entry)) {
+		secondDone = done
+	}
+	r.log.KeywordField.SetText("ti")
+	if secondDone == nil {
+		t.Fatal("setup: second scan never dispatched")
+	}
+
+	secondDone(nil)                                       // the newer request's own (empty, for simplicity) result
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 { // header + placeholder (showTablePlaceholder sets row 1, header stays at row 0)
+		t.Fatalf("setup: GetRowCount() after the second (empty) result landed = %d, want 2 (header + placeholder)", got)
+	}
+
+	firstDone([]logview.Entry{{Message: "stale result from the first keystroke"}}) // the stale, superseded one
+
+	if got := r.log.ViewerTable.GetCell(1, 0).Text; strings.Contains(got, "stale result") {
+		t.Errorf("table cell = %q, the stale first scan's own result must not have been applied", got)
 	}
 }
