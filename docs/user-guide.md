@@ -2921,6 +2921,7 @@ Every key breakthrough recognizes, with its default:
 | `duplicate_count_max` | `100` | Upper bound `duplicate_count` can be set to |
 | `language` | `en` | Reserved for future translations — parsed, no effect yet |
 | `remote_archive_confirm_size` | `10MB` | Opening a remote zip/tar at or above this size asks first — a size with a unit, e.g. `500KB` or `1GB` |
+| `log_audit_cache_size` | `2GB` | Log Holepunch's own session-only cache of already-read rotated log files, by estimated size not file count — `0` turns caching off |
 | `log_level` | `off` | Activity log detail: `off`, `errors`, `actions`, `detailed`, or `debug` |
 | `log_category_fileops` | `true` | Log File operations (copy, move, rename, trash, remove, multiply, new file/dir) |
 | `log_category_permissions` | `true` | Log permission changes (chmod, chown) |

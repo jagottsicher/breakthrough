@@ -1474,6 +1474,34 @@ func optionCategories() []optionCategory {
 			},
 		},
 		{
+			name: "Log Holepunch",
+			options: []optionSpec{
+				stringOption("log_audit_cache_size", "Rotated-file cache size",
+					"Log Holepunch's own session-only cache of already-read rotated log "+
+						"files, so re-opening a family you already viewed this session doesn't "+
+						"mean re-reading and re-parsing every rotated file from disk again — "+
+						"capped by estimated size, not file count, since one rotated file alone "+
+						"can be gigabytes.\n\n"+
+						`Type size unit — "2GB", "500MB", "1GB" — or bare number for bytes. `+
+						"2GB by default. A single file bigger than this is never cached at all, "+
+						"just re-read on every reopen instead of evicting everything else to fit "+
+						"it. 0 turns caching off entirely.\n\n"+
+						"This only bounds what stays cached after you leave a log — the family "+
+						"you currently have open stays fully in memory regardless of this "+
+						"setting, since showing it at all needs that.",
+					func(r *Root) string { return config.FormatByteSize(r.settings.LogAuditCacheSize) },
+					func(r *Root, v string) {
+						n, err := config.ParseByteSize(v)
+						if err != nil {
+							return // see boolOption's own equivalent guard: ignore, don't guess
+						}
+						r.settings.LogAuditCacheSize = n
+						r.persistSetting("log_audit_cache_size", config.FormatByteSize(n))
+					},
+				),
+			},
+		},
+		{
 			// Off by default (see internal/activitylog's own doc
 			// comment on why this stays opt-in) — a plain-text, one-
 			// line-per-entry activity log of what breakthrough itself
@@ -2100,6 +2128,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.MoveStableSymlinks), true
 	case "remote_archive_confirm_size":
 		return config.FormatByteSize(s.RemoteArchiveConfirmSize), true
+	case "log_audit_cache_size":
+		return config.FormatByteSize(s.LogAuditCacheSize), true
 	case "cloud_mount_base_dir":
 		return s.CloudMountBaseDir, true
 	case "compress_format":

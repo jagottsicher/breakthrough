@@ -234,7 +234,7 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 		return
 	}
 	if r.log.RotatedCache == nil {
-		r.log.RotatedCache = map[string][]logview.Entry{}
+		r.log.RotatedCache = logview.NewRotatedCache()
 	}
 	r.log.TotalFiles = len(group.Files)
 
@@ -244,7 +244,7 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 		case !f.Supported:
 			r.applyLogAuditRotatedFile(f, nil, true, nil)
 		default:
-			if cached, ok := r.log.RotatedCache[logAuditCacheKey(f)]; ok {
+			if cached, ok := r.log.RotatedCache.Get(logAuditCacheKey(f)); ok {
 				r.applyLogAuditRotatedFile(f, cached, false, nil)
 				continue
 			}
@@ -333,7 +333,7 @@ func (r *Root) applyLogAuditRotatedFile(f logview.CandidateFile, entries []logvi
 		r.log.RotatedErrCount += fileErrCount
 		r.log.RotatedWarnCount += fileWarnCount
 		r.log.RotatedEntries = append(r.log.RotatedEntries, entries...)
-		r.log.RotatedCache[logAuditCacheKey(f)] = entries
+		r.log.RotatedCache.Put(logAuditCacheKey(f), entries, r.settings.LogAuditCacheSize)
 	}
 	r.log.CombineDirty = true
 	if !r.log.LastCombineAt.IsZero() && time.Since(r.log.LastCombineAt) < logAuditCombineThrottleInterval {
