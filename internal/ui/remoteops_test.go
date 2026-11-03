@@ -170,6 +170,26 @@ func TestApplyPanelDiskUsageDiscardsAStaleResultAfterNavigation(t *testing.T) {
 // half of refreshPanelDiskUsage's own gate: a request already in
 // flight must not get a second one stacked on top of it on a slow
 // connection.
+// TestRefreshPanelDiskUsageOnALocalPanelDoesNotPanic pins a real,
+// reported crash: called unconditionally from StartClock's own ticker
+// regardless of which kind of panel is active (see its own call site
+// in bottombar.go), a local panel's own nil remote used to reach the
+// background goroutine's remote.DiskUsage call completely unguarded —
+// a nil pointer dereference on the very first tick after opening
+// breakthrough on nothing but a local directory, the single most
+// common case there is. newTestRemoteRoot would have masked this (its
+// own panel is always remote), so this test deliberately uses a plain
+// local Root instead.
+func TestRefreshPanelDiskUsageOnALocalPanelDoesNotPanic(t *testing.T) {
+	r := newTestRootForConnectionMenu(t) // a plain local Root — see its own doc comment
+
+	r.refreshPanelDiskUsage(r.panel)
+
+	if r.panel.diskUsageFetching {
+		t.Error("refreshPanelDiskUsage should never start a fetch for a local panel")
+	}
+}
+
 func TestRefreshPanelDiskUsageSkipsWhileAlreadyFetching(t *testing.T) {
 	r := newTestRemoteRoot(t)
 	r.panel.diskUsageFetching = true
