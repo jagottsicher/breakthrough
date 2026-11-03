@@ -86,6 +86,10 @@ func (r *Root) openLogAuditViewer() {
 	r.log.RotatedFiles = 0
 	r.log.RotatedSkipped = 0
 	r.log.RotatedErr = nil
+	r.log.RotatedErrCount = 0
+	r.log.RotatedWarnCount = 0
+	r.log.LastCombineAt = time.Time{}
+	r.log.CombineDirty = false
 	r.refreshLogAuditCurrentFile()
 	r.log.KeywordField.SetText("")
 	r.log.TimeField.SetText("")
@@ -149,7 +153,29 @@ func (r *Root) refreshLogAuditCurrentFile() {
 			}
 		}
 	}
+	r.log.CurrentErrCount, r.log.CurrentWarnCount = countLogAuditErrWarn(r.log.CurrentEntries)
 	r.recomputeLogAuditCombined()
+}
+
+// countLogAuditErrWarn tallies entries' Error+Fatal and Warn levels —
+// the per-batch half of ErrCount/WarnCount's own doc comment:
+// refreshLogAuditCurrentFile and applyLogAuditRotatedFile each call
+// this once, on just the entries they themselves just read, and add
+// the result to a running total, instead of recomputeLogAuditCombined
+// walking the full, ever-growing AllEntries on every single rotated
+// file applied during a progressive load — see
+// BenchmarkApplyLogAuditRotatedFile for the real-world cost that used
+// to be (confirmed ~11.5s at 1.2M/40 files before this change).
+func countLogAuditErrWarn(entries []logview.Entry) (errCount, warnCount int) {
+	for _, e := range entries {
+		switch e.Level {
+		case logview.LevelError, logview.LevelFatal:
+			errCount++
+		case logview.LevelWarn:
+			warnCount++
+		}
+	}
+	return errCount, warnCount
 }
 
 // recomputeLogAuditCombined merges log.CurrentEntries/Files/
@@ -164,15 +190,8 @@ func (r *Root) refreshLogAuditCurrentFile() {
 // failed.
 func (r *Root) recomputeLogAuditCombined() {
 	r.log.AllEntries = logview.Merge(r.log.CurrentEntries, r.log.RotatedEntries)
-	r.log.ErrCount, r.log.WarnCount = 0, 0
-	for _, e := range r.log.AllEntries {
-		switch e.Level {
-		case logview.LevelError, logview.LevelFatal:
-			r.log.ErrCount++
-		case logview.LevelWarn:
-			r.log.WarnCount++
-		}
-	}
+	r.log.ErrCount = r.log.CurrentErrCount + r.log.RotatedErrCount
+	r.log.WarnCount = r.log.CurrentWarnCount + r.log.RotatedWarnCount
 	r.log.Files = r.log.CurrentFiles + r.log.RotatedFiles
 	r.log.Skipped = r.log.CurrentSkipped + r.log.RotatedSkipped
 	r.log.ParseErr = r.log.RotatedErr
@@ -273,13 +292,35 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 	})
 }
 
+// logAuditCombineThrottleInterval bounds how often applyLogAuditRotatedFile
+// actually recombines and re-renders during a progressive load — see
+// that function's own doc comment for why a per-file recombine doesn't
+// scale. Matches hashAnimationInterval's own cadence (properties.go):
+// fast enough that the viewer still visibly fills in as files land,
+// far fewer than once per file on a family with hundreds of rotations.
+const logAuditCombineThrottleInterval = 150 * time.Millisecond
+
 // applyLogAuditRotatedFile merges one rotated file's own already-read
-// result into log.RotatedEntries/Files/Skipped/Err, recombines, and
-// re-renders — called from startLogAuditProgressiveLoad's own
-// QueueUpdateDraw callback (the real file I/O already happened off the
-// UI goroutine by then, the same shape tickLogAuditFollow already
-// establishes for readLogAuditGroup), and directly, with no goroutine
-// at all, from a test exercising one already-known result.
+// result into log.RotatedEntries/Files/Skipped/Err — called from
+// startLogAuditProgressiveLoad's own QueueUpdateDraw callback (the real
+// file I/O already happened off the UI goroutine by then, the same
+// shape tickLogAuditFollow already establishes for readLogAuditGroup),
+// and directly, with no goroutine at all, from a test exercising one
+// already-known result.
+//
+// The actual recombine (logview.Merge's own full stable sort, run
+// twice — once for RotatedEntries, again inside recomputeLogAuditCombined
+// for AllEntries) and re-render (a full filtered scan) are the
+// expensive part at scale — confirmed by BenchmarkApplyLogAuditRotatedFile
+// at ~11.5s for just 1.2M entries across 40 files when run unconditionally
+// per file, the real-world "stalls before the last file is even loaded,
+// once a keyword search is already running" report on a 4.4M-entry
+// family. New entries are appended raw here — logview.Merge's own stable
+// sort-by-Time with no dedupe means Merge(Merge(a,b),c) and Merge(a,b,c)
+// produce identical output, so deferring the sort to the next
+// recomputeLogAuditCombined call (throttled below, or finally forced by
+// finishLogAuditProgressiveLoad) changes nothing about the eventual
+// order, only how often that full O(n log n) pass actually runs.
 func (r *Root) applyLogAuditRotatedFile(f logview.CandidateFile, entries []logview.Entry, skip bool, err error) {
 	switch {
 	case skip:
@@ -288,17 +329,35 @@ func (r *Root) applyLogAuditRotatedFile(f logview.CandidateFile, entries []logvi
 		r.log.RotatedErr = err
 	default:
 		r.log.RotatedFiles++
-		r.log.RotatedEntries = logview.Merge(r.log.RotatedEntries, entries)
+		fileErrCount, fileWarnCount := countLogAuditErrWarn(entries)
+		r.log.RotatedErrCount += fileErrCount
+		r.log.RotatedWarnCount += fileWarnCount
+		r.log.RotatedEntries = append(r.log.RotatedEntries, entries...)
 		r.log.RotatedCache[logAuditCacheKey(f)] = entries
+	}
+	r.log.CombineDirty = true
+	if !r.log.LastCombineAt.IsZero() && time.Since(r.log.LastCombineAt) < logAuditCombineThrottleInterval {
+		return // throttled — the next tick past the interval, or finishLogAuditProgressiveLoad, will catch this up
 	}
 	r.recomputeLogAuditCombined()
 	r.renderLogAuditViewer()
+	r.log.LastCombineAt = time.Now()
+	r.log.CombineDirty = false
 }
 
 // finishLogAuditProgressiveLoad ends a completed background load —
 // every pending file has already been applied by the time this runs
-// (see startLogAuditProgressiveLoad's own final QueueUpdateDraw call).
+// (see startLogAuditProgressiveLoad's own final QueueUpdateDraw call),
+// but applyLogAuditRotatedFile's own throttle (see its doc comment) may
+// have left the last batch or two un-recombined; flush that here so the
+// viewer's final state always reflects every file, not just whichever
+// one last happened to land past the throttle interval.
 func (r *Root) finishLogAuditProgressiveLoad() {
+	if r.log.CombineDirty {
+		r.recomputeLogAuditCombined()
+		r.log.LastCombineAt = time.Now()
+		r.log.CombineDirty = false
+	}
 	r.stopLogAuditProgressiveLoad()
 	r.renderLogAuditViewer()
 }
