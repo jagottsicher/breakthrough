@@ -93,6 +93,15 @@ type logAuditState struct {
 	// viewerLookDownloadPath already establish elsewhere in this app
 	// (see scheduleLogAuditFilterRescan's own doc comment).
 	FilterScanToken int
+	// FilterScanInFlight/FilterScanPending coalesce rapid typing into
+	// at most one running scan at a time — see
+	// scheduleLogAuditFilterRescan/runLogAuditFilterScan's own doc
+	// comments. Without this, every keystroke spawned its own
+	// unbounded O(n) scan regardless of whether an earlier one was
+	// still running, the real cost behind "stalls before the last file
+	// is even loaded, once a keyword search is already running".
+	FilterScanInFlight bool
+	FilterScanPending  bool
 	// ScanFn is how scheduleLogAuditFilterRescan's own background scan
 	// actually runs — nil falls back to the real implementation
 	// (defaultLogAuditScanFn: safeGo + QueueUpdateDraw), the same
@@ -143,10 +152,28 @@ type logAuditState struct {
 	CurrentFiles   int
 	CurrentSkipped int
 	CurrentErr     error
-	RotatedEntries []logview.Entry
-	RotatedFiles   int
-	RotatedSkipped int
-	RotatedErr     error
+	// CurrentErrCount/WarnCount and RotatedErrCount/WarnCount are
+	// countLogAuditErrWarn's own per-batch tallies for CurrentEntries
+	// and RotatedEntries respectively — recomputeLogAuditCombined just
+	// adds the two pairs together for ErrCount/WarnCount above, instead
+	// of walking the full AllEntries on every call (see
+	// applyLogAuditRotatedFile's own doc comment for why that mattered).
+	CurrentErrCount  int
+	CurrentWarnCount int
+	RotatedEntries   []logview.Entry
+	RotatedFiles     int
+	RotatedSkipped   int
+	RotatedErr       error
+	RotatedErrCount  int
+	RotatedWarnCount int
+	// LastCombineAt/CombineDirty back applyLogAuditRotatedFile's own
+	// throttle (logaudit.go) — LastCombineAt is when AllEntries was
+	// last actually recombined/re-rendered during a progressive load,
+	// CombineDirty is whether a rotated file has landed since then that
+	// still needs to be folded in (flushed by finishLogAuditProgressiveLoad
+	// if the throttle ends before one more catch-up tick fires).
+	LastCombineAt time.Time
+	CombineDirty  bool
 	// RotatedCache is session-only (per explicit request — never
 	// written to disk, cleared only by the app exiting), keyed by
 	// logAuditCacheKey — a rotated file never changes once written, so
@@ -1282,19 +1309,47 @@ func (r *Root) renderLogAuditViewer() {
 // typing" shape search-as-you-type already has everywhere else, not
 // something that needs its own visible affordance.
 func (r *Root) scheduleLogAuditFilterRescan() {
+	r.log.FilterScanToken++
+	if r.log.FilterScanInFlight {
+		// Coalesce rather than spawn a second concurrent scan: fast
+		// typing on a multi-million-entry family used to mean every
+		// keystroke's own O(n) scan ran regardless of whether the
+		// previous one had even finished — see runLogAuditFilterScan's
+		// own doc comment for what happens once this one completes.
+		r.log.FilterScanPending = true
+		return
+	}
+	r.runLogAuditFilterScan()
+}
+
+// runLogAuditFilterScan is scheduleLogAuditFilterRescan's own dispatch
+// half — only ever one of these in flight at a time (FilterScanInFlight
+// guards it). Re-reads Keyword/Time/Level fresh here, not at schedule
+// time, so a coalesced dispatch (FilterScanPending, below) always scans
+// against whatever the fields actually hold once it finally runs, not
+// a stale snapshot from whichever earlier keystroke first asked.
+func (r *Root) runLogAuditFilterScan() {
 	entries := r.log.AllEntries
 	filters := parseLogAuditFilters(r.log.KeywordField.GetText(), r.log.TimeField.GetText(), r.log.LevelField.GetText(), time.Now())
-	r.log.FilterScanToken++
 	token := r.log.FilterScanToken
+	r.log.FilterScanInFlight = true
 	scan := r.log.ScanFn
 	if scan == nil {
 		scan = r.defaultLogAuditScanFn
 	}
 	scan(entries, filters, func(shown []logview.Entry) {
-		if r.log.FilterScanToken != token {
-			return // superseded by a newer keystroke while this scan was running
+		r.log.FilterScanInFlight = false
+		if r.log.FilterScanToken == token {
+			r.renderLogAuditViewerFor(shown)
 		}
-		r.renderLogAuditViewerFor(shown)
+		// else: superseded by a newer keystroke while this scan was
+		// running — same per-request staleness guard loadToken/
+		// diskUsageForPath/viewerLookDownloadPath already establish
+		// elsewhere in this app (see async-ui skill).
+		if r.log.FilterScanPending {
+			r.log.FilterScanPending = false
+			r.runLogAuditFilterScan() // one more, coalesced, pass — see scheduleLogAuditFilterRescan
+		}
 	})
 }
 

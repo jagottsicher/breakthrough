@@ -1863,6 +1863,64 @@ func BenchmarkRenderLogAuditViewer(b *testing.B) {
 	}
 }
 
+// BenchmarkApplyLogAuditRotatedFile measures startLogAuditProgressiveLoad's
+// own hot path — applyLogAuditRotatedFile called once per rotated file,
+// with an active Keyword filter (the real-world "already searching while
+// still loading" report). Run with
+// `go test -bench ApplyLogAuditRotatedFile -benchtime=5x ./internal/ui`.
+func BenchmarkApplyLogAuditRotatedFile(b *testing.B) {
+	const files = 40
+	const perFile = 30000 // 40*30000 = 1.2M, scaled down from the reported 4.4M for benchmark runtime
+	start := time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC)
+
+	dir := b.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.log"), []byte("placeholder\n"), 0o644); err != nil {
+		b.Fatal(err)
+	}
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		b.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 200, 60)
+	r.openLogAudit()
+	r.log.Table.Select(1, 0)
+	r.openLogAuditViewer()
+	r.log.KeywordField.SetText("connection")
+	r.log.RotatedCache = map[string][]logview.Entry{}
+
+	batches := make([][]logview.Entry, files)
+	for i := range batches {
+		entries := make([]logview.Entry, perFile)
+		for j := range entries {
+			entries[j] = logview.Entry{
+				Time:    start.Add(time.Duration(i*perFile+j) * time.Second),
+				Level:   logview.LevelInfo,
+				Source:  "benchd",
+				Message: "connection established",
+			}
+		}
+		batches[i] = entries
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		r.log.RotatedEntries = nil
+		r.log.RotatedFiles = 0
+		r.log.RotatedSkipped = 0
+		r.log.RotatedErr = nil
+		r.log.RotatedErrCount = 0
+		r.log.RotatedWarnCount = 0
+		r.log.LastCombineAt = time.Time{}
+		r.log.CombineDirty = false
+		b.StartTimer()
+		for fi, entries := range batches {
+			r.applyLogAuditRotatedFile(logview.CandidateFile{Path: fmt.Sprintf("app.log.%d", fi+1)}, entries, false, nil)
+		}
+		r.finishLogAuditProgressiveLoad()
+	}
+}
+
 // controlledLogAuditScanFn wires r.log.ScanFn to a hook that never
 // calls done on its own — it captures the call instead, so a test can
 // dispatch scheduleLogAuditFilterRescan and then decide when (and
@@ -1915,13 +1973,19 @@ func TestScheduleLogAuditFilterRescanAppliesTheResultOnceItLands(t *testing.T) {
 	}
 }
 
-// TestScheduleLogAuditFilterRescanDiscardsAStaleResult pins the same
+// TestScheduleLogAuditFilterRescanCoalescesRapidTyping pins the
+// no-concurrent-scans fix directly: a second keystroke while the first
+// one's own scan is still in flight must NOT dispatch a second,
+// overlapping scan (the real cost behind "stalls... once a keyword
+// search is already running" on a multi-million-entry family) — it
+// coalesces into FilterScanPending instead, and runLogAuditFilterScan
+// re-dispatches exactly once, against the field's current text, right
+// after the in-flight one completes. Also re-pins the same
 // "a background answer for a target that's no longer current gets
 // thrown away" rule applyPanelDiskUsage/applyLogAuditRotatedFile's own
-// stale-result guards already establish: typing a second character
-// before the first keystroke's own scan landed must mean the first
-// scan's eventual result never overwrites the second's.
-func TestScheduleLogAuditFilterRescanDiscardsAStaleResult(t *testing.T) {
+// stale-result guards already establish: the superseded first scan's
+// own eventual result must never reach the table.
+func TestScheduleLogAuditFilterRescanCoalescesRapidTyping(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
@@ -1937,23 +2001,29 @@ func TestScheduleLogAuditFilterRescanDiscardsAStaleResult(t *testing.T) {
 		t.Fatal("setup: first scan never dispatched")
 	}
 
-	var secondDone func([]logview.Entry)
+	var coalescedDone func([]logview.Entry)
 	r.log.ScanFn = func(entries []logview.Entry, filters logAuditParsedFilters, done func([]logview.Entry)) {
-		secondDone = done
+		coalescedDone = done
 	}
 	r.log.KeywordField.SetText("ti")
-	if secondDone == nil {
-		t.Fatal("setup: second scan never dispatched")
+	if coalescedDone != nil {
+		t.Fatal("second keystroke dispatched its own scan while the first was still in flight — should have coalesced instead")
 	}
-
-	secondDone(nil)                                       // the newer request's own (empty, for simplicity) result
-	if got := r.log.ViewerTable.GetRowCount(); got != 2 { // header + placeholder (showTablePlaceholder sets row 1, header stays at row 0)
-		t.Fatalf("setup: GetRowCount() after the second (empty) result landed = %d, want 2 (header + placeholder)", got)
+	if !r.log.FilterScanPending {
+		t.Fatal("setup: FilterScanPending not set after a keystroke arrived while a scan was in flight")
 	}
 
 	firstDone([]logview.Entry{{Message: "stale result from the first keystroke"}}) // the stale, superseded one
 
+	if coalescedDone == nil {
+		t.Fatal("the coalesced rescan never dispatched once the in-flight scan completed")
+	}
 	if got := r.log.ViewerTable.GetCell(1, 0).Text; strings.Contains(got, "stale result") {
 		t.Errorf("table cell = %q, the stale first scan's own result must not have been applied", got)
+	}
+
+	coalescedDone(nil)                                    // the coalesced scan's own (empty, for simplicity) result for "ti"
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 { // header + placeholder (showTablePlaceholder sets row 1, header stays at row 0)
+		t.Errorf("GetRowCount() after the coalesced result landed = %d, want 2 (header + placeholder)", got)
 	}
 }
