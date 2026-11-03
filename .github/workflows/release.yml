@@ -15,7 +15,34 @@ permissions:
   contents: write
 
 jobs:
+  # The test-*.yml workflows only trigger on a push/pull_request against
+  # develop — a tag push to main (this workflow's own trigger) never ran
+  # them on the actual merge commit being released. gh pr checks on the
+  # develop->main release PR shows the *same* check runs as a green,
+  # independent confirmation only by coincidence: those are the develop
+  # push's own runs for that identical commit SHA, not a fresh run
+  # against main. goreleaser needing this job closes that gap: nothing
+  # releases without the exact tagged commit passing go vet/lint/test
+  # right here, regardless of what already ran (or didn't) on develop.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - run: go vet ./...
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.0
+
+      - run: go test ./... -race -cover
+
   goreleaser:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
