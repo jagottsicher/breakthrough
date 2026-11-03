@@ -9,6 +9,11 @@ on:
     branches:
       - develop
 
+# See test-linux.yml's own identical comment.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
