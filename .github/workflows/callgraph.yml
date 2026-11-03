@@ -26,8 +26,15 @@ jobs:
       - name: Regenerate callgraph
         run: |
           callvis_dir="$(mktemp -d)"
-          git clone --depth 1 https://github.com/ofabry/go-callvis.git "$callvis_dir/go-callvis"
+          git clone https://github.com/ofabry/go-callvis.git "$callvis_dir/go-callvis"
           cd "$callvis_dir/go-callvis"
+          # Pinned commit, not upstream's own default-branch HEAD: an
+          # unpinned clone here means the determinism patch below can
+          # start failing to apply (or silently stop being needed, or
+          # stop being enough) the moment upstream touches these lines,
+          # with no changelog entry in this repo to explain why this
+          # job started failing.
+          git checkout 67a26605e208542065d44b34a28948dde3af8d1c
           # go-callvis walks callgraph.Graph.Nodes (a map) and collects
           # dotAttrs into another map without sorting either, so the
           # generated .dot/.svg is not reproducible between two otherwise

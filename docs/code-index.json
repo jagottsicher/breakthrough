@@ -23,13 +23,13 @@
     },
     {
       "path": ".github/workflows/callgraph.yml",
-      "size": 1750,
-      "sha256": "074140eebee66d2ad3d293f42a69d8fadcdd56a8170efe24919bb8b2f35d63cb"
+      "size": 2188,
+      "sha256": "0f82775def0980814547a5bc99fadfb6db1da895b7f99425e7e5fe9f6f038226"
     },
     {
       "path": ".github/workflows/release.yml",
-      "size": 8078,
-      "sha256": "e3618dd35c13cfb60b077d4a34e2a0b450427d415e6c6eca069fdc7e9049af46"
+      "size": 8265,
+      "sha256": "4c120bf7474edfca45c27c66d4097507a35caefc727ef010c3ab993bb6cdfe06"
     },
     {
       "path": ".github/workflows/test-linux-arm.yml",
@@ -63874,5 +63874,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "a269fbac0e1145f696bfd9b08d84a20ff99b7f1839d115ff2c2adea755d3d13b"
+  "merkle_root": "b880b2c027f7ee50473b6f50ebcc52954517e323720c35375d5f68225572e67c"
 }
