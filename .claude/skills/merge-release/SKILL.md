@@ -58,6 +58,33 @@ gh pr merge <number> --merge --delete-branch=false
 ```
 (`--delete-branch=false` unless the user's instruction implies otherwise — check CLAUDE.md's "delete merged feature branches" guidance; typically a separate manual `git branch -d`/`push origin --delete` after confirming.)
 
+## Rebasing an already-pushed branch (merging several PRs in sequence)
+
+Merging more than one PR back-to-back routinely leaves the next one stale: `gh pr view <number> --json mergeable` reports `UNKNOWN` for a few seconds right after a sibling PR merges, then settles to `CONFLICTING` once it's actually checked. Don't treat `UNKNOWN` as "fine" — wait a moment and re-check before assuming no conflict.
+
+```sh
+git checkout <branch>
+git fetch origin develop
+git rebase origin/develop
+```
+
+`docs/code-index.json` and `docs/images/callgraph.svg` conflict on **every single rebase that crosses another merged PR** — this is guaranteed, not occasional, and the two files are never hand-merged:
+```sh
+git checkout --theirs docs/code-index.json docs/images/callgraph.svg
+git add docs/code-index.json docs/images/callgraph.svg
+```
+Resolve any *real* code conflicts first, then regenerate both artifacts fresh (see `docs-sync`'s own regen step) — the `--theirs` checkout is only a placeholder to get past the rebase; it does not reflect the branch's own actual new content. If the rebase is still in progress (mid-`git rebase --continue`), amend the regenerated artifacts into the commit being replayed rather than creating a new one:
+```sh
+git add docs/code-index.json docs/images/callgraph.svg
+git rebase --continue
+```
+
+After a rebase of a branch that was already pushed (has an open PR), the push needs `--force-with-lease`, and CI must be watched again from scratch — the earlier green run doesn't carry over to the new commit hashes:
+```sh
+git push --force-with-lease origin <branch>
+gh pr checks <number> --watch
+```
+
 ## Step 3 — cutting a release (`develop` → `main` + tag)
 
 Preflight, before anything else:
@@ -81,9 +108,12 @@ gh pr merge <number> --merge   # a real merge commit, not squash — main accumu
 Tag on `main` after the merge:
 ```sh
 git checkout main && git pull
+git tag --sort=-creatordate | head -3     # the real latest tag — NOT git describe --tags --abbrev=0
+git ls-remote --tags origin | grep vX.Y.Z # confirm the version you're about to use isn't already taken
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
+`git describe --tags --abbrev=0` is unreliable here — it reports the latest tag *reachable from the current commit*, which skips any tag made on a branch that merged in afterward (produced a stale version once, leading to a tag collision only caught by the push itself). Always cross-check against `git tag --sort=-creatordate` and the remote before picking the next version.
 
 Version bump rule: label-only/cosmetic renames get a patch bump even if the commit itself was tagged `feat:` — see the `release_versioning_cosmetic_rename` memory. Otherwise follow the commit types actually merged since the last tag (any `feat:` → at least minor; any breaking change → major; otherwise patch).
 
