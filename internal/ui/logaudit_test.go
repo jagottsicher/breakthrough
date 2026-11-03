@@ -1886,7 +1886,7 @@ func BenchmarkApplyLogAuditRotatedFile(b *testing.B) {
 	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 	r.log.KeywordField.SetText("connection")
-	r.log.RotatedCache = map[string][]logview.Entry{}
+	r.log.RotatedCache = logview.NewRotatedCache()
 
 	batches := make([][]logview.Entry, files)
 	for i := range batches {

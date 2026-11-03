@@ -376,6 +376,17 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:     "log_audit_cache_size",
+			Default: FormatByteSize(d.LogAuditCacheSize),
+			Kind:    KindString,
+			Summary: `Log Holepunch's own session-only cache of already-read rotated log ` +
+				`files, capped by estimated size (e.g. "2GB", "500MB"), not file count. ` +
+				`A single rotated file bigger than this is never cached at all — it's just ` +
+				`re-read on every reopen instead of evicting everything else to fit. 0 turns ` +
+				`caching off.`,
+			Implemented: true,
+		},
+		{
 			Key:         "cloud_mount_base_dir",
 			Default:     d.CloudMountBaseDir,
 			Kind:        KindString,
