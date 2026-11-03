@@ -1203,8 +1203,8 @@
     },
     {
       "path": "internal/logview/rotatedcache_test.go",
-      "size": 3951,
-      "sha256": "ffc4539a55b449b95d47c749a81991b29c1a0efc2a5eced3072b2e6091373bb7"
+      "size": 3929,
+      "sha256": "83239b10a1f71112c7546de284c23f6ad503710ae149d5026bd5d6eb136b35e9"
     },
     {
       "path": "internal/logview/source.go",
@@ -16723,14 +16723,14 @@
       "file": "internal/logview/rotatedcache_test.go",
       "name": "TestEstimateEntriesBytesCountsFileOncePerBatchNotPerEntry",
       "kind": "function",
-      "line": 105
+      "line": 104
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/logview",
       "file": "internal/logview/rotatedcache_test.go",
       "name": "TestEstimateEntriesBytesEmptyIsZero",
       "kind": "function",
-      "line": 118
+      "line": 117
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/logview",
@@ -63874,5 +63874,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "0dcc692216f6a41e8840bf3a9cb868eaede52fd03fe6db144601da0a446fb658"
+  "merkle_root": "12f5cfd69bb101b4cf40de1ed092bebb94ace296d07ab20658644bfd62cef1e6"
 }
