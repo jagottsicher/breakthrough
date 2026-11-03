@@ -1808,3 +1808,50 @@ func BenchmarkLogAuditVisibleEntries(b *testing.B) {
 		r.logAuditVisibleEntries()
 	}
 }
+
+// BenchmarkRenderLogAuditViewer measures the full per-keystroke path —
+// not just logAuditVisibleEntries (see BenchmarkLogAuditVisibleEntries
+// just above), but also renderLogAuditTimeline's own bucketing over
+// every matching entry (uncapped — logAuditMaxRenderedRows only caps
+// the table, not the timeline or the title bar's own counts) and the
+// up-to-2000-row table rebuild itself, including logAuditHighlight's
+// per-row keyword search. Uses a real *Root (newTestRootForLogAudit's
+// own construction, via a minimal on-disk fixture) with AllEntries
+// swapped out for the large synthetic set, so every widget
+// renderLogAuditViewer touches is real, not nil. Run with
+// `go test -bench RenderLogAuditViewer -benchtime=10x ./internal/ui`.
+func BenchmarkRenderLogAuditViewer(b *testing.B) {
+	const n = 75000
+	start := time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC)
+	entries := make([]logview.Entry, n)
+	for i := range entries {
+		entries[i] = logview.Entry{
+			Time:    start.Add(time.Duration(i) * time.Minute),
+			Level:   logview.LevelInfo,
+			Source:  "benchd",
+			Message: "connection established",
+		}
+	}
+
+	dir := b.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.log"), []byte("placeholder\n"), 0o644); err != nil {
+		b.Fatal(err)
+	}
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		b.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 200, 60)
+	r.openLogAudit()
+	r.log.Table.Select(1, 0)
+	r.openLogAuditViewer()
+
+	r.log.AllEntries = entries
+	r.log.KeywordField.SetText("connection")
+	r.log.TimeField.SetText("between 2026-09-18 00:00:00 and 2026-11-02 00:00:00")
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r.renderLogAuditViewer()
+	}
+}

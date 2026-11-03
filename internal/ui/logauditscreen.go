@@ -813,7 +813,7 @@ const logAuditMaxRenderedRows = 2000
 
 // logAuditHighlight escapes text for safe use inside a tview cell (see
 // panel.go's own addRow doc comment on why escaping has to happen
-// before any tag is added, not after) and, if terms is non-empty,
+// before any tag is added, not after) and, if lowerTerms is non-empty,
 // wraps every case-insensitive occurrence of any of them in a
 // background tag (reusing nameHighlightTags — panel.go — exactly
 // as-is: it already wraps an escaped string in "set background, then
@@ -821,7 +821,17 @@ const logAuditMaxRenderedRows = 2000
 // so the indices found are never thrown off by an escape sequence
 // tview.Escape may have inserted.
 //
-// terms is a list, not a single keyword, since the Keyword field's own
+// lowerTerms is already lower-cased and already filtered of empty
+// strings — see logAuditLowerTerms, called once per render by
+// renderLogAuditViewer/renderLogAuditDetail, not recomputed here on
+// every call: this runs twice per table row (Source and Message), up
+// to logAuditMaxRenderedRows times each, so lower-casing terms inside
+// it used to mean thousands of redundant strings.ToLower calls and
+// allocations per keystroke for no reason — the same class of
+// per-entry-instead-of-per-render cost parseLogAuditFilters' own doc
+// comment already describes fixing elsewhere in this file.
+//
+// Several terms, not a single keyword, since the Keyword field's own
 // boolean query (internal/filterexpr's ParseQuery) can carry several
 // terms at once — see QueryFilter.PositiveTerms's own doc comment for
 // why only the positively-matching ones (never one under NOT/NAND/NOR)
@@ -829,13 +839,21 @@ const logAuditMaxRenderedRows = 2000
 // right there wins — so a shorter term that happens to be a prefix of
 // a longer one at the same spot (both given as terms) doesn't fire
 // twice or split the longer match apart.
-func logAuditHighlight(text string, terms []string, bg tcell.Color) string {
+// logAuditLowerTerms lower-cases terms (QueryFilter.PositiveTerms' own
+// output) once, filtering out any empty string — see
+// logAuditHighlight's own doc comment for why this must happen once
+// per render, not once per call.
+func logAuditLowerTerms(terms []string) []string {
 	lowerTerms := make([]string, 0, len(terms))
 	for _, t := range terms {
 		if t != "" {
 			lowerTerms = append(lowerTerms, strings.ToLower(t))
 		}
 	}
+	return lowerTerms
+}
+
+func logAuditHighlight(text string, lowerTerms []string, bg tcell.Color) string {
 	if len(lowerTerms) == 0 {
 		return tview.Escape(text)
 	}
@@ -1224,7 +1242,7 @@ func (r *Root) renderLogAuditViewer() {
 
 	var highlightTerms []string
 	if hasQuery {
-		highlightTerms = query.PositiveTerms()
+		highlightTerms = logAuditLowerTerms(query.PositiveTerms())
 	}
 
 	shown, errCount, warnCount := r.logAuditVisibleEntries()
@@ -1369,7 +1387,7 @@ func (r *Root) openLogAuditDetail(row int) {
 	query, hasQuery := logAuditKeywordQuery(r.log.KeywordField.GetText())
 	var highlightTerms []string
 	if hasQuery {
-		highlightTerms = query.PositiveTerms()
+		highlightTerms = logAuditLowerTerms(query.PositiveTerms())
 	}
 	bg := r.theme.ButtonBackground
 	header := fmt.Sprintf("%s  %s  %s\n", logAuditTimeText(e.Time), e.Level.String(), e.File)
