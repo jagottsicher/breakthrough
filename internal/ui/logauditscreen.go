@@ -174,17 +174,20 @@ type logAuditState struct {
 	// if the throttle ends before one more catch-up tick fires).
 	LastCombineAt time.Time
 	CombineDirty  bool
-	// RotatedCache is session-only (per explicit request — never
-	// written to disk, cleared only by the app exiting), keyed by
-	// logAuditCacheKey — a rotated file never changes once written, so
-	// a cache hit is always correct. Read and written only on the UI
-	// goroutine (the pre-pass in startLogAuditProgressiveLoad, and
-	// applyLogAuditRotatedFile's own QueueUpdateDraw callback) — the
-	// background loader goroutine itself never touches this map, the
-	// same "never touch a Root field concurrently with the UI
-	// goroutine" rule startLogAuditFollow's own doc comment already
-	// states for the identical reason.
-	RotatedCache map[string][]logview.Entry
+	// RotatedCache is session-only (never written to disk, cleared
+	// only by the app exiting), keyed by logAuditCacheKey — a rotated
+	// file never changes once written, so a cache hit is always
+	// correct. Budgeted by settings.LogAuditCacheSize (bytes, not file
+	// count — see logview.RotatedCache's own doc comment for why: a
+	// single rotated file can be gigabytes, and keeping every family
+	// ever opened this session forever used to grow without bound).
+	// Read and written only on the UI goroutine (the pre-pass in
+	// startLogAuditProgressiveLoad, and applyLogAuditRotatedFile's own
+	// QueueUpdateDraw callback) — the background loader goroutine
+	// itself never touches it, the same "never touch a Root field
+	// concurrently with the UI goroutine" rule startLogAuditFollow's
+	// own doc comment already states for the identical reason.
+	RotatedCache *logview.RotatedCache
 	// TotalFiles is len(group.Files) as Discover found it when the
 	// viewer opened — known upfront, never changes for this one open,
 	// used only for the "x/y files" loading segment in the title bar

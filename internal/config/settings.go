@@ -383,6 +383,15 @@ type Settings struct {
 
 	RemoteArchiveConfirmSize int64
 
+	// LogAuditCacheSize caps Log Holepunch's own session-only cache of
+	// already-parsed rotated log files (logview.RotatedCache) — an
+	// estimated-byte LRU budget, not a file count, since one rotated
+	// file alone can be gigabytes. 0 means caching off entirely
+	// (always re-read a rotated file on reopen), the explicit choice
+	// over "unlimited": unlimited reintroduces the unbounded
+	// session-long growth this setting exists to cap.
+	LogAuditCacheSize int64
+
 	// CloudMountBaseDir overrides internal/rclone's own computed default
 	// (session.MountsDir: XDG_DATA_HOME or ~/.local/share/breakthrough,
 	// plus "mounts/<user>" — the same base trash already uses, see
@@ -793,6 +802,8 @@ func DefaultSettings() Settings {
 
 		RemoteArchiveConfirmSize: 10 << 20, // 10MB
 
+		LogAuditCacheSize: 2 << 30, // 2GB
+
 		CloudMountBaseDir: "",
 
 		CompressFormat: "zip",
@@ -980,6 +991,12 @@ func (s *Settings) apply(key, value string) error {
 			return fmt.Errorf("invalid size for %q: %w", key, err)
 		}
 		s.RemoteArchiveConfirmSize = n
+	case "log_audit_cache_size":
+		n, err := ParseByteSize(value)
+		if err != nil {
+			return fmt.Errorf("invalid size for %q: %w", key, err)
+		}
+		s.LogAuditCacheSize = n
 	case "cloud_mount_base_dir":
 		s.CloudMountBaseDir = value
 	case "compress_format":
