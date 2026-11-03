@@ -537,14 +537,11 @@ func (r *Root) newLogAuditStatsScreen() {
 // Statistics reports on exactly what the table is currently showing,
 // not the whole unfiltered group.
 func (r *Root) logAuditViewerVisibleEntries() []logview.Entry {
-	query, hasQuery := logAuditKeywordQuery(r.log.KeywordField.GetText())
-	timeExpr := r.log.TimeField.GetText()
-	levelText := r.log.LevelField.GetText()
-	now := time.Now()
+	filters := parseLogAuditFilters(r.log.KeywordField.GetText(), r.log.TimeField.GetText(), r.log.LevelField.GetText(), time.Now())
 
 	var shown []logview.Entry
 	for _, e := range r.log.AllEntries {
-		if logAuditEntryVisible(e, query, hasQuery, timeExpr, levelText, now) {
+		if logAuditEntryVisible(e, filters) {
 			shown = append(shown, e)
 		}
 	}

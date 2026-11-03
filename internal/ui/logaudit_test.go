@@ -596,8 +596,7 @@ func TestLogAuditEntryVisibleCombinesAllThreeFilters(t *testing.T) {
 	}
 	visible := func(keyword, timeExpr, levelText string) bool {
 		t.Helper()
-		query, hasQuery := logAuditKeywordQuery(keyword)
-		return logAuditEntryVisible(e, query, hasQuery, timeExpr, levelText, now)
+		return logAuditEntryVisible(e, parseLogAuditFilters(keyword, timeExpr, levelText, now))
 	}
 
 	if !visible("", "", "") {
@@ -622,11 +621,11 @@ func TestLogAuditEntryVisibleCombinesAllThreeFilters(t *testing.T) {
 
 func TestLogAuditEntryVisibleExcludesUnknownLevelFromLevelFilter(t *testing.T) {
 	e := logview.Entry{Level: logview.LevelUnknown, Message: "no level recognized here"}
-	noQuery, hasNoQuery := logAuditKeywordQuery("")
-	if logAuditEntryVisible(e, noQuery, hasNoQuery, "", "trace", time.Now()) {
+	now := time.Now()
+	if logAuditEntryVisible(e, parseLogAuditFilters("", "", "trace", now)) {
 		t.Error("an entry with no recognized level should not pass even a >= trace filter")
 	}
-	if !logAuditEntryVisible(e, noQuery, hasNoQuery, "", "", time.Now()) {
+	if !logAuditEntryVisible(e, parseLogAuditFilters("", "", "", now)) {
 		t.Error("with no level filter at all, the same entry should still show")
 	}
 }
@@ -1771,5 +1770,41 @@ func TestEscapeClosesConsigliereEvenAfterDrillingToADifferentPage(t *testing.T) 
 	}
 	if r.activePage != logAuditViewerPage {
 		t.Errorf("activePage = %q, want %q — closing the sidebar must not touch the still-open viewer", r.activePage, logAuditViewerPage)
+	}
+}
+
+// BenchmarkLogAuditVisibleEntries measures logAuditVisibleEntries
+// against a synthetic ~75k-entry family with Time populated the same
+// way the real, user-reported slow case had it (a wide "between ...
+// and ..." range covering the whole family) — the exact shape that
+// used to re-run filterexpr.ParseMtime, up to eleven date/time layout
+// attempts, once per entry instead of once per render (see
+// parseLogAuditFilters' own doc comment). Run with
+// `go test -bench LogAuditVisibleEntries -benchtime=10x ./internal/ui`
+// to compare against a pre-fix checkout.
+func BenchmarkLogAuditVisibleEntries(b *testing.B) {
+	const n = 75000
+	start := time.Date(2026, 9, 18, 0, 0, 0, 0, time.UTC)
+	entries := make([]logview.Entry, n)
+	for i := range entries {
+		entries[i] = logview.Entry{
+			Time:    start.Add(time.Duration(i) * time.Minute),
+			Level:   logview.LevelInfo,
+			Source:  "benchd",
+			Message: "connection established",
+		}
+	}
+
+	r := &Root{}
+	r.log.AllEntries = entries
+	r.log.KeywordField = tview.NewInputField()
+	r.log.KeywordField.SetText("connection")
+	r.log.TimeField = tview.NewInputField()
+	r.log.TimeField.SetText("between 2026-09-18 00:00:00 and 2026-11-02 00:00:00")
+	r.log.LevelField = tview.NewInputField()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r.logAuditVisibleEntries()
 	}
 }

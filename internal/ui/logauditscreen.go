@@ -723,28 +723,77 @@ func logAuditMinLevel(levelText string) (logview.Level, bool) {
 	return level, true
 }
 
-// logAuditEntryVisible combines all three viewer filters (AND, the
-// same combination rule filterActivityLogEntries' own keyword+time
-// pair already uses): a boolean query over Source/Message (see
-// internal/filterexpr's ParseQuery — query/hasQuery come from
-// logAuditKeywordQuery, compiled once per render, not passed as a raw
-// string here), a time range via filterexpr.ParseMtime (the exact same
-// grammar the Action Log's own Time field already accepts), and a
-// minimum Level severity. An entry with LevelUnknown never passes a
-// Level filter, even ">= trace" — "no level recognized" and "this
-// severity or worse" are different claims, and the filter is
-// explicitly about the latter.
-func logAuditEntryVisible(e logview.Entry, query filterexpr.QueryFilter, hasQuery bool, timeExpr, levelText string, now time.Time) bool {
-	if !logAuditMatchesQuery(e, query, hasQuery) {
-		return false
-	}
+// logAuditParsedFilters is every viewer filter already parsed once —
+// see parseLogAuditFilters' own doc comment for why this must never
+// happen per entry inside logAuditVisibleEntries/
+// logAuditViewerVisibleEntries' own loops.
+type logAuditParsedFilters struct {
+	query       filterexpr.QueryFilter
+	hasQuery    bool
+	mtime       filterexpr.MtimeFilter
+	hasMtime    bool
+	minLevel    logview.Level
+	hasMinLevel bool
+}
+
+// parseLogAuditFilters parses the Keyword/Time/Level fields' own
+// current text exactly once per render — a real, user-reported
+// performance bug without this: logAuditEntryVisible used to call
+// filterexpr.ParseMtime itself, per entry, inside
+// logAuditVisibleEntries' own loop — up to eleven different
+// date/time layouts tried in sequence (see ParseMtime's own doc
+// comment) on every single one of a 74k-entry family's own entries,
+// on every keystroke typed into Keyword, whenever Time also happened
+// to be populated. logAuditKeywordQuery was already correctly hoisted
+// outside the loop; ParseMtime and logAuditMinLevel were not.
+//
+// now is captured once here too, not re-read per entry: a relative
+// expression like "last 7 days" means the same instant for every
+// entry in a single scan, not a slightly different one for each as
+// evaluation proceeds.
+//
+// An unparseable Time expression still means "that half of the filter
+// simply isn't applied" (hasMtime false), never "match nothing" —
+// the same graceful-degradation contract logAuditMinLevel's own doc
+// comment already establishes for Level, preserved exactly by
+// parsing once instead of inline per call.
+func parseLogAuditFilters(keyword, timeExpr, levelText string, now time.Time) logAuditParsedFilters {
+	query, hasQuery := logAuditKeywordQuery(keyword)
+
+	var mtime filterexpr.MtimeFilter
+	hasMtime := false
 	if strings.TrimSpace(timeExpr) != "" {
-		if f, err := filterexpr.ParseMtime(timeExpr, now); err == nil && !f.Match(e.Time) {
-			return false
+		if f, err := filterexpr.ParseMtime(timeExpr, now); err == nil {
+			mtime, hasMtime = f, true
 		}
 	}
-	if minLevel, ok := logAuditMinLevel(levelText); ok {
-		if e.Level == logview.LevelUnknown || e.Level < minLevel {
+
+	minLevel, hasMinLevel := logAuditMinLevel(levelText)
+
+	return logAuditParsedFilters{
+		query: query, hasQuery: hasQuery,
+		mtime: mtime, hasMtime: hasMtime,
+		minLevel: minLevel, hasMinLevel: hasMinLevel,
+	}
+}
+
+// logAuditEntryVisible combines all three viewer filters (AND, the
+// same combination rule filterActivityLogEntries' own keyword+time
+// pair already uses) against f — already parsed once per render by
+// parseLogAuditFilters, never re-parsed here (see its own doc comment
+// for why). An entry with LevelUnknown never passes a Level filter,
+// even ">= trace" — "no level recognized" and "this severity or
+// worse" are different claims, and the filter is explicitly about the
+// latter.
+func logAuditEntryVisible(e logview.Entry, f logAuditParsedFilters) bool {
+	if !logAuditMatchesQuery(e, f.query, f.hasQuery) {
+		return false
+	}
+	if f.hasMtime && !f.mtime.Match(e.Time) {
+		return false
+	}
+	if f.hasMinLevel {
+		if e.Level == logview.LevelUnknown || e.Level < f.minLevel {
 			return false
 		}
 	}
@@ -1115,11 +1164,7 @@ func (r *Root) tickLogAuditLoadAnimation() {
 // every entry (not just the shown ones) — renderLogAuditViewer's own
 // title bar needs those regardless of the current filter.
 func (r *Root) logAuditVisibleEntries() (shown []logview.Entry, errCount, warnCount int) {
-	keyword := r.log.KeywordField.GetText()
-	query, hasQuery := logAuditKeywordQuery(keyword)
-	timeExpr := r.log.TimeField.GetText()
-	levelText := r.log.LevelField.GetText()
-	now := time.Now()
+	filters := parseLogAuditFilters(r.log.KeywordField.GetText(), r.log.TimeField.GetText(), r.log.LevelField.GetText(), time.Now())
 
 	for _, e := range r.log.AllEntries {
 		switch e.Level {
@@ -1128,7 +1173,7 @@ func (r *Root) logAuditVisibleEntries() (shown []logview.Entry, errCount, warnCo
 		case logview.LevelWarn:
 			warnCount++
 		}
-		if logAuditEntryVisible(e, query, hasQuery, timeExpr, levelText, now) {
+		if logAuditEntryVisible(e, filters) {
 			shown = append(shown, e)
 		}
 	}
