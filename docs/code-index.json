@@ -2293,8 +2293,8 @@
     },
     {
       "path": "internal/ui/logaudit_test.go",
-      "size": 79967,
-      "sha256": "7c607d0dcec4a7dc84f32a63e70cef03ee51b787439b028539801788a3514597"
+      "size": 80005,
+      "sha256": "a5ddd00467f3248caa3258f2fdb696ed79e7bf19327658b2d0e4e71fbde98817"
     },
     {
       "path": "internal/ui/logauditscreen.go",
@@ -63702,5 +63702,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "925eee6292905d389b59c4982aedfc91cef3dc715d33c8b1933f46385a6435e8"
+  "merkle_root": "125fe1fe4fb9514787e20d582e35d1ea32c12a37fb5e04d41d00407e0ed5c6d1"
 }
