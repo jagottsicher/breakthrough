@@ -128,8 +128,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y reprepro createrepo-c rpm gnupg
 
       - name: Import signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
-          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
           # Belt-and-suspenders against gpg-agent trying to pop a
           # pinentry prompt (which would just hang in CI) when reprepro
           # shells out to gpg to sign the apt Release file — the key
@@ -157,8 +159,10 @@ jobs:
             --dir assets
 
       - name: Clone breakthrough-pkg
+        env:
+          PKG_REPO_GITHUB_TOKEN: ${{ secrets.PKG_REPO_GITHUB_TOKEN }}
         run: |
-          git clone "https://x-access-token:${{ secrets.PKG_REPO_GITHUB_TOKEN }}@github.com/jagottsicher/breakthrough-pkg.git" pkg-repo
+          git clone "https://x-access-token:${PKG_REPO_GITHUB_TOKEN}@github.com/jagottsicher/breakthrough-pkg.git" pkg-repo
 
       - name: Update apt repository
         run: |
