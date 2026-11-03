@@ -1352,7 +1352,17 @@ const diskUsageRefreshInterval = time.Second
 // refresh (StartClock's own 1s cadence). Wrapped in safeGo (see its
 // own doc comment) like every other background goroutine in this app.
 func (r *Root) refreshPanelDiskUsage(panel *Panel) {
-	if panel.diskUsageFetching || time.Since(panel.diskUsageFetchedAt) < diskUsageRefreshInterval {
+	// A real, reported crash without this: called unconditionally from
+	// StartClock's own ticker (see its own call site below) regardless
+	// of which kind of panel is active — a local panel's own
+	// panel.remote is nil, and the background goroutine below used to
+	// call remote.DiskUsage on it completely unguarded, a nil pointer
+	// dereference on the very first tick after opening breakthrough on
+	// nothing but a local directory. diskUsageFor's own local branch
+	// (fsops.FetchDiskUsage, a direct local call) needs no fetch at
+	// all — there's nothing for this function's own remote-only
+	// background refresh to ever do for it.
+	if panel.remote == nil || panel.diskUsageFetching || time.Since(panel.diskUsageFetchedAt) < diskUsageRefreshInterval {
 		return
 	}
 	remote := panel.remote
