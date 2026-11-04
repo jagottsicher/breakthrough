@@ -1147,6 +1147,26 @@
       "sha256": "7c43b39811b749e17f7a908dd8484342ba0290d5042dd445d9961f80b296f2e8"
     },
     {
+      "path": "internal/logdiskcache/diskcache.go",
+      "size": 19305,
+      "sha256": "22bf4e43c3e7fb10b39e589c0b3f81ecbff7d9e3dc9aca26d3677fc9b2b05182"
+    },
+    {
+      "path": "internal/logdiskcache/diskcache_test.go",
+      "size": 16298,
+      "sha256": "acfa393920fe0d114a02ef5faf00751b1c5c182021db2e5699087c0a40722dda"
+    },
+    {
+      "path": "internal/logdiskcache/realias.go",
+      "size": 1851,
+      "sha256": "30d51b963b4e10f8c372129a7dc42aae8221fc495f55b4e35af84aaff4749818"
+    },
+    {
+      "path": "internal/logdiskcache/sort.go",
+      "size": 362,
+      "sha256": "52b370265fbf706606584e83effa6e8191b7c2add6d5ce9a7d350cd27d1fc1da"
+    },
+    {
       "path": "internal/logview/detect.go",
       "size": 13692,
       "sha256": "8450a13aa545de9d77e683adbad9022cdc175146f461591bc788596108ebbd83"
@@ -3639,6 +3659,32 @@
         "strconv",
         "strings",
         "testing"
+      ]
+    },
+    {
+      "import_path": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "directory": "internal/logdiskcache",
+      "name": "logdiskcache",
+      "files": [
+        "internal/logdiskcache/diskcache.go",
+        "internal/logdiskcache/diskcache_test.go",
+        "internal/logdiskcache/realias.go",
+        "internal/logdiskcache/sort.go"
+      ],
+      "imports": [
+        "context",
+        "crypto/sha256",
+        "encoding/gob",
+        "encoding/hex",
+        "encoding/json",
+        "fmt",
+        "github.com/jagottsicher/breakthrough/internal/logview",
+        "os",
+        "path/filepath",
+        "sort",
+        "sync",
+        "testing",
+        "unsafe"
       ]
     },
     {
@@ -15888,6 +15934,360 @@
       "name": "TestShortOID",
       "kind": "function",
       "line": 322
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "dirMode",
+      "kind": "const",
+      "line": 41
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "fileMode",
+      "kind": "const",
+      "line": 42
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "manifestFileName",
+      "kind": "const",
+      "line": 52
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "cacheFormatVersion",
+      "kind": "const",
+      "line": 60
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "Cache",
+      "kind": "type",
+      "line": 73
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "manifest",
+      "kind": "type",
+      "line": 93
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "identityManifest",
+      "kind": "type",
+      "line": 107
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "fileManifest",
+      "kind": "type",
+      "line": 117
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "Open",
+      "kind": "function",
+      "line": 137
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "wipeExcept",
+      "kind": "function",
+      "line": 161
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "identityDir",
+      "kind": "function",
+      "line": 184
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "fileName",
+      "kind": "function",
+      "line": 194
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "Get",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 226
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "Flush",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 274
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "cacheRecord",
+      "kind": "type",
+      "line": 294
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "Put",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 306
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "evictOldestLocked",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 386
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "removeLocked",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 411
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "removeFileLocked",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 415
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "ClearAll",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 436
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "ClearIdentity",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 451
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "IdentitySummary",
+      "kind": "type",
+      "line": 471
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "Identities",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 481
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "TotalBytes",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 495
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache.go",
+      "name": "saveManifest",
+      "kind": "method",
+      "receiver": "*Cache",
+      "line": 506
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "mb",
+      "kind": "const",
+      "line": 14
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "mustOpen",
+      "kind": "function",
+      "line": 16
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestPutThenGetRoundTrips",
+      "kind": "function",
+      "line": 25
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestGetMissesForUnknownKeyOrIdentity",
+      "kind": "function",
+      "line": 41
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestIdenticalKeyAcrossIdentitiesStaysSeparate",
+      "kind": "function",
+      "line": 58
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestPutWithNonPositiveMaxBytesDisablesCaching",
+      "kind": "function",
+      "line": 79
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestPutEvictsLeastRecentlyUsedAcrossIdentitiesWhenOverBudget",
+      "kind": "function",
+      "line": 92
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestClearIdentityOnlyRemovesThatIdentity",
+      "kind": "function",
+      "line": 137
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestClearAllRemovesEveryIdentity",
+      "kind": "function",
+      "line": 156
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestIdentitiesListsLabelAndSize",
+      "kind": "function",
+      "line": 181
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestManifestSurvivesReopen",
+      "kind": "function",
+      "line": 201
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestOpenTreatsCorruptManifestAsFreshStart",
+      "kind": "function",
+      "line": 215
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestOpenWipesOrphanedDataOnCorruptManifest",
+      "kind": "function",
+      "line": 233
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestDirectoryAndFilePermissionsAreOwnerOnly",
+      "kind": "function",
+      "line": 254
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "sameBacking",
+      "kind": "function",
+      "line": 293
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestGetRealiasesMessageAndRawAfterDecode",
+      "kind": "function",
+      "line": 303
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestGetRealiasesFileAcrossWholeBatch",
+      "kind": "function",
+      "line": 326
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestGetTreatsUndecodableCacheFileAsAMiss",
+      "kind": "function",
+      "line": 350
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestGetTreatsVersionMismatchAsAMiss",
+      "kind": "function",
+      "line": 377
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestPutOverwritesExistingKeyRatherThanDuplicating",
+      "kind": "function",
+      "line": 402
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestPutRejectsAFileLargerThanTheWholeBudget",
+      "kind": "function",
+      "line": 420
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/diskcache_test.go",
+      "name": "TestOpenCreatesRootDirectoryIfMissing",
+      "kind": "function",
+      "line": 437
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/realias.go",
+      "name": "realiasEntries",
+      "kind": "function",
+      "line": 23
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
+      "file": "internal/logdiskcache/sort.go",
+      "name": "sortIdentitySummaries",
+      "kind": "function",
+      "line": 8
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/logview",
@@ -39765,14 +40165,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -64009,5 +64409,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "0a1105ca9c38d3b1b929813ecc615705666312942e6d48a30470a1c1cad210fd"
+  "merkle_root": "eccc12f38086fa1d589efdfba86c22753460a711517323ebd374235020f242e2"
 }
