@@ -162,7 +162,7 @@ jobs:
         env:
           PKG_REPO_GITHUB_TOKEN: ${{ secrets.PKG_REPO_GITHUB_TOKEN }}
         run: |
-          git clone "https://x-access-token:${PKG_REPO_GITHUB_TOKEN}@github.com/jagottsicher/breakthrough-pkg.git" pkg-repo
+          git clone --depth 1 "https://x-access-token:${PKG_REPO_GITHUB_TOKEN}@github.com/jagottsicher/breakthrough-pkg.git" pkg-repo
 
       - name: Update apt repository
         # Idempotent against a re-tag of the same version (the
@@ -183,6 +183,15 @@ jobs:
           for f in ../assets/*.deb; do
             reprepro -b apt includedeb stable "$f"
           done
+          # reprepro's own distribution index only ever lists the
+          # latest version "includedeb" added per package+architecture
+          # -- an older version's own .deb is never listed/installable
+          # again the moment a newer one replaces it, it just stays on
+          # disk in pool/ as dead weight (confirmed: 22MB of apt/ here
+          # vs 1.2GB of rpm/, where nothing dropped old versions at
+          # all). deleteunreferenced purges exactly that dead weight,
+          # with zero change to what's actually installable.
+          reprepro -b apt deleteunreferenced
 
       - name: Update rpm repository
         # Maps each .goreleaser.yaml nfpm arch suffix to the RPM repo
@@ -224,6 +233,25 @@ jobs:
           if [ "${#new_rpms[@]}" -gt 0 ]; then
             rpm --addsign "${new_rpms[@]}"
           fi
+          # Unlike apt/reprepro (see "Update apt repository" above),
+          # createrepo_c indexes every .rpm file physically present --
+          # there is no "newer version replaces older" semantic here,
+          # so every version ever copied in stayed installable forever
+          # (confirmed: 182 files back to v0.60.1, 1.2GB). Keep only
+          # the 3 newest per architecture directory before
+          # regenerating metadata -- a real, deliberate reduction in
+          # how far back a pinned install can reach, not just garbage
+          # collection.
+          for dir in rpm/stable/*/; do
+            mapfile -t rpm_files < <(find "$dir" -maxdepth 1 -name '*.rpm' -printf '%f\n' | sort -t_ -k2 -V)
+            keep=3
+            total=${#rpm_files[@]}
+            if [ "$total" -gt "$keep" ]; then
+              for f in "${rpm_files[@]:0:$((total - keep))}"; do
+                rm -f "$dir/$f"
+              done
+            fi
+          done
           for dir in rpm/stable/*/; do
             createrepo_c --update "$dir"
           done
