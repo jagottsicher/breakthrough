@@ -134,6 +134,17 @@ type fileManifest struct {
 // eviction could never reclaim it, on a feature whose entire
 // settings surface (see feature_ideas.txt, section 19d) assumes those
 // two numbers agree.
+//
+// That wipe only ever runs once isSafeRoot (see below) has confirmed
+// root contains nothing but this cache's own kind of data — root is
+// no longer always a path breakthrough itself chose (see Move, and
+// the Options screen's own "Change disk cache location" action): a
+// hand-edited config file, or a typo in that dialog, can point root
+// at a real directory full of the user's own files. A corrupt or
+// missing manifest there must never be read as license to delete
+// them. Open fails instead, with root left untouched, exactly the
+// same "fail open to no caching" posture logDiskCache's own caller
+// already has to handle for every other reason Open can fail.
 func Open(root string) (*Cache, error) {
 	if err := os.MkdirAll(root, dirMode); err != nil {
 		return nil, fmt.Errorf("logdiskcache: creating cache root: %w", err)
@@ -148,16 +159,70 @@ func Open(root string) (*Cache, error) {
 			return c, nil
 		}
 	}
+	safe, err := isSafeRoot(root)
+	if err != nil {
+		return nil, fmt.Errorf("logdiskcache: checking %s: %w", root, err)
+	}
+	if !safe {
+		return nil, fmt.Errorf("logdiskcache: %s already contains files that don't look like this cache's own data — refusing to touch it", root)
+	}
 	if err := wipeExcept(root, manifestFileName); err != nil {
 		return nil, fmt.Errorf("logdiskcache: clearing orphaned cache data: %w", err)
 	}
 	return c, nil
 }
 
+// isSafeRoot reports whether every entry directly inside root is
+// either this cache's own manifest (or its ".tmp" write-ahead file,
+// see saveManifest) or something that looks exactly like one of this
+// cache's own identityDir subdirectories — a 32-character lowercase
+// hex name, nothing else. Empty counts as safe (the common case: a
+// freshly created or never-before-used directory). Used by both
+// Open's own "start fresh" fallback and ValidateNewRoot (see Move) —
+// one rule, not two that could drift apart, for the one thing that
+// actually matters here: never mistake a directory full of the
+// user's own, unrelated files for abandoned cache data.
+func isSafeRoot(root string) (bool, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return false, err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if name == manifestFileName || name == manifestFileName+".tmp" {
+			continue
+		}
+		if e.IsDir() && looksLikeIdentityDirName(name) {
+			continue
+		}
+		return false, nil
+	}
+	return true, nil
+}
+
+// looksLikeIdentityDirName reports whether name has exactly
+// identityDir's own shape: 32 lowercase hex characters, nothing more
+// or less. Doesn't attempt to reverse the hash or verify it actually
+// corresponds to some real identity — that's not the point, only
+// "this couldn't be anything a real filesystem path or username would
+// ever collide with by accident" is.
+func looksLikeIdentityDirName(name string) bool {
+	if len(name) != 32 {
+		return false
+	}
+	for _, c := range name {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
 // wipeExcept removes every entry directly inside dir except keep —
 // Open's own "start fresh" fallback, kept as a small named helper so
 // the reasoning above stays next to Open itself instead of inline
-// loop logic.
+// loop logic. Only ever reached once isSafeRoot has already confirmed
+// dir contains nothing else worth protecting.
 func wipeExcept(dir, keep string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

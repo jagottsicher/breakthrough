@@ -2811,7 +2811,12 @@ means another trip over the network — a persistent, on-disk cache
 default, 20GB) that survives past this process exiting, so a family
 read once stays a fast local decode even in a future run. Options →
 Log Holepunch offers "Clear disk cache for current connection" and
-"Clear disk cache (every connection)" to empty it on demand.
+"Clear disk cache (every connection)" to empty it on demand, and
+"Disk cache location" (`log_audit_disk_cache_path`) to relocate it —
+moving whatever is already cached there to the new path first, in the
+background, rather than starting over empty. Refuses a target that
+already holds unrelated files, so a typo can't delete anything real;
+blocked while a family is still progressively loading.
 
 A mini-timeline above the table shows the matching entries' own
 density over time — one block per time bucket, colored red if that
@@ -2937,6 +2942,7 @@ Every key breakthrough recognizes, with its default:
 | `log_audit_cache_size` | `2GB` | Log Holepunch's own session-only cache of already-read rotated log files, by estimated size not file count — `0` turns caching off |
 | `log_audit_disk_cache_enabled` | `true` | Log Holepunch's own persistent, on-disk cache for remote log families — survives past this process exiting, unlike `log_audit_cache_size`'s RAM-only cache |
 | `log_audit_disk_cache_size` | `20GB` | Maximum total size of the disk cache above, across every cached connection combined, by estimated size not file count |
+| `log_audit_disk_cache_path` | `` (default location) | Where the disk cache lives; best changed via Options → "Change disk cache location", which moves existing data — hand-editing this only changes where new data goes |
 | `log_level` | `off` | Activity log detail: `off`, `errors`, `actions`, `detailed`, or `debug` |
 | `log_category_fileops` | `true` | Log File operations (copy, move, rename, trash, remove, multiply, new file/dir) |
 | `log_category_permissions` | `true` | Log permission changes (chmod, chown) |

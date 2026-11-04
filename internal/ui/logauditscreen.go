@@ -208,6 +208,14 @@ type logAuditState struct {
 	// of this run.
 	DiskCache            *logdiskcache.Cache
 	DiskCacheUnavailable bool
+	// DiskCacheMoveCancel/DiskCacheMoveTarget back the Options screen's
+	// own "Change disk cache location" action (see
+	// internal/ui/logauditdiskcachemove.go) — non-nil/non-empty for as
+	// long as a move is actually in flight, so the row's own value()
+	// can show progress and re-activating the same row cancels rather
+	// than starting a second, overlapping move.
+	DiskCacheMoveCancel context.CancelFunc
+	DiskCacheMoveTarget string
 	// TotalFiles is len(group.Files) as Discover found it when the
 	// viewer opened — known upfront, never changes for this one open,
 	// used only for the "x/y files" loading segment in the title bar

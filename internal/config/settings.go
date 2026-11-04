@@ -414,6 +414,20 @@ type Settings struct {
 	// just one session.
 	LogAuditDiskCacheSize int64
 
+	// LogAuditDiskCachePath overrides where the disk cache above lives
+	// on disk; "" (the default) means config.UserCacheDir()'s own
+	// "logaudit" subdirectory. Best changed through the Options
+	// screen's own "Change disk cache location" action rather than by
+	// hand-editing this file directly: that action actually moves the
+	// existing cached data from the old path to the new one first
+	// (internal/logdiskcache.Cache.Move) — hand-editing this value
+	// only changes where *new* data goes from the next start onward,
+	// it does not move anything already cached at the old path, which
+	// then simply becomes unreachable through this app (not deleted,
+	// see internal/logdiskcache's own isSafeRoot — just orphaned,
+	// recoverable by hand or by pointing this back at it).
+	LogAuditDiskCachePath string
+
 	// CloudMountBaseDir overrides internal/rclone's own computed default
 	// (session.MountsDir: XDG_DATA_HOME or ~/.local/share/breakthrough,
 	// plus "mounts/<user>" — the same base trash already uses, see
@@ -1030,6 +1044,8 @@ func (s *Settings) apply(key, value string) error {
 			return fmt.Errorf("invalid size for %q: %w", key, err)
 		}
 		s.LogAuditDiskCacheSize = n
+	case "log_audit_disk_cache_path":
+		s.LogAuditDiskCachePath = value
 	case "cloud_mount_base_dir":
 		s.CloudMountBaseDir = value
 	case "compress_format":

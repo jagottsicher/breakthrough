@@ -404,6 +404,15 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:     "log_audit_disk_cache_path",
+			Default: d.LogAuditDiskCachePath,
+			Kind:    KindString,
+			Summary: `Where Log Holepunch's own disk cache lives; "" uses the default ` +
+				`cache directory. Best changed via Options → "Change disk cache location", ` +
+				`which moves existing data — hand-editing this only changes where new data goes.`,
+			Implemented: true,
+		},
+		{
 			Key:         "cloud_mount_base_dir",
 			Default:     d.CloudMountBaseDir,
 			Kind:        KindString,

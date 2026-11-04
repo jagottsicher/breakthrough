@@ -226,6 +226,49 @@ func TestOpenTreatsCorruptManifestAsFreshStart(t *testing.T) {
 	}
 }
 
+// TestOpenRefusesToWipeADirectoryThatIsNotItsOwn is the real-world
+// counterpart to the previous test: a missing/unreadable manifest in
+// a directory that also holds something that isn't this cache's own
+// data (a real user file, here) must fail Open rather than silently
+// deleting it — the actual risk a user-settable cache path (see
+// Move/ValidateNewRoot) introduces that a hardcoded, breakthrough-
+// chosen path never could.
+func TestOpenRefusesToWipeADirectoryThatIsNotItsOwn(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "my-important-document.txt"), []byte("do not delete me"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := Open(root)
+	if err == nil {
+		t.Fatal("Open succeeded on a directory with unrelated content and no manifest — want an error")
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "my-important-document.txt")); statErr != nil {
+		t.Errorf("the unrelated file was removed: %v", statErr)
+	}
+}
+
+// TestOpenAcceptsADirectoryContainingOnlyItsOwnOrphanedData pins the
+// other half: a directory whose only unexpected content looks exactly
+// like this cache's own identity subdirectories (orphaned by a prior
+// corrupt manifest, say) is still accepted and wiped — isSafeRoot must
+// not become so cautious it defeats Open's own existing fresh-start
+// recovery for genuinely orphaned cache data.
+func TestOpenAcceptsADirectoryContainingOnlyItsOwnOrphanedData(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, identityDir("remote:a@hosta:22")), dirMode); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	c, err := Open(root)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := c.Put("remote:a@hosta:22", "key1", []logview.Entry{{Message: "a"}}, 10*mb); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+}
+
 // TestOpenWipesOrphanedDataOnCorruptManifest pins the actual risk a
 // corrupt manifest creates: without this, the old identity directory
 // stays on disk forever, unreachable by the fresh, empty manifest,

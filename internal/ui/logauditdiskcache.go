@@ -21,13 +21,44 @@ import (
 // this one.
 const logAuditDiskCacheSubdir = "logaudit"
 
+// logAuditDiskCacheRoot resolves where the disk cache should live
+// right now: settings.LogAuditDiskCachePath if the user has set one
+// (via "Change disk cache location", or by hand-editing the config
+// file — see that setting's own doc comment), otherwise
+// config.UserCacheDir()'s own logAuditDiskCacheSubdir. "" (both
+// settings.LogAuditDiskCachePath and this function's own result, if
+// UserCacheDir itself can't resolve) means "no usable path at all".
+func (r *Root) logAuditDiskCacheRoot() string {
+	if r.settings.LogAuditDiskCachePath != "" {
+		return r.settings.LogAuditDiskCachePath
+	}
+	return logAuditDiskCacheDefaultRoot()
+}
+
+// logAuditDiskCacheDefaultRoot is logAuditDiskCacheRoot's own
+// built-in default, ignoring any override — what "Change disk cache
+// location" moves back to when the user clears the path field instead
+// of typing a new one (see confirmLogAuditDiskCacheMove), since
+// logAuditDiskCacheRoot itself can't answer "what's the default"
+// while an override is still set.
+func logAuditDiskCacheDefaultRoot() string {
+	dir := config.UserCacheDir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, logAuditDiskCacheSubdir)
+}
+
 // logDiskCache returns the lazily opened, process-lifetime disk cache,
-// or nil if it isn't available — no XDG cache directory could be
-// resolved, or Open itself failed (e.g. a permissions problem). Tried
-// at most once per process: a failure here is assumed to still be a
-// failure on the very next call within the same run (the underlying
-// cause, if any, won't have changed), so this doesn't retry Open on
-// every single progressive load.
+// or nil if it isn't available — no usable root could be resolved, or
+// Open itself failed (e.g. a permissions problem, or the configured
+// path already holds unrelated files — see isSafeRoot). Tried at most
+// once per process: a failure here is assumed to still be a failure
+// on the very next call within the same run (the underlying cause, if
+// any, won't have changed), so this doesn't retry Open on every single
+// progressive load. Reset to nil/false by startLogAuditDiskCacheMove
+// once a move actually succeeds, so the very next call re-opens at the
+// new root instead of keeping whatever was cached from the old one.
 func (r *Root) logDiskCache() *logdiskcache.Cache {
 	if r.log.DiskCache != nil {
 		return r.log.DiskCache
@@ -35,12 +66,12 @@ func (r *Root) logDiskCache() *logdiskcache.Cache {
 	if r.log.DiskCacheUnavailable {
 		return nil
 	}
-	dir := config.UserCacheDir()
-	if dir == "" {
+	root := r.logAuditDiskCacheRoot()
+	if root == "" {
 		r.log.DiskCacheUnavailable = true
 		return nil
 	}
-	c, err := logdiskcache.Open(filepath.Join(dir, logAuditDiskCacheSubdir))
+	c, err := logdiskcache.Open(root)
 	if err != nil {
 		r.log.DiskCacheUnavailable = true
 		return nil
