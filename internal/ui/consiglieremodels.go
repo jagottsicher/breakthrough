@@ -308,7 +308,14 @@ func (r *Root) consigliereEffortChoices() []optionChoice {
 
 	defaultText := ""
 	if fetched {
+		// "model default" for every provider except Anthropic, where ""
+		// no longer means "whatever the model itself defaults to" — see
+		// anthropicDefaultEffort's own doc comment for why leaving that
+		// claim here would now be wrong specifically for this provider.
 		defaultText = "model default"
+		if provider == "anthropic" {
+			defaultText = "medium"
+		}
 	}
 	choices := []optionChoice{{value: "", label: consigliereDefaultChoiceLabel(r.consigliere.ModelFetchErr[provider], fetched, defaultText)}}
 	for _, lvl := range r.consigliereEffortLevelsFor(provider, model) {
