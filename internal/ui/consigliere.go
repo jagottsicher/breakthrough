@@ -650,6 +650,36 @@ func (r *Root) hideConsigliere() {
 	r.consigliere.Visible = false
 }
 
+// restartConsiglierePromptForModeChange forces a fresh Consigliere
+// session whenever Machiavelli Mode is turned on or off from Options
+// — the same "close and reopen starts a fresh conversation" contract
+// showConsigliere already promises for an ordinary close, just
+// triggered by the mode toggle itself instead of requiring the user
+// to close and reopen the sidebar by hand. A real reported bug
+// without this: the title bar's own "· MACHIAVELLI" label stayed
+// stale until the sidebar was closed and reopened, even though its
+// background color already jumped to the warning color right away
+// (via consigliere.History's own focus/blur handlers, which read
+// ConsigliereHardcoreMode live — see consigliereTitleBarBackground).
+//
+// Called unconditionally by the option's own onChange, regardless of
+// whether the sidebar is currently open: cancelling an in-flight
+// reply and discarding Messages is correct either way, and
+// repositionConsigliereSidebar/renderConsigliereHistory below are
+// skipped whenever nothing is actually visible to redraw.
+func (r *Root) restartConsiglierePromptForModeChange() {
+	if r.consigliere.Cancel != nil {
+		r.consigliere.Cancel()
+		r.consigliere.Cancel = nil
+	}
+	r.consigliere.Messages = nil
+	if !r.consigliere.Visible {
+		return
+	}
+	r.repositionConsigliereSidebar() // re-renders the title bar with the new label
+	r.renderConsigliereHistory()
+}
+
 // handleConsigliereInputDone is consigliere.Input's own SetDoneFunc —
 // Enter submits the current text, Escape closes the sidebar. Tab/
 // Backtab (the other two keys InputField itself calls this for) move

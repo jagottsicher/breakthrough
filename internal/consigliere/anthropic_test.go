@@ -136,6 +136,30 @@ func TestAnthropicReplySurfacesServerError(t *testing.T) {
 	}
 }
 
+// TestAnthropicReplySurfacesStopReasonWhenNoTextContent pins a real,
+// reported bug: Claude Opus 5 thinks by default even with Effort left
+// unset, and those thinking tokens come out of the same MaxTokens
+// budget ahead of any TextBlock — on a reply that needed more
+// deliberation than anthropicMaxTokens left room for, the loop found
+// no text block at all and the resulting error gave the user nothing
+// to act on beyond "no text content". stop_reason (almost always
+// "max_tokens" in that case) must be in the message.
+func TestAnthropicReplySurfacesStopReasonWhenNoTextContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"content":[{"type":"thinking","text":""}],"stop_reason":"max_tokens"}`))
+	}))
+	defer server.Close()
+
+	p := Anthropic{BaseURL: server.URL, APIKey: func() (string, error) { return "k", nil }}
+	_, err := p.Reply(context.Background(), Request{})
+	if err == nil {
+		t.Fatal("Reply: want an error when no block is text")
+	}
+	if !strings.Contains(err.Error(), "max_tokens") {
+		t.Errorf("Reply error = %v, want it to mention stop_reason max_tokens", err)
+	}
+}
+
 func TestAnthropicReplyWithoutAPIKeyFails(t *testing.T) {
 	p := Anthropic{}
 	_, err := p.Reply(context.Background(), Request{})
