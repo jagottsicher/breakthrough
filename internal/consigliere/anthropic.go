@@ -26,10 +26,18 @@ const AnthropicDefaultBaseURL = "https://api.anthropic.com"
 // messages, checked 2026-10-27).
 const anthropicAPIVersion = "2023-06-01"
 
-// anthropicMaxTokens caps a single reply — generous enough for the
-// sidebar's own short, concrete-tip use case without risking an
-// unbounded, slow-to-render response.
-const anthropicMaxTokens = 1024
+// anthropicMaxTokens caps a single reply. Claude Opus 5 (and later
+// Opus models) think by default even when Effort is left unset — the
+// thinking tokens come out of this same budget, ahead of the actual
+// reply — so a cap sized for the sidebar's own short, concrete-tip
+// text alone was leaving no room for that reasoning on anything but
+// the simplest question. A real, reported bug: with the budget
+// already spent on thinking before any TextBlock, the loop below
+// never found one and returned errAnthropicNoText — observed only
+// without Machiavelli Mode, where the extra forwarded context
+// apparently needed less deliberation to answer, not because
+// forwarding itself changes this budget in any way.
+const anthropicMaxTokens = 4096
 
 // Anthropic is a Provider backed by Anthropic's own Messages API. Its
 // own request/response shape (x-api-key auth, an anthropic-version
@@ -82,8 +90,9 @@ type anthropicOutputConfig struct {
 }
 
 type anthropicResponse struct {
-	Content []anthropicContentBlock `json:"content"`
-	Error   *anthropicErrorBody     `json:"error,omitempty"`
+	Content    []anthropicContentBlock `json:"content"`
+	StopReason string                  `json:"stop_reason"`
+	Error      *anthropicErrorBody     `json:"error,omitempty"`
 }
 
 type anthropicErrorBody struct {
@@ -156,7 +165,11 @@ func (p Anthropic) Reply(ctx context.Context, req Request) (string, error) {
 			return block.Text, nil
 		}
 	}
-	return "", fmt.Errorf("consigliere: Anthropic reply had no text content")
+	// StopReason ("max_tokens" most likely, per anthropicMaxTokens's
+	// own doc comment — the thinking budget ran out before any
+	// TextBlock) goes in the message itself: a bare "no text content"
+	// left the user with nothing to act on beyond retrying blindly.
+	return "", fmt.Errorf("consigliere: Anthropic reply had no text content (stop_reason: %s)", firstNonEmpty(parsed.StopReason, "unknown"))
 }
 
 // toAnthropicMessages translates Message.Role (this package's own
