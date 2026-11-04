@@ -445,7 +445,7 @@ const machiavelliModeWarning = `Machiavelli Mode lets the AI Consigliere forward
 - Undertow: every operation's own source/target path.
 - Terminal: the shell's own current visible screen content.
 
-Real log lines, diffs, firewall rules, action log messages, transfer paths, and a terminal's own screen very often contain things you would not otherwise want to leave this machine: passwords typed into forms, API keys and session tokens, private IP addresses and internal network/VPN layout, real filesystem paths, employee or customer names, email addresses, or other personal data that happened to get written into a line (or added/removed in a diff, or shown on screen) by whatever produced it.
+Real log lines, diffs, firewall rules, action log messages, transfer paths, and a terminal's own screen very often contain things you would not otherwise want to leave this machine: passwords typed into forms, API keys and session tokens, private IP addresses and internal network/VPN layout, real filesystem paths, employee or customer names, email addresses, or other personal data that happened to get written into a line (or added/removed in a diff, or shown on screen) by whatever produced it. That personal data is very often about someone who has nothing to do with you at all — a third party, such as an end user of whatever application wrote the log (a real, reported case: a name and other personal fields of someone using a web portal you merely administer) — not just your own employees, customers, or infrastructure.
 
 Once a question is sent with this mode on, that content has already left breakthrough and gone to a third-party provider over the network. There is no way to recall it afterwards, no matter what you do here next.
 

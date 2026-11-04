@@ -26,6 +26,31 @@ const AnthropicDefaultBaseURL = "https://api.anthropic.com"
 // messages, checked 2026-10-27).
 const anthropicAPIVersion = "2023-06-01"
 
+// anthropicServerSideFallbackBeta opts every request into retrying a
+// declined reply on another model within the same call — see
+// anthropicFallbacks' own doc comment for why this is always sent,
+// not an Options toggle. The beta header's own date must match
+// exactly (platform.claude.com/docs/en/build-with-claude/
+// refusals-and-fallback, checked 2026-11-04) — a different
+// server-side-fallback-* value, or none, gets fallbacks rejected with
+// a 400 rather than silently ignored.
+const anthropicServerSideFallbackBeta = "server-side-fallback-2026-07-01"
+
+// anthropicFallbacks requests Anthropic's own server-side fallback
+// routing, mode "default" ("the model Anthropic recommends for its
+// refusal category", rather than a fixed, hand-picked list this
+// package would then have to keep current). A real, reported case:
+// Machiavelli Mode forwarding an ordinary application log's own line
+// — which happened to include a third party's name and other
+// personal fields — got declined outright (stop_reason "refusal",
+// category "cyber") on content that was never attack-adjacent at all.
+// Always sent, unconditionally: a refusal otherwise ends the
+// question right there with nothing to act on besides rephrasing, and
+// this costs nothing extra when no refusal happens in the first place
+// (see Reply's own stop_reason handling for what happens when every
+// model in the fallback chain still declines).
+const anthropicFallbacks = "default"
+
 // anthropicMaxTokens caps a single reply. Claude Opus 5 (and later
 // Opus models) think by default even when Effort is left unset — the
 // thinking tokens come out of this same budget, ahead of the actual
@@ -101,6 +126,7 @@ type anthropicRequest struct {
 	System       string                 `json:"system,omitempty"`
 	Messages     []anthropicMessage     `json:"messages"`
 	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
+	Fallbacks    string                 `json:"fallbacks,omitempty"`
 }
 
 type anthropicOutputConfig struct {
@@ -108,6 +134,7 @@ type anthropicOutputConfig struct {
 }
 
 type anthropicResponse struct {
+	Model       string                  `json:"model"`
 	Content     []anthropicContentBlock `json:"content"`
 	StopReason  string                  `json:"stop_reason"`
 	StopDetails *anthropicStopDetails   `json:"stop_details,omitempty"`
@@ -149,6 +176,7 @@ func (p Anthropic) Reply(ctx context.Context, req Request) (string, error) {
 		System:       combineConsigliereSystem(req.System, req.Snapshot),
 		Messages:     toAnthropicMessages(req.History),
 		OutputConfig: &anthropicOutputConfig{Effort: firstNonEmpty(p.Effort, anthropicDefaultEffort)},
+		Fallbacks:    anthropicFallbacks,
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -163,6 +191,7 @@ func (p Anthropic) Reply(ctx context.Context, req Request) (string, error) {
 	httpReq.Header.Set("content-type", "application/json")
 	httpReq.Header.Set("x-api-key", key)
 	httpReq.Header.Set("anthropic-version", anthropicAPIVersion)
+	httpReq.Header.Set("anthropic-beta", anthropicServerSideFallbackBeta)
 
 	resp, err := httpClient(p.Client).Do(httpReq)
 	if err != nil {
@@ -201,6 +230,14 @@ func (p Anthropic) Reply(ctx context.Context, req Request) (string, error) {
 				// below. Appended rather than discarded: a short, cut-off
 				// fragment is still more useful to the user than nothing.
 				return block.Text + "\n\n[reply cut off — ran out of reply budget; try asking again, or more narrowly]", nil
+			}
+			if parsed.Model != "" && parsed.Model != body.Model {
+				// anthropicFallbacks served this reply, silently, from a
+				// different model than the one configured in Options — a
+				// real, reported risk (CLAUDE.md's own "no silent
+				// substitution") if that went unmentioned: a noticeably
+				// different-sounding answer with no indication why.
+				return fmt.Sprintf("%s\n\n[answered by %s after %s declined]", block.Text, parsed.Model, body.Model), nil
 			}
 			return block.Text, nil
 		}
