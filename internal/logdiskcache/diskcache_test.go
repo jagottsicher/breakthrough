@@ -337,9 +337,15 @@ func TestGetRealiasesFileAcrossWholeBatch(t *testing.T) {
 	if !ok || len(got) != 5 {
 		t.Fatalf("Get = %+v, %v, want 5 entries", got, ok)
 	}
-	for i := 1; i < len(got); i++ {
-		if !sameBacking(got[0].File, got[i].File) {
-			t.Errorf("entry %d's File does not share a backing array with entry 0's — the per-batch File re-aliasing did not run", i)
+	// Deliberately compares two non-canonical entries against each
+	// other (1 and 2), not against entry 0 — entry 0's own File is
+	// realiasEntries' own canonical value every other entry gets
+	// re-pointed at, so comparing against it specifically wouldn't
+	// prove entries 1..4 were actually touched versus just happening
+	// to equal the one value everything is measured against.
+	for i := 2; i < len(got); i++ {
+		if !sameBacking(got[1].File, got[i].File) {
+			t.Errorf("entry %d's File does not share a backing array with entry 1's — the per-batch File re-aliasing did not run", i)
 		}
 	}
 }
