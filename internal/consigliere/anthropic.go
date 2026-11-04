@@ -33,11 +33,28 @@ const anthropicAPIVersion = "2023-06-01"
 // text alone was leaving no room for that reasoning on anything but
 // the simplest question. A real, reported bug: with the budget
 // already spent on thinking before any TextBlock, the loop below
-// never found one and returned errAnthropicNoText — observed only
-// without Machiavelli Mode, where the extra forwarded context
-// apparently needed less deliberation to answer, not because
-// forwarding itself changes this budget in any way.
+// never found one at all. Raising this alone only shrinks the window
+// where that happens — see anthropicDefaultEffort below for the fix
+// that actually bounds how much thinking happens in the first place,
+// and the stop_reason check in Reply for the case this still doesn't
+// cover (a TextBlock that exists but was itself cut off mid-reply).
 const anthropicMaxTokens = 4096
+
+// anthropicDefaultEffort is sent whenever Effort is left unset,
+// instead of omitting output_config entirely (the model's own
+// documented default, "high", which also means "think as much as it
+// wants to"). A real, reported bug: thinking tokens come out of
+// anthropicMaxTokens ahead of the actual reply, so "high" effort could
+// leave only one or two tokens of budget for the visible answer —
+// observed as a reply truncated to two words, non-deterministically,
+// since how much a given question makes the model think isn't fixed.
+// "medium" trades away the depth "high" would have given a genuinely
+// hard problem for headroom this sidebar's own short, concrete-tip
+// questions rarely need anyway — matching the guidance in
+// platform.claude.com/docs/en/build-with-claude/effort (checked
+// 2026-11-04) that chat/latency-sensitive routes do well below "high".
+// An explicit Effort (including "high" itself) always overrides this.
+const anthropicDefaultEffort = "medium"
 
 // Anthropic is a Provider backed by Anthropic's own Messages API. Its
 // own request/response shape (x-api-key auth, an anthropic-version
@@ -54,9 +71,10 @@ type Anthropic struct {
 	// Effort sets output_config.effort on the request ("low",
 	// "medium", "high", "xhigh", or "max" — see
 	// platform.claude.com/docs/en/build-with-claude/effort, checked
-	// 2026-10-27) — "" omits output_config entirely, which is exactly
-	// the model's own documented default behavior, not merely a
-	// fallback value this package picks.
+	// 2026-10-27) — "" sends anthropicDefaultEffort rather than
+	// omitting output_config, see that constant's own doc comment for
+	// why "the model's own documented default" turned out to be the
+	// wrong choice here.
 	Effort string
 	// APIKey resolves the current key immediately before the request
 	// is sent — see KeyFunc's own doc comment for why this is a
@@ -90,14 +108,27 @@ type anthropicOutputConfig struct {
 }
 
 type anthropicResponse struct {
-	Content    []anthropicContentBlock `json:"content"`
-	StopReason string                  `json:"stop_reason"`
-	Error      *anthropicErrorBody     `json:"error,omitempty"`
+	Content     []anthropicContentBlock `json:"content"`
+	StopReason  string                  `json:"stop_reason"`
+	StopDetails *anthropicStopDetails   `json:"stop_details,omitempty"`
+	Error       *anthropicErrorBody     `json:"error,omitempty"`
 }
 
 type anthropicErrorBody struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
+}
+
+// anthropicStopDetails is only populated when StopReason is
+// "refusal" — a safety classifier declined the request outright
+// (HTTP 200, no error) rather than running out of budget. Category is
+// an open set ("cyber", "bio", "reasoning_extraction",
+// "frontier_llm", ... or "" — platform.claude.com/docs/en/api/
+// messages, checked 2026-11-04) and Explanation may also be empty;
+// both are surfaced as-is rather than guessed at.
+type anthropicStopDetails struct {
+	Category    string `json:"category"`
+	Explanation string `json:"explanation"`
 }
 
 // Reply implements Provider. req.System and req.Snapshot (combined
@@ -113,13 +144,11 @@ func (p Anthropic) Reply(ctx context.Context, req Request) (string, error) {
 	}
 
 	body := anthropicRequest{
-		Model:     firstNonEmpty(p.Model, AnthropicDefaultModel),
-		MaxTokens: anthropicMaxTokens,
-		System:    combineConsigliereSystem(req.System, req.Snapshot),
-		Messages:  toAnthropicMessages(req.History),
-	}
-	if p.Effort != "" {
-		body.OutputConfig = &anthropicOutputConfig{Effort: p.Effort}
+		Model:        firstNonEmpty(p.Model, AnthropicDefaultModel),
+		MaxTokens:    anthropicMaxTokens,
+		System:       combineConsigliereSystem(req.System, req.Snapshot),
+		Messages:     toAnthropicMessages(req.History),
+		OutputConfig: &anthropicOutputConfig{Effort: firstNonEmpty(p.Effort, anthropicDefaultEffort)},
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -162,8 +191,33 @@ func (p Anthropic) Reply(ctx context.Context, req Request) (string, error) {
 
 	for _, block := range parsed.Content {
 		if block.Type == "text" && block.Text != "" {
+			if parsed.StopReason == "max_tokens" {
+				// A real, reported bug: a non-empty TextBlock here does
+				// not mean a complete reply — anthropicMaxTokens can run
+				// out mid-sentence just as easily as it can run out
+				// before any TextBlock at all, and returning that
+				// fragment as if it were the whole answer (e.g. "Ich s")
+				// is a silent wrong result, worse than the loud error
+				// below. Appended rather than discarded: a short, cut-off
+				// fragment is still more useful to the user than nothing.
+				return block.Text + "\n\n[reply cut off — ran out of reply budget; try asking again, or more narrowly]", nil
+			}
 			return block.Text, nil
 		}
+	}
+	if parsed.StopReason == "refusal" {
+		detail := "no explanation given"
+		if parsed.StopDetails != nil {
+			switch {
+			case parsed.StopDetails.Category != "" && parsed.StopDetails.Explanation != "":
+				detail = fmt.Sprintf("%s: %s", parsed.StopDetails.Category, parsed.StopDetails.Explanation)
+			case parsed.StopDetails.Category != "":
+				detail = parsed.StopDetails.Category
+			case parsed.StopDetails.Explanation != "":
+				detail = parsed.StopDetails.Explanation
+			}
+		}
+		return "", fmt.Errorf("consigliere: Anthropic declined to answer (%s) — likely the forwarded content itself, not a bug; try rephrasing the question", detail)
 	}
 	// StopReason ("max_tokens" most likely, per anthropicMaxTokens's
 	// own doc comment — the thinking budget ran out before any

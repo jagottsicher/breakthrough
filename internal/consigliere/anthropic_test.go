@@ -102,7 +102,14 @@ func TestAnthropicReplySetsOutputConfigEffortWhenSet(t *testing.T) {
 	}
 }
 
-func TestAnthropicReplyOmitsOutputConfigWhenEffortUnset(t *testing.T) {
+// TestAnthropicReplySendsDefaultEffortWhenUnset pins a deliberately
+// changed contract: omitting output_config used to mean "the model's
+// own documented default" (unconditional "high", which also means
+// unbounded thinking) — a real, reported bug let that consume
+// anthropicMaxTokens before any reply text, or cut the reply itself
+// off mid-sentence. "" now sends anthropicDefaultEffort explicitly;
+// see that constant's own doc comment.
+func TestAnthropicReplySendsDefaultEffortWhenUnset(t *testing.T) {
 	var gotBody anthropicRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&gotBody)
@@ -114,8 +121,8 @@ func TestAnthropicReplyOmitsOutputConfigWhenEffortUnset(t *testing.T) {
 	if _, err := p.Reply(context.Background(), Request{}); err != nil {
 		t.Fatalf("Reply: %v", err)
 	}
-	if gotBody.OutputConfig != nil {
-		t.Errorf("OutputConfig = %+v, want nil (the model's own documented default)", gotBody.OutputConfig)
+	if gotBody.OutputConfig == nil || gotBody.OutputConfig.Effort != anthropicDefaultEffort {
+		t.Errorf("OutputConfig = %+v, want Effort %q", gotBody.OutputConfig, anthropicDefaultEffort)
 	}
 }
 
@@ -157,6 +164,55 @@ func TestAnthropicReplySurfacesStopReasonWhenNoTextContent(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "max_tokens") {
 		t.Errorf("Reply error = %v, want it to mention stop_reason max_tokens", err)
+	}
+}
+
+// TestAnthropicReplyMarksTruncatedTextInsteadOfReturningItAsComplete
+// pins a real, reported bug: raising anthropicMaxTokens didn't
+// eliminate the thinking-budget problem, it just moved the failure
+// mode — a TextBlock that exists but was itself cut off mid-sentence
+// (observed as a two-word reply, "Ich s") used to come back from
+// Reply looking like any other complete answer, silently wrong rather
+// than loudly failed. stop_reason "max_tokens" alongside real text
+// must still be visible to the caller.
+func TestAnthropicReplyMarksTruncatedTextInsteadOfReturningItAsComplete(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"Ich s"}],"stop_reason":"max_tokens"}`))
+	}))
+	defer server.Close()
+
+	p := Anthropic{BaseURL: server.URL, APIKey: func() (string, error) { return "k", nil }}
+	got, err := p.Reply(context.Background(), Request{})
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if !strings.HasPrefix(got, "Ich s") {
+		t.Errorf("Reply = %q, want the fragment itself kept, not discarded", got)
+	}
+	if !strings.Contains(got, "cut off") {
+		t.Errorf("Reply = %q, want an explicit truncation marker", got)
+	}
+}
+
+// TestAnthropicReplyExplainsRefusal pins the other new stop_reason
+// case a real session hit under Machiavelli Mode on an ordinary
+// syslog question: a safety classifier declining outright (HTTP 200,
+// stop_reason "refusal") used to come back as the same generic "no
+// text content" message as a budget problem, giving no hint that the
+// forwarded content itself was the reason, not a bug.
+func TestAnthropicReplyExplainsRefusal(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"content":[],"stop_reason":"refusal","stop_details":{"category":"cyber","explanation":"repeated authentication failures"}}`))
+	}))
+	defer server.Close()
+
+	p := Anthropic{BaseURL: server.URL, APIKey: func() (string, error) { return "k", nil }}
+	_, err := p.Reply(context.Background(), Request{})
+	if err == nil {
+		t.Fatal("Reply: want an error for a refusal")
+	}
+	if !strings.Contains(err.Error(), "cyber") || !strings.Contains(err.Error(), "repeated authentication failures") {
+		t.Errorf("Reply error = %v, want it to mention the stop_details category and explanation", err)
 	}
 }
 
