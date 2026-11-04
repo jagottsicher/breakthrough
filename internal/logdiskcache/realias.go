@@ -30,12 +30,17 @@ func realiasEntries(entries []logview.Entry) {
 	// because Put is always called once per single rotated file's own
 	// already-homogeneous batch (see internal/ui's
 	// applyLogAuditRotatedFile) — never a mixed batch from more than
-	// one file.
+	// one file. Unconditional, not "only if already equal": every
+	// entry's own File is equal by *content* after a gob decode
+	// regardless (nothing else could have written a different file
+	// name into this one batch), so a content check here would never
+	// actually be false — the whole point is collapsing entries[i]'s
+	// own, separately decoded backing array onto entries[0]'s, which a
+	// check that only reassigns when they're "already equal" would
+	// defeat entirely.
 	file := entries[0].File
 	for i := range entries {
-		if entries[i].File == file {
-			entries[i].File = file
-		}
+		entries[i].File = file
 		if entries[i].Message == entries[i].Raw {
 			entries[i].Raw = entries[i].Message
 		}

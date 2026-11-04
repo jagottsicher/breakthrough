@@ -37,6 +37,29 @@ func SystemDir() string {
 	return systemDir
 }
 
+// UserCacheDir returns the user's own cache directory: $XDG_CACHE_HOME/
+// breakthrough if XDG_CACHE_HOME is set, otherwise ~/.cache/breakthrough
+// — the same XDG Base Directory convention UserDir already follows for
+// config, applied to the separate "regenerable, safe to delete, not
+// meant to be backed up" tier the XDG spec itself defines caches for.
+// Log Holepunch's own persistent disk cache (internal/logdiskcache) is
+// the first feature in this project that needs one; earlier
+// disk-backed features (mounts, trash) all use UserDir's own sibling in
+// internal/session instead because their own content isn't disposable
+// the same way a re-fetchable cache's is. Returns "" if neither is
+// available, the same "no tier, not fatal" contract UserDir's own doc
+// comment already establishes.
+func UserCacheDir() string {
+	if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
+		return filepath.Join(xdg, appDirName)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".cache", appDirName)
+}
+
 // SystemConfigFile and UserConfigFile are the two tiers' own flat
 // "key = value" files (see ParseFile/Load). UserConfigFile returns ""
 // when UserDir does (see its own doc comment) — callers must check for

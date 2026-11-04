@@ -13,6 +13,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/filterexpr"
+	"github.com/jagottsicher/breakthrough/internal/logdiskcache"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 )
 
@@ -196,6 +197,17 @@ type logAuditState struct {
 	// concurrently with the UI goroutine" rule startLogAuditFollow's
 	// own doc comment already states for the identical reason.
 	RotatedCache *logview.RotatedCache
+	// DiskCache is the lazily opened, process-lifetime persistent
+	// counterpart to RotatedCache (see internal/logdiskcache's own doc
+	// comment) — unlike RotatedCache, survives past this process
+	// exiting, and is remote-only by design (see
+	// startLogAuditProgressiveLoad's own doc comment on why). nil until
+	// first actually needed; DiskCacheUnavailable short-circuits
+	// logDiskCache's own Open attempt once it has already failed once,
+	// rather than retrying every single progressive load for the rest
+	// of this run.
+	DiskCache            *logdiskcache.Cache
+	DiskCacheUnavailable bool
 	// TotalFiles is len(group.Files) as Discover found it when the
 	// viewer opened — known upfront, never changes for this one open,
 	// used only for the "x/y files" loading segment in the title bar

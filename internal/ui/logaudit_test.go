@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/logdiskcache"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -181,6 +184,120 @@ func TestLogAuditCacheUsesIdentityCapturedAtLoadStartNotLivePanelState(t *testin
 	}
 	if _, ok := r.log.RotatedCache.Get(logAuditCacheKey(r.currentLogAuditSourceIdentity(), f)); ok {
 		t.Error("entries must not be reachable under the live (post-reconnect) identity")
+	}
+}
+
+// explodingFileSource panics the instant anything actually tries to
+// read through it — used to prove readLogAuditRotatedFileWithDiskCache
+// took the disk-hit path and never touched the real source at all,
+// not just that it happened to return the right entries.
+type explodingFileSource struct{}
+
+func (explodingFileSource) ReadDir(string) ([]logview.SourceEntry, error) {
+	panic("ReadDir must not be called on a disk-cache hit")
+}
+
+func (explodingFileSource) Open(string) (io.ReadCloser, error) {
+	panic("Open must not be called on a disk-cache hit")
+}
+
+func (explodingFileSource) Join(dir, name string) string { return dir + "/" + name }
+
+func TestReadLogAuditRotatedFileWithDiskCachePrefersDiskOverNetwork(t *testing.T) {
+	cache, err := logdiskcache.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	f := logview.CandidateFile{Path: "/var/log/app.log.1", Size: 10, ModTime: time.Unix(1700000000, 0)}
+	identity := "remote:a@hosta:22"
+	want := []logview.Entry{{Message: "from disk cache"}}
+	if err := cache.Put(identity, logAuditFileKey(f), want, 10<<20); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	got, err := readLogAuditRotatedFileWithDiskCache(context.Background(), cache, identity, explodingFileSource{}, f, 10<<20)
+	if err != nil {
+		t.Fatalf("readLogAuditRotatedFileWithDiskCache: %v", err)
+	}
+	if len(got) != 1 || got[0].Message != "from disk cache" {
+		t.Errorf("got = %+v, want the disk-cached entries", got)
+	}
+}
+
+func TestReadLogAuditRotatedFileWithDiskCachePopulatesCacheOnMiss(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.log.1"), []byte("just some unstructured text\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	fi, err := os.Stat(filepath.Join(dir, "app.log.1"))
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	f := logview.CandidateFile{Path: filepath.Join(dir, "app.log.1"), Size: fi.Size(), ModTime: fi.ModTime(), Supported: true}
+	cache, err := logdiskcache.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	identity := "remote:a@hosta:22"
+
+	got, err := readLogAuditRotatedFileWithDiskCache(context.Background(), cache, identity, logview.LocalFileSource{}, f, 10<<20)
+	if err != nil {
+		t.Fatalf("readLogAuditRotatedFileWithDiskCache: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d entries, want 1", len(got))
+	}
+
+	cached, ok := cache.Get(context.Background(), identity, logAuditFileKey(f))
+	if !ok {
+		t.Fatal("a miss did not populate the disk cache for next time")
+	}
+	if len(cached) != 1 || cached[0].Message != got[0].Message {
+		t.Errorf("cached = %+v, want it to match the freshly read entries", cached)
+	}
+}
+
+func TestReadLogAuditRotatedFileWithDiskCacheNilCacheFallsThroughToSource(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.log.1"), []byte("just some unstructured text\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	fi, err := os.Stat(filepath.Join(dir, "app.log.1"))
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	f := logview.CandidateFile{Path: filepath.Join(dir, "app.log.1"), Size: fi.Size(), ModTime: fi.ModTime(), Supported: true}
+
+	got, err := readLogAuditRotatedFileWithDiskCache(context.Background(), nil, "remote:a@hosta:22", logview.LocalFileSource{}, f, 10<<20)
+	if err != nil {
+		t.Fatalf("readLogAuditRotatedFileWithDiskCache: %v", err)
+	}
+	if len(got) != 1 {
+		t.Errorf("got %d entries, want 1 — a nil diskCache must still fall through to a real read", len(got))
+	}
+}
+
+// TestStartLogAuditProgressiveLoadNeverOpensDiskCacheForLocalSource pins
+// the disk cache's own remote-only scope (see
+// startLogAuditProgressiveLoad's own doc comment on why): the decision
+// of whether to use it at all is made synchronously, before any
+// background goroutine is even spawned, so this is directly observable
+// without draining QueueUpdateDraw.
+func TestStartLogAuditProgressiveLoadNeverOpensDiskCacheForLocalSource(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.log"), []byte("current\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile app.log: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "app.log.1"), []byte("rotated\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile app.log.1: %v", err)
+	}
+	r := newTestRootForLogAudit(t, dir)
+	r.settings.LogAuditDiskCacheEnabled = true
+	r.log.Table.Select(1, 0)
+	r.openLogAuditViewer()
+
+	if r.log.DiskCache != nil {
+		t.Error("a local-source progressive load opened the disk cache — it must stay remote-only")
 	}
 }
 

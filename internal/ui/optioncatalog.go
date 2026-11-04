@@ -113,6 +113,22 @@ type optionSpec struct {
 	// TestOptionCatalogMatchesSettingDocs' own secretAction exemption.
 	secretAction func(*Root)
 
+	// action, when non-nil, marks this row as a one-off triggered
+	// action rather than an ordinary value — activateOptionRow calls
+	// it instead of toggling/cycling/editing in place, the same
+	// "dispatch differently, don't route through apply/persistSetting"
+	// shape secretAction already establishes, just for a plain action
+	// (e.g. Log Holepunch's own "Clear disk cache") rather than a
+	// credential entry point specifically. key still identifies the
+	// row, but deliberately has no config.SettingDocs entry of its own
+	// — see TestOptionCatalogMatchesSettingDocs' own exemption for
+	// both this and secretAction. An action expected to actually
+	// delete something is responsible for confirming itself (see
+	// r.openConfirm) before doing it; this field carries no
+	// confirmation of its own the way confirmEnable does for a KindBool
+	// row, since not every action needs one.
+	action func(*Root)
+
 	// pathCompletion marks a KindString row whose editOptionValue
 	// dialog should offer Tab path completion (see
 	// completeOptionsInputPath) instead of Tab's own default meaning
@@ -1499,6 +1515,73 @@ func optionCategories() []optionCategory {
 						r.persistSetting("log_audit_cache_size", config.FormatByteSize(n))
 					},
 				),
+				boolOption("log_audit_disk_cache_enabled", "Persistent disk cache",
+					"Keeps already-read rotated files from remote log families cached on "+
+						"disk, so re-opening one later — even in a future run of breakthrough "+
+						"— skips the network round trip entirely instead of just the "+
+						"session-only rotated-file cache above. Off re-reads every rotated "+
+						"file over the connection on every reopen, same as before this "+
+						"existed. On by default.",
+					false,
+					func(r *Root) bool { return r.settings.LogAuditDiskCacheEnabled },
+					func(r *Root, b bool) {
+						r.settings.LogAuditDiskCacheEnabled = b
+						r.persistSetting("log_audit_disk_cache_enabled", strconv.FormatBool(b))
+					},
+				),
+				stringOption("log_audit_disk_cache_size", "Disk cache max size",
+					"Caps the disk cache's own total size across every cached remote "+
+						"connection, shared globally rather than per-session — unlike the "+
+						"rotated-file cache above, this survives this process exiting: once a "+
+						"remote family has been read once, re-opening it later (even in a "+
+						"future run) is a local decode instead of another trip over the "+
+						"connection. Remote sources only — a live measurement found no "+
+						"win caching an already-local file.\n\n"+
+						`Type a size unit — "20GB", "5GB", "500MB" — or a bare number for `+
+						"bytes. 20GB by default. A single family bigger than this is never "+
+						"cached at all, just re-read on every reopen instead of evicting "+
+						"everything else to fit it.",
+					func(r *Root) string { return config.FormatByteSize(r.settings.LogAuditDiskCacheSize) },
+					func(r *Root, v string) {
+						n, err := config.ParseByteSize(v)
+						if err != nil {
+							return
+						}
+						r.settings.LogAuditDiskCacheSize = n
+						r.persistSetting("log_audit_disk_cache_size", config.FormatByteSize(n))
+					},
+				),
+				{
+					key:   "log_audit_disk_cache_clear_connection",
+					label: "Clear disk cache for current connection",
+					help: "Removes only the active panel's own connection from the disk " +
+						"cache (see above) — every other cached connection's own data is " +
+						"left alone. A no-op if the active panel is local, or if that " +
+						"connection has nothing cached.",
+					value: func(*Root) string { return "" },
+					action: func(r *Root) {
+						r.openConfirm(
+							"Clear the disk cache for the current connection?",
+							"Yes, clear",
+							func() { r.clearLogAuditDiskCacheForCurrentConnection() },
+						)
+					},
+				},
+				{
+					key:   "log_audit_disk_cache_clear_all",
+					label: "Clear disk cache (every connection)",
+					help: "Empties the whole disk cache at once — every connection it has " +
+						"ever cached anything for, not just the one currently active. The " +
+						"next open of any remote log family is a cold read again.",
+					value: func(*Root) string { return "" },
+					action: func(r *Root) {
+						r.openConfirm(
+							"Clear the entire Log Holepunch disk cache, for every connection?",
+							"Yes, clear everything",
+							func() { r.clearLogAuditDiskCache() },
+						)
+					},
+				},
 			},
 		},
 		{
@@ -2131,6 +2214,10 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return config.FormatByteSize(s.RemoteArchiveConfirmSize), true
 	case "log_audit_cache_size":
 		return config.FormatByteSize(s.LogAuditCacheSize), true
+	case "log_audit_disk_cache_enabled":
+		return strconv.FormatBool(s.LogAuditDiskCacheEnabled), true
+	case "log_audit_disk_cache_size":
+		return config.FormatByteSize(s.LogAuditDiskCacheSize), true
 	case "cloud_mount_base_dir":
 		return s.CloudMountBaseDir, true
 	case "compress_format":
