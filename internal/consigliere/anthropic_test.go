@@ -11,13 +11,14 @@ import (
 )
 
 func TestAnthropicReplySendsExpectedRequestAndParsesReply(t *testing.T) {
-	var gotPath, gotAPIKey, gotVersion string
+	var gotPath, gotAPIKey, gotVersion, gotBeta string
 	var gotBody anthropicRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotAPIKey = r.Header.Get("x-api-key")
 		gotVersion = r.Header.Get("anthropic-version")
+		gotBeta = r.Header.Get("anthropic-beta")
 		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
 			t.Fatalf("decoding request body: %v", err)
 		}
@@ -50,6 +51,12 @@ func TestAnthropicReplySendsExpectedRequestAndParsesReply(t *testing.T) {
 	}
 	if gotVersion != anthropicAPIVersion {
 		t.Errorf("anthropic-version = %q, want %q", gotVersion, anthropicAPIVersion)
+	}
+	if gotBeta != anthropicServerSideFallbackBeta {
+		t.Errorf("anthropic-beta = %q, want %q", gotBeta, anthropicServerSideFallbackBeta)
+	}
+	if gotBody.Fallbacks != "default" {
+		t.Errorf("Fallbacks = %q, want %q", gotBody.Fallbacks, "default")
 	}
 	if gotBody.Model != AnthropicDefaultModel {
 		t.Errorf("model = %q, want default %q", gotBody.Model, AnthropicDefaultModel)
@@ -213,6 +220,53 @@ func TestAnthropicReplyExplainsRefusal(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cyber") || !strings.Contains(err.Error(), "repeated authentication failures") {
 		t.Errorf("Reply error = %v, want it to mention the stop_details category and explanation", err)
+	}
+}
+
+// TestAnthropicReplyNotesWhenAFallbackModelAnswered pins a real,
+// reported case: the requested model declined (stop_reason
+// "refusal") and anthropicFallbacks retried it on another model
+// within the same call, which answered — the response's top-level
+// "model" then differs from what was requested. That substitution
+// must be visible to the caller, not silent (CLAUDE.md's own "no
+// silent errors or substitutions").
+func TestAnthropicReplyNotesWhenAFallbackModelAnswered(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"claude-opus-4-8","content":[{"type":"fallback"},{"type":"text","text":"use lsusb"}],"stop_reason":"end_turn"}`))
+	}))
+	defer server.Close()
+
+	p := Anthropic{BaseURL: server.URL, APIKey: func() (string, error) { return "k", nil }}
+	got, err := p.Reply(context.Background(), Request{})
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if !strings.Contains(got, "use lsusb") {
+		t.Errorf("Reply = %q, want the fallback model's own text kept", got)
+	}
+	if !strings.Contains(got, "claude-opus-4-8") || !strings.Contains(got, AnthropicDefaultModel) {
+		t.Errorf("Reply = %q, want both the fallback model and the originally requested one named", got)
+	}
+}
+
+// TestAnthropicReplyExplainsRefusalWhenFallbackAlsoDeclines is the
+// other half: if every model in the fallback chain declines, the API
+// returns the last one's refusal — already-existing stop_reason
+// handling must still surface it rather than treating anthropicFallbacks
+// as having silently solved every refusal.
+func TestAnthropicReplyExplainsRefusalWhenFallbackAlsoDeclines(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"claude-opus-4-8","content":[],"stop_reason":"refusal","stop_details":{"category":"cyber","explanation":"declined"}}`))
+	}))
+	defer server.Close()
+
+	p := Anthropic{BaseURL: server.URL, APIKey: func() (string, error) { return "k", nil }}
+	_, err := p.Reply(context.Background(), Request{})
+	if err == nil {
+		t.Fatal("Reply: want an error when the fallback model also refuses")
+	}
+	if !strings.Contains(err.Error(), "cyber") {
+		t.Errorf("Reply error = %v, want the refusal category", err)
 	}
 }
 
