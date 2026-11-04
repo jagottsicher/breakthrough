@@ -9,6 +9,7 @@
 package ui
 
 import (
+	"fmt"
 	"io"
 	"path"
 
@@ -33,6 +34,33 @@ func (r *Root) currentLogAuditSource() logview.FileSource {
 		return remoteLogFileSource{client: r.panel.remote}
 	}
 	return logview.LocalFileSource{}
+}
+
+// currentLogAuditSourceIdentity names whichever machine
+// currentLogAuditSource would read from right now — distinct,
+// non-empty strings for "local" versus any remote connection, used
+// only as a RotatedCache namespace prefix (see logAuditCacheKey in
+// logaudit.go). Deliberately not a method on logview.FileSource
+// itself: nothing inside internal/logview ever needs a source's own
+// identity, only this UI-side cache key does, so the concept stays out
+// of a package every FileSource implementer (including tests) would
+// otherwise have to satisfy for no reason connected to their own job.
+//
+// Built from r.panel.remoteConn rather than r.panel.remote — panel.go's
+// own doc comment calls remoteConn "purely for display... never
+// consulted to decide behavior", which this deliberately changes: a
+// log family's own cache entries must never be reusable across two
+// different remote hosts (or between a remote host and this machine)
+// just because they happen to share a path, size and mtime. The
+// "remote:" prefix guarantees that even a zero-valued Connection (were
+// one ever reachable while r.panel.remote is still set) can never
+// collide with the local identity string.
+func (r *Root) currentLogAuditSourceIdentity() string {
+	if !r.panel.isRemote() {
+		return "local"
+	}
+	c := r.panel.remoteConn
+	return fmt.Sprintf("remote:%s@%s:%d", c.User, c.Host, c.Port)
 }
 
 // remoteLogFileSource adapts remotefs.Client to logview.FileSource —

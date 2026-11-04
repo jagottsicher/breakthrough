@@ -200,16 +200,22 @@ func (r *Root) recomputeLogAuditCombined() {
 	}
 }
 
-// logAuditCacheKey identifies f for log.RotatedCache — path, size,
-// and modtime together, the same CandidateFile.Size/ModTime Discover
-// already populated from a single ReadDir/ListDir call, not a second
-// stat. A rotated file never changes once written, so in practice this
-// only ever needs to tell "the same file" apart from "a different file
-// that happens to reuse the same path" (e.g. a differently-configured
-// remote reused between two sessions) — belt and suspenders, not a
-// real expected case.
-func logAuditCacheKey(f logview.CandidateFile) string {
-	return fmt.Sprintf("%s|%d|%d", f.Path, f.Size, f.ModTime.UnixNano())
+// logAuditCacheKey identifies f for log.RotatedCache — identity (see
+// currentLogAuditSourceIdentity), path, size, and modtime together, the
+// latter three the same CandidateFile.Size/ModTime Discover already
+// populated from a single ReadDir/ListDir call, not a second stat. A
+// rotated file never changes once written, so size+modtime alone
+// already tell "the same file" apart from "a different file that
+// happens to reuse the same path". identity is what tells two
+// different machines apart: without it, two hosts provisioned from the
+// same image (or simply reusing the same path, e.g. both rotating
+// /var/log/nginx/access.log.1 to the same size at the same cron tick)
+// would otherwise produce the exact same key and silently serve one
+// host's entries for the other's family — a real case this app's own
+// remote-vs-local separation rule (see CLAUDE.md) requires guarding
+// against, not "belt and suspenders".
+func logAuditCacheKey(identity string, f logview.CandidateFile) string {
+	return fmt.Sprintf("%s|%s|%d|%d", identity, f.Path, f.Size, f.ModTime.UnixNano())
 }
 
 // startLogAuditProgressiveLoad reads group's own rotated files
@@ -238,14 +244,24 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 	}
 	r.log.TotalFiles = len(group.Files)
 
+	// identity is captured once, right here, and closed over by every
+	// use below (the pre-pass immediately, the background goroutine's
+	// own closure later) rather than re-read from r.panel at Put time —
+	// r.panel can reconnect to a different host while this same load is
+	// still progressing, and a cache key built from whatever r.panel
+	// says *then* would silently file one host's entries under
+	// another's identity. See currentLogAuditSourceIdentity's own doc
+	// comment for why this matters at all.
+	identity := r.currentLogAuditSourceIdentity()
+
 	var pending []logview.CandidateFile
 	for _, f := range group.Files[1:] {
 		switch {
 		case !f.Supported:
-			r.applyLogAuditRotatedFile(f, nil, true, nil)
+			r.applyLogAuditRotatedFile(identity, f, nil, true, nil)
 		default:
-			if cached, ok := r.log.RotatedCache.Get(logAuditCacheKey(f)); ok {
-				r.applyLogAuditRotatedFile(f, cached, false, nil)
+			if cached, ok := r.log.RotatedCache.Get(logAuditCacheKey(identity, f)); ok {
+				r.applyLogAuditRotatedFile(identity, f, cached, false, nil)
 				continue
 			}
 			pending = append(pending, f)
@@ -280,7 +296,7 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 				if ctx.Err() != nil {
 					return
 				}
-				r.applyLogAuditRotatedFile(f, entries, false, ferr)
+				r.applyLogAuditRotatedFile(identity, f, entries, false, ferr)
 			})
 		}
 		r.app.QueueUpdateDraw(func() {
@@ -306,7 +322,11 @@ const logAuditCombineThrottleInterval = 150 * time.Millisecond
 // file I/O already happened off the UI goroutine by then, the same
 // shape tickLogAuditFollow already establishes for readLogAuditGroup),
 // and directly, with no goroutine at all, from a test exercising one
-// already-known result.
+// already-known result. identity is always whatever
+// startLogAuditProgressiveLoad captured at the start of the load that
+// produced f/entries, passed through the closure rather than re-read
+// from r.panel here — see that function's own doc comment for why
+// re-reading it here would be wrong.
 //
 // The actual recombine (logview.Merge's own full stable sort, run
 // twice — once for RotatedEntries, again inside recomputeLogAuditCombined
@@ -321,7 +341,7 @@ const logAuditCombineThrottleInterval = 150 * time.Millisecond
 // recomputeLogAuditCombined call (throttled below, or finally forced by
 // finishLogAuditProgressiveLoad) changes nothing about the eventual
 // order, only how often that full O(n log n) pass actually runs.
-func (r *Root) applyLogAuditRotatedFile(f logview.CandidateFile, entries []logview.Entry, skip bool, err error) {
+func (r *Root) applyLogAuditRotatedFile(identity string, f logview.CandidateFile, entries []logview.Entry, skip bool, err error) {
 	switch {
 	case skip:
 		r.log.RotatedSkipped++
@@ -333,7 +353,7 @@ func (r *Root) applyLogAuditRotatedFile(f logview.CandidateFile, entries []logvi
 		r.log.RotatedErrCount += fileErrCount
 		r.log.RotatedWarnCount += fileWarnCount
 		r.log.RotatedEntries = append(r.log.RotatedEntries, entries...)
-		r.log.RotatedCache.Put(logAuditCacheKey(f), entries, r.settings.LogAuditCacheSize)
+		r.log.RotatedCache.Put(logAuditCacheKey(identity, f), entries, r.settings.LogAuditCacheSize)
 	}
 	r.log.CombineDirty = true
 	if !r.log.LastCombineAt.IsZero() && time.Since(r.log.LastCombineAt) < logAuditCombineThrottleInterval {

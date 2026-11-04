@@ -94,6 +94,96 @@ func TestOpenLogAuditDiscoversAndReadsRemoteFiles(t *testing.T) {
 	}
 }
 
+// TestLogAuditCacheKeyNamespacesByIdentity pins the real bug: two
+// machines (or a remote host and this one) that happen to share a
+// rotated file's own path, size and modtime must never collide in
+// log.RotatedCache. Same CandidateFile, two different identities —
+// logAuditCacheKey must produce two distinct keys, and
+// applyLogAuditRotatedFile's own Put must file each under its own key,
+// not overwrite or merge the other's.
+func TestLogAuditCacheKeyNamespacesByIdentity(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.log.RotatedCache = logview.NewRotatedCache()
+
+	f := logview.CandidateFile{Path: "/var/log/app.log.1", Size: 1234, ModTime: time.Unix(1700000000, 0)}
+	entriesA := []logview.Entry{{Message: "from host A"}}
+	entriesB := []logview.Entry{{Message: "from host B"}}
+
+	const identityA = "remote:root@hosta:22"
+	const identityB = "remote:root@hostb:22"
+	if identityA == identityB {
+		t.Fatal("test setup: identities must differ")
+	}
+
+	r.applyLogAuditRotatedFile(identityA, f, entriesA, false, nil)
+	r.applyLogAuditRotatedFile(identityB, f, entriesB, false, nil)
+
+	if got := r.log.RotatedCache.Len(); got != 2 {
+		t.Fatalf("RotatedCache.Len() = %d, want 2 — same path/size/modtime under two identities must not collide into one entry", got)
+	}
+	gotA, ok := r.log.RotatedCache.Get(logAuditCacheKey(identityA, f))
+	if !ok || len(gotA) != 1 || gotA[0].Message != "from host A" {
+		t.Errorf("Get(identityA key) = %v, %v, want entriesA", gotA, ok)
+	}
+	gotB, ok := r.log.RotatedCache.Get(logAuditCacheKey(identityB, f))
+	if !ok || len(gotB) != 1 || gotB[0].Message != "from host B" {
+		t.Errorf("Get(identityB key) = %v, %v, want entriesB", gotB, ok)
+	}
+}
+
+// TestLogAuditCacheUsesIdentityCapturedAtLoadStartNotLivePanelState pins
+// the sharper half of the same bug: startLogAuditProgressiveLoad
+// captures currentLogAuditSourceIdentity() exactly once, before
+// dispatching any background read, and that captured value — not
+// whatever r.panel says by the time a QueueUpdateDraw callback actually
+// runs — is what applyLogAuditRotatedFile files entries under. This
+// test cannot drive the real background goroutine (this package's own
+// convention never drains QueueUpdateDraw, see
+// TestRenderLogAuditViewerKeepsGoodEntriesWhenOneFileFails's own doc
+// comment), so it reproduces the exact sequence
+// startLogAuditProgressiveLoad's real code follows: capture identity
+// from the panel connected *now*, then mutate the panel to a different
+// connection (simulating a reconnect while a load is still in flight),
+// then apply using the already-captured identity — exactly what the
+// closure in the real pending-files loop does.
+func TestLogAuditCacheUsesIdentityCapturedAtLoadStartNotLivePanelState(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.log.RotatedCache = logview.NewRotatedCache()
+
+	remoteA := newTestFakeRemote("/remote")
+	if err := r.panel.connectRemote(remoteA, remotefs.Connection{Host: "hosta"}); err != nil {
+		t.Fatalf("connectRemote hosta: %v", err)
+	}
+	// Exactly what startLogAuditProgressiveLoad does at its own top,
+	// before any background read is dispatched.
+	identity := r.currentLogAuditSourceIdentity()
+
+	// The connection changes while the (simulated) load is still in
+	// flight — the panel now describes a different machine entirely.
+	remoteB := newTestFakeRemote("/remote")
+	if err := r.panel.connectRemote(remoteB, remotefs.Connection{Host: "hostb"}); err != nil {
+		t.Fatalf("connectRemote hostb: %v", err)
+	}
+	if live := r.currentLogAuditSourceIdentity(); live == identity {
+		t.Fatal("test setup: live identity must differ from the captured one after reconnecting")
+	}
+
+	f := logview.CandidateFile{Path: "/var/log/app.log.1", Size: 999, ModTime: time.Unix(1700000001, 0)}
+	entries := []logview.Entry{{Message: "read while connected to hosta"}}
+	r.applyLogAuditRotatedFile(identity, f, entries, false, nil)
+
+	if _, ok := r.log.RotatedCache.Get(logAuditCacheKey(identity, f)); !ok {
+		t.Error("entries were not filed under the identity captured at load start")
+	}
+	if _, ok := r.log.RotatedCache.Get(logAuditCacheKey(r.currentLogAuditSourceIdentity(), f)); ok {
+		t.Error("entries must not be reachable under the live (post-reconnect) identity")
+	}
+}
+
 // TestRenderLogAuditSelectionTitleNamesTheRemoteConnectionWhenRemote
 // pins this project's own "a remote view must never describe local
 // paths or metadata" rule applied in the other direction: once the
@@ -375,7 +465,7 @@ func TestRenderLogAuditViewerKeepsGoodEntriesWhenOneFileFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("setup: expected app.log.1.gz to fail to parse")
 	}
-	r.applyLogAuditRotatedFile(rotated, entries, false, err)
+	r.applyLogAuditRotatedFile(r.currentLogAuditSourceIdentity(), rotated, entries, false, err)
 
 	if len(r.log.AllEntries) != 1 {
 		t.Fatalf("len(log.AllEntries) = %d, want 1 (app.log's own entry, kept despite the rotated file's own error)", len(r.log.AllEntries))
@@ -1915,7 +2005,7 @@ func BenchmarkApplyLogAuditRotatedFile(b *testing.B) {
 		r.log.CombineDirty = false
 		b.StartTimer()
 		for fi, entries := range batches {
-			r.applyLogAuditRotatedFile(logview.CandidateFile{Path: fmt.Sprintf("app.log.%d", fi+1)}, entries, false, nil)
+			r.applyLogAuditRotatedFile("local", logview.CandidateFile{Path: fmt.Sprintf("app.log.%d", fi+1)}, entries, false, nil)
 		}
 		r.finishLogAuditProgressiveLoad()
 	}

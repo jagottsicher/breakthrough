@@ -177,10 +177,18 @@ type logAuditState struct {
 	// RotatedCache is session-only (never written to disk, cleared
 	// only by the app exiting), keyed by logAuditCacheKey — a rotated
 	// file never changes once written, so a cache hit is always
-	// correct. Budgeted by settings.LogAuditCacheSize (bytes, not file
-	// count — see logview.RotatedCache's own doc comment for why: a
-	// single rotated file can be gigabytes, and keeping every family
-	// ever opened this session forever used to grow without bound).
+	// correct, as long as the key's own identity prefix (see
+	// currentLogAuditSourceIdentity) actually tells two different
+	// machines apart: without it, two hosts that happen to share a
+	// rotated file's path, size and mtime would otherwise collide in
+	// this single map. Budgeted by settings.LogAuditCacheSize (bytes,
+	// not file count — see logview.RotatedCache's own doc comment for
+	// why: a single rotated file can be gigabytes, and keeping every
+	// family ever opened this session forever used to grow without
+	// bound). That budget is shared across every identity namespace, by
+	// design, not a bug: switching from one host's log family to
+	// another's can evict the first host's own cached entries exactly
+	// the same way opening a second local family would.
 	// Read and written only on the UI goroutine (the pre-pass in
 	// startLogAuditProgressiveLoad, and applyLogAuditRotatedFile's own
 	// QueueUpdateDraw callback) — the background loader goroutine
