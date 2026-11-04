@@ -9,6 +9,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/consigliere"
 )
 
 // newOptionsRoot is the shared setup here: a Root with its own isolated
@@ -397,6 +398,70 @@ func TestConfirmEnableOptionTurningOffNeedsNoConfirmation(t *testing.T) {
 	}
 	if r.activePage == scrollAcknowledgePage {
 		t.Error("no scroll-to-acknowledge notice should have opened for turning it off")
+	}
+}
+
+// TestMachiavelliModeToggleRestartsAnOpenConsigliereWhenTurnedOn pins
+// a real, reported bug: turning Machiavelli Mode on from Options
+// while the sidebar was already open left its title bar showing the
+// plain label (and its background the ordinary focused/unfocused
+// color) until the sidebar was closed and reopened by hand — even
+// though the mode itself already applied immediately to every actual
+// provider call. The fix must take effect right here, through the
+// option row's own activation path (including the scroll-to-
+// acknowledge notice turning it on goes through), not just when
+// called directly.
+func TestMachiavelliModeToggleRestartsAnOpenConsigliereWhenTurnedOn(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
+	r.showConsigliere()
+	r.consigliere.Messages = []consigliere.Message{{Role: consigliere.RoleUser, Text: "hello"}}
+
+	selectOptionCategory(t, r, "AI Consigliere")
+	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
+	if !ok {
+		t.Fatal("no consigliere_hardcore_mode row")
+	}
+	r.activateOptionRow(row)
+	r.scrollAcknowledgeMessageView.ScrollTo(r.scrollAcknowledgeScrollbar.maxOffset(), 0)
+	r.acceptScrollAcknowledgeNotice()
+
+	if !r.settings.ConsigliereHardcoreMode {
+		t.Fatal("Machiavelli Mode should be on")
+	}
+	if !strings.Contains(r.consigliere.TitleBar.GetText(false), "MACHIAVELLI") {
+		t.Errorf("title bar text = %q, want it to mention Machiavelli Mode right away, without closing and reopening the sidebar", r.consigliere.TitleBar.GetText(false))
+	}
+	if len(r.consigliere.Messages) != 0 {
+		t.Error("turning Machiavelli Mode on should have started a fresh conversation in the still-open sidebar")
+	}
+}
+
+// TestMachiavelliModeToggleRestartsAnOpenConsigliereWhenTurnedOff is
+// the other half: turning it back off (no confirmation notice needed)
+// must also reset the still-open sidebar's title bar and conversation.
+func TestMachiavelliModeToggleRestartsAnOpenConsigliereWhenTurnedOff(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	r.SetRect(0, 0, 100, 40)
+	r.settings.ConsigliereHardcoreMode = true
+	r.showConsigliere()
+	r.consigliere.Messages = []consigliere.Message{{Role: consigliere.RoleUser, Text: "hello"}}
+
+	selectOptionCategory(t, r, "AI Consigliere")
+	row, ok := optionRowByKey(r, "consigliere_hardcore_mode")
+	if !ok {
+		t.Fatal("no consigliere_hardcore_mode row")
+	}
+	r.activateOptionRow(row)
+
+	if r.settings.ConsigliereHardcoreMode {
+		t.Fatal("Machiavelli Mode should be off")
+	}
+	if strings.Contains(r.consigliere.TitleBar.GetText(false), "MACHIAVELLI") {
+		t.Errorf("title bar text = %q, must not mention Machiavelli Mode anymore, without closing and reopening the sidebar", r.consigliere.TitleBar.GetText(false))
+	}
+	if len(r.consigliere.Messages) != 0 {
+		t.Error("turning Machiavelli Mode off should have started a fresh conversation in the still-open sidebar")
 	}
 }
 

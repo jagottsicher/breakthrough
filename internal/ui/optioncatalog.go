@@ -1828,6 +1828,7 @@ func optionCategories() []optionCategory {
 					func(r *Root, b bool) {
 						r.settings.ConsigliereHardcoreMode = b
 						r.persistSetting("consigliere_hardcore_mode", strconv.FormatBool(b))
+						r.restartConsiglierePromptForModeChange()
 					}),
 					machiavelliModeWarning),
 			},
