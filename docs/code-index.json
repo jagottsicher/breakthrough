@@ -23,28 +23,28 @@
     },
     {
       "path": ".github/workflows/callgraph.yml",
-      "size": 1664,
-      "sha256": "a8cba5d71d003394a2b39585c2650f35b428b5cd731ab392014072d9d89029fa"
+      "size": 2412,
+      "sha256": "7e9a39b4527c031c85ec9c2e45c6756262af357ac6baa3763678ebe0379cc5c3"
     },
     {
       "path": ".github/workflows/release.yml",
-      "size": 6715,
-      "sha256": "e9c05db1ea203443e2624c2196c9cbe574b16a8a94676140c7b18e9edfc0c130"
+      "size": 12032,
+      "sha256": "d728ebc378e7a36f056c37770214a19a89b09f44971ce76a1c35049d13585393"
     },
     {
       "path": ".github/workflows/test-linux-arm.yml",
-      "size": 494,
-      "sha256": "281d719fc476d3a175862c2f388397a53dad45414e6540dd1bb449b614523498"
+      "size": 1160,
+      "sha256": "7aa4eae6f329e6df4b5741edae0c959af55594292f98740207105b89e6769b57"
     },
     {
       "path": ".github/workflows/test-linux.yml",
-      "size": 485,
-      "sha256": "2385f9d97994044d569899dd363e5eadc1fa8d21406e4f13d22aab22ae180f09"
+      "size": 1330,
+      "sha256": "39ee1b31f4cf61623e7f53d7e48de839694cc12d20bcb4e937c4735cdf8e3147"
     },
     {
       "path": ".github/workflows/test-macos.yml",
-      "size": 484,
-      "sha256": "6d1d5ab680f9363d0ab59dad6aef4834eb20b1910dc006027d1f8b911229ecc7"
+      "size": 1150,
+      "sha256": "0d4897080ac80d5a9bc68b29098ef87ae1e63f8e8e55f8decb149afab7dab09a"
     },
     {
       "path": ".gitignore",
@@ -63874,5 +63874,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "12f5cfd69bb101b4cf40de1ed092bebb94ace296d07ab20658644bfd62cef1e6"
+  "merkle_root": "5ee49faffd9a49daa3f5ac0db23bfcd47e60ba9e1914303c3caf85e672c45228"
 }
