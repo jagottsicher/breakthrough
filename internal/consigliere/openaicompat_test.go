@@ -167,6 +167,74 @@ func TestOpenAICompatReplySurfacesServerError(t *testing.T) {
 	}
 }
 
+// TestOpenAICompatReplyExplainsContentFilterRefusal pins the
+// precautionary counterpart to Anthropic's own refusal handling:
+// finish_reason "content_filter" with empty content is this shape's
+// own equivalent of a safety-classifier decline — not yet actually
+// reported against this specific provider shape, built ahead of a
+// report rather than after one.
+func TestOpenAICompatReplyExplainsContentFilterRefusal(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":""},"finish_reason":"content_filter"}]}`))
+	}))
+	defer server.Close()
+
+	p := OpenAICompat{BaseURL: server.URL, Model: "m", APIKey: func() (string, error) { return "k", nil }}
+	_, err := p.Reply(context.Background(), Request{})
+	if err == nil {
+		t.Fatal("Reply: want an error for a content_filter decline")
+	}
+	if !strings.Contains(err.Error(), "content_filter") {
+		t.Errorf("Reply error = %v, want it to mention content_filter", err)
+	}
+}
+
+// TestOpenAICompatReplySurfacesFinishReasonWhenContentEmpty pins the
+// other empty-content case: no finish_reason-specific message exists
+// for it, but the reason itself must still be visible rather than a
+// bare "no content" the same way every cause used to get.
+func TestOpenAICompatReplySurfacesFinishReasonWhenContentEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":""},"finish_reason":"tool_calls"}]}`))
+	}))
+	defer server.Close()
+
+	p := OpenAICompat{BaseURL: server.URL, Model: "m", APIKey: func() (string, error) { return "k", nil }}
+	_, err := p.Reply(context.Background(), Request{})
+	if err == nil {
+		t.Fatal("Reply: want an error for empty content")
+	}
+	if !strings.Contains(err.Error(), "tool_calls") {
+		t.Errorf("Reply error = %v, want it to mention the finish_reason", err)
+	}
+}
+
+// TestOpenAICompatReplyMarksTruncatedTextInsteadOfReturningItAsComplete
+// mirrors Anthropic.Reply's identical fix: finish_reason "length"
+// alongside real content means the reply was cut off, not complete —
+// this package never sets its own output-length cap (see the doc
+// comment above OpenAICompat), but the provider's own default limit
+// can still truncate, and a silently-incomplete reply is the same
+// risk either way.
+func TestOpenAICompatReplyMarksTruncatedTextInsteadOfReturningItAsComplete(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"check d"},"finish_reason":"length"}]}`))
+	}))
+	defer server.Close()
+
+	p := OpenAICompat{BaseURL: server.URL, Model: "m", APIKey: func() (string, error) { return "k", nil }}
+	got, err := p.Reply(context.Background(), Request{})
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if !strings.HasPrefix(got, "check d") {
+		t.Errorf("Reply = %q, want the fragment itself kept, not discarded", got)
+	}
+	if !strings.Contains(got, "cut off") {
+		t.Errorf("Reply = %q, want an explicit truncation marker", got)
+	}
+}
+
 func TestOpenAICompatReplyWithoutAPIKeyFails(t *testing.T) {
 	p := OpenAICompat{BaseURL: "http://unused.invalid", Model: "m"}
 	_, err := p.Reply(context.Background(), Request{})
