@@ -387,6 +387,23 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "log_audit_disk_cache_enabled",
+			Default:     strconv.FormatBool(d.LogAuditDiskCacheEnabled),
+			Kind:        KindBool,
+			Summary:     `Log Holepunch's own persistent, on-disk cache for remote log families — outlives one session, unlike log_audit_cache_size's RAM-only cache. Off re-reads every rotated file over the connection on every reopen, same as before this existed.`,
+			Implemented: true,
+		},
+		{
+			Key:     "log_audit_disk_cache_size",
+			Default: FormatByteSize(d.LogAuditDiskCacheSize),
+			Kind:    KindString,
+			Summary: `Maximum total size of Log Holepunch's own disk cache across every ` +
+				`cached connection (e.g. "20GB", "5GB"), shared globally, not per-session. ` +
+				`20GB by default — disk is normally much cheaper than RAM, and whole ` +
+				`families are meant to stay cached for months.`,
+			Implemented: true,
+		},
+		{
 			Key:         "cloud_mount_base_dir",
 			Default:     d.CloudMountBaseDir,
 			Kind:        KindString,
