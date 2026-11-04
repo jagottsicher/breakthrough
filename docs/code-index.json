@@ -493,13 +493,13 @@
     },
     {
       "path": "internal/consigliere/anthropic.go",
-      "size": 10194,
-      "sha256": "457f8930ea3c6e49eb517d43f03173a34b87aedd9b457b89462735f7134a75cd"
+      "size": 12364,
+      "sha256": "51eb91b23821ad0afa156f0c273bf1ba0b9c854d21c94e76242782cc032426a2"
     },
     {
       "path": "internal/consigliere/anthropic_test.go",
-      "size": 10293,
-      "sha256": "a84187b4a5e621848d3ab79c713ab1c5d336c307a65fda24e11e93840d86844b"
+      "size": 12896,
+      "sha256": "c457d272f07aa8a4a5614e2a57f4b712b1cac5f92971b88b8e72bc717bc2d3db"
     },
     {
       "path": "internal/consigliere/doc.go",
@@ -2428,8 +2428,8 @@
     },
     {
       "path": "internal/ui/optioncatalog.go",
-      "size": 109238,
-      "sha256": "879526dd31970b106b09c751a9b84f357e2d233221c700c814073c8ee3a2edc5"
+      "size": 109573,
+      "sha256": "7bd1d465d9ece0f40a33f5708076ce992e0f6e99df2d11beb59529cc833b8d99"
     },
     {
       "path": "internal/ui/options.go",
@@ -8737,72 +8737,86 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
+      "name": "anthropicServerSideFallbackBeta",
+      "kind": "const",
+      "line": 37
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/anthropic.go",
+      "name": "anthropicFallbacks",
+      "kind": "const",
+      "line": 52
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/anthropic.go",
       "name": "anthropicMaxTokens",
       "kind": "const",
-      "line": 41
+      "line": 66
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
       "name": "anthropicDefaultEffort",
       "kind": "const",
-      "line": 57
+      "line": 82
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
       "name": "Anthropic",
       "kind": "type",
-      "line": 64
+      "line": 89
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
       "name": "anthropicContentBlock",
       "kind": "type",
-      "line": 88
+      "line": 113
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
       "name": "anthropicMessage",
       "kind": "type",
-      "line": 93
+      "line": 118
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
       "name": "anthropicRequest",
       "kind": "type",
-      "line": 98
+      "line": 123
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
       "name": "anthropicOutputConfig",
       "kind": "type",
-      "line": 106
+      "line": 132
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
       "name": "anthropicResponse",
       "kind": "type",
-      "line": 110
+      "line": 136
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
       "name": "anthropicErrorBody",
       "kind": "type",
-      "line": 117
+      "line": 144
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
       "name": "anthropicStopDetails",
       "kind": "type",
-      "line": 129
+      "line": 156
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -8810,14 +8824,14 @@
       "name": "Reply",
       "kind": "method",
       "receiver": "Anthropic",
-      "line": 140
+      "line": 167
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic.go",
       "name": "toAnthropicMessages",
       "kind": "function",
-      "line": 232
+      "line": 269
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -8831,70 +8845,84 @@
       "file": "internal/consigliere/anthropic_test.go",
       "name": "TestAnthropicReplyUsesOverrideModel",
       "kind": "function",
-      "line": 65
+      "line": 72
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic_test.go",
       "name": "TestAnthropicReplySetsOutputConfigEffortWhenSet",
       "kind": "function",
-      "line": 88
+      "line": 95
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic_test.go",
       "name": "TestAnthropicReplySendsDefaultEffortWhenUnset",
       "kind": "function",
-      "line": 112
+      "line": 119
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic_test.go",
       "name": "TestAnthropicReplySurfacesServerError",
       "kind": "function",
-      "line": 129
+      "line": 136
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic_test.go",
       "name": "TestAnthropicReplySurfacesStopReasonWhenNoTextContent",
       "kind": "function",
-      "line": 154
+      "line": 161
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic_test.go",
       "name": "TestAnthropicReplyMarksTruncatedTextInsteadOfReturningItAsComplete",
       "kind": "function",
-      "line": 178
+      "line": 185
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic_test.go",
       "name": "TestAnthropicReplyExplainsRefusal",
       "kind": "function",
-      "line": 203
+      "line": 210
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/anthropic_test.go",
+      "name": "TestAnthropicReplyNotesWhenAFallbackModelAnswered",
+      "kind": "function",
+      "line": 233
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/anthropic_test.go",
+      "name": "TestAnthropicReplyExplainsRefusalWhenFallbackAlsoDeclines",
+      "kind": "function",
+      "line": 257
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic_test.go",
       "name": "TestAnthropicReplyWithoutAPIKeyFails",
       "kind": "function",
-      "line": 219
+      "line": 273
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic_test.go",
       "name": "TestAnthropicReplyPropagatesKeyFuncError",
       "kind": "function",
-      "line": 227
+      "line": 281
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/anthropic_test.go",
       "name": "TestAnthropicReplyCombinesSystemAndSnapshot",
       "kind": "function",
-      "line": 236
+      "line": 290
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -35174,14 +35202,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
@@ -63938,5 +63966,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "c5486a2564e5b7628af329f6ab0f542dbf2b139671750ca9662306a7220a38bd"
+  "merkle_root": "edaff4123c2095996d0b0caf800eaf3fe52040d1a52ac662ece03d7ad3f87070"
 }
