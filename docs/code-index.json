@@ -1153,13 +1153,13 @@
     },
     {
       "path": "internal/logdiskcache/diskcache_test.go",
-      "size": 16298,
-      "sha256": "acfa393920fe0d114a02ef5faf00751b1c5c182021db2e5699087c0a40722dda"
+      "size": 16684,
+      "sha256": "ff7692b04cdf1111639ea2f1ce225fd0b27c9fa765fe5934f374910264d1d2c8"
     },
     {
       "path": "internal/logdiskcache/realias.go",
-      "size": 1851,
-      "sha256": "30d51b963b4e10f8c372129a7dc42aae8221fc495f55b4e35af84aaff4749818"
+      "size": 2283,
+      "sha256": "adc349324d91fbc1d4bab2cece38fa3e882a490c9601309c747bace16e82f4f5"
     },
     {
       "path": "internal/logdiskcache/sort.go",
@@ -16259,35 +16259,35 @@
       "file": "internal/logdiskcache/diskcache_test.go",
       "name": "TestGetTreatsUndecodableCacheFileAsAMiss",
       "kind": "function",
-      "line": 350
+      "line": 356
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
       "file": "internal/logdiskcache/diskcache_test.go",
       "name": "TestGetTreatsVersionMismatchAsAMiss",
       "kind": "function",
-      "line": 377
+      "line": 383
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
       "file": "internal/logdiskcache/diskcache_test.go",
       "name": "TestPutOverwritesExistingKeyRatherThanDuplicating",
       "kind": "function",
-      "line": 402
+      "line": 408
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
       "file": "internal/logdiskcache/diskcache_test.go",
       "name": "TestPutRejectsAFileLargerThanTheWholeBudget",
       "kind": "function",
-      "line": 420
+      "line": 426
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
       "file": "internal/logdiskcache/diskcache_test.go",
       "name": "TestOpenCreatesRootDirectoryIfMissing",
       "kind": "function",
-      "line": 437
+      "line": 443
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/logdiskcache",
@@ -64527,5 +64527,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "a0667d89b752d9fcb5a9840ca3d5a00d8ce9a65d080ede8dbdf48387dc3ae6ff"
+  "merkle_root": "b955fac93ab7e1cda771c5f68e8a874dd06cceab4421d8537b24498db5a52b28"
 }
