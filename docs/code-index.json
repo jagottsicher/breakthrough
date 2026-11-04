@@ -528,13 +528,13 @@
     },
     {
       "path": "internal/consigliere/openaicompat.go",
-      "size": 8611,
-      "sha256": "71e7ea88c8969892c0140f0b21c41d4a72a6ea8121e04092740e0e03adaf2689"
+      "size": 10378,
+      "sha256": "b2bfe2da93e948eaeb48fa872c3fe8ca90a3189a5206b38c397226bd28c74071"
     },
     {
       "path": "internal/consigliere/openaicompat_test.go",
-      "size": 6202,
-      "sha256": "2a9961934b408866375547d0795adeae7a54774183d529928ace1ecc330849a5"
+      "size": 9348,
+      "sha256": "1f7afbb5529f0ac80c34bcf20ea7d8e164a4914c86f1f8eba2c110a2f826a86e"
     },
     {
       "path": "internal/consigliere/provider.go",
@@ -9183,14 +9183,14 @@
       "file": "internal/consigliere/openaicompat.go",
       "name": "openAICompatResponse",
       "kind": "type",
-      "line": 120
+      "line": 121
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/openaicompat.go",
       "name": "openAICompatErrorBody",
       "kind": "type",
-      "line": 125
+      "line": 126
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -9198,14 +9198,14 @@
       "name": "Reply",
       "kind": "method",
       "receiver": "OpenAICompat",
-      "line": 134
+      "line": 135
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/openaicompat.go",
       "name": "toOpenAICompatMessages",
       "kind": "function",
-      "line": 195
+      "line": 226
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -9252,9 +9252,30 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
       "file": "internal/consigliere/openaicompat_test.go",
+      "name": "TestOpenAICompatReplyExplainsContentFilterRefusal",
+      "kind": "function",
+      "line": 176
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/openaicompat_test.go",
+      "name": "TestOpenAICompatReplySurfacesFinishReasonWhenContentEmpty",
+      "kind": "function",
+      "line": 196
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/openaicompat_test.go",
+      "name": "TestOpenAICompatReplyMarksTruncatedTextInsteadOfReturningItAsComplete",
+      "kind": "function",
+      "line": 219
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
+      "file": "internal/consigliere/openaicompat_test.go",
       "name": "TestOpenAICompatReplyWithoutAPIKeyFails",
       "kind": "function",
-      "line": 170
+      "line": 238
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/consigliere",
@@ -35202,14 +35223,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
@@ -39744,14 +39765,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -63966,5 +63987,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "edaff4123c2095996d0b0caf800eaf3fe52040d1a52ac662ece03d7ad3f87070"
+  "merkle_root": "5c316fabc1bd753f2e702a6484c8685ca939d76b009e848bf3242d11d305e04d"
 }

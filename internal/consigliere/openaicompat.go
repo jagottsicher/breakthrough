@@ -114,7 +114,8 @@ type openAICompatRequest struct {
 }
 
 type openAICompatChoice struct {
-	Message openAICompatMessage `json:"message"`
+	Message      openAICompatMessage `json:"message"`
+	FinishReason string              `json:"finish_reason"`
 }
 
 type openAICompatResponse struct {
@@ -180,10 +181,40 @@ func (p OpenAICompat) Reply(ctx context.Context, req Request) (string, error) {
 		return "", fmt.Errorf("consigliere: provider returned status %d", resp.StatusCode)
 	}
 
-	if len(parsed.Choices) == 0 || parsed.Choices[0].Message.Content == "" {
+	if len(parsed.Choices) == 0 {
 		return "", fmt.Errorf("consigliere: provider reply had no content")
 	}
-	return parsed.Choices[0].Message.Content, nil
+	choice := parsed.Choices[0]
+
+	if choice.Message.Content == "" {
+		// A real, reported risk, so far only confirmed on Anthropic but
+		// precautionary here too, ahead of an actual report: this chat
+		// shape's own "content_filter" finish_reason is the moderation-
+		// declined case (OpenAI's own equivalent of Anthropic's
+		// "refusal") — worth its own message rather than the same bare
+		// "no content" every other empty-reply cause gets, since "the
+		// forwarded content itself, not a bug" is actionable and a
+		// generic failure isn't. There is no cross-provider fallback to
+		// retry on here — see anthropicFallbacks' own doc comment on why
+		// that mechanism is Anthropic-specific, not something this
+		// shared OpenAI-compatible path can offer DeepSeek/Gemini/
+		// Ollama/Custom too.
+		if choice.FinishReason == "content_filter" {
+			return "", fmt.Errorf("consigliere: provider declined to answer (content_filter) — likely the forwarded content itself, not a bug; try rephrasing the question")
+		}
+		return "", fmt.Errorf("consigliere: provider reply had no content (finish_reason: %s)", firstNonEmpty(choice.FinishReason, "unknown"))
+	}
+	if choice.FinishReason == "length" {
+		// This package deliberately never sets an output-length cap on
+		// this shape (see the doc comment above OpenAICompat), so this
+		// is the provider's own default limit, not one this package
+		// chose — but the risk a non-empty reply here is itself
+		// incomplete is the same either way (see Anthropic.Reply's
+		// identical "max_tokens" case): a truncated fragment must never
+		// come back looking like a complete answer.
+		return choice.Message.Content + "\n\n[reply cut off — ran out of reply budget; try asking again, or more narrowly]", nil
+	}
+	return choice.Message.Content, nil
 }
 
 // toOpenAICompatMessages prepends req.System+req.Snapshot (combined
