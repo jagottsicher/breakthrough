@@ -423,8 +423,8 @@
     },
     {
       "path": "internal/config/consigliere.go",
-      "size": 3751,
-      "sha256": "07ac29b72914e553ea2ee233411cc694c372fc0758067b00736c8705687770a5"
+      "size": 4923,
+      "sha256": "16a95f834386e7b3067ceb65ee4cb81289b397849792846d651c6de41e0d67f0"
     },
     {
       "path": "internal/config/consigliere_test.go",
@@ -7753,28 +7753,28 @@
       "file": "internal/config/consigliere.go",
       "name": "DefaultConsigliereSystemPrompt",
       "kind": "const",
-      "line": 38
+      "line": 52
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/consigliere.go",
       "name": "EnsureConsigliereSystemPromptFile",
       "kind": "function",
-      "line": 44
+      "line": 58
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/consigliere.go",
       "name": "WriteDefaultConsigliereSystemPrompt",
       "kind": "function",
-      "line": 58
+      "line": 72
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/consigliere.go",
       "name": "LoadConsigliereSystemPrompt",
       "kind": "function",
-      "line": 67
+      "line": 81
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -63938,5 +63938,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "f9bc0ce7e8be28d4ef4d9ce2cce4978d055825b72eade0aa733ad58fbe8f75bb"
+  "merkle_root": "c5486a2564e5b7628af329f6ab0f542dbf2b139671750ca9662306a7220a38bd"
 }
