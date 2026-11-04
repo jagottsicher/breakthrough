@@ -533,14 +533,33 @@ func TestConsigliereEffortChoicesDefaultLabelIsNotAvailableBeforeFetch(t *testin
 
 // TestConsigliereEffortChoicesDefaultLabelShowsModelDefaultOnceFetched
 // is the other half: once a fetch for this provider has actually
-// succeeded, the usual "(model default)" sentinel is shown again.
+// succeeded, the usual "(model default)" sentinel is shown again —
+// except for Anthropic specifically, see the next test.
 func TestConsigliereEffortChoicesDefaultLabelShowsModelDefaultOnceFetched(t *testing.T) {
+	r := newPlainKeyRoot(t)
+	r.settings.ConsigliereProvider = "deepseek"
+	r.consigliere.ModelCache["deepseek"] = []consigliere.ModelInfo{{ID: "deepseek-chat"}}
+
+	choices := r.consigliereEffortChoices()
+
+	if want := "(model default)"; choices[0].label != want {
+		t.Errorf("choices[0].label = %q, want %q", choices[0].label, want)
+	}
+}
+
+// TestConsigliereEffortChoicesDefaultLabelShowsMediumForAnthropic pins
+// a deliberately changed contract: "" no longer means "whatever the
+// model itself defaults to" for Anthropic specifically — see
+// anthropicDefaultEffort's own doc comment (internal/consigliere) for
+// why leaving the generic "(model default)" label here would now be
+// a wrong claim about what actually gets sent.
+func TestConsigliereEffortChoicesDefaultLabelShowsMediumForAnthropic(t *testing.T) {
 	r := newPlainKeyRoot(t)
 	r.consigliere.ModelCache["anthropic"] = []consigliere.ModelInfo{{ID: consigliere.AnthropicDefaultModel}}
 
 	choices := r.consigliereEffortChoices()
 
-	if want := "(model default)"; choices[0].label != want {
+	if want := "(medium)"; choices[0].label != want {
 		t.Errorf("choices[0].label = %q, want %q", choices[0].label, want)
 	}
 }
