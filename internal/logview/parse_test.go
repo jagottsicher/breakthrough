@@ -430,3 +430,41 @@ func TestParseLevel(t *testing.T) {
 		}
 	}
 }
+
+// syntheticSyslogRFC3164 builds n lines of a synthetic RFC 3164
+// syslog file — the same shape the 19e real-world report's own
+// "syslog family" uses — standing in for one ~900k-line rotated file
+// out of the reported 5-file, 4.5M-event family (19e, Stufe A
+// follow-up measurement, 2026-11-05: Stufe A alone did not fix the
+// real-world OOM, isolating whether per-file parsing itself — not the
+// merge/sort Stufe A targeted — is the dominant cost).
+func syntheticSyslogRFC3164(n int) string {
+	var b strings.Builder
+	for range n {
+		b.WriteString("Oct  7 16:04:22 server kernel: eth0: link down, interface flapping, retry attempt in progress\n")
+	}
+	return b.String()
+}
+
+// BenchmarkParseAllLargeSyslogFile measures ParseAll's own cost on a
+// single large file in isolation — no Root, no merge, no UI — to
+// test the hypothesis that ParseAll's own `lines []string` buffer
+// (every line kept as its own heap string, built before a single
+// Entry exists) plus Entry.Raw retaining that same text a second time
+// is the dominant memory cost at the per-file scale the real-world
+// report measures against (19e). Run with
+// `go test -bench ParseAllLargeSyslogFile -benchmem ./internal/logview`.
+func BenchmarkParseAllLargeSyslogFile(b *testing.B) {
+	const lines = 900000 // ~4.5M events / 5 files, see 19e's own real-world report
+	input := syntheticSyslogRFC3164(lines)
+
+	for b.Loop() {
+		entries, _, err := ParseAll(strings.NewReader(input), "syslog", time.Time{})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(entries) != lines {
+			b.Fatalf("len(entries) = %d, want %d", len(entries), lines)
+		}
+	}
+}
