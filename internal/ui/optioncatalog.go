@@ -1552,6 +1552,35 @@ func optionCategories() []optionCategory {
 					},
 				),
 				{
+					key:   "log_audit_disk_cache_path",
+					label: "Disk cache location",
+					help: "Where the disk cache above actually lives on disk. Changing " +
+						"this moves whatever is already cached there to the new location " +
+						"first — in the background, so this screen stays usable while it " +
+						"runs — rather than starting over with an empty cache at the new " +
+						"path. Refuses a path that already contains files that don't look " +
+						"like this cache's own data, so a typo can never wipe something " +
+						"real. Blocked while a Log Holepunch family is still progressively " +
+						"loading, since that load may be writing into the cache right now.\n\n" +
+						"Re-activating this row while a move is running cancels it instead " +
+						"— cancelling leaves everything exactly as it was before, nothing " +
+						"partially moved.\n\n" +
+						"The prompt starts pre-filled with the current location, including " +
+						"the default one — clearing the field cancels (the same as Escape) " +
+						"rather than resetting it, so to go back to the default after " +
+						"setting a custom one, type that default path back in explicitly.",
+					value: func(r *Root) string {
+						if r.log.DiskCacheMoveCancel != nil {
+							return fmt.Sprintf("Moving to %s… (Enter to cancel)", r.log.DiskCacheMoveTarget)
+						}
+						if r.settings.LogAuditDiskCachePath == "" {
+							return r.logAuditDiskCacheRoot() + " (default)"
+						}
+						return r.settings.LogAuditDiskCachePath
+					},
+					action: func(r *Root) { r.activateLogAuditDiskCacheLocationRow() },
+				},
+				{
 					key:   "log_audit_disk_cache_clear_connection",
 					label: "Clear disk cache for current connection",
 					help: "Removes only the active panel's own connection from the disk " +
@@ -2218,6 +2247,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.LogAuditDiskCacheEnabled), true
 	case "log_audit_disk_cache_size":
 		return config.FormatByteSize(s.LogAuditDiskCacheSize), true
+	case "log_audit_disk_cache_path":
+		return s.LogAuditDiskCachePath, true
 	case "cloud_mount_base_dir":
 		return s.CloudMountBaseDir, true
 	case "compress_format":

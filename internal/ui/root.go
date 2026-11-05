@@ -4728,6 +4728,27 @@ func (r *Root) finishRename(key tcell.Key) {
 // onSubmit runs with whatever was typed if the user confirms with Enter;
 // see finishPrompt for what happens on Escape/Tab instead.
 func (r *Root) openPrompt(label, prefill string, onSubmit func(text string)) {
+	r.layoutPrompt(label, prefill, onSubmit)
+	r.showOverlay(promptPage, r.prompt)
+}
+
+// openPromptOverOptions is openPrompt, but pushed on top of whatever's
+// already showing instead of replacing it — for the one case
+// openPrompt's own ordinary showOverlay semantics would be wrong: a
+// prompt opened from inside the Options screen (itself an overlay,
+// see openOptions), where showOverlay's closeAllOverlays would close
+// Options first, same "layer on top, don't replace" bug
+// openAPIKeyDialog's own doc comment already describes and fixed for
+// an identical reason.
+func (r *Root) openPromptOverOptions(label, prefill string, onSubmit func(text string)) {
+	r.layoutPrompt(label, prefill, onSubmit)
+	r.pushOverlay(promptPage, r.prompt, nil)
+}
+
+// layoutPrompt is openPrompt/openPromptOverOptions' own shared setup —
+// everything except the final show-vs-push call, which is the one
+// thing that actually differs between the two.
+func (r *Root) layoutPrompt(label, prefill string, onSubmit func(text string)) {
 	r.prompt.SetLabel(label + " ")
 	r.prompt.SetText(prefill)
 	r.promptSubmit = onSubmit
@@ -4748,7 +4769,6 @@ func (r *Root) openPrompt(label, prefill string, onSubmit func(text string)) {
 	x, y, width, clampedHeight := r.clampToScreen(x, y, width, height)
 
 	r.prompt.SetRect(x, y, width, clampedHeight)
-	r.showOverlay(promptPage, r.prompt)
 }
 
 // finishPrompt handles Enter (submit) and Escape/Tab (cancel) in the
