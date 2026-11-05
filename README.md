@@ -97,6 +97,9 @@ request, an Action
 Log screen (`jl`) browsing the real activity log with keyword/time
 filtering, a Log Holepunch screen (`jL`) reading and merging *other* log
 files found in whichever directory the active panel currently shows,
+with a persistent, on-disk cache for remote connections so a log
+family already read once stays an instant local decode instead of
+another trip over the network, even in a future run,
 a Git breach dashboard (`jg`) for staging, committing, and diffing the
 local git repository containing the active panel's own current
 directory — its own diff pane toggles between a unified pager and a

@@ -946,7 +946,10 @@ var helpText = strings.TrimLeft(`
   files count in the title bar for as long as that is still happening.
   The title bar shows running counts (events/files/skipped/
   errors/warnings, plus how many entries currently match if the filters
-  narrow it, and "● following" while follow is on). Clicking the Time
+  narrow it, and "● following" while follow is on). Once read, a
+  rotated file is cached (in memory always; on disk too for a remote
+  connection, see Options → "Log Holepunch") so reopening the same
+  family later skips re-reading it. Clicking the Time
   column header reverses the list between newest-first (the default,
   so the most recent activity is right there without scrolling) and
   oldest-first, the same arrow-suffix convention the panel's own

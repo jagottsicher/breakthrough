@@ -392,6 +392,42 @@ type Settings struct {
 	// session-long growth this setting exists to cap.
 	LogAuditCacheSize int64
 
+	// LogAuditDiskCacheEnabled turns Log Holepunch's own persistent,
+	// on-disk cache (internal/logdiskcache) on or off — remote sources
+	// only, see that package's own doc comment for why. Off means
+	// every rotated file is re-read over the connection on every
+	// reopen, exactly like before this cache existed at all; LRU
+	// eviction already bounds LogAuditDiskCacheSize, but disk is still
+	// a shared, finite resource unlike RAM reclaimed the moment
+	// breakthrough exits, so this stays a separate, explicit switch
+	// rather than "on whenever the size is non-zero" the way the RAM
+	// cache's own LogAuditCacheSize works.
+	LogAuditDiskCacheEnabled bool
+
+	// LogAuditDiskCacheSize caps the disk cache's own total size across
+	// every cached connection, the same estimated-byte LRU budget shape
+	// LogAuditCacheSize already establishes for the RAM-only cache, just
+	// on disk and shared globally across connections rather than
+	// per-session. Defaults far larger than the RAM cache (20GB vs.
+	// 2GB) since disk is normally much cheaper than RAM and whole
+	// multi-gigabyte families are meant to stay cached for months, not
+	// just one session.
+	LogAuditDiskCacheSize int64
+
+	// LogAuditDiskCachePath overrides where the disk cache above lives
+	// on disk; "" (the default) means config.UserCacheDir()'s own
+	// "logaudit" subdirectory. Best changed through the Options
+	// screen's own "Change disk cache location" action rather than by
+	// hand-editing this file directly: that action actually moves the
+	// existing cached data from the old path to the new one first
+	// (internal/logdiskcache.Cache.Move) — hand-editing this value
+	// only changes where *new* data goes from the next start onward,
+	// it does not move anything already cached at the old path, which
+	// then simply becomes unreachable through this app (not deleted,
+	// see internal/logdiskcache's own isSafeRoot — just orphaned,
+	// recoverable by hand or by pointing this back at it).
+	LogAuditDiskCachePath string
+
 	// CloudMountBaseDir overrides internal/rclone's own computed default
 	// (session.MountsDir: XDG_DATA_HOME or ~/.local/share/breakthrough,
 	// plus "mounts/<user>" — the same base trash already uses, see
@@ -804,6 +840,9 @@ func DefaultSettings() Settings {
 
 		LogAuditCacheSize: 2 << 30, // 2GB
 
+		LogAuditDiskCacheEnabled: true,
+		LogAuditDiskCacheSize:    20 << 30, // 20GB — 10x the RAM cache's own default
+
 		CloudMountBaseDir: "",
 
 		CompressFormat: "zip",
@@ -997,6 +1036,16 @@ func (s *Settings) apply(key, value string) error {
 			return fmt.Errorf("invalid size for %q: %w", key, err)
 		}
 		s.LogAuditCacheSize = n
+	case "log_audit_disk_cache_enabled":
+		return parseBool(&s.LogAuditDiskCacheEnabled)
+	case "log_audit_disk_cache_size":
+		n, err := ParseByteSize(value)
+		if err != nil {
+			return fmt.Errorf("invalid size for %q: %w", key, err)
+		}
+		s.LogAuditDiskCacheSize = n
+	case "log_audit_disk_cache_path":
+		s.LogAuditDiskCachePath = value
 	case "cloud_mount_base_dir":
 		s.CloudMountBaseDir = value
 	case "compress_format":

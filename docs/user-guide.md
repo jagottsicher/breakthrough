@@ -2800,6 +2800,24 @@ an animated glyph in front of the files count in the title bar for as
 long as that is still happening. The title bar shows running counts
 (events/files/skipped/errors/warnings).
 
+Once a rotated file has been read and parsed, it's cached so re-opening
+the same family later doesn't mean re-reading and re-parsing it again —
+a rotated file never changes once logrotate renames it away, so a cache
+hit is always correct. Two layers: an in-memory cache (`log_audit_cache_size`,
+2GB by default, cleared when breakthrough exits) for any source, local
+or remote, and — for a remote connection specifically, where re-reading
+means another trip over the network — a persistent, on-disk cache
+(`log_audit_disk_cache_enabled`/`log_audit_disk_cache_size`, on by
+default, 20GB) that survives past this process exiting, so a family
+read once stays a fast local decode even in a future run. Options →
+Log Holepunch offers "Clear disk cache for current connection" and
+"Clear disk cache (every connection)" to empty it on demand, and
+"Disk cache location" (`log_audit_disk_cache_path`) to relocate it —
+moving whatever is already cached there to the new path first, in the
+background, rather than starting over empty. Refuses a target that
+already holds unrelated files, so a typo can't delete anything real;
+blocked while a family is still progressively loading.
+
 A mini-timeline above the table shows the matching entries' own
 density over time — one block per time bucket, colored red if that
 bucket contains an error, the app's own warning color if it contains a
@@ -2922,6 +2940,9 @@ Every key breakthrough recognizes, with its default:
 | `language` | `en` | Reserved for future translations — parsed, no effect yet |
 | `remote_archive_confirm_size` | `10MB` | Opening a remote zip/tar at or above this size asks first — a size with a unit, e.g. `500KB` or `1GB` |
 | `log_audit_cache_size` | `2GB` | Log Holepunch's own session-only cache of already-read rotated log files, by estimated size not file count — `0` turns caching off |
+| `log_audit_disk_cache_enabled` | `true` | Log Holepunch's own persistent, on-disk cache for remote log families — survives past this process exiting, unlike `log_audit_cache_size`'s RAM-only cache |
+| `log_audit_disk_cache_size` | `20GB` | Maximum total size of the disk cache above, across every cached connection combined, by estimated size not file count |
+| `log_audit_disk_cache_path` | `` (default location) | Where the disk cache lives; best changed via Options → "Change disk cache location", which moves existing data — hand-editing this only changes where new data goes |
 | `log_level` | `off` | Activity log detail: `off`, `errors`, `actions`, `detailed`, or `debug` |
 | `log_category_fileops` | `true` | Log File operations (copy, move, rename, trash, remove, multiply, new file/dir) |
 | `log_category_permissions` | `true` | Log permission changes (chmod, chown) |

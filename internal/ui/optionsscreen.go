@@ -871,6 +871,8 @@ func (r *Root) activateOptionRow(row int) {
 	switch {
 	case opt.secretAction != nil:
 		opt.secretAction(r)
+	case opt.action != nil:
+		opt.action(r)
 	case doc.Kind == config.KindBool:
 		next := opt.value(r) != "true"
 		if next && opt.confirmEnable != "" {
@@ -1109,7 +1111,11 @@ func (r *Root) showOptionInfo(opt optionSpec) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[::b]%s[::-]\n\n", opt.label)
 	b.WriteString(opt.help)
-	if opt.secretAction != nil {
+	if opt.action != nil {
+		// A one-off triggered action has no current value and no
+		// config key at all (see optionSpec.action's own doc comment)
+		// — the help text above is the whole explanation.
+	} else if opt.secretAction != nil {
 		// Never stored in the config file at all (see optionSpec's own
 		// doc comment on secretAction) — "Config key"/"Default" would
 		// both be misleading here, so this just shows where the live
@@ -1284,9 +1290,10 @@ func (r *Root) resetAllOptions() {
 // change here.
 func (r *Root) resetOptions(options []optionSpec) {
 	for _, opt := range options {
-		if opt.secretAction != nil {
+		if opt.secretAction != nil || opt.action != nil {
 			// Not config-backed at all (see optionSpec.secretAction's
-			// own doc comment) — nothing for "reset" to do.
+			// and optionSpec.action's own doc comments) — nothing for
+			// "reset" to do.
 			continue
 		}
 		value := r.resetSetting(opt.key)

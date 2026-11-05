@@ -12,6 +12,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/jagottsicher/breakthrough/internal/logdiskcache"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 )
 
@@ -215,7 +216,18 @@ func (r *Root) recomputeLogAuditCombined() {
 // remote-vs-local separation rule (see CLAUDE.md) requires guarding
 // against, not "belt and suspenders".
 func logAuditCacheKey(identity string, f logview.CandidateFile) string {
-	return fmt.Sprintf("%s|%s|%d|%d", identity, f.Path, f.Size, f.ModTime.UnixNano())
+	return identity + "|" + logAuditFileKey(f)
+}
+
+// logAuditFileKey is logAuditCacheKey's own key without the identity
+// prefix — what logdiskcache.Cache's Get/Put take as their own "key"
+// argument, since that type already partitions by identity into its
+// own directory per connection (see internal/logdiskcache's own doc
+// comment); embedding identity a second time into that key would be
+// redundant, not wrong, just pointless hashing of the same string
+// twice.
+func logAuditFileKey(f logview.CandidateFile) string {
+	return fmt.Sprintf("%s|%d|%d", f.Path, f.Size, f.ModTime.UnixNano())
 }
 
 // startLogAuditProgressiveLoad reads group's own rotated files
@@ -278,6 +290,17 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 	r.renderLogAuditViewer() // shows the loading segment right away, before the first file actually finishes
 
 	source := r.currentLogAuditSource()
+	// diskCache is resolved once, right here, alongside identity above
+	// — same reasoning: r.panel.isRemote() could answer differently by
+	// the time a later QueueUpdateDraw callback ran if read again then,
+	// and this cache is remote-only by design (see
+	// internal/logdiskcache's own doc comment: a 2026-11-04 live
+	// measurement found no win re-reading an already-local file, only
+	// "no network round trip" pays for the complexity here).
+	var diskCache *logdiskcache.Cache
+	if r.panel.isRemote() && r.settings.LogAuditDiskCacheEnabled {
+		diskCache = r.logDiskCache()
+	}
 	onPanic := func() { r.stopLogAuditProgressiveLoad() }
 	// Both wrapped in safeGo (see its own doc comment), the same
 	// animation-plus-work pairing computeHashes/animateHashProgress
@@ -288,7 +311,7 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 			if ctx.Err() != nil {
 				return
 			}
-			entries, ferr := readLogAuditFile(source, f)
+			entries, ferr := readLogAuditRotatedFileWithDiskCache(ctx, diskCache, identity, source, f, r.settings.LogAuditDiskCacheSize)
 			if ctx.Err() != nil {
 				return
 			}
@@ -299,6 +322,13 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 				r.applyLogAuditRotatedFile(identity, f, entries, false, ferr)
 			})
 		}
+		if diskCache != nil {
+			// Once per load, not once per file — a 40-rotation family
+			// would otherwise mean 40 full manifest rewrites on the
+			// very path this cache exists to make fast (see
+			// logdiskcache.Cache.Flush's own doc comment).
+			_ = diskCache.Flush()
+		}
 		r.app.QueueUpdateDraw(func() {
 			if ctx.Err() != nil {
 				return
@@ -306,6 +336,30 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 			r.finishLogAuditProgressiveLoad()
 		})
 	})
+}
+
+// readLogAuditRotatedFileWithDiskCache tries diskCache first — a nil
+// diskCache (disk caching disabled, unavailable, or this load is local
+// rather than remote, see startLogAuditProgressiveLoad's own doc
+// comment) falls straight through to the real read, same as before
+// this cache existed. A successful real read is written back to
+// diskCache so this family's next open, on this machine, is a disk
+// hit instead of another network round trip; a disk hit itself is
+// never written back (it's already there). Factored out from the
+// background goroutine's own loop specifically so it's unit-testable
+// without a real tview.Application or goroutine — see its own test
+// for the shape that exercises.
+func readLogAuditRotatedFileWithDiskCache(ctx context.Context, diskCache *logdiskcache.Cache, identity string, source logview.FileSource, f logview.CandidateFile, maxDiskBytes int64) ([]logview.Entry, error) {
+	if diskCache != nil {
+		if cached, ok := diskCache.Get(ctx, identity, logAuditFileKey(f)); ok {
+			return cached, nil
+		}
+	}
+	entries, err := readLogAuditFile(source, f)
+	if err == nil && diskCache != nil {
+		_ = diskCache.Put(identity, logAuditFileKey(f), entries, maxDiskBytes)
+	}
+	return entries, err
 }
 
 // logAuditCombineThrottleInterval bounds how often applyLogAuditRotatedFile
