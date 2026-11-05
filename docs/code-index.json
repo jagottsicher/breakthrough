@@ -153,8 +153,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 178622,
-      "sha256": "1ca08bade8ed47b3e05119c8dda55e5f64c3360a0dae7ce02009de4fe366d154"
+      "size": 178959,
+      "sha256": "10a44335ea22971fe6b25b090f7d26f83ef590d97c179a5ea01e0e2be862884a"
     },
     {
       "path": "docs/whitepaper.md",
@@ -2473,8 +2473,8 @@
     },
     {
       "path": "internal/ui/optioncatalog.go",
-      "size": 115522,
-      "sha256": "d9ae44a6dc7a99f238799ed47b635e2f1d9174f823143797fc22694ee0212c2d"
+      "size": 115953,
+      "sha256": "10ff8572e8a8c4bb7422ebb5879221cd47266b1a334c44a999760f80e64fc164"
     },
     {
       "path": "internal/ui/options.go",
@@ -45108,14 +45108,14 @@
       "file": "internal/ui/optioncatalog.go",
       "name": "consigliereEnvVarForProvider",
       "kind": "function",
-      "line": 1957
+      "line": 1963
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "consigliereProviderNeedsNoKey",
       "kind": "function",
-      "line": 1986
+      "line": 1992
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -45123,49 +45123,49 @@
       "name": "consigliereAPIKeyStatus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1990
+      "line": 1996
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "consigliereFilePermissionWarning",
       "kind": "function",
-      "line": 2038
+      "line": 2044
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "consigliereKeySuffixHint",
       "kind": "function",
-      "line": 2058
+      "line": 2064
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "labelNameOptions",
       "kind": "function",
-      "line": 2069
+      "line": 2075
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "activityLogCategoryOption",
       "kind": "function",
-      "line": 2117
+      "line": 2123
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "optionSpecByKey",
       "kind": "function",
-      "line": 2136
+      "line": 2142
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "settingValueByKey",
       "kind": "function",
-      "line": 2154
+      "line": 2160
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -64823,5 +64823,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "02fd036848db7e7398c621f92f40edea958c460497b48bff7dfad0a2c5013746"
+  "merkle_root": "8e8ba22e7a79bf561437bc7fa8b793e2638c55a06a875aaf220794fd612ef139"
 }
