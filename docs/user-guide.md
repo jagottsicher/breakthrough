@@ -2810,7 +2810,12 @@ means another trip over the network — a persistent, on-disk cache
 (`log_audit_disk_cache_enabled`/`log_audit_disk_cache_size`, on by
 default, 20GB) that survives past this process exiting, so a family
 read once stays a fast local decode even in a future run. Options →
-Log Holepunch offers "Clear disk cache for current connection" and
+Log Holepunch offers "Clear disk cache for the active panel's
+connection" (whichever connection the active panel has right now, at
+the moment this is activated — not necessarily the one a family was
+last read from if you've since switched tabs or panels; with several
+tabs on different hosts, there's no way yet to target a specific
+non-active cached connection, only this one or every connection) and
 "Clear disk cache (every connection)" to empty it on demand, and
 "Disk cache location" (`log_audit_disk_cache_path`) to relocate it —
 moving whatever is already cached there to the new path first, in the

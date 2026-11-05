@@ -1582,15 +1582,21 @@ func optionCategories() []optionCategory {
 				},
 				{
 					key:   "log_audit_disk_cache_clear_connection",
-					label: "Clear disk cache for current connection",
-					help: "Removes only the active panel's own connection from the disk " +
-						"cache (see above) — every other cached connection's own data is " +
-						"left alone. A no-op if the active panel is local, or if that " +
-						"connection has nothing cached.",
+					label: "Clear disk cache for the active panel's connection",
+					help: "Removes only whichever connection the active panel has right " +
+						"now, at the moment this is activated — not necessarily the " +
+						"connection a Log Holepunch family was last read from, if you've " +
+						"since switched tabs or panels. Every other cached connection's " +
+						"own data is left alone. A no-op if the active panel is local " +
+						"right now, or if that connection has nothing cached.\n\n" +
+						"With several tabs each connected to a different host, there is " +
+						"currently no way to target one specific cached connection that " +
+						"isn't the active one — only this one or \"every connection\" " +
+						"below.",
 					value: func(*Root) string { return "" },
 					action: func(r *Root) {
 						r.openConfirm(
-							"Clear the disk cache for the current connection?",
+							"Clear the disk cache for the active panel's own connection?",
 							"Yes, clear",
 							func() { r.clearLogAuditDiskCacheForCurrentConnection() },
 						)
