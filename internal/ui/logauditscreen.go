@@ -167,6 +167,16 @@ type logAuditState struct {
 	RotatedErr       error
 	RotatedErrCount  int
 	RotatedWarnCount int
+	// PendingRotatedEntries holds every rotated file's own entries
+	// applied since RotatedEntries was last folded up to date — plain
+	// raw appends, same cost as appending straight into RotatedEntries
+	// used to be. recomputeLogAuditCombined (logaudit.go) sorts this
+	// batch once and merges it into the already-sorted RotatedEntries
+	// in one O(len(RotatedEntries)+len(PendingRotatedEntries)) pass,
+	// instead of resorting all of RotatedEntries from scratch on every
+	// throttled recombine — see that function's own doc comment for
+	// the full reasoning (19e, Stufe A).
+	PendingRotatedEntries []logview.Entry
 	// LastCombineAt/CombineDirty back applyLogAuditRotatedFile's own
 	// throttle (logaudit.go) — LastCombineAt is when AllEntries was
 	// last actually recombined/re-rendered during a progressive load,

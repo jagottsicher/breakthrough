@@ -84,6 +84,7 @@ func (r *Root) openLogAuditViewer() {
 	r.stopLogAuditProgressiveLoad()
 	r.log.GroupOpen = group
 	r.log.RotatedEntries = nil
+	r.log.PendingRotatedEntries = nil
 	r.log.RotatedFiles = 0
 	r.log.RotatedSkipped = 0
 	r.log.RotatedErr = nil
@@ -150,6 +151,12 @@ func (r *Root) refreshLogAuditCurrentFile() {
 				r.log.CurrentErr = err
 			} else {
 				r.log.CurrentFiles = 1
+				// Sorted here, once, rather than relying on ParseAll's
+				// own output order — see MergeSorted's own doc comment
+				// (internal/logview/merge.go) for why a freshly parsed
+				// file isn't guaranteed to come out already Time-sorted,
+				// and recomputeLogAuditCombined below now requires it.
+				logview.SortByTime(entries)
 				r.log.CurrentEntries = entries
 			}
 		}
@@ -189,8 +196,42 @@ func countLogAuditErrWarn(entries []logview.Entry) (errCount, warnCount int) {
 // (current) always came first there, so a later, rotated file's own
 // error was always what actually ended up reported whenever both
 // failed.
+//
+// log.PendingRotatedEntries — whatever applyLogAuditRotatedFile has
+// appended raw since the last combine — is folded into
+// log.RotatedEntries first, via one SortByTime of just that batch
+// plus one MergeSortedInto, instead of this function re-sorting all
+// of RotatedEntries from scratch on every throttled call the way a
+// plain logview.Merge(CurrentEntries, RotatedEntries) used to. A
+// real multi-million-entry family, once a disk cache (see
+// logdiskcache's own doc comment) makes reading fast enough that many
+// rotated files land within a single logAuditCombineThrottleInterval
+// window, hits this throttled recombine dozens of times over a few
+// seconds, each time re-sorting everything accumulated so far rather
+// than just the newest increment — reported as RAM "exploding" during
+// that window (19e, Stufe A). BenchmarkRecombineFullResortEachTick/
+// BenchmarkRecombineIncrementalMerge (internal/logview/merge_test.go)
+// reproduce that many-ticks shape directly and confirm the gain this
+// incremental merge gives there; BenchmarkApplyLogAuditRotatedFile
+// (this package) does not — an unthrottled tight loop with no real
+// time elapsing collapses down to only two real recombines regardless
+// of file count, old code or new, so it is the wrong benchmark to
+// judge this specific change by. MergeSortedInto mutates
+// RotatedEntries' own backing array in place rather than allocating a
+// fresh one each time — safe here because log.RotatedEntries is never
+// read by anything off the UI goroutine (see that function's own doc
+// comment). AllEntries itself, by contrast, always gets a brand-new
+// slice below: runLogAuditFilterScan can have handed a copy of the
+// previous AllEntries off to a still-running background filter scan
+// goroutine (logauditscreen.go), and mutating that same backing array
+// here instead of replacing it would race with that scan's own reads.
 func (r *Root) recomputeLogAuditCombined() {
-	r.log.AllEntries = logview.Merge(r.log.CurrentEntries, r.log.RotatedEntries)
+	if len(r.log.PendingRotatedEntries) > 0 {
+		logview.SortByTime(r.log.PendingRotatedEntries)
+		r.log.RotatedEntries = logview.MergeSortedInto(r.log.RotatedEntries, r.log.PendingRotatedEntries)
+		r.log.PendingRotatedEntries = nil
+	}
+	r.log.AllEntries = logview.MergeSorted(r.log.CurrentEntries, r.log.RotatedEntries)
 	r.log.ErrCount = r.log.CurrentErrCount + r.log.RotatedErrCount
 	r.log.WarnCount = r.log.CurrentWarnCount + r.log.RotatedWarnCount
 	r.log.Files = r.log.CurrentFiles + r.log.RotatedFiles
@@ -371,30 +412,36 @@ func readLogAuditRotatedFileWithDiskCache(ctx context.Context, diskCache *logdis
 const logAuditCombineThrottleInterval = 150 * time.Millisecond
 
 // applyLogAuditRotatedFile merges one rotated file's own already-read
-// result into log.RotatedEntries/Files/Skipped/Err — called from
-// startLogAuditProgressiveLoad's own QueueUpdateDraw callback (the real
-// file I/O already happened off the UI goroutine by then, the same
-// shape tickLogAuditFollow already establishes for readLogAuditGroup),
-// and directly, with no goroutine at all, from a test exercising one
-// already-known result. identity is always whatever
-// startLogAuditProgressiveLoad captured at the start of the load that
-// produced f/entries, passed through the closure rather than re-read
-// from r.panel here — see that function's own doc comment for why
-// re-reading it here would be wrong.
+// result into log.PendingRotatedEntries/RotatedFiles/Skipped/Err —
+// called from startLogAuditProgressiveLoad's own QueueUpdateDraw
+// callback (the real file I/O already happened off the UI goroutine
+// by then, the same shape tickLogAuditFollow already establishes for
+// readLogAuditGroup), and directly, with no goroutine at all, from a
+// test exercising one already-known result. identity is always
+// whatever startLogAuditProgressiveLoad captured at the start of the
+// load that produced f/entries, passed through the closure rather
+// than re-read from r.panel here — see that function's own doc
+// comment for why re-reading it here would be wrong.
 //
-// The actual recombine (logview.Merge's own full stable sort, run
-// twice — once for RotatedEntries, again inside recomputeLogAuditCombined
-// for AllEntries) and re-render (a full filtered scan) are the
-// expensive part at scale — confirmed by BenchmarkApplyLogAuditRotatedFile
-// at ~11.5s for just 1.2M entries across 40 files when run unconditionally
-// per file, the real-world "stalls before the last file is even loaded,
+// The actual recombine (folding log.PendingRotatedEntries into
+// log.RotatedEntries, and merging that with log.CurrentEntries into
+// log.AllEntries — see recomputeLogAuditCombined's own doc comment)
+// and re-render (a full filtered scan) are the expensive part at
+// scale — confirmed by BenchmarkApplyLogAuditRotatedFile at ~11.5s
+// for just 1.2M entries across 40 files when run unconditionally per
+// file, the real-world "stalls before the last file is even loaded,
 // once a keyword search is already running" report on a 4.4M-entry
-// family. New entries are appended raw here — logview.Merge's own stable
-// sort-by-Time with no dedupe means Merge(Merge(a,b),c) and Merge(a,b,c)
-// produce identical output, so deferring the sort to the next
-// recomputeLogAuditCombined call (throttled below, or finally forced by
-// finishLogAuditProgressiveLoad) changes nothing about the eventual
-// order, only how often that full O(n log n) pass actually runs.
+// family, and separately by a live 2026-11-05 report of RAM
+// "exploding" during the equivalent recombine churn on a 4.5M-entry
+// family once the disk cache made loading itself fast (19e, Stufe A).
+// New entries are appended raw to log.PendingRotatedEntries here, not
+// sorted or merged into log.RotatedEntries yet — recomputeLogAuditCombined's
+// own MergeSorted/MergeSortedInto calls require sorted input, but
+// sorting (and merging) every single file's own small batch right
+// here, unthrottled, would just move the same O(n) cost that used to
+// hide behind the throttle below into every single file application
+// instead of every few — the throttle exists precisely so a family
+// with many small rotated files doesn't pay that cost once per file.
 func (r *Root) applyLogAuditRotatedFile(identity string, f logview.CandidateFile, entries []logview.Entry, skip bool, err error) {
 	switch {
 	case skip:
@@ -406,7 +453,7 @@ func (r *Root) applyLogAuditRotatedFile(identity string, f logview.CandidateFile
 		fileErrCount, fileWarnCount := countLogAuditErrWarn(entries)
 		r.log.RotatedErrCount += fileErrCount
 		r.log.RotatedWarnCount += fileWarnCount
-		r.log.RotatedEntries = append(r.log.RotatedEntries, entries...)
+		r.log.PendingRotatedEntries = append(r.log.PendingRotatedEntries, entries...)
 		r.log.RotatedCache.Put(logAuditCacheKey(identity, f), entries, r.settings.LogAuditCacheSize)
 	}
 	r.log.CombineDirty = true

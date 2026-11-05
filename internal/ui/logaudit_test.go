@@ -136,6 +136,105 @@ func TestLogAuditCacheKeyNamespacesByIdentity(t *testing.T) {
 	}
 }
 
+// TestApplyLogAuditRotatedFileCombinesCorrectlyAcrossManyThrottleTicks
+// pins recomputeLogAuditCombined's own incremental-merge contract
+// (19e, Stufe A) end to end, through the real entry points a
+// progressive load actually calls: several rotated files, each
+// forced through its own real recombine (LastCombineAt reset before
+// every call, so the throttle never once skips) rather than letting
+// them coalesce into one or two ticks the way an unthrottled test
+// loop normally would — deliberately the opposite shape from
+// BenchmarkApplyLogAuditRotatedFile, which happens to collapse down
+// to only two real recombines no matter how many files it feeds in.
+// Timestamps are deliberately out of order within a batch and tied
+// across batches/CurrentEntries, exercising both SortByTime (ParseAll
+// gives no sortedness guarantee, see MergeSorted's own doc comment)
+// and the prior-wins tie-break MergeSorted/MergeSortedInto must
+// preserve.
+func TestApplyLogAuditRotatedFileCombinesCorrectlyAcrossManyThrottleTicks(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.log.RotatedCache = logview.NewRotatedCache()
+
+	t0 := time.Date(2026, 10, 7, 16, 0, 0, 0, time.UTC)
+	r.log.CurrentEntries = []logview.Entry{{Time: t0, Message: "current-tie"}}
+
+	batches := [][]logview.Entry{
+		{
+			{Time: t0.Add(3 * time.Minute), Message: "b0-3"},
+			{Time: t0, Message: "b0-tie"}, // out of order within the batch itself
+		},
+		{
+			{Time: t0.Add(1 * time.Minute), Message: "b1-1"},
+			{Time: t0.Add(3 * time.Minute), Message: "b1-3-tie"}, // ties b0-3 across batches
+		},
+		{
+			{Time: t0.Add(2 * time.Minute), Message: "b2-2"},
+		},
+	}
+
+	for i, batch := range batches {
+		r.log.LastCombineAt = time.Time{} // force a real recombine on every single call below
+		r.applyLogAuditRotatedFile("local", logview.CandidateFile{Path: fmt.Sprintf("app.log.%d", i+1)}, batch, false, nil)
+	}
+
+	want := []string{"current-tie", "b0-tie", "b1-1", "b2-2", "b0-3", "b1-3-tie"}
+	if len(r.log.AllEntries) != len(want) {
+		t.Fatalf("len(AllEntries) = %d, want %d: %+v", len(r.log.AllEntries), len(want), r.log.AllEntries)
+	}
+	for i, w := range want {
+		if r.log.AllEntries[i].Message != w {
+			t.Errorf("AllEntries[%d].Message = %q, want %q", i, r.log.AllEntries[i].Message, w)
+		}
+	}
+	if len(r.log.PendingRotatedEntries) != 0 {
+		t.Errorf("PendingRotatedEntries = %+v, want empty after every tick recombined", r.log.PendingRotatedEntries)
+	}
+}
+
+// TestOpenLogAuditViewerClearsPendingRotatedEntriesFromThePreviousGroup
+// pins a real cross-family contamination bug the first version of
+// this incremental-merge change had: openLogAuditViewer reset
+// RotatedEntries/RotatedFiles/.../CombineDirty when switching to a
+// different group, but not the new log.PendingRotatedEntries — an
+// in-flight batch landed-but-not-yet-recombined (the throttle skips
+// it on purpose, see applyLogAuditRotatedFile's own doc comment)
+// would otherwise survive the switch and get folded into the next
+// group's own AllEntries by its first recombine. Deliberately never
+// lets the first group's batch recombine (LastCombineAt forced into
+// the throttle window) before opening the second group, the one
+// sequence TestApplyLogAuditRotatedFileCombinesCorrectlyAcrossManyThrottleTicks
+// above never reaches, since it forces a recombine on every call.
+func TestOpenLogAuditViewerClearsPendingRotatedEntriesFromThePreviousGroup(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir) // two groups: app.log (row 1), syslog (row 2)
+	r := newTestRootForLogAudit(t, dir)
+	r.log.RotatedCache = logview.NewRotatedCache()
+
+	r.log.Table.Select(1, 0) // app.log group
+	r.openLogAuditViewer()
+
+	r.log.LastCombineAt = time.Now() // inside the throttle window — the apply below must NOT recombine
+	r.applyLogAuditRotatedFile("local", logview.CandidateFile{Path: "app.log.1"},
+		[]logview.Entry{{Message: "family-A-leftover-batch"}}, false, nil)
+	if len(r.log.PendingRotatedEntries) == 0 {
+		t.Fatal("test setup: expected a pending, not-yet-recombined batch before switching groups")
+	}
+
+	r.log.Table.Select(2, 0) // syslog group — a different family entirely
+	r.openLogAuditViewer()
+
+	for _, e := range r.log.AllEntries {
+		if e.Message == "family-A-leftover-batch" {
+			t.Fatalf("AllEntries = %+v, leaked a pending batch from the previous group", r.log.AllEntries)
+		}
+	}
+	if len(r.log.PendingRotatedEntries) != 0 {
+		t.Errorf("PendingRotatedEntries = %+v, want cleared on opening a different group", r.log.PendingRotatedEntries)
+	}
+}
+
 // TestLogAuditCacheUsesIdentityCapturedAtLoadStartNotLivePanelState pins
 // the sharper half of the same bug: startLogAuditProgressiveLoad
 // captures currentLogAuditSourceIdentity() exactly once, before
@@ -2113,6 +2212,7 @@ func BenchmarkApplyLogAuditRotatedFile(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		r.log.RotatedEntries = nil
+		r.log.PendingRotatedEntries = nil
 		r.log.RotatedFiles = 0
 		r.log.RotatedSkipped = 0
 		r.log.RotatedErr = nil
