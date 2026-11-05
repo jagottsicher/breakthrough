@@ -1304,7 +1304,25 @@ func (r *Root) logAuditVisibleEntries() []logview.Entry {
 // background goroutine against a captured snapshot instead of
 // r.log.AllEntries directly (see its own doc comment on why that
 // matters).
+//
+// With no filter active at all — Keyword/Time/Level all empty, the
+// viewer's own opening default (openLogAuditViewer clears all three)
+// — every entry is visible, so the scan below would just build a
+// byte-for-byte copy of entries at the same size, for no reason:
+// entries is returned as-is instead. On a multi-million-entry family
+// this is the difference between one more full-size allocation of
+// Entry structs per render — repeated at every throttled recombine
+// tick during a progressive load, exactly the window a real 19e
+// report (2026-11-05, after Stufe A/v0.98.2) found the UI frozen in —
+// and none at all. Safe: nothing downstream (renderLogAuditViewerFor,
+// renderLogAuditTimeline) mutates shown's backing array in place,
+// only clones before reversing (see renderLogAuditViewerFor's own
+// doc comment), so aliasing entries here is never observed as a
+// mutation of log.AllEntries itself.
 func scanLogAuditEntries(entries []logview.Entry, filters logAuditParsedFilters) []logview.Entry {
+	if !filters.hasQuery && !filters.hasMtime && !filters.hasMinLevel {
+		return entries
+	}
 	var shown []logview.Entry
 	for _, e := range entries {
 		if logAuditEntryVisible(e, filters) {
@@ -1486,19 +1504,29 @@ func (r *Root) renderLogAuditViewerFor(shown []logview.Entry) {
 	// real chronological order, which its own density strip always
 	// reads left-to-right regardless of which way the table currently
 	// sorts.
-	rendered := shown
-	if r.log.NewestFirst {
-		rendered = slices.Clone(rendered)
-		slices.Reverse(rendered)
-	}
 	// logAuditMaxRenderedRows caps the table itself, not the counts
 	// above or the timeline (both still reflect every matching entry)
-	// — see its own doc comment for why. Truncating after the reverse
-	// above, not before: the first logAuditMaxRenderedRows of whichever
-	// order is currently showing is always the relevant end to keep —
-	// the newest entries when sorted newest-first, not whichever
-	// happened to come first in file order regardless of the arrow.
-	if len(rendered) > logAuditMaxRenderedRows {
+	// — see its own doc comment for why. Truncated first, before any
+	// clone/reverse below, not after: the old order here was clone the
+	// *entire* shown, reverse all of it, then throw away everything
+	// past the first logAuditMaxRenderedRows — on a multi-million-entry
+	// family that is a full-size allocation plus a full-size reverse
+	// just to keep 2000 rows, measurably part of the UI freeze a real
+	// 19e report (2026-11-05) found during a progressive load. The last
+	// logAuditMaxRenderedRows elements of shown, reversed, is the exact
+	// same result (reversing the whole array and keeping its own first
+	// N is the same N elements, in the same order, as keeping the last
+	// N and reversing only those) for the newest-first case; the
+	// oldest-first case never needed a clone or reverse at all, a plain
+	// sub-slice always sufficed.
+	rendered := shown
+	if r.log.NewestFirst {
+		if len(rendered) > logAuditMaxRenderedRows {
+			rendered = rendered[len(rendered)-logAuditMaxRenderedRows:]
+		}
+		rendered = slices.Clone(rendered)
+		slices.Reverse(rendered)
+	} else if len(rendered) > logAuditMaxRenderedRows {
 		rendered = rendered[:logAuditMaxRenderedRows]
 	}
 

@@ -633,6 +633,63 @@ func TestRenderLogAuditViewerNotesTruncationInTitle(t *testing.T) {
 	}
 }
 
+// TestRenderLogAuditViewerNewestFirstTruncationKeepsTheActualNewestRows
+// pins the exact row content for the newest-first + truncated case —
+// not just the row count TestRenderLogAuditViewerNotesTruncationInTitle
+// above already covers — after renderLogAuditViewerFor stopped
+// cloning and reversing the entire matching set just to keep the
+// first logAuditMaxRenderedRows of it (19e, Stufe A follow-up,
+// 2026-11-05: that full clone+reverse was itself part of a real UI
+// freeze on a multi-million-entry family). Only the last
+// logAuditMaxRenderedRows entries are cloned/reversed now; this pins
+// that the entries actually kept are still the newest ones, not an
+// off-by-one slice of the wrong end.
+func TestRenderLogAuditViewerNewestFirstTruncationKeepsTheActualNewestRows(t *testing.T) {
+	dir := t.TempDir()
+	const total = logAuditMaxRenderedRows + 5
+	var b strings.Builder
+	base := time.Date(2026, 10, 7, 16, 0, 0, 0, time.UTC)
+	for i := 0; i < total; i++ {
+		fmt.Fprintf(&b, "%s line-%04d\n", base.Add(time.Duration(i)*time.Second).Format("2006-01-02 15:04:05"), i)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "big.log"), []byte(b.String()), 0o644); err != nil {
+		t.Fatalf("WriteFile big.log: %v", err)
+	}
+	r := newTestRootForLogAudit(t, dir)
+	r.log.Table.Select(1, 0)
+	r.openLogAuditViewer() // NewestFirst defaults true
+
+	// Newest-first: row 1 is the very last line written, row
+	// logAuditMaxRenderedRows is the oldest line still kept (line
+	// total-logAuditMaxRenderedRows, 0-indexed).
+	wantNewest := fmt.Sprintf("line-%04d", total-1)
+	wantOldestKept := fmt.Sprintf("line-%04d", total-logAuditMaxRenderedRows)
+	if got := r.log.ViewerTable.GetCell(1, logAuditColMessage).Text; got != wantNewest {
+		t.Errorf("row 1 message = %q, want %q", got, wantNewest)
+	}
+	if got := r.log.ViewerTable.GetCell(logAuditMaxRenderedRows, logAuditColMessage).Text; got != wantOldestKept {
+		t.Errorf("row %d message = %q, want %q", logAuditMaxRenderedRows, got, wantOldestKept)
+	}
+}
+
+// TestScanLogAuditEntriesReturnsEntriesUnchangedWhenNoFilterIsActive
+// pins the no-copy shortcut (19e, Stufe A follow-up, 2026-11-05):
+// with Keyword/Time/Level all empty — the viewer's own opening
+// default — scanLogAuditEntries must return entries itself, not a
+// copy, since every entry matches an empty filter anyway. Checked by
+// slice identity (same backing array), the one thing a plain
+// value-equality check on the contents couldn't tell apart from an
+// equivalent-but-copied result.
+func TestScanLogAuditEntriesReturnsEntriesUnchangedWhenNoFilterIsActive(t *testing.T) {
+	entries := []logview.Entry{{Message: "a"}, {Message: "b"}}
+
+	shown := scanLogAuditEntries(entries, logAuditParsedFilters{})
+
+	if len(shown) != len(entries) || &shown[0] != &entries[0] {
+		t.Fatalf("scanLogAuditEntries copied entries despite no active filter: shown=%+v", shown)
+	}
+}
+
 // TestRenderLogAuditViewerKeepsGoodEntriesWhenOneFileFails pins a real,
 // independently-discovered bug directly on point for the user's own
 // "nicht alle Logeinträge sichtbar" report: a parse error from just
