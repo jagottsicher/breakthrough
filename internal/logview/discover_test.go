@@ -192,6 +192,46 @@ func TestDiscoverSupportsEveryCompressedExtension(t *testing.T) {
 	}
 }
 
+func TestFilterCompressedKeepsEverythingWhenNotSkipping(t *testing.T) {
+	files := []CandidateFile{{Path: "access.log"}, {Path: "access.log.1.gz", Compressed: true}}
+	kept, excluded := FilterCompressed(files, false)
+	if excluded != 0 || len(kept) != 2 {
+		t.Fatalf("kept = %+v, excluded = %d, want all 2 files, 0 excluded", kept, excluded)
+	}
+}
+
+func TestFilterCompressedExcludesOnlyCompressed(t *testing.T) {
+	files := []CandidateFile{
+		{Path: "access.log"},
+		{Path: "access.log.1", Compressed: false},
+		{Path: "access.log.2.gz", Compressed: true},
+		{Path: "access.log.3.xz", Compressed: true},
+	}
+	kept, excluded := FilterCompressed(files, true)
+	if excluded != 2 {
+		t.Fatalf("excluded = %d, want 2", excluded)
+	}
+	if len(kept) != 2 {
+		t.Fatalf("kept = %+v, want 2 uncompressed files", kept)
+	}
+	for _, f := range kept {
+		if f.Compressed {
+			t.Errorf("kept %s, want only uncompressed files kept", f.Path)
+		}
+	}
+}
+
+func TestFilterCompressedAllCompressed(t *testing.T) {
+	files := []CandidateFile{
+		{Path: "access.log.1.gz", Compressed: true},
+		{Path: "access.log.2.gz", Compressed: true},
+	}
+	kept, excluded := FilterCompressed(files, true)
+	if excluded != 2 || len(kept) != 0 {
+		t.Fatalf("kept = %+v, excluded = %d, want 0 kept, 2 excluded", kept, excluded)
+	}
+}
+
 func TestOpenDecompressesGzip(t *testing.T) {
 	dir := t.TempDir()
 	writeGzipFile(t, dir, "access.log.1.gz", "hello from gzip\n")

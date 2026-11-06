@@ -160,6 +160,32 @@ func rotationSortKey(p string) string {
 	return strings.TrimPrefix(name, base)
 }
 
+// FilterCompressed returns files unchanged (excluded always 0) when skip
+// is false — the common case, every file including a compressed rotation
+// is read. When skip is true, every CandidateFile with Compressed set is
+// left out of kept and counted into excluded instead, for a caller (see
+// startLogAuditProgressiveLoad/readLogAuditGroup, internal/ui/logaudit.go)
+// that wants to honor a user's own "skip compressed files" scope choice
+// without reading or decompressing them at all — a real win over reading
+// then discarding, since decompression is exactly the expensive part a
+// large rotated family's own .gz/.xz/.zst/.bz2 files pay for. The current,
+// unrotated file (files[0] in whatever a FileGroup's own Files already
+// is) is never affected either way: Discover never marks it Compressed.
+func FilterCompressed(files []CandidateFile, skip bool) (kept []CandidateFile, excluded int) {
+	if !skip {
+		return files, 0
+	}
+	kept = make([]CandidateFile, 0, len(files))
+	for _, f := range files {
+		if f.Compressed {
+			excluded++
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept, excluded
+}
+
 // Open returns a decompressing reader for f, read through source (the
 // same one Discover built f from — see FileSource's own doc comment on
 // why that's the caller's responsibility, not something CandidateFile
