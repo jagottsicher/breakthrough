@@ -1227,6 +1227,104 @@ func TestLogAuditTimeFieldAppliesOnLeavingViaMouseClick(t *testing.T) {
 	}
 }
 
+// syncLogAuditScanFn resolves scheduleLogAuditFilterRescan's own scan
+// synchronously, inline — Keyword/Level's deferred filter (19e,
+// 2026-11-06) goes through this async path rather than Time's
+// synchronous renderLogAuditViewer (see applyLogAuditFilterFieldLeft's
+// own doc comment on why), and this package's own tests never drain
+// QueueUpdateDraw, so the real defaultLogAuditScanFn (safeGo + a real
+// goroutine) would leave a test with no way to observe the result at
+// all.
+func syncLogAuditScanFn(entries []logview.Entry, filters logAuditParsedFilters, done func([]logview.Entry)) {
+	done(scanLogAuditEntries(entries, filters))
+}
+
+// TestLogAuditKeywordFieldDoesNotFilterLiveButDoesOnEnter is Keyword's
+// own counterpart to TestLogAuditTimeFieldDoesNotFilterLiveButDoesOnEnterOrLeave
+// above — pinning the 19e fix directly: typing must not rescan, only
+// Enter (or leaving, see the mouse-click variant below) does.
+func TestLogAuditKeywordFieldDoesNotFilterLiveButDoesOnEnter(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	r.log.ScanFn = syncLogAuditScanFn
+	allRows := r.log.ViewerTable.GetRowCount()
+
+	// A term none of the fixture's "entry N" messages contain —
+	// typing it should change nothing yet.
+	r.log.KeywordField.SetText("nonexistent-term-xyz")
+	if got := r.log.ViewerTable.GetRowCount(); got != allRows {
+		t.Errorf("row count = %d after merely setting the Keyword field's text, want unchanged %d (no live filtering)", got, allRows)
+	}
+
+	r.log.KeywordField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	// 2, not 1: header row + the table's own "No entries match the
+	// current filter." row, not just a bare header.
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 {
+		t.Errorf("row count = %d after Enter, want 2 (header + the no-match row — the filter excludes everything)", got)
+	}
+}
+
+// TestLogAuditKeywordFieldAppliesOnLeavingViaMouseClick is Keyword's
+// own counterpart to TestLogAuditTimeFieldAppliesOnLeavingViaMouseClick
+// above — same real MouseHandler-driven focus change, same reason a
+// direct SetFocus call wouldn't exercise the actual gap
+// (restyleLogAuditFocusTargets' own doc comment).
+func TestLogAuditKeywordFieldAppliesOnLeavingViaMouseClick(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	r.log.ScanFn = syncLogAuditScanFn
+	allRows := r.log.ViewerTable.GetRowCount()
+
+	clickPrimitive(r, r.log.KeywordField)
+	r.log.KeywordField.SetText("nonexistent-term-xyz")
+	if got := r.log.ViewerTable.GetRowCount(); got != allRows {
+		t.Fatalf("setup: row count = %d after setting the Keyword field's text, want unchanged %d", got, allRows)
+	}
+
+	clickPrimitive(r, r.log.TimeField)
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 {
+		t.Errorf("row count = %d after clicking away to Time, want 2 (header + no-match row — the Keyword filter should now be applied)", got)
+	}
+}
+
+// TestLogAuditLevelFieldDoesNotFilterLiveButDoesOnEnter is Level's own
+// counterpart to TestLogAuditKeywordFieldDoesNotFilterLiveButDoesOnEnter
+// just above.
+func TestLogAuditLevelFieldDoesNotFilterLiveButDoesOnEnter(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	r.log.ScanFn = syncLogAuditScanFn
+	allRows := r.log.ViewerTable.GetRowCount()
+
+	// The fixture is all level "info" — "error" excludes everything.
+	r.log.LevelField.SetText("error")
+	if got := r.log.ViewerTable.GetRowCount(); got != allRows {
+		t.Errorf("row count = %d after merely setting the Level field's text, want unchanged %d (no live filtering)", got, allRows)
+	}
+
+	r.log.LevelField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 {
+		t.Errorf("row count = %d after Enter, want 2 (header + the no-match row — the filter excludes everything)", got)
+	}
+}
+
+// TestLogAuditLevelFieldAppliesOnLeavingViaMouseClick is Level's own
+// counterpart to TestLogAuditKeywordFieldAppliesOnLeavingViaMouseClick
+// above.
+func TestLogAuditLevelFieldAppliesOnLeavingViaMouseClick(t *testing.T) {
+	r := openLogAuditTimelineViewer(t, 200, 50)
+	r.log.ScanFn = syncLogAuditScanFn
+	allRows := r.log.ViewerTable.GetRowCount()
+
+	clickPrimitive(r, r.log.LevelField)
+	r.log.LevelField.SetText("error")
+	if got := r.log.ViewerTable.GetRowCount(); got != allRows {
+		t.Fatalf("setup: row count = %d after setting the Level field's text, want unchanged %d", got, allRows)
+	}
+
+	clickPrimitive(r, r.log.KeywordField)
+	if got := r.log.ViewerTable.GetRowCount(); got != 2 {
+		t.Errorf("row count = %d after clicking away to Keyword, want 2 (header + no-match row — the Level filter should now be applied)", got)
+	}
+}
+
 // writeLogAuditTimelineFixture writes 20 JSON-Lines entries, one per
 // second, all on the same calendar day — predictable enough to drive
 // the interactive timeline without hand-computing bucket boundaries:
@@ -2319,9 +2417,15 @@ func TestScheduleLogAuditFilterRescanAppliesTheResultOnceItLands(t *testing.T) {
 	fire := controlledLogAuditScanFn(r)
 
 	r.log.KeywordField.SetText("timeout")
+	// Keyword no longer rescans live on every keystroke (19e,
+	// 2026-11-06) — SetText alone must not have dispatched anything
+	// yet; Enter (the same real trigger
+	// TestLogAuditTimeFieldDoesNotFilterLiveButDoesOnEnterOrLeave
+	// exercises for Time) is what actually applies it.
 	if got := r.log.ViewerTable.GetRowCount(); got == 2 {
 		t.Fatal("table already shows the filtered result before the scan landed")
 	}
+	r.log.KeywordField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	entries := r.log.AllEntries
 	var want []logview.Entry
@@ -2356,11 +2460,17 @@ func TestScheduleLogAuditFilterRescanCoalescesRapidTyping(t *testing.T) {
 	r.log.Table.Select(1, 0)
 	r.openLogAuditViewer()
 
+	// Keyword no longer rescans live on every keystroke (19e,
+	// 2026-11-06), so each SetText here is followed by the real
+	// trigger (scheduleLogAuditFilterRescan, as SetDoneFunc/
+	// restyleLogAuditFocusTargets now call it) — the coalescing
+	// behavior under test is unchanged, only how it gets dispatched.
 	var firstDone func([]logview.Entry)
 	r.log.ScanFn = func(entries []logview.Entry, filters logAuditParsedFilters, done func([]logview.Entry)) {
 		firstDone = done
 	}
 	r.log.KeywordField.SetText("t")
+	r.scheduleLogAuditFilterRescan()
 	if firstDone == nil {
 		t.Fatal("setup: first scan never dispatched")
 	}
@@ -2370,11 +2480,12 @@ func TestScheduleLogAuditFilterRescanCoalescesRapidTyping(t *testing.T) {
 		coalescedDone = done
 	}
 	r.log.KeywordField.SetText("ti")
+	r.scheduleLogAuditFilterRescan()
 	if coalescedDone != nil {
-		t.Fatal("second keystroke dispatched its own scan while the first was still in flight — should have coalesced instead")
+		t.Fatal("second rescan dispatched its own scan while the first was still in flight — should have coalesced instead")
 	}
 	if !r.log.FilterScanPending {
-		t.Fatal("setup: FilterScanPending not set after a keystroke arrived while a scan was in flight")
+		t.Fatal("setup: FilterScanPending not set after a rescan arrived while a scan was in flight")
 	}
 
 	firstDone([]logview.Entry{{Message: "stale result from the first keystroke"}}) // the stale, superseded one
