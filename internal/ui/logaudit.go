@@ -96,6 +96,13 @@ func (r *Root) openLogAuditViewer() {
 	r.log.KeywordField.SetText("")
 	r.log.TimeField.SetText("")
 	r.log.LevelField.SetText("")
+	// Cleared alongside the three field texts just above — a stale
+	// value here (the previous open's own last-focused filter field)
+	// would otherwise make the very next restyleLogAuditFocusTargets
+	// call for this new open apply a filter against a fresh
+	// AllEntries on behalf of a field nobody actually just left this
+	// time around (19e, 2026-11-06).
+	r.log.LastFocusedFilterField = nil
 	// Newest-first, not the Merge's own oldest-first order — per the
 	// user's own explicit request, the same "most recent at the top"
 	// default every other reasonable default for triaging a log
