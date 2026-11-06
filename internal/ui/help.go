@@ -913,6 +913,10 @@ var helpText = strings.TrimLeft(`
 
     Enter    Open the Log Holepunch view for the family under the cursor
     r        Re-scan the directory
+    z        Toggle skipping compressed rotations on the next open
+             (global for this screen, not per family — the title
+             bar and each family's own Info column always show the
+             current state, and the next open is all this affects)
     Esc      Close
 
   Step 2 — Log Holepunch view: every selected file's own lines, merged into
@@ -936,7 +940,11 @@ var helpText = strings.TrimLeft(`
   timestamp anywhere in this one at all — a snapshot of package
   state, not a sequence of timed events — but every field still shown
   under its own stanza's "Package:" as Source); or plain text as a
-  fallback. .gz/.xz/.zst/.bz2 files are decompressed transparently.
+  fallback. .gz/.xz/.zst/.bz2 files are decompressed transparently,
+  unless "z" on the selection screen skipped that family's own
+  compressed rotations for this open — the title bar then also shows
+  how many were excluded that way, separately from "skipped" (a file
+  that failed to read or whose compression isn't recognized at all).
   A parse error in one file of the family (a corrupted rotation, say)
   only blanks the view when every file failed — otherwise the entries
   that did read fine still show, with the error noted in the title bar

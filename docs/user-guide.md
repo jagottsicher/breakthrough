@@ -2785,6 +2785,7 @@ and the Log Holepunch view below have one.
 |---|---|
 | `Enter` | Open the Log Holepunch view for the family under the cursor |
 | `r` | Re-scan the directory |
+| `z` | Toggle whether opening a family reads its compressed rotations too — global for this screen, not per family; the title bar and each family's own Info column always show the current state |
 | `Escape` | Close |
 
 Step 2 — the Log Holepunch view: every selected file's own lines, merged into
@@ -2793,7 +2794,7 @@ format is detected automatically from a sample of its own lines
 (`internal/logview.Detect`) — JSON Lines (including Docker's
 `json-file` log driver), syslog RFC 3164, syslog RFC 5424, a generic
 "timestamp level message" line, or plain text as a fallback — and
-gzip-compressed files are decompressed transparently. The current
+`.gz`/`.xz`/`.zst`/`.bz2` files are decompressed transparently. The current
 (most recent) file's own lines show first, immediately — a logrotate
 family's older, rotated files stream in afterward in the background,
 an animated glyph in front of the files count in the title bar for as
@@ -2894,7 +2895,25 @@ following.
 
 `.gz`, `.xz`, `.zst`, and `.bz2` files are all decompressed
 transparently and inline — the selection screen's own Info column
-notes how many of a group's files are compressed, nothing more.
+notes how many of a group's files are compressed. The current
+(unrotated) file is never affected — only an older, already-rotated
+file can be compressed at all. Pressing `z` on the selection screen
+skips reading those compressed rotations the next time a family is
+opened — a large family's own full history can mean reading and
+decompressing dozens of gigabytes just to get at the handful of most
+recent events; skipping them trades that history away for a faster
+open. The current scope ("compressed: included"/"compressed:
+skipped") always shows in both the selection screen's and the Log
+Holepunch view's own title bar, and the Info column spells out
+"skipped" right next to the compressed count while the scope excludes
+them. A family opened with compressed rotations skipped shows how many
+were left out in the title bar ("N compressed excluded"), alongside
+the existing "N skipped" count for a file that failed to read or whose
+compression isn't recognized at all — a different, unrelated count,
+kept apart deliberately so a real read failure never hides behind a
+deliberate exclusion. Toggling `z` only changes what the *next* open
+reads; it has no effect on a family already open in the Log Holepunch
+view.
 
 ## Settings reference
 

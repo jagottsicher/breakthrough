@@ -1240,8 +1240,10 @@ Lightning Network ⚡️ using the sponsor button above.
 - Log Holepunch (`jL`): reads *other* log files on disk — whichever
   directory the active panel currently shows, no arguments or flags.
   Discovers logrotate families (`access.log`, `access.log.1`,
-  `access.log.2.gz`, ...), lets you check which ones to include, then
-  merges them into one chronological stream with automatic format
+  `access.log.2.gz`, ...); a global toggle ("z") can skip a family's
+  own compressed rotations entirely on the next open, trading history
+  away for a faster read of a large family. Opening a family
+  merges its files into one chronological stream with automatic format
   detection (JSON Lines — including Docker's json-file log driver,
   syslog RFC 3164/5424, a generic "timestamp level message" line, or
   plain text as a fallback), transparent `.gz`/`.xz`/`.zst`/`.bz2`

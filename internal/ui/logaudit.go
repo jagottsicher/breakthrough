@@ -46,6 +46,20 @@ func (r *Root) closeLogAuditSelection() {
 	r.hideOverlay()
 }
 
+// toggleLogAuditSkipCompressed flips log.SkipCompressed — "z" on the
+// selection screen, global for the whole screen rather than per family,
+// per the user's own explicit request. Scoped to the selection screen
+// only: it takes effect for whichever family is opened next (see
+// startLogAuditProgressiveLoad/readLogAuditGroup, both of which read
+// log.SkipCompressed fresh at that point), not retroactively against a
+// viewer already open. Re-renders the selection table immediately so
+// Info column and title reflect the new scope right away (see
+// logAuditGroupInfo/logAuditCompressedScopeLabel, logauditscreen.go).
+func (r *Root) toggleLogAuditSkipCompressed() {
+	r.log.SkipCompressed = !r.log.SkipCompressed
+	r.renderLogAuditSelection()
+}
+
 // logAuditGroupAt returns log.Groups[row-1] — row is a table row
 // (1-based, header at 0), the same offset every other screen's own
 // table-row-to-data mapping uses (see e.g. renderActivityLog).
@@ -87,6 +101,7 @@ func (r *Root) openLogAuditViewer() {
 	r.log.PendingRotatedEntries = nil
 	r.log.RotatedFiles = 0
 	r.log.RotatedSkipped = 0
+	r.log.RotatedExcluded = 0
 	r.log.RotatedErr = nil
 	r.log.RotatedErrCount = 0
 	r.log.RotatedWarnCount = 0
@@ -243,6 +258,9 @@ func (r *Root) recomputeLogAuditCombined() {
 	r.log.WarnCount = r.log.CurrentWarnCount + r.log.RotatedWarnCount
 	r.log.Files = r.log.CurrentFiles + r.log.RotatedFiles
 	r.log.Skipped = r.log.CurrentSkipped + r.log.RotatedSkipped
+	// No CurrentExcluded counterpart — Files[0] is never Compressed, see
+	// RotatedExcluded's own doc comment (logauditscreen.go).
+	r.log.Excluded = r.log.RotatedExcluded
 	r.log.ParseErr = r.log.RotatedErr
 	if r.log.ParseErr == nil {
 		r.log.ParseErr = r.log.CurrentErr
@@ -302,7 +320,21 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 	if r.log.RotatedCache == nil {
 		r.log.RotatedCache = logview.NewRotatedCache()
 	}
-	r.log.TotalFiles = len(group.Files)
+	// rotated excludes whatever SkipCompressed leaves out — TotalFiles
+	// below must count only what will actually be read (1, the current
+	// file already counted into log.Files by refreshLogAuditCurrentFile,
+	// plus len(rotated)), not len(group.Files): the "x/y files" loading
+	// segment in the title bar (buildLogAuditViewerTitle) would otherwise
+	// never converge once a family has excluded files, stuck forever at
+	// e.g. "2/40" for a family where 38 rotations were deliberately left
+	// out.
+	rotated, excluded := logview.FilterCompressed(group.Files[1:], r.log.SkipCompressed)
+	r.log.RotatedExcluded = excluded
+	r.log.Excluded = excluded
+	r.log.TotalFiles = 1 + len(rotated)
+	if len(rotated) == 0 {
+		return
+	}
 
 	// identity is captured once, right here, and closed over by every
 	// use below (the pre-pass immediately, the background goroutine's
@@ -315,7 +347,7 @@ func (r *Root) startLogAuditProgressiveLoad(group logview.FileGroup) {
 	identity := r.currentLogAuditSourceIdentity()
 
 	var pending []logview.CandidateFile
-	for _, f := range group.Files[1:] {
+	for _, f := range rotated {
 		switch {
 		case !f.Supported:
 			r.applyLogAuditRotatedFile(identity, f, nil, true, nil)
@@ -543,9 +575,10 @@ func (r *Root) animateLogAuditLoad(ctx context.Context) {
 // ~700ms, measured) — running that on the UI goroutine every single
 // follow tick would stutter the whole app repeatedly, not just once,
 // the way a manual "r" press's own one-off blocking read does not.
-func readLogAuditGroup(source logview.FileSource, group logview.FileGroup) (entries []logview.Entry, files, skipped int, err error) {
+func readLogAuditGroup(source logview.FileSource, group logview.FileGroup, skipCompressed bool) (entries []logview.Entry, files, skipped, excluded int, err error) {
+	kept, excluded := logview.FilterCompressed(group.Files, skipCompressed)
 	var allEntries [][]logview.Entry
-	for _, f := range group.Files {
+	for _, f := range kept {
 		if !f.Supported {
 			skipped++
 			continue
@@ -559,7 +592,7 @@ func readLogAuditGroup(source logview.FileSource, group logview.FileGroup) (entr
 		allEntries = append(allEntries, fileEntries)
 	}
 	entries = logview.Merge(allEntries...)
-	return entries, files, skipped, err
+	return entries, files, skipped, excluded, err
 }
 
 // readLogAuditFile opens, decompresses, and parses one file — fallback
@@ -703,6 +736,7 @@ func (r *Root) startLogAuditFollow() {
 	// handed to QueueUpdateDraw.
 	group := r.log.GroupOpen
 	source := r.currentLogAuditSource()
+	skipCompressed := r.log.SkipCompressed
 	r.safeGo("log audit follow", func() { r.stopLogAuditFollow() }, func() {
 		ticker := time.NewTicker(logAuditFollowInterval)
 		defer ticker.Stop()
@@ -712,7 +746,7 @@ func (r *Root) startLogAuditFollow() {
 				if ctx.Err() != nil {
 					return
 				}
-				entries, files, skipped, err := readLogAuditGroup(source, group)
+				entries, files, skipped, excluded, err := readLogAuditGroup(source, group, skipCompressed)
 				if ctx.Err() != nil {
 					return
 				}
@@ -720,7 +754,7 @@ func (r *Root) startLogAuditFollow() {
 					if ctx.Err() != nil {
 						return
 					}
-					r.tickLogAuditFollow(entries, files, skipped, err)
+					r.tickLogAuditFollow(entries, files, skipped, excluded, err)
 				})
 			case <-ctx.Done():
 				return
@@ -751,7 +785,7 @@ func (r *Root) stopLogAuditFollow() {
 // it). Which row that is depends on log.NewestFirst — row 1 (new
 // entries appear at the top) when true, the last row (they appear at
 // the bottom, same as a plain `tail -f`) when false, the default.
-func (r *Root) tickLogAuditFollow(entries []logview.Entry, files, skipped int, err error) {
+func (r *Root) tickLogAuditFollow(entries []logview.Entry, files, skipped, excluded int, err error) {
 	rowCount := r.log.ViewerTable.GetRowCount()
 	cur, _ := r.log.ViewerTable.GetSelection()
 	tailRow := rowCount - 1
@@ -763,6 +797,7 @@ func (r *Root) tickLogAuditFollow(entries []logview.Entry, files, skipped int, e
 	r.log.AllEntries = entries
 	r.log.Files = files
 	r.log.Skipped = skipped
+	r.log.Excluded = excluded
 	r.log.ParseErr = err
 	r.renderLogAuditViewer()
 
