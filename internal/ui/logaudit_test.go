@@ -569,6 +569,99 @@ func TestCloseLogAuditViewerReturnsToSelection(t *testing.T) {
 	}
 }
 
+// TestCloseLogAuditViewerReleasesEntriesWhenRemoteWithDiskCacheEnabled
+// pins the user's own explicit request (19e, 2026-11-06): once the
+// real fixes above were confirmed to hold against the real family,
+// closing a remote, disk-cached group's own viewer should let its
+// log.AllEntries/RotatedEntries/CurrentEntries be reclaimed rather
+// than sitting fully resident for the rest of the session — the next
+// open re-reads every rotated file straight back from logdiskcache
+// (a local disk read), confirmed noticeably faster than the original
+// read in the same real-world report.
+func TestCloseLogAuditViewerReleasesEntriesWhenRemoteWithDiskCacheEnabled(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	remote := newTestFakeRemote("/remote")
+	remote.content = map[string][]byte{"/remote/app.log": []byte("2026-10-07 16:04:23 ERROR database connection timeout\n")}
+	remote.entries["/remote"] = []fsops.Entry{
+		{Name: "app.log", Type: fsops.TypeFile, Size: int64(len(remote.content["/remote/app.log"])), ModTime: time.Now()},
+	}
+	if err := r.panel.connectRemote(remote, remotefs.Connection{Host: "testhost"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.settings.LogAuditDiskCacheEnabled = true
+
+	r.openLogAudit()
+	r.log.Table.Select(1, 0)
+	r.openLogAuditViewer()
+	if len(r.log.AllEntries) == 0 {
+		t.Fatal("setup: AllEntries empty after opening the viewer")
+	}
+
+	r.closeLogAuditViewer()
+
+	if r.log.AllEntries != nil || r.log.CurrentEntries != nil || r.log.RotatedEntries != nil {
+		t.Errorf("AllEntries/CurrentEntries/RotatedEntries not released after closing a remote, disk-cached viewer: %+v / %+v / %+v",
+			r.log.AllEntries, r.log.CurrentEntries, r.log.RotatedEntries)
+	}
+}
+
+// TestCloseLogAuditViewerKeepsEntriesForLocalSource pins the other
+// half: a local source has no logdiskcache fast path back at all (see
+// releaseLogAuditEntriesIfDiskCached's own doc comment) — releasing
+// there would just turn the next "r"/re-open into the exact same
+// slow, from-scratch read the disk cache exists to avoid.
+func TestCloseLogAuditViewerKeepsEntriesForLocalSource(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+
+	r.log.Table.Select(1, 0)
+	r.openLogAuditViewer()
+	if len(r.log.AllEntries) == 0 {
+		t.Fatal("setup: AllEntries empty after opening the viewer")
+	}
+
+	r.closeLogAuditViewer()
+
+	if r.log.AllEntries == nil {
+		t.Error("AllEntries released after closing a local viewer — local has no disk-cache fast path back")
+	}
+}
+
+// TestCloseLogAuditViewerKeepsEntriesWhenDiskCacheDisabled is the
+// remote-but-disk-cache-off half of the same pair.
+func TestCloseLogAuditViewerKeepsEntriesWhenDiskCacheDisabled(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	remote := newTestFakeRemote("/remote")
+	remote.content = map[string][]byte{"/remote/app.log": []byte("2026-10-07 16:04:23 ERROR database connection timeout\n")}
+	remote.entries["/remote"] = []fsops.Entry{
+		{Name: "app.log", Type: fsops.TypeFile, Size: int64(len(remote.content["/remote/app.log"])), ModTime: time.Now()},
+	}
+	if err := r.panel.connectRemote(remote, remotefs.Connection{Host: "testhost"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.settings.LogAuditDiskCacheEnabled = false
+
+	r.openLogAudit()
+	r.log.Table.Select(1, 0)
+	r.openLogAuditViewer()
+	if len(r.log.AllEntries) == 0 {
+		t.Fatal("setup: AllEntries empty after opening the viewer")
+	}
+
+	r.closeLogAuditViewer()
+
+	if r.log.AllEntries == nil {
+		t.Error("AllEntries released after closing a viewer with disk caching disabled")
+	}
+}
+
 func TestNavigateLogAuditLevelFindsAndWrapsErrors(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
