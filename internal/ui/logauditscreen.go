@@ -840,17 +840,29 @@ func logAuditTimeText(t time.Time) string {
 // logAuditLevelColor mirrors activityLogLevelColor's own "stop sign"
 // convention: Error/Fatal red, Warn the app's own WarningText, Info/
 // Debug/Trace muted, Unknown plain text (nothing to call out).
-func logAuditLevelColor(theme config.ResolvedTheme, level logview.Level) tcell.Color {
+// logAuditInferredLevelBlend is how far logAuditLevelColor fades an
+// inferred Level's own color toward the table's own background — real
+// signal (see Entry.LevelInferred's own doc comment, internal/logview/
+// model.go), but weaker evidence than a level the source format
+// declared itself, so it reads as paler rather than full-strength.
+const logAuditInferredLevelBlend = 0.45
+
+func logAuditLevelColor(theme config.ResolvedTheme, level logview.Level, inferred bool) tcell.Color {
+	var c tcell.Color
 	switch level {
 	case logview.LevelError, logview.LevelFatal:
-		return theme.CriticalText
+		c = theme.CriticalText
 	case logview.LevelWarn:
-		return theme.WarningText
+		c = theme.WarningText
 	case logview.LevelUnknown:
 		return theme.Text
 	default:
-		return theme.MutedTextColor
+		c = theme.MutedTextColor
 	}
+	if inferred {
+		return blendToward(c, theme.PanelBackground, logAuditInferredLevelBlend)
+	}
+	return c
 }
 
 // logAuditKeywordQuery parses the Keyword field's own boolean query
@@ -1661,7 +1673,7 @@ func (r *Root) renderLogAuditViewerFor(shown []logview.Entry) {
 	bg := r.theme.ButtonBackground
 	for i, e := range rendered {
 		row := i + 1
-		levelColor := logAuditLevelColor(r.theme, e.Level)
+		levelColor := logAuditLevelColor(r.theme, e.Level, e.LevelInferred)
 		cell := func(col int, text string, color tcell.Color) {
 			r.log.ViewerTable.SetCell(row, col,
 				tview.NewTableCell(text).SetTextColor(color).SetSelectable(true).

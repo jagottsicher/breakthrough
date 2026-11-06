@@ -56,8 +56,15 @@ const manifestFileName = "index.json"
 // transparently absorb (a renamed or retyped field), so a stale cache
 // from a previous breakthrough version is detected and treated as a
 // miss instead of either failing to decode or, worse, decoding into
-// garbage.
-const cacheFormatVersion = 1
+// garbage. Also bumped (2026-11-06, Entry.LevelInferred) for an added
+// field gob itself would decode just fine without a bump — an old,
+// still-valid-looking cache entry would otherwise silently come back
+// with LevelInferred permanently false and a stale Level (LevelUnknown
+// on every line a cache predating this feature never had a chance to
+// infer one for), a wrong result with no error to notice it by, not
+// the "can't decode, so it's a miss" case the version guard originally
+// existed for.
+const cacheFormatVersion = 2
 
 // Cache is one open on-disk cache rooted at a single directory —
 // typically $XDG_CACHE_HOME/breakthrough/logaudit. Not safe for

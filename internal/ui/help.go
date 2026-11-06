@@ -945,6 +945,19 @@ var helpText = strings.TrimLeft(`
   compressed rotations for this open — the title bar then also shows
   how many were excluded that way, separately from "skipped" (a file
   that failed to read or whose compression isn't recognized at all).
+  When a line's own format gives no level at all (classic syslog
+  RFC 3164 never does, and the generic format's own level is
+  optional), the message text itself is checked for one: a leading
+  "ERROR:"/"[WARN]"-style token, a Java/Logback-style
+  "elapsed [thread] LEVEL logger - message" line, a logfmt-style
+  "level="/"lvl="/"severity=" pair, or a whole second log line nested
+  inside the message (some agents write their own fully-timestamped,
+  leveled line straight into syslog). A level recovered this way shows
+  in a paler shade of its usual color — real signal, but a scanned
+  guess rather than a field the log format itself declared; an
+  Apache/nginx/CUPS access log's own HTTP status is treated the same
+  way for a 4xx response (paler Warn — a 404 is routine, not
+  necessarily a server problem), while 5xx is a full-strength Error.
   A parse error in one file of the family (a corrupted rotation, say)
   only blanks the view when every file failed — otherwise the entries
   that did read fine still show, with the error noted in the title bar
@@ -1027,8 +1040,11 @@ var helpText = strings.TrimLeft(`
                      field already accepts
     Level >=        A minimum severity ("warn" shows WARN and
                      everything worse — ERROR, FATAL — not just exact
-                     WARN matches); an entry with no recognized level
-                     never passes this filter, even "trace"
+                     WARN matches), a level a scanned guess recovered
+                     from the message text included same as one the
+                     format declared outright; an entry with no level
+                     at all, recovered or not, never passes this
+                     filter, even "trace"
     Tab / Shift+Tab Move between Filter, Time, Level, the timeline, and
                      the list
     e               Jump to the next error (wraps around)

@@ -2865,7 +2865,7 @@ the only sign anything was actually wrong.
 |---|---|
 | Filter field | A boolean query over Source and Message, narrowing the list live and highlighting every positively-matching term (never one whose own absence is what made an entry match — see `not`/`nand`/`nor` below). A bare word is a case-insensitive substring match, same as before; two words with nothing between them (`foo bar`) mean AND, the same as typing several words always has. `AND`, `OR`, `NAND`, `NOR`, `NOT` (case-insensitive) combine terms or parenthesized groups — `nand`/`nor` are the negated forms of `and`/`or` (`a nand b` is `not (a and b)`), precedence is `not` tightest, then `and`/`nand`, then `or`/`nor`, and parentheses override it: `keyword1 and (keyword2 or keyword3)` means exactly what it reads as. Quote a term in double quotes to search for a literal `and`/`or`/`not`/`nand`/`nor`, or one containing a parenthesis or whitespace an operator would otherwise swallow. An expression that doesn't parse simply isn't applied, the same "no error shown, that part of the filter is just off" contract an unparseable Time/Level expression already has |
 | Time field | Filter by when the entry happened — `before <moment>`, `after <moment>`, or `between <moment> and <moment>`, where a moment is an absolute date/time or a relative one such as `7 days`, `2 hours ago`, or `30 minutes`; a relative moment on its own (`last 7 days`) is shorthand for "within that span". Exact same syntax as the Action Log's own Time field (and the panel's own Modified-time filter — see [Filtering](#filtering)). |
-| Level field (`>=`) | A *minimum* severity ("warn" shows WARN and everything worse — ERROR, FATAL — not just exact matches); an entry with no recognized level never passes this filter, even "trace" |
+| Level field (`>=`) | A *minimum* severity ("warn" shows WARN and everything worse — ERROR, FATAL — not just exact matches), counting a level recovered from the message text the same as one the format declared outright; an entry with no level at all, recovered or not, never passes this filter, even "trace" |
 | `Tab` / `Shift+Tab` | Move between Filter, Time, Level, the timeline, and the list |
 | Click the Time column header | Toggle the list between oldest-first (the default, matching the file itself) and newest-first |
 | `e` | Jump to the next error (wraps around) |
@@ -2914,6 +2914,39 @@ kept apart deliberately so a real read failure never hides behind a
 deliberate exclusion. Toggling `z` only changes what the *next* open
 reads; it has no effect on a family already open in the Log Holepunch
 view.
+
+When a line's own format leaves Level empty — classic syslog
+(RFC 3164) never carries one at all, and the generic
+"timestamp [level[] message" format's own level is optional —
+`internal/logview` scans the extracted message text itself for one,
+in this order: a logfmt-style `level=`/`lvl=`/`severity=` pair; a
+whole second log line nested inside the message (confirmed against a
+real production host: AWS's `amazon-ssm-agent` writes its own
+fully-timestamped, leveled line straight into the syslog message
+RFC 3164 already stripped a tag off of, parsed the same way a
+top-level generic-format file would be); a leading token such as
+`"Error: 404 Not Found"` or `"[WARN] disk usage high"`; or a
+Java/Logback-style `"<elapsed> [<thread>] LEVEL <logger> - message"`
+line (also confirmed against a real production host). The first two
+are exactly as authoritative as a level the format itself declared
+(a JSON `"level"` key, RFC 5424's PRI); the last two are a genuine
+guess from the message's own shape, shown in a paler version of the
+usual severity color so a weaker, scanned recovery never looks
+identical to a level the source log actually named. A guess never
+overrides a level the format already gave — a JSON line whose own
+`"level"` field says `"info"` keeps that level even if its message
+text happens to contain the word "error". None of this is a bare
+substring search: `"errors=remount-ro"` (a real `kern.log` ext4 mount
+option), `"0 errors"`, and `"/var/log/error.log"` all contain "error"
+without being one.
+
+An Apache/nginx/CUPS access log's own HTTP status is mapped to a
+Level the same authoritative/guessed distinction applies to: 5xx is a
+full-strength Error (an unambiguous server-side failure), 4xx is a
+paler Warn (a 404 is routine on a public endpoint, not necessarily a
+problem — treating every one as a flat, undistinguished warning would
+make "w" useless on exactly the file it matters most for), and every
+other status is left without a Level at all.
 
 ## Settings reference
 
