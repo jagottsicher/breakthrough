@@ -1238,13 +1238,13 @@
     },
     {
       "path": "internal/logview/rotatedcache.go",
-      "size": 6055,
-      "sha256": "066e07190ccfa9b27c6bbc1f0798d0e330ddfe31ad40b62442b98f02ad44b094"
+      "size": 6407,
+      "sha256": "350cf2e960eb6e0395655634940d3f582581cbd7780050172d814cef38edbd3f"
     },
     {
       "path": "internal/logview/rotatedcache_test.go",
-      "size": 3929,
-      "sha256": "83239b10a1f71112c7546de284c23f6ad503710ae149d5026bd5d6eb136b35e9"
+      "size": 3917,
+      "sha256": "e9c45282b6d1b255916456cf45e5f6c1d94bbba63e4062c84df02361b8a43a3c"
     },
     {
       "path": "internal/logview/source.go",
@@ -17614,14 +17614,14 @@
       "file": "internal/logview/rotatedcache.go",
       "name": "entryBaseOverhead",
       "kind": "const",
-      "line": 143
+      "line": 148
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/logview",
       "file": "internal/logview/rotatedcache.go",
       "name": "EstimateEntriesBytes",
       "kind": "function",
-      "line": 158
+      "line": 163
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/logview",
@@ -65288,5 +65288,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "249f6d97969aae068133be83d49da6830e97b22c8472f0c849e82728883dfbdd"
+  "merkle_root": "7677268ff16d7572b088906df01f85a539ac988e376364309c0c2e9ace602d8e"
 }
