@@ -98,8 +98,8 @@
     },
     {
       "path": "cmd/breakthrough/main.go",
-      "size": 28168,
-      "sha256": "8073636a2b89e2f2e186a173f3797b6b4c98230e6a9c1e36b54b63e4a8bd1d46"
+      "size": 28620,
+      "sha256": "ea4b7a627925d53bc5e3f95c1d09c4e3f4027e1f4d26445b1102f7990907f89c"
     },
     {
       "path": "cmd/breakthrough/main_test.go",
@@ -1310,6 +1310,16 @@
       "path": "internal/mail/source.go",
       "size": 1185,
       "sha256": "2c10ae2b27a2d6f8354a5ad0a6a48ec79fecd66d0019e85338a36665656e3b86"
+    },
+    {
+      "path": "internal/memlimit/memlimit.go",
+      "size": 3655,
+      "sha256": "09706a866fe2387bcaadad81e83987829bf98c3578e075dc60da1a0a9e04345e"
+    },
+    {
+      "path": "internal/memlimit/memlimit_test.go",
+      "size": 2068,
+      "sha256": "90b43122e7a5ef52c4fc040fc88926ecfb777cdb0cf9a7b3316a2b5fda337ae5"
     },
     {
       "path": "internal/mounts/mounts.go",
@@ -3069,6 +3079,7 @@
       "imports": [
         "fmt",
         "github.com/gdamore/tcell/v2",
+        "github.com/jagottsicher/breakthrough/internal/memlimit",
         "github.com/jagottsicher/breakthrough/internal/ui",
         "github.com/rivo/tview",
         "golang.org/x/sys/unix",
@@ -3796,6 +3807,24 @@
         "strings",
         "testing",
         "time"
+      ]
+    },
+    {
+      "import_path": "github.com/jagottsicher/breakthrough/internal/memlimit",
+      "directory": "internal/memlimit",
+      "name": "memlimit",
+      "files": [
+        "internal/memlimit/memlimit.go",
+        "internal/memlimit/memlimit_test.go"
+      ],
+      "imports": [
+        "bufio",
+        "os",
+        "path/filepath",
+        "runtime/debug",
+        "strconv",
+        "strings",
+        "testing"
       ]
     },
     {
@@ -4560,77 +4589,77 @@
       "file": "cmd/breakthrough/main.go",
       "name": "version",
       "kind": "var",
-      "line": 48
+      "line": 49
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "commit",
       "kind": "var",
-      "line": 49
+      "line": 50
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "date",
       "kind": "var",
-      "line": 50
+      "line": 51
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "builtBy",
       "kind": "var",
-      "line": 51
+      "line": 52
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "main",
       "kind": "function",
-      "line": 54
+      "line": 55
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "run",
       "kind": "function",
-      "line": 109
+      "line": 110
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "installSignalHandler",
       "kind": "function",
-      "line": 534
+      "line": 543
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "shouldStop",
       "kind": "function",
-      "line": 555
+      "line": 564
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "startDir",
       "kind": "function",
-      "line": 575
+      "line": 584
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "startDirWasGiven",
       "kind": "function",
-      "line": 591
+      "line": 600
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "explicitStartDir",
       "kind": "function",
-      "line": 598
+      "line": 607
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
@@ -18322,6 +18351,62 @@
       "name": "Source",
       "kind": "type",
       "line": 18
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/memlimit",
+      "file": "internal/memlimit/memlimit.go",
+      "name": "fraction",
+      "kind": "const",
+      "line": 38
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/memlimit",
+      "file": "internal/memlimit/memlimit.go",
+      "name": "Apply",
+      "kind": "function",
+      "line": 50
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/memlimit",
+      "file": "internal/memlimit/memlimit.go",
+      "name": "totalMemBytes",
+      "kind": "function",
+      "line": 65
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/memlimit",
+      "file": "internal/memlimit/memlimit_test.go",
+      "name": "TestTotalMemBytesParsesMemTotalLine",
+      "kind": "function",
+      "line": 9
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/memlimit",
+      "file": "internal/memlimit/memlimit_test.go",
+      "name": "TestTotalMemBytesMissingFileReportsNotOk",
+      "kind": "function",
+      "line": 27
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/memlimit",
+      "file": "internal/memlimit/memlimit_test.go",
+      "name": "TestTotalMemBytesMissingMemTotalLineReportsNotOk",
+      "kind": "function",
+      "line": 33
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/memlimit",
+      "file": "internal/memlimit/memlimit_test.go",
+      "name": "TestTotalMemBytesUnparsableValueReportsNotOk",
+      "kind": "function",
+      "line": 45
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/memlimit",
+      "file": "internal/memlimit/memlimit_test.go",
+      "name": "TestApplyUsesEightyPercentOfRealMemTotalOnLinux",
+      "kind": "function",
+      "line": 57
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/mounts",
@@ -55445,14 +55530,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 27
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 27
     },
@@ -64936,5 +65021,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "1d15b43657b1c98a6db17ea6948117320fd5842828615f209dc14a564ecc4f9b"
+  "merkle_root": "7ae24630edd9593f46c79ae439dc35bba430a1a8cc687c1328726486e6470736"
 }

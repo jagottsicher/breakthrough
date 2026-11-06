@@ -30,6 +30,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/memlimit"
 	"github.com/jagottsicher/breakthrough/internal/ui"
 )
 
@@ -107,6 +108,14 @@ func main() {
 }
 
 func run() error {
+	// A soft process-wide memory ceiling, from the host's own total
+	// RAM — see memlimit's own package doc for why: a real,
+	// user-reported case where opening a multi-million-entry log
+	// family under WSL2 hit an OOM kill rather than ever giving the
+	// GC a chance to collect harder first. A no-op wherever
+	// /proc/meminfo isn't available (every non-Linux platform).
+	memlimit.Apply()
+
 	start, err := startDir()
 	if err != nil {
 		return err
