@@ -41,15 +41,22 @@ const (
 // read/parsed result (see logaudit.go/logauditscreen.go/
 // logauditstats.go).
 type logAuditState struct {
-	SelectionLayout     *tview.Flex
-	TitleBar            *tview.TextView
-	Table               *tview.Table
-	Scrollbar           *verticalScrollbar
-	Hint                *tview.TextView
-	HintSpans           []listHintSpan
-	Dir                 string
-	Groups              []logview.FileGroup
-	DiscoverErr         error
+	SelectionLayout *tview.Flex
+	TitleBar        *tview.TextView
+	Table           *tview.Table
+	Scrollbar       *verticalScrollbar
+	Hint            *tview.TextView
+	HintSpans       []listHintSpan
+	Dir             string
+	Groups          []logview.FileGroup
+	DiscoverErr     error
+	// SkipCompressed is the selection screen's own "z" toggle (see
+	// toggleLogAuditSkipCompressed, logaudit.go) — false (zero value,
+	// read every file including a compressed rotation) by default, per
+	// the user's own explicit request. Global for the whole screen, not
+	// per family: applies to whichever group is opened next, and to a
+	// running follow (see readLogAuditGroup/startLogAuditFollow).
+	SkipCompressed      bool
 	ViewerLayout        *tview.Flex
 	ViewerTitle         *tview.TextView
 	KeywordField        *tview.InputField
@@ -125,9 +132,14 @@ type logAuditState struct {
 	// (this package's own established convention), so the real
 	// implementation's result would otherwise never be observable at
 	// all, not just delayed.
-	ScanFn            func(entries []logview.Entry, filters logAuditParsedFilters, done func([]logview.Entry))
-	Files             int
-	Skipped           int
+	ScanFn  func(entries []logview.Entry, filters logAuditParsedFilters, done func([]logview.Entry))
+	Files   int
+	Skipped int
+	// Excluded is how many of GroupOpen's own rotated files were left
+	// unread this open because SkipCompressed excluded them — see
+	// RotatedExcluded's own doc comment above for why this is counted
+	// apart from Skipped.
+	Excluded          int
 	ParseErr          error
 	NewestFirst       bool
 	Following         bool
@@ -176,6 +188,19 @@ type logAuditState struct {
 	RotatedErr       error
 	RotatedErrCount  int
 	RotatedWarnCount int
+	// RotatedExcluded is how many of GroupOpen's own rotated files
+	// FilterCompressed left out this open because SkipCompressed was on
+	// — set once, upfront, by startLogAuditProgressiveLoad, not per file
+	// the way RotatedSkipped (files that failed, or whose compression
+	// Open doesn't recognize) is. Kept apart from RotatedSkipped rather
+	// than folded into it: that field already means "could not be
+	// read", and merging a deliberate, user-chosen exclusion into the
+	// same count would hide a genuine failure happening alongside it —
+	// CLAUDE.md's "keine stillen Fehler" rule, read the other way.
+	// recomputeLogAuditCombined copies this straight into top-level
+	// Excluded; there is no CurrentExcluded counterpart since Files[0]
+	// (the current, unrotated file) is never Compressed.
+	RotatedExcluded int
 	// PendingRotatedEntries holds every rotated file's own entries
 	// applied since RotatedEntries was last folded up to date — plain
 	// raw appends, same cost as appending straight into RotatedEntries
@@ -282,6 +307,7 @@ func logAuditSelectionHintEntries() []listHintEntry {
 	return []listHintEntry{
 		hintKey("Enter", "open log audit", func(r *Root) { r.openLogAuditViewer() }),
 		hintKey("r", "re-scan directory", func(r *Root) { r.reloadLogAuditDiscovery() }),
+		hintKey("z", "toggle compressed files", func(r *Root) { r.toggleLogAuditSkipCompressed() }),
 		hintKey("Esc", "close", func(r *Root) { r.closeLogAuditSelection() }),
 	}
 }
@@ -625,8 +651,11 @@ func (r *Root) newLogAuditDetailScreen() {
 // logview.Open), and a call-out for any file whose compression Open
 // doesn't recognize at all, which stays possible even though every
 // extension familyBase/compressedExt currently parses out is
-// supported today.
-func logAuditGroupInfo(g logview.FileGroup) string {
+// supported today. skipCompressed mirrors log.SkipCompressed — when
+// true, the compressed count also says "skipped" right here, so the
+// selection table itself already shows what opening this family will
+// actually read, not just what Discover found on disk.
+func logAuditGroupInfo(g logview.FileGroup, skipCompressed bool) string {
 	compressed, unsupported := 0, 0
 	for _, f := range g.Files {
 		if f.Compressed {
@@ -641,12 +670,28 @@ func logAuditGroupInfo(g logview.FileGroup) string {
 		info += "s"
 	}
 	if compressed > 0 {
-		info += fmt.Sprintf(" (%d compressed)", compressed)
+		info += fmt.Sprintf(" (%d compressed", compressed)
+		if skipCompressed {
+			info += ", skipped"
+		}
+		info += ")"
 	}
 	if unsupported > 0 {
 		info += fmt.Sprintf(" — %d unsupported compression", unsupported)
 	}
 	return info
+}
+
+// logAuditCompressedScopeLabel names log.SkipCompressed's own current
+// state for the selection/viewer title bars — shown unconditionally
+// (not just when true), per the user's own explicit request for a
+// visible indicator of whatever scope is actually active, not only a
+// callout when it narrows the default.
+func logAuditCompressedScopeLabel(skipCompressed bool) string {
+	if skipCompressed {
+		return "compressed: skipped"
+	}
+	return "compressed: included"
 }
 
 // renderLogAuditSelection fills the selection table: the family's own
@@ -665,6 +710,7 @@ func (r *Root) renderLogAuditSelection() {
 		// already named.
 		title += " — " + r.panel.remoteConn.Label()
 	}
+	title += " — " + logAuditCompressedScopeLabel(r.log.SkipCompressed)
 	renderReloadCloseTitleBar(r.log.TitleBar, title+" ", r.lastScreenWidth)
 	r.log.Table.Clear()
 
@@ -701,7 +747,7 @@ func (r *Root) renderLogAuditSelection() {
 		// these three carry any "this is secondary" meaning Name
 		// itself doesn't also have).
 		r.log.Table.SetCell(row, logAuditSelInfo,
-			tview.NewTableCell(logAuditGroupInfo(g)).SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
+			tview.NewTableCell(logAuditGroupInfo(g, r.log.SkipCompressed)).SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
 		sizeText, modText := "", ""
 		if newest, ok := g.Newest(); ok {
 			sizeText = humanSize(newest.Size)
@@ -794,17 +840,29 @@ func logAuditTimeText(t time.Time) string {
 // logAuditLevelColor mirrors activityLogLevelColor's own "stop sign"
 // convention: Error/Fatal red, Warn the app's own WarningText, Info/
 // Debug/Trace muted, Unknown plain text (nothing to call out).
-func logAuditLevelColor(theme config.ResolvedTheme, level logview.Level) tcell.Color {
+// logAuditInferredLevelBlend is how far logAuditLevelColor fades an
+// inferred Level's own color toward the table's own background — real
+// signal (see Entry.LevelInferred's own doc comment, internal/logview/
+// model.go), but weaker evidence than a level the source format
+// declared itself, so it reads as paler rather than full-strength.
+const logAuditInferredLevelBlend = 0.45
+
+func logAuditLevelColor(theme config.ResolvedTheme, level logview.Level, inferred bool) tcell.Color {
+	var c tcell.Color
 	switch level {
 	case logview.LevelError, logview.LevelFatal:
-		return theme.CriticalText
+		c = theme.CriticalText
 	case logview.LevelWarn:
-		return theme.WarningText
+		c = theme.WarningText
 	case logview.LevelUnknown:
 		return theme.Text
 	default:
-		return theme.MutedTextColor
+		c = theme.MutedTextColor
 	}
+	if inferred {
+		return blendToward(c, theme.PanelBackground, logAuditInferredLevelBlend)
+	}
+	return c
 }
 
 // logAuditKeywordQuery parses the Keyword field's own boolean query
@@ -1266,6 +1324,10 @@ func (r *Root) buildLogAuditViewerTitle(shown []logview.Entry, errCount, warnCou
 
 	title := fmt.Sprintf(" Log Holepunch — %d events │ %s │ %d skipped │ %d errors │ %d warnings",
 		len(r.log.AllEntries), filesText, r.log.Skipped, errCount, warnCount)
+	if r.log.Excluded > 0 {
+		title += fmt.Sprintf(" │ %d compressed excluded", r.log.Excluded)
+	}
+	title += " │ " + logAuditCompressedScopeLabel(r.log.SkipCompressed)
 	if len(shown) != len(r.log.AllEntries) {
 		title += fmt.Sprintf(" │ %d matching", len(shown))
 	}
@@ -1611,7 +1673,7 @@ func (r *Root) renderLogAuditViewerFor(shown []logview.Entry) {
 	bg := r.theme.ButtonBackground
 	for i, e := range rendered {
 		row := i + 1
-		levelColor := logAuditLevelColor(r.theme, e.Level)
+		levelColor := logAuditLevelColor(r.theme, e.Level, e.LevelInferred)
 		cell := func(col int, text string, color tcell.Color) {
 			r.log.ViewerTable.SetCell(row, col,
 				tview.NewTableCell(text).SetTextColor(color).SetSelectable(true).
@@ -1828,6 +1890,9 @@ func (r *Root) captureLogAuditSelectionTableKey(event *tcell.EventKey) *tcell.Ev
 		switch event.Rune() {
 		case 'r':
 			r.reloadLogAuditDiscovery()
+			return nil
+		case 'z':
+			r.toggleLogAuditSkipCompressed()
 			return nil
 		case 'g':
 			// "gC" reaches the AI Consigliere from here too — see

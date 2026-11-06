@@ -136,11 +136,16 @@ func (c *RotatedCache) UsedBytes() int64 {
 }
 
 // entryBaseOverhead is a rough, deliberately generous per-Entry
-// estimate of the struct's own fixed fields (Time, Level, Line, and
-// four string headers) — EstimateEntriesBytes' own doc comment
-// explains why overestimating here is the safe direction for a
-// budget, undercounting is not.
-const entryBaseOverhead = 96
+// estimate of the struct's own fixed fields (Time, Level,
+// LevelInferred, Line, and four string headers) — EstimateEntriesBytes'
+// own doc comment explains why overestimating here is the safe
+// direction for a budget, undercounting is not. 112, confirmed by
+// unsafe.Sizeof(Entry{}) directly rather than counted by hand — Entry
+// grew from 104 to 112 bytes when LevelInferred was added (2026-11-06);
+// left at the old 96 here would have undercounted a 4.5M-entry family
+// (the exact scale 19e's own RAM blowup incident was about) by roughly
+// 70MB against this budget.
+const entryBaseOverhead = 112
 
 // EstimateEntriesBytes estimates entries' own total memory footprint
 // for RotatedCache's budget. Message and Raw are counted separately

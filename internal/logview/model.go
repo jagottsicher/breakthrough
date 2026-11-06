@@ -81,11 +81,21 @@ func normalizeLevelToken(token string) string {
 // reduces to, so the UI never needs to know which format a line came
 // from.
 type Entry struct {
-	Time    time.Time // zero if the line carried no recognizable timestamp
-	Level   Level
-	Source  string // e.g. a JSON "service"/"logger" field, a syslog tag, or "" if none
-	Message string
-	Raw     string // the original, unparsed line — identical to Message for FormatPlain, otherwise the full structured line Message was extracted from
-	File    string // base name of the file this line came from
-	Line    int    // 1-based line number within File — tie-breaker for Merge
+	Time  time.Time // zero if the line carried no recognizable timestamp
+	Level Level
+	// LevelInferred is true when Level came from scanning free-form
+	// message text for a leading token or positional shape (see
+	// inferLevel, levelinfer.go) rather than from a field the format
+	// itself declares (JSON's own "level" key, RFC 5424's PRI, a
+	// logfmt-style "level="/"lvl="/"severity=" pair, or a nested
+	// generic "timestamp LEVEL message" line already parsed in full) —
+	// the UI colors an inferred Level paler, since a scanned guess is
+	// real but weaker evidence than a field the source log actually
+	// named as its own severity.
+	LevelInferred bool
+	Source        string // e.g. a JSON "service"/"logger" field, a syslog tag, or "" if none
+	Message       string
+	Raw           string // the original, unparsed line — identical to Message for FormatPlain, otherwise the full structured line Message was extracted from
+	File          string // base name of the file this line came from
+	Line          int    // 1-based line number within File — tie-breaker for Merge
 }

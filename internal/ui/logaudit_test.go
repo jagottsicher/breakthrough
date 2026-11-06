@@ -961,9 +961,13 @@ func TestLogAuditGroupInfo(t *testing.T) {
 			{Path: "access.log.2.foo", Compressed: true, Supported: false},
 		}},
 	}
-	got := logAuditGroupInfo(groups[0])
+	got := logAuditGroupInfo(groups[0], false)
 	if got != "3 files (2 compressed) — 1 unsupported compression" {
 		t.Errorf("logAuditGroupInfo = %q", got)
+	}
+	gotSkip := logAuditGroupInfo(groups[0], true)
+	if gotSkip != "3 files (2 compressed, skipped) — 1 unsupported compression" {
+		t.Errorf("logAuditGroupInfo (skipCompressed) = %q", gotSkip)
 	}
 }
 
