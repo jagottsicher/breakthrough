@@ -37,7 +37,7 @@ func TestRotatedCacheGetMissReturnsFalse(t *testing.T) {
 
 func TestRotatedCachePutOversizedItemNeverInserted(t *testing.T) {
 	c := NewRotatedCache()
-	entries := fixedSizeEntries(4) // size = entryBaseOverhead+4 = 100
+	entries := fixedSizeEntries(4) // size = entryBaseOverhead+4
 	c.Put("a", entries, 50)        // budget smaller than this one item
 
 	if c.Len() != 0 {
@@ -77,7 +77,7 @@ func TestRotatedCacheZeroMaxBytesDisablesCaching(t *testing.T) {
 // inserted after it but never read again.
 func TestRotatedCacheEvictsLeastRecentlyUsedNotLeastRecentlyInserted(t *testing.T) {
 	c := NewRotatedCache()
-	const budget = 250 // room for two 100-byte items (entryBaseOverhead+4), not three
+	const budget = 250 // room for two entryBaseOverhead+4-byte items, not three
 
 	c.Put("a", fixedSizeEntries(4), budget)
 	c.Put("b", fixedSizeEntries(4), budget)

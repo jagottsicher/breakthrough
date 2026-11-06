@@ -66,6 +66,23 @@ func ParseAll(r io.Reader, fileName string, fallbackTime time.Time) ([]Entry, Fo
 			continue
 		}
 		e := parseLine(line, format, fallbackTime)
+		// Only when the format itself left no Level at all — RFC 3164's
+		// own classic shape never carries one, FormatGeneric's is
+		// optional, and a JSON line without a recognized level key
+		// falls back the same way — never overriding a Level the
+		// format already declared authoritatively (RFC 5424's PRI, a
+		// JSON "level" key). See inferLevel's own doc comment
+		// (levelinfer.go) for why this is anchored, not a bare
+		// substring search.
+		if e.Level == LevelUnknown {
+			if lvl, inferred, msg := inferLevel(e.Message); lvl != LevelUnknown {
+				e.Level = lvl
+				e.LevelInferred = inferred
+				if msg != "" {
+					e.Message = msg
+				}
+			}
+		}
 		e.Raw = line
 		e.File = fileName
 		e.Line = i + 1
@@ -288,6 +305,15 @@ func parseGenericLine(line string) (Entry, bool) {
 // whole thing verbatim is more useful than discarding any of it.
 var reCLFFields = regexp.MustCompile(`^(\S+)\s+\S+\s+\S+\s+\[(\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2}\s[+-]\d{4})\]\s+(.*)$`)
 
+// reCLFStatus pulls the HTTP status code out of Message's own leading
+// "REQUEST" status ... shape — "\"GET / HTTP/1.1\" 404 1234 ..." — so
+// parseCLFLine can map it to a Level the same way any other field a
+// log format itself declares already is (RFC 5424's PRI, JSON's own
+// "level" key): a numeric HTTP status is exactly as authoritative,
+// not a guess from scanned text the way inferLevel's own two
+// token-anchor regexes are (levelinfer.go).
+var reCLFStatus = regexp.MustCompile(`^"[^"]*"\s+(\d{3})\b`)
+
 // clfTimeLayout is Apache/CUPS's own bracketed access-log timestamp —
 // "09/Oct/2026:13:55:36 +0200", the one true fixed shape this format
 // ever uses, so a dedicated layout (rather than parseAnyTime's whole
@@ -303,11 +329,30 @@ func parseCLFLine(line string) (Entry, bool) {
 	if err != nil {
 		return Entry{}, false
 	}
-	return Entry{
+	e := Entry{
 		Time:    t,
 		Source:  m[1],
 		Message: m[3],
-	}, true
+	}
+	// 5xx is unambiguously an error. 4xx is deliberately not — a public
+	// access log's own 404s are routine, not a server-side problem, so
+	// mapping every one of them to a flat, undistinguished Warn would
+	// make "w" (next warning) useless on exactly the file it's most
+	// useful for; marked Inferred instead, the same "real signal, but
+	// weaker than a field the source actually declared" semantics
+	// every other scanned (as opposed to parsed) Level already gets
+	// (see Entry.LevelInferred's own doc comment, model.go) — per the
+	// user's own explicit choice, 2026-11-06.
+	if sm := reCLFStatus.FindStringSubmatch(e.Message); sm != nil {
+		switch sm[1][0] {
+		case '5':
+			e.Level = LevelError
+		case '4':
+			e.Level = LevelWarn
+			e.LevelInferred = true
+		}
+	}
+	return e, true
 }
 
 // aptHistoryStartPrefix/aptHistoryEndPrefix are apt history.log's own
@@ -317,6 +362,12 @@ func parseCLFLine(line string) (Entry, bool) {
 const (
 	aptHistoryStartPrefix = "Start-Date:"
 	aptHistoryEndPrefix   = "End-Date:"
+	// aptHistoryErrorPrefix is apt's own field for a transaction that
+	// failed — reAptHistoryField (detect.go) already recognizes it as
+	// one of history.log's fixed field labels; mapped to LevelError
+	// here (not inferLevel — this is a field apt itself declared, not
+	// text scanned for a guess, so LevelInferred stays false).
+	aptHistoryErrorPrefix = "Error:"
 )
 
 // parseAptHistoryEntries is apt history.log's own dedicated parsing
@@ -355,8 +406,13 @@ func parseAptHistoryEntries(lines []string, fileName string, fallbackTime time.T
 			// Start-Date resets it.
 			t = end
 		}
+		level := LevelUnknown
+		if strings.HasPrefix(line, aptHistoryErrorPrefix) {
+			level = LevelError
+		}
 		entries = append(entries, Entry{
 			Time:    t,
+			Level:   level,
 			Message: line,
 			Raw:     line,
 			File:    fileName,
