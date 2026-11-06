@@ -607,6 +607,46 @@ func (r *Root) closeLogAuditViewer() {
 	r.stopLogAuditFollow()
 	r.stopLogAuditProgressiveLoad()
 	r.hideOverlay()
+	r.releaseLogAuditEntriesIfDiskCached()
+}
+
+// releaseLogAuditEntriesIfDiskCached drops the just-closed group's own
+// log.CurrentEntries/RotatedEntries/PendingRotatedEntries/AllEntries —
+// otherwise, nothing else replaces these fields until a *different*
+// group is opened (openLogAuditViewer resets RotatedEntries, but
+// AllEntries itself keeps pointing at this group's own old slice
+// until the next recomputeLogAuditCombined call overwrites it), so a
+// multi-GB family closed but never reopened would otherwise sit fully
+// resident in RAM for the rest of the session for no reason.
+//
+// Only when it's actually cheap to rebuild: a remote source with the
+// disk cache enabled, per the user's own explicit request (19e,
+// 2026-11-06, after confirming the fixes above actually hold against
+// the real family) — on re-open, every rotated file this released
+// comes straight back from logdiskcache (a local disk read, no
+// network round trip, no re-parsing), confirmed noticeably faster
+// than the original read in the same report. A local source, or disk
+// caching disabled, has no such fast path back at all: releasing
+// there would just turn the next "r"/re-open into the exact same
+// slow, from-scratch read the disk cache exists to avoid, for a
+// family that might never even be reopened — the one place
+// log.RotatedCache's own session-memory cache (a *different* pool
+// from logdiskcache, see its own doc comment) is the only thing
+// speeding up a same-session reopen, and is left alone here.
+//
+// Nothing else reads any of these fields once the viewer itself is
+// closed: every consumer (filtering, the title bar,
+// consigliereMachiavelliContext's own switch on r.activePage) is
+// gated on one of the Log Audit pages actually being the active
+// overlay, which hideOverlay above has already left.
+func (r *Root) releaseLogAuditEntriesIfDiskCached() {
+	if !r.panel.isRemote() || !r.settings.LogAuditDiskCacheEnabled {
+		return
+	}
+	r.log.CurrentEntries = nil
+	r.log.RotatedEntries = nil
+	r.log.PendingRotatedEntries = nil
+	r.log.AllEntries = nil
 }
 
 // logAuditFollowInterval is how often a running follow re-reads
