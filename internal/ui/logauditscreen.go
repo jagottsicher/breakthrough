@@ -69,14 +69,23 @@ type logAuditState struct {
 	TimelineAnchor      int
 	TimelineCursor      int
 	TimelineDragging    bool
-	TimeFieldFocused    bool
-	FocusIndicator      *tview.TextView
-	ViewerTable         *tview.Table
-	ViewerScrollbar     *verticalScrollbar
-	ViewerHint          *tview.TextView
-	ViewerSpans         []listHintSpan
-	GroupOpen           logview.FileGroup // the group the viewer is currently showing — see reopenLogAuditViewer
-	AllEntries          []logview.Entry
+	// LastFocusedFilterField is whichever of Keyword/Time/Level most
+	// recently had focus (nil before any of the three ever did) —
+	// tview never reliably forwards Blur from an InputField's own
+	// embedded TextArea on a mouse-driven focus change (see
+	// restyleLogAuditFocusTargets' own doc comment), so comparing
+	// this against whatever FocusFunc fires next is the only way to
+	// detect "a filter field just lost focus" and apply its own
+	// deferred filter — none of the three applies live while typing
+	// (see each field's own SetChangedFunc doc comment).
+	LastFocusedFilterField tview.Primitive
+	FocusIndicator         *tview.TextView
+	ViewerTable            *tview.Table
+	ViewerScrollbar        *verticalScrollbar
+	ViewerHint             *tview.TextView
+	ViewerSpans            []listHintSpan
+	GroupOpen              logview.FileGroup // the group the viewer is currently showing — see reopenLogAuditViewer
+	AllEntries             []logview.Entry
 	// ErrCount/WarnCount are AllEntries' own Error+Fatal/Warn counts —
 	// filter-independent (every entry counts, regardless of whether it
 	// currently matches Keyword/Time/Level), so computed once by
@@ -374,11 +383,32 @@ func (r *Root) newLogAuditViewerScreen() {
 	// the same class of silent failure the Time field's own label
 	// color already addresses — per the user's own explicit follow-up
 	// request to extend it here too.
+	//
+	// Deliberately NOT a live rescan on every keystroke anymore — per
+	// a real, user-reported OOM/crash while typing a filter during a
+	// multi-million-entry family's own progressive load (19e,
+	// 2026-11-06): each keystroke's own background scan
+	// (scheduleLogAuditFilterRescan) captures and pins a whole
+	// AllEntries snapshot alive for its own duration, and several of
+	// those overlapping with the loader's own ever-larger ones was
+	// enough on its own to exhaust memory, independent of whether the
+	// query matched much. Matches Time's own already-established
+	// "validate syntax live, apply on Enter/leaving" split (see its
+	// own SetChangedFunc comment) — label restyle (cheap, a parse
+	// attempt against the typed text alone) still runs every
+	// keystroke; the actual rescan now only runs from SetDoneFunc
+	// below and restyleLogAuditFocusTargets' own "just lost focus"
+	// case.
 	r.log.KeywordField.SetChangedFunc(func(string) {
-		r.scheduleLogAuditFilterRescan()
 		r.restyleLogAuditKeywordFieldLabel()
 	})
 	r.log.KeywordField.SetDoneFunc(func(key tcell.Key) {
+		// Applies the deferred filter (see SetChangedFunc's own doc
+		// comment just above) on every way of leaving this field —
+		// Tab, Backtab, and Enter alike, the same "any Done means
+		// done editing for now" contract Time's own SetDoneFunc
+		// already has.
+		r.scheduleLogAuditFilterRescan()
 		// Keyword is the first stop in this screen's own field chain —
 		// Backtab from here is the backward edge into the AI
 		// Consigliere sidebar, same reasoning
@@ -458,11 +488,19 @@ func (r *Root) newLogAuditViewerScreen() {
 	// of silent failure the Time field's own label color already
 	// addresses — per the user's own explicit follow-up request to
 	// extend it here too.
+	//
+	// Deliberately NOT a live rescan on every keystroke anymore — see
+	// Keyword's own identical SetChangedFunc comment just above (19e,
+	// 2026-11-06) for the real-world OOM/crash this addresses and why
+	// Time's own existing "live validate, apply on leave" split is
+	// the pattern here too.
 	r.log.LevelField.SetChangedFunc(func(string) {
-		r.scheduleLogAuditFilterRescan()
 		r.restyleLogAuditLevelFieldLabel()
 	})
 	r.log.LevelField.SetDoneFunc(func(key tcell.Key) {
+		// Applies the deferred filter — see Keyword's own identical
+		// SetDoneFunc comment.
+		r.scheduleLogAuditFilterRescan()
 		// next is the timeline, not the table directly — see
 		// captureLogAuditTimelineKey's own doc comment on the Tab
 		// chain this is now one link of.
@@ -510,15 +548,14 @@ func (r *Root) newLogAuditViewerScreen() {
 		// widget); only this one widget's own repaint stays deferred to
 		// the next key or mouse event, same as always while frozen.
 		r.log.TimelineFocused = true
-		// Same timeFieldWasFocused check restyleLogAuditFocusTargets
+		// Same LastFocusedFilterField check restyleLogAuditFocusTargets
 		// itself does (see its own doc comment) — needed here too since
-		// a mouse click can jump straight from the Time field to the
-		// Timeline, skipping Level (the only stop restyleLogAuditFocusTargets
-		// would otherwise have caught this transition through).
-		if r.log.TimeFieldFocused {
-			r.log.TimeFieldFocused = false
-			r.renderLogAuditViewer()
-		}
+		// a mouse click can jump straight from any of Keyword/Time/
+		// Level to the Timeline, skipping whichever of the other two
+		// would otherwise have caught this transition through
+		// restyleLogAuditFocusTargets.
+		r.applyLogAuditFilterFieldLeft(r.log.LastFocusedFilterField)
+		r.log.LastFocusedFilterField = r.log.TimelineView
 		r.log.TimelineView.SetBackgroundColor(r.theme.InputFocusedBackground)
 		for _, f := range r.logAuditFilterFields() {
 			styleInput(f, r.theme, false)
@@ -1026,25 +1063,46 @@ func (r *Root) logAuditFilterFields() []*tview.InputField {
 // FocusFunc (the known-forwarded event) rather than any BlurFunc (the
 // known-broken one for InputField) — not one of the five callers below
 // registers a BlurFunc of its own at all.
+// applyLogAuditFilterFieldLeft applies whichever of Keyword/Time/
+// Level's own deferred filter just lost focus — Time's synchronous
+// renderLogAuditViewer, Keyword/Level's async scheduleLogAuditFilterRescan
+// (see each field's own SetChangedFunc doc comment for why none of
+// the three filters live while typing, and why Keyword/Level still go
+// through the async path rather than copying Time's synchronous one:
+// a single scan over a multi-million-entry family is cheap enough to
+// trigger once per edit, but not cheap enough to block the UI
+// goroutine for). A no-op for every other primitive (nil included),
+// so callers can pass whatever the previously focused widget was
+// without checking first.
+func (r *Root) applyLogAuditFilterFieldLeft(field tview.Primitive) {
+	switch field {
+	case r.log.TimeField:
+		r.renderLogAuditViewer()
+	case r.log.KeywordField, r.log.LevelField:
+		r.scheduleLogAuditFilterRescan()
+	}
+}
+
 func (r *Root) restyleLogAuditFocusTargets(focused tview.Primitive) {
-	// timeFieldWasFocused, not r.log.TimeField.HasFocus(): the
-	// latter is exactly the unreliable signal this function's own doc
+	// previous, not r.log.KeywordField/TimeField/LevelField.HasFocus():
+	// that's exactly the unreliable signal this function's own doc
 	// comment already explains tview never updates on a mouse-driven
 	// focus change away from an InputField (Blur fires on its embedded
 	// TextArea, never forwarded back to the InputField's own Box) — own
 	// bookkeeping, updated on every call here (which, unlike Blur, this
 	// function always reliably is, driven by the next target's own
-	// Focus event), is what correctly detects "the Time field just lost
-	// focus" so its own debounced render (see its own SetDoneFunc
-	// comment on why Time isn't live like Keyword/Level) still applies
-	// when the user leaves it with a mouse click rather than Tab.
-	timeFieldWasFocused := r.log.TimeFieldFocused
+	// Focus event), is what correctly detects "a filter field just
+	// lost focus" so its own debounced filter (see each field's own
+	// SetChangedFunc comment on why none of the three is live) still
+	// applies when the user leaves it with a mouse click rather than
+	// Tab.
+	previous := r.log.LastFocusedFilterField
 	for _, f := range r.logAuditFilterFields() {
 		styleInput(f, r.theme, tview.Primitive(f) == focused)
 	}
-	r.log.TimeFieldFocused = focused == r.log.TimeField
-	if timeFieldWasFocused && !r.log.TimeFieldFocused {
-		r.renderLogAuditViewer()
+	r.log.LastFocusedFilterField = focused
+	if previous != focused {
+		r.applyLogAuditFilterFieldLeft(previous)
 	}
 	r.log.TimelineFocused = focused == r.log.TimelineView
 	background := r.theme.PopupBackground
@@ -1369,6 +1427,25 @@ func (r *Root) renderLogAuditViewer() {
 // something that needs its own visible affordance.
 func (r *Root) scheduleLogAuditFilterRescan() {
 	r.log.FilterScanToken++
+	if r.log.LoadingMore {
+		// Deferred entirely while a progressive load is still filling
+		// in log.RotatedEntries/AllEntries — a real, user-reported OOM
+		// trigger (19e, 2026-11-06), distinct from the merge/copy costs
+		// earlier 19e stages already addressed: runLogAuditFilterScan
+		// below captures entries (a snapshot of AllEntries) and pins
+		// that whole snapshot alive for the scan's own duration, while
+		// the loader keeps installing ever-larger ones on top of it at
+		// every recombine tick — several of these pinned snapshots
+		// alive at once, each full-size, is enough on its own to
+		// exhaust memory on a multi-million-entry family, independent
+		// of whether the query itself actually matches much. No
+		// FilterScanPending bookkeeping needed here:
+		// finishLogAuditProgressiveLoad's own unconditional
+		// renderLogAuditViewer() call already re-scans against the
+		// complete, final AllEntries once loading ends, against
+		// whatever the Keyword/Time/Level fields hold by then.
+		return
+	}
 	if r.log.FilterScanInFlight {
 		// Coalesce rather than spawn a second concurrent scan: fast
 		// typing on a multi-million-entry family used to mean every
