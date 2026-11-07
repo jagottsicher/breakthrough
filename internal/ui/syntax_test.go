@@ -81,3 +81,60 @@ func TestRenderSyntaxRoundTripsThroughTviewParsing(t *testing.T) {
 		t.Errorf("GetText(true) = %q, want the literal content unmangled by tag parsing", got)
 	}
 }
+
+// TestSplitHighlightedTokensByLineLineCountInvariant is the
+// discriminating test gitBreachColorizeDiff's own correctness rests
+// on: splitHighlightedTokensByLine's result must have exactly one
+// element per "\n"-split line of the content Highlight was actually
+// run on, or a caller indexing into it by line number silently
+// mis-colors a diff instead of merely losing the multi-line-construct
+// improvement (see renderReconstructedFiles' own defensive length
+// check in gitbreachscreen.go, which exists precisely because this
+// invariant is Highlight's own contract, not provable from this
+// package alone, across every lexer chroma ships).
+func TestSplitHighlightedTokensByLineLineCountInvariant(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+		ls   []string
+	}{
+		{"Go file with a block comment", "x.go", []string{
+			"/* start of comment", "still a comment", "end */", "func x() {}",
+		}},
+		{"file ending without a trailing newline", "x.go", []string{
+			"package main", "func main() {}",
+		}},
+		{"single-line file", "x.go", []string{"package main"}},
+		{"single empty line", "x.go", []string{""}},
+		{"no recognized extension", "x", []string{"plain text", "more plain text"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tokens := viewer.Highlight(c.path, strings.Join(c.ls, "\n"))
+			got := splitHighlightedTokensByLine(tokens, darkSyntaxPalette)
+			if len(got) != len(c.ls) {
+				t.Fatalf("splitHighlightedTokensByLine returned %d lines, want %d (input: %q)", len(got), len(c.ls), c.ls)
+			}
+		})
+	}
+}
+
+// TestSplitHighlightedTokensByLinePreservesClassificationAcrossLines
+// pins the actual motivating improvement over lexing one line at a
+// time: a multi-line Go block comment, split back per line, still
+// carries its own KindComment color on every one of its lines — which
+// Highlight given each line in isolation (no real surrounding
+// context) cannot do at all (verified directly: it comes back
+// KindPlain line by line).
+func TestSplitHighlightedTokensByLinePreservesClassificationAcrossLines(t *testing.T) {
+	ls := []string{"/* start of comment", "still a comment", "end */"}
+	tokens := viewer.Highlight("x.go", strings.Join(ls, "\n"))
+
+	got := splitHighlightedTokensByLine(tokens, darkSyntaxPalette)
+	wantTag := "[" + colorTag(darkSyntaxPalette[viewer.KindComment]) + "]"
+	for i, line := range got {
+		if !strings.Contains(line, wantTag) {
+			t.Errorf("line %d = %q, want it tagged as a comment (%q)", i, line, wantTag)
+		}
+	}
+}

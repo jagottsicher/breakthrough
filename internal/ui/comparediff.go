@@ -391,10 +391,15 @@ func (r *Root) closeCompareDiff() {
 // assumed to be: a .go-vs-.go.bak compare should still highlight both
 // sides as Go.
 //
-// Same known limitation as gitbreach's own doc comment on
-// gitBreachColorizeDiff spells out: each line is lexed in isolation, so
-// a lexer construct spanning several lines (a block comment, a raw
-// string literal) can come out misclassified at its own boundaries.
+// Known, accepted limitation, not yet solved here the way
+// gitBreachColorizeDiff's own doc comment describes solving it for
+// Git Breach: each line is lexed in isolation, so a lexer construct
+// spanning several lines (a block comment, a raw string literal) can
+// come out misclassified at its own boundaries. The same
+// reconstruct-the-full-side-then-lex-once approach would apply here
+// too (compare.DiffPairs' own Left/Right already carry each side's
+// full reconstructed content, in order) — a separate item, not yet
+// done for this screen.
 func (r *Root) renderCompareDiff() {
 	palette := paletteFor(r.theme.SurfaceBackground)
 
