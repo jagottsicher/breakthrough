@@ -25,39 +25,49 @@ const gitBreachPage = "gitBreach"
 // result for each pane, and the Diff pane's own split-view state (see
 // gitbreach.go/gitbreachscreen.go/gitbreachdiffsplit.go).
 type gitBreachState struct {
-	Layout              *tview.Flex
-	TitleBar            *tview.TextView
-	StatusHeader        *tview.TextView
-	StatusView          *tview.TextView
-	FilesHeader         *tview.TextView
-	FilesTable          *tview.Table
-	FilesScrollbar      *verticalScrollbar
-	BranchesHeader      *tview.TextView
-	BranchesTable       *tview.Table
-	BranchesScrollbar   *verticalScrollbar
-	CommitsHeader       *tview.TextView
-	CommitsTable        *tview.Table
-	CommitsScrollbar    *verticalScrollbar
-	StashHeader         *tview.TextView
-	StashTable          *tview.Table
-	StashScrollbar      *verticalScrollbar
-	DiffHeader          *tview.TextView
-	DiffView            *tview.TextView
-	DiffScrollbar       *verticalScrollbar
-	DiffHScrollbar      *horizontalScrollbar
-	DiffSpacer          *tview.Box
-	Hint                *tview.TextView
-	HintSpans           []listHintSpan
-	Dir                 string // the directory "jg" was invoked from
-	Root                string // resolved repository root, see git.Root
-	Status              git.Status
-	Rows                []gitBreachRow
-	RowIndex            map[int]int
-	FetchErr            error
-	FilesReady          bool
-	Branches            []git.Branch
-	BranchesErr         error
-	BranchesReady       bool
+	Layout            *tview.Flex
+	TitleBar          *tview.TextView
+	StatusHeader      *tview.TextView
+	StatusView        *tview.TextView
+	FilesHeader       *tview.TextView
+	FilesTable        *tview.Table
+	FilesScrollbar    *verticalScrollbar
+	BranchesHeader    *tview.TextView
+	BranchesTable     *tview.Table
+	BranchesScrollbar *verticalScrollbar
+	CommitsHeader     *tview.TextView
+	CommitsTable      *tview.Table
+	CommitsScrollbar  *verticalScrollbar
+	StashHeader       *tview.TextView
+	StashTable        *tview.Table
+	StashScrollbar    *verticalScrollbar
+	DiffHeader        *tview.TextView
+	DiffView          *tview.TextView
+	DiffScrollbar     *verticalScrollbar
+	DiffHScrollbar    *horizontalScrollbar
+	DiffSpacer        *tview.Box
+	Hint              *tview.TextView
+	HintSpans         []listHintSpan
+	Dir               string // the directory "jg" was invoked from
+	Root              string // resolved repository root, see git.Root
+	Status            git.Status
+	Rows              []gitBreachRow
+	RowIndex          map[int]int
+	FetchErr          error
+	FilesReady        bool
+	Branches          []git.Branch
+	BranchesErr       error
+	BranchesReady     bool
+	// BranchesShowTags switches the Branches box between its two
+	// sub-tabs (Branches/Tags, see renderGitBreachBranchesHeader) —
+	// one box, one table, two row kinds, the same "no new box" shape
+	// feature_ideas.txt's own Box-Gruppierung plan calls for (Tags is
+	// meant to join Branches/Remotes as tabs within this one box, not
+	// become a fifth box of its own). Reset to false on every fresh
+	// "jg" open (see openGitBreach), same as CommitsLimit.
+	BranchesShowTags    bool
+	Tags                []git.Tag
+	TagsErr             error
 	Commits             []git.LogEntry
 	CommitsErr          error
 	CommitsReady        bool
@@ -135,6 +145,7 @@ func (r *Root) openGitBreach() {
 	// deliberately leaves an already-expanded limit alone so a user who
 	// scrolled to 600 commits and reloads doesn't lose that expansion.
 	r.gitBreach.CommitsLimit = git.CommitLogLimit
+	r.gitBreach.BranchesShowTags = false
 	r.reloadGitBreach()
 	r.showOverlayWithRestore(gitBreachPage, r.gitBreach.Layout, r.restoreGitBreachFocus)
 }
@@ -185,6 +196,10 @@ func (r *Root) reloadGitBreach() {
 	branches, branchesErr := git.Branches(ctx, r.gitBreach.Root)
 	r.gitBreach.Branches = branches
 	r.gitBreach.BranchesErr = branchesErr
+
+	tags, tagsErr := git.Tags(ctx, r.gitBreach.Root)
+	r.gitBreach.Tags = tags
+	r.gitBreach.TagsErr = tagsErr
 
 	commits, commitsErr := git.Log(ctx, r.gitBreach.Root, r.gitBreach.CommitsLimit)
 	r.gitBreach.Commits = commits
@@ -466,6 +481,109 @@ func (r *Root) gitBreachBranchAt(row int) (git.Branch, bool) {
 		return git.Branch{}, false
 	}
 	return r.gitBreach.Branches[row], true
+}
+
+// gitBreachTagAt returns gitBreach.Tags[row] — no detached-HEAD row-0
+// special case to account for here the way gitBreachBranchAt has:
+// a tag is never "current" the way a branch is, so renderGitBreachTags
+// never inserts a non-selectable row ahead of the real ones.
+func (r *Root) gitBreachTagAt(row int) (git.Tag, bool) {
+	if row < 0 || row >= len(r.gitBreach.Tags) {
+		return git.Tag{}, false
+	}
+	return r.gitBreach.Tags[row], true
+}
+
+// toggleGitBreachBranchesTab switches the Branches box between its
+// Branches/Tags sub-tabs (Left/Right while the box has focus — see
+// captureGitBreachBranchesTableKey) and re-renders in place, landing
+// on the first row of whichever table just became visible rather than
+// keeping a selection index that belonged to the other one.
+func (r *Root) toggleGitBreachBranchesTab() {
+	r.gitBreach.BranchesShowTags = !r.gitBreach.BranchesShowTags
+	r.renderGitBreachBranches()
+	r.renderGitBreachBranchesHeader()
+	// Focus itself never changes here (still the Branches table before
+	// and after), so refreshGitBreachHint's own usual trigger (a
+	// FocusFunc) never fires on its own — has to be called directly,
+	// or the hint bar would keep advertising Enter/checkout and "d
+	// delete branch" after switching to Tags, a real, live-caught bug.
+	r.refreshGitBreachHint()
+}
+
+// openGitBreachCreateTag prompts for a name and creates a new,
+// lightweight tag at HEAD — see git.CreateTag's own doc comment on
+// why never annotated. Only reachable while the Tags sub-tab is
+// showing (see captureGitBreachBranchesTableKey); nothing here needs
+// a row under the cursor, unlike checkout/delete.
+//
+// Built directly on r.pushOverlay rather than the shared openPrompt
+// helper — same reasoning openGitBreachCommitPrompt's own identical
+// shape already has: openPrompt's own showOverlay calls
+// closeAllOverlays first, which would close Git Breach itself (also
+// an overlay) before ever showing the prompt on top of it, a real,
+// live-caught bug (Enter after typing a name closed the whole
+// dashboard instead of creating the tag).
+func (r *Root) openGitBreachCreateTag() {
+	r.prompt.SetLabel("New tag name ")
+	r.prompt.SetText("")
+	r.promptSubmit = func(name string) {
+		if name == "" {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+		defer cancel()
+		if err := git.CreateTag(ctx, r.gitBreach.Root, name, "HEAD"); err != nil {
+			// showTransientErrorOverOverlay, not showError: Git Breach
+			// is itself an overlay, and showError's own showOverlay
+			// closes whatever's already open before showing anything
+			// — a real, live-caught bug (an already-existing tag name
+			// closed the whole dashboard instead of just reporting the
+			// refusal).
+			r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+			return
+		}
+		r.reloadGitBreach()
+	}
+
+	const width, height = 56, 1
+	_, _, screenWidth, screenHeight := r.GetRect()
+	x, y, w, h := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
+	r.prompt.SetRect(x, y, w, h)
+	r.pushOverlay(promptPage, r.prompt, nil)
+}
+
+// openGitBreachDeleteTag confirms, then deletes the tag under the
+// cursor — always confirms, the same reasoning deleteGitBreachBranch's
+// own sibling "d" already has: deleting a tag is itself the
+// irreversible action, with no "unmerged" concept for git to safely
+// refuse on the way a branch delete sometimes does.
+func (r *Root) openGitBreachDeleteTag() {
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	tg, ok := r.gitBreachTagAt(row)
+	if !ok {
+		return
+	}
+	r.openConfirm(
+		fmt.Sprintf("Delete tag %q?", tg.Name),
+		"Yes, delete",
+		func() { r.deleteGitBreachTag(tg.Name) },
+	)
+}
+
+// deleteGitBreachTag runs the actual delete and reloads — the same
+// "re-run the real read, don't hand-patch gitBreach.Tags" contract
+// deleteGitBreachBranch already follows for its own box. Same
+// showTransientErrorOverOverlay reasoning as openGitBreachCreateTag's
+// own doc comment on its own identical error path.
+func (r *Root) deleteGitBreachTag(name string) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.DeleteTag(ctx, r.gitBreach.Root, name); err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
 }
 
 // gitBreachDiffDebounce/gitBreachDiffTimeout mirror

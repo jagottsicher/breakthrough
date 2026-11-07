@@ -774,7 +774,12 @@ var helpText = strings.TrimLeft(`
   on it. Several boxes at once rather than one full-screen list: Status
   (branch, ahead/behind, a one-line summary), Files (staged/unstaged/
   untracked, Conflicts first if any, real syntax coloring on every
-  change), Branches (every local branch, the current one marked),
+  change), Branches (every local branch, the current one marked —
+  Left/Right switch this box to its own Tags sub-tab and back, one
+  shared table either way; "a" there creates a new, lightweight tag
+  at HEAD, "d" deletes the one under the cursor after confirming, and
+  Enter does nothing — a tag has no checkout equivalent; pushing a
+  tag isn't part of this yet),
   Commits (the most recent commits, newest first, each one colored by
   its own author — loads 200 at a time, reaching the last loaded row
   fetches 200 more automatically, with a "loaded/total" hint in the
@@ -861,18 +866,30 @@ var helpText = strings.TrimLeft(`
              real keyboard focus — only shown in the hint bar while one
              of these three has focus, since Branches has no diff of
              its own to jump into
-    Enter    (Branches only) Check out the branch under the cursor —
-             confirms first if the working tree isn't clean — only
-             shown in the hint bar while Branches has focus
+    Left/    (Branches only) Switch this box between its own Branches
+    Right    and Tags sub-tabs — one shared table either way, so
+             nothing else about the focus ring changes
+    Enter    (Branches sub-tab) Check out the branch under the
+             cursor — confirms first if the working tree isn't clean
+             — only shown in the hint bar while Branches has focus;
+             does nothing on the Tags sub-tab (a tag has no checkout
+             equivalent)
     Enter/   (Commits only) Same jump into Main as Right, plus two more
     Space    keys that are otherwise free there — Space already stages
              a Files row and Stash's own diff is already fully visible
              on selection, so neither gains this second meaning there
-    d        (Branches only) Delete the branch under the cursor, after
-             confirming — always confirms, unlike Enter, since deleting
-             a branch is itself the irreversible action. Refuses with
-             the same error git itself gives for an unmerged branch
-             (never force-deletes); does nothing on the current branch
+    d        (Branches sub-tab) Delete the branch under the cursor,
+             after confirming — always confirms, unlike Enter, since
+             deleting a branch is itself the irreversible action.
+             Refuses with the same error git itself gives for an
+             unmerged branch (never force-deletes); does nothing on
+             the current branch
+    a        (Tags sub-tab) Create a new, lightweight tag at HEAD,
+             after typing a name in a prompt
+    d        (Tags sub-tab) Delete the tag under the cursor, after
+             confirming — always confirms, same reasoning as
+             Branches' own "d"; no "unmerged" concept for a tag to
+             safely refuse on the way a branch delete sometimes does
     a        (Stash only) Apply the entry under the cursor onto the
              working tree — confirms first only if the working tree
              isn't clean; the stash itself is never removed (apply,

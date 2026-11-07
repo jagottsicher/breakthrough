@@ -1340,7 +1340,7 @@ list.
 |---|---|
 | Status | Branch, ahead/behind, a one-line summary |
 | Files | Staged/unstaged/untracked changes (Conflicts first, if any), real syntax coloring on every change |
-| Branches | Every local branch, the current one marked |
+| Branches | Every local branch, the current one marked — `Left`/`Right` switch this box to its Tags sub-tab and back (see below) |
 | Commits | The most recent commits, newest first, each colored by its own author, with a lane/branch graph; loads 200 at a time, fetching 200 more automatically once you reach the last loaded row |
 | Stash | Every stashed change, newest first |
 
@@ -1361,15 +1361,26 @@ on an unresolved conflict (no single history to attribute lines to
 without resolving it first) or an untracked file (never added to the
 index, so there's no history yet).
 
+`Left`/`Right` on the Branches box switch it between its own two
+sub-tabs — Branches (above) and Tags, one shared table either way.
+On the Tags sub-tab: `a` prompts for a name and creates a new,
+lightweight tag at `HEAD`; `d` deletes the one under the cursor,
+after confirming. `Enter` does nothing there — a tag has no
+equivalent of a branch checkout. Pushing a tag to a remote isn't part
+of this yet.
+
 | Key | Action |
 |---|---|
 | `Tab` / `Shift+Tab` | Switch focus between Files, Branches, Commits and Stash |
 | `Space` | (Files) Stage/unstage the row under the cursor |
 | `b` | (Files) Show the selected file's own blame in Main |
 | `Right` | (Files/Commits/Stash) Jump into Main's own diff |
-| `Enter` | (Branches) Check out the branch under the cursor, confirming first if the working tree isn't clean |
+| `Left` / `Right` | (Branches) Switch between the Branches and Tags sub-tabs |
+| `Enter` | (Branches sub-tab) Check out the branch under the cursor, confirming first if the working tree isn't clean |
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
-| `d` | (Branches) Delete the branch under the cursor, after confirming — refuses on an unmerged branch the same way `git` itself does |
+| `d` | (Branches sub-tab) Delete the branch under the cursor, after confirming — refuses on an unmerged branch the same way `git` itself does |
+| `a` | (Tags sub-tab) Create a new tag at `HEAD`, after typing a name |
+| `d` | (Tags sub-tab) Delete the tag under the cursor, after confirming |
 | `a` | (Stash) Apply the entry under the cursor (never pops it) |
 | `d` | (Stash) Drop the entry under the cursor, after confirming |
 | `c` | Commit whatever is currently staged, after typing a message |

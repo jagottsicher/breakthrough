@@ -614,10 +614,18 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 			hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 		)
 	case r.gitBreach.BranchesTable.HasFocus():
-		entries = append(entries,
-			hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }),
-			hintKey("d", "delete branch", func(r *Root) { r.openGitBreachDeleteBranch() }),
-		)
+		entries = append(entries, hintKey("←/→", "switch tab", func(r *Root) { r.toggleGitBreachBranchesTab() }))
+		if r.gitBreach.BranchesShowTags {
+			entries = append(entries,
+				hintKey("a", "new tag", func(r *Root) { r.openGitBreachCreateTag() }),
+				hintKey("d", "delete tag", func(r *Root) { r.openGitBreachDeleteTag() }),
+			)
+		} else {
+			entries = append(entries,
+				hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }),
+				hintKey("d", "delete branch", func(r *Root) { r.openGitBreachDeleteBranch() }),
+			)
+		}
 	case r.gitBreach.CommitsTable.HasFocus():
 		entries = append(entries,
 			hintKey("Enter/Space/→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
@@ -968,11 +976,17 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 	return event
 }
 
-// captureGitBreachBranchesTableKey: Tab switches to the next box
-// (same reasoning as captureGitBreachFilesTableKey's own doc comment),
-// Enter checks out the branch under the cursor, "d" deletes it
-// (git branch -d only — see its own doc comment for why not -D), "r"
-// reloads, Escape closes.
+// captureGitBreachBranchesTableKey: Tab switches to the next box,
+// Left/Right switch this box's own two sub-tabs (Branches/Tags — see
+// toggleGitBreachBranchesTab), free on this table either way since
+// activateGitBreachMain is deliberately never wired here (Branches
+// never owns Main, see gitBreachMainOwnerKind). On the Branches
+// sub-tab: Enter checks out the branch under the cursor, "d" deletes
+// it (git branch -d only — see its own doc comment for why not -D).
+// On the Tags sub-tab instead: "a" creates a new tag, "d" deletes the
+// one under the cursor — Enter does nothing there (a tag has no
+// equivalent "make this the active one" action the way a branch
+// checkout is). "r" reloads and Escape closes either way.
 func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeGitBreach()
@@ -986,8 +1000,14 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 		r.reverseToggleGitBreachFocus()
 		return nil
 	}
+	if event.Key() == tcell.KeyLeft || event.Key() == tcell.KeyRight {
+		r.toggleGitBreachBranchesTab()
+		return nil
+	}
 	if event.Key() == tcell.KeyEnter {
-		r.openGitBreachCheckout()
+		if !r.gitBreach.BranchesShowTags {
+			r.openGitBreachCheckout()
+		}
 		return nil
 	}
 	if event.Key() == tcell.KeyRune {
@@ -998,8 +1018,17 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 		case 'c':
 			r.openGitBreachCommitPrompt()
 			return nil
+		case 'a':
+			if r.gitBreach.BranchesShowTags {
+				r.openGitBreachCreateTag()
+			}
+			return nil
 		case 'd':
-			r.openGitBreachDeleteBranch()
+			if r.gitBreach.BranchesShowTags {
+				r.openGitBreachDeleteTag()
+			} else {
+				r.openGitBreachDeleteBranch()
+			}
 			return nil
 		case 'g':
 			// "gC" reaches the AI Consigliere — see
@@ -1315,8 +1344,29 @@ func (r *Root) renderGitBreachFiles() {
 // no section headers at all (every row is the same kind of thing, a
 // branch), so gitBreachBranchAt indexes r.gitBreach.Branches directly
 // by row rather than needing Files' own gitBreach.RowIndex indirection.
+// renderGitBreachBranchesHeader shows which of Branches/Tags is
+// currently the visible sub-tab in the box's own header — a "●"
+// before whichever name is active, the same marker convention Batch
+// Rename's own steps list already uses for "this one currently
+// changes something". No SetDynamicColors here (unlike DiffHeader/
+// Hint): a bold/colored active label would need it turned on for this
+// header specifically, for one glyph's worth of difference.
+func (r *Root) renderGitBreachBranchesHeader() {
+	title := " ● Branches   Tags "
+	if r.gitBreach.BranchesShowTags {
+		title = "   Branches  ● Tags "
+	}
+	r.gitBreach.BranchesHeader.SetText(title)
+}
+
 func (r *Root) renderGitBreachBranches() {
 	r.gitBreach.BranchesTable.Clear()
+	r.renderGitBreachBranchesHeader()
+
+	if r.gitBreach.BranchesShowTags {
+		r.renderGitBreachTags()
+		return
+	}
 
 	if r.gitBreach.BranchesErr != nil {
 		showTablePlaceholder(r.gitBreach.BranchesTable, r.gitBreach.BranchesErr.Error(), r.theme.EntryError)
@@ -1379,6 +1429,38 @@ func (r *Root) renderGitBreachBranches() {
 		r.gitBreach.BranchesTable.Select(firstRow, 0)
 	}
 	r.gitBreach.BranchesReady = true
+}
+
+// renderGitBreachTags fills the same BranchesTable with
+// gitBreach.Tags instead, while the Tags sub-tab is showing — no
+// detached-HEAD row-0 offset the way Branches has (see
+// gitBreachTagAt's own doc comment), so the table row index maps
+// directly onto gitBreach.Tags.
+func (r *Root) renderGitBreachTags() {
+	if r.gitBreach.TagsErr != nil {
+		showTablePlaceholder(r.gitBreach.BranchesTable, r.gitBreach.TagsErr.Error(), r.theme.EntryError)
+		return
+	}
+	if len(r.gitBreach.Tags) == 0 {
+		showTablePlaceholder(r.gitBreach.BranchesTable, "No tags found.", r.theme.MutedTextColor)
+		return
+	}
+
+	for row, tg := range r.gitBreach.Tags {
+		r.gitBreach.BranchesTable.SetCell(row, 0, tview.NewTableCell("  "+tg.Name).SetTextColor(r.theme.Text))
+	}
+
+	// Same reasoning as renderGitBreachBranches' own identical tail:
+	// showTablePlaceholder's SetSelectable(false) has to be undone
+	// once real rows exist, and a selection index left over from
+	// whichever table (or placeholder) this box showed before has to
+	// be checked against the table that's actually visible now, not
+	// assumed still valid.
+	r.gitBreach.BranchesTable.SetSelectable(true, false)
+	cur, _ := r.gitBreach.BranchesTable.GetSelection()
+	if _, ok := r.gitBreachTagAt(cur); !ok {
+		r.gitBreach.BranchesTable.Select(0, 0)
+	}
 }
 
 // gitBreachAuthorColors are twelve hues, evenly spaced around the hue
