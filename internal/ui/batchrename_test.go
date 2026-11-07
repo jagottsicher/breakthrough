@@ -69,6 +69,59 @@ func TestOpenBatchRenameAlwaysStartsFromAFreshRules(t *testing.T) {
 	}
 }
 
+// TestOpenBatchRenamePrefixBuildsATemplateAndFocusesThePreview pins the
+// "Batch rename ▸ Prefix…" quick action end to end: same engine as the
+// full wizard (a Template rule, "<prefix>{name}"), but landing focus on
+// the live preview rather than the fields table — the result is the
+// first thing seen, not the field that produced it.
+func TestOpenBatchRenamePrefixBuildsATemplateAndFocusesThePreview(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if _, err := r.panel.selectByPattern("ap*.txt", true); err != nil {
+		t.Fatalf("selectByPattern: %v", err)
+	}
+
+	r.openBatchRenamePrefix()
+	r.prompt.SetText("new_")
+	r.finishPrompt(tcell.KeyEnter)
+
+	if got, want := r.batch.Rules.Template, "new_{name}"; got != want {
+		t.Errorf("Template = %q, want %q", got, want)
+	}
+	if !r.batch.PreviewTable.HasFocus() {
+		t.Error("Prefix quick action should land focus on the live preview, not the fields table")
+	}
+	if len(r.batch.PendingChanges) != 2 {
+		t.Fatalf("pending changes = %+v, want both selected files renamed", r.batch.PendingChanges)
+	}
+}
+
+// TestOpenBatchRenamePrefixWithEmptyInputCancels pins that an empty
+// prefix — the shared prompt overlay's own "nothing typed" cancel path
+// (see finishPrompt) — never opens the wizard at all, rather than
+// opening it with a no-op Template rule.
+func TestOpenBatchRenamePrefixWithEmptyInputCancels(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if _, err := r.panel.selectByPattern("ap*.txt", true); err != nil {
+		t.Fatalf("selectByPattern: %v", err)
+	}
+
+	r.openBatchRenamePrefix()
+	r.prompt.SetText("")
+	r.finishPrompt(tcell.KeyEnter)
+
+	if r.batch.Targets != nil {
+		t.Errorf("Targets = %v, want the wizard never opened for an empty prefix", r.batch.Targets)
+	}
+}
+
 func TestBatchRenameBoolFieldTogglesInPlace(t *testing.T) {
 	r, _ := newBatchRenameRoot(t) // default step is "Search & Replace"
 

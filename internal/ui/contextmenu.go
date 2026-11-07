@@ -181,7 +181,15 @@ func contextMenuTree() []menuEntry {
 			{label: "chown", mnemonic: 'o', action: func(r *Root) { r.openChown() }},
 			{label: "chmod", mnemonic: 'm', action: func(r *Root) { r.openChmod() }},
 			{label: "sed", mnemonic: 'S', action: func(r *Root) { r.openSedReplace() }},
-			{label: "Batch rename", mnemonic: 'B', action: func(r *Root) { r.openBatchRename() }},
+			// A submenu, not two top-level rows: per this file's own
+			// doc comment above, a slimmer menu was the explicit goal
+			// — "Prefix…" (the one quick action Jens chose, 2026-11-07)
+			// stays tucked under the full wizard rather than widening
+			// "More actions" itself.
+			{label: "Batch rename", submenu: []menuEntry{
+				{label: "Rename...", mnemonic: 'B', action: func(r *Root) { r.openBatchRename() }},
+				{label: "Prefix...", mnemonic: 'p', action: func(r *Root) { r.openBatchRenamePrefix() }},
+			}},
 			{label: "Undo last rename", mnemonic: 'u', action: func(r *Root) { r.undoLastBatchRename() }},
 			{label: "Compare Faultline", mnemonic: 'C', action: func(r *Root) { r.openCompare() }},
 			{label: "Rsync", mnemonic: 'R', action: func(r *Root) { r.openRsync() }},
