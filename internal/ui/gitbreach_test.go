@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -249,6 +250,95 @@ func TestToggleGitBreachStageStagesAndUnstagesTheRowUnderTheCursor(t *testing.T)
 	}
 	if len(r.gitBreach.Status.Untracked) != 1 {
 		t.Errorf("Untracked = %v, want a.txt untracked again after unstaging", r.gitBreach.Status.Untracked)
+	}
+}
+
+// TestStartGitBreachBlameOnUntrackedShowsNothingToBlameYet pins the
+// one guard clause in startGitBreachBlame that's fully synchronous
+// (same reasoning as startGitBreachDiff's own identical-shaped
+// "unresolved conflict" guard, neither of which this file tests via
+// the real async git fetch — see git.Blame's own tests in
+// internal/git for that layer, and gitBreachRenderBlame's own test
+// below for the rendering that happy path produces).
+func TestStartGitBreachBlameOnUntrackedShowsNothingToBlameYet(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "c.txt"), []byte("c"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	row := gitBreachTableRowForPath(r, "c.txt")
+	if row == 0 {
+		t.Fatal("c.txt row not found in the Files table")
+	}
+	r.gitBreach.FilesTable.Select(row, 0)
+
+	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyRune, 'b', tcell.ModNone))
+
+	if got, want := r.gitBreach.DiffView.GetText(true), "nothing to blame yet"; !strings.Contains(got, want) {
+		t.Errorf("DiffView = %q, want it to contain %q", got, want)
+	}
+}
+
+// TestStartGitBreachBlameActivatesItsOwnScrollKey pins that "b" on a
+// real, committed row switches gitBreach.DiffScrollKey synchronously,
+// before the actual git blame fetch (async, see startGitBreachBlame's
+// own doc comment) has any chance to land — the same "B:" prefix, not
+// startGitBreachDiff's own "F:", so blame's remembered scroll position
+// for this row never collides with that row's own diff.
+func TestStartGitBreachBlameActivatesItsOwnScrollKey(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	row := gitBreachTableRowForPath(r, "a.txt")
+	if row == 0 {
+		t.Fatal("a.txt row not found in the Files table")
+	}
+	r.gitBreach.FilesTable.Select(row, 0)
+
+	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyRune, 'b', tcell.ModNone))
+
+	if got, want := r.gitBreach.DiffScrollKey, "B:a.txt"; got != want {
+		t.Errorf("DiffScrollKey = %q, want %q", got, want)
+	}
+}
+
+// TestGitBreachRenderBlameFormatsHashDateAuthorAndContent pins the
+// pure rendering half of startGitBreachBlame's happy path — no git
+// process, no async fetch, just git.BlameLine values in, text out.
+func TestGitBreachRenderBlameFormatsHashDateAuthorAndContent(t *testing.T) {
+	when := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	lines := []git.BlameLine{
+		{Hash: "abc1234", Short: "abc1234", AuthorName: "Ada", AuthorEmail: "ada@example.com", When: when, LineNo: 1, Content: "package main"},
+		{Hash: "def5678", Short: "def5678", AuthorName: "Grace Hopper", AuthorEmail: "grace@example.com", When: when, LineNo: 2, Content: ""},
+	}
+
+	got := gitBreachRenderBlame(lines)
+
+	for _, want := range []string{"abc1234", "2026-03-09", "Ada", "package main", "def5678", "Grace Hopper"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("gitBreachRenderBlame output missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Count(got, "\n") != len(lines) {
+		t.Errorf("gitBreachRenderBlame produced %d lines, want %d", strings.Count(got, "\n"), len(lines))
 	}
 }
 

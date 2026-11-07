@@ -8,6 +8,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/rivo/tview"
@@ -663,6 +664,103 @@ func (r *Root) startGitBreachDiff(row int) {
 // that need their own separate remembered scroll position.
 func gitBreachFileDiffScrollKey(gr gitBreachRow) string {
 	return fmt.Sprintf("F:%d:%s", gr.kind, gr.path)
+}
+
+// startGitBreachBlame is "b" on the Files table — fetches row's own
+// per-line commit history via git.Blame and shows it in Main, same
+// shape as startGitBreachDiff (cancellable context, safeGo,
+// QueueUpdateDraw, a final check against the still-current selection)
+// minus the debounce: a deliberate keypress, not cursor-movement
+// noise, so there's no "did the cursor only pass through" case to
+// wait out. Its own scroll key ("B:", as opposed to diff's "F:") keeps
+// blame's remembered scroll position separate from the same row's own
+// diff. Moving the cursor afterward hands Main straight back to the
+// ordinary diff view via Files' own SetSelectionChangedFunc
+// (startGitBreachFilesDiffIfOwner) — blame is a one-shot look, not a
+// persistent mode alongside diff.
+func (r *Root) startGitBreachBlame() {
+	row, _ := r.gitBreach.FilesTable.GetSelection()
+	gr, ok := r.gitBreachRowAt(row)
+	if !ok {
+		return
+	}
+	r.cancelGitBreachDiff()
+
+	key := "B:" + gr.path
+	r.gitBreachActivateDiffKey(key)
+
+	// Neither has a real blame to show: a conflict is unmerged (no
+	// single HEAD-relative history to attribute lines to without
+	// resolving it first — explicitly out of scope, same reasoning as
+	// toggleGitBreachStage's own conflict exclusion), an untracked file
+	// was never added to the index, so git has no history for it at
+	// all yet.
+	switch gr.kind {
+	case gitBreachRowConflict:
+		r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: unresolved conflict — blame isn't meaningful on an unmerged path.", gr.path)), "")
+		return
+	case gitBreachRowUntracked:
+		r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: untracked — nothing to blame yet.", gr.path)), "")
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r.gitBreach.DiffCancel = cancel
+	root := r.gitBreach.Root
+
+	r.safeGo("Git breach blame", r.cancelGitBreachDiff, func() {
+		fetchCtx, fetchCancel := context.WithTimeout(ctx, gitBreachFetchTimeout)
+		lines, err := git.Blame(fetchCtx, root, gr.path)
+		fetchCancel()
+		if ctx.Err() != nil {
+			return
+		}
+
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			curRow, _ := r.gitBreach.FilesTable.GetSelection()
+			curGr, ok := r.gitBreachRowAt(curRow)
+			if !ok || curGr != gr {
+				return // the cursor moved to a different row before this landed
+			}
+			if err != nil {
+				r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: %v", gr.path, err)), "")
+				return
+			}
+			r.gitBreachSetDiffText(key, gitBreachRenderBlame(lines), "")
+		})
+	})
+}
+
+// gitBreachRenderBlame formats lines for Main — each one prefixed with
+// its short hash, the commit's own date and author (colored the same
+// way the Commits box already colors its own rows, see
+// gitBreachAuthorColor, so a line's author reads consistently whether
+// seen in Commits or here), then the line's own content verbatim.
+// Author names are padded to the widest one actually present, not a
+// fixed guess, so the content column lines up regardless of how long
+// names in this particular repository happen to be.
+func gitBreachRenderBlame(lines []git.BlameLine) string {
+	widestAuthor := 0
+	for _, l := range lines {
+		if n := len([]rune(l.AuthorName)); n > widestAuthor {
+			widestAuthor = n
+		}
+	}
+	var b strings.Builder
+	for _, l := range lines {
+		author := l.AuthorName
+		if pad := widestAuthor - len([]rune(author)); pad > 0 {
+			author += strings.Repeat(" ", pad)
+		}
+		prefix := fmt.Sprintf("%-7s %s %s  ", l.Short, l.When.Format("2006-01-02"), author)
+		b.WriteString(wrapColor(gitBreachAuthorColor(l.AuthorEmail), tview.Escape(prefix)))
+		b.WriteString(tview.Escape(l.Content))
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // gitBreachCommitAt returns gitBreach.Commits[row] — the Commits table
