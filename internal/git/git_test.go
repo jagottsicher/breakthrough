@@ -2,9 +2,11 @@ package git
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -266,6 +268,73 @@ func TestStageAndUnstageRoundTrip(t *testing.T) {
 	}
 	if len(st.Untracked) != 1 || st.Untracked[0] != "a.txt" {
 		t.Errorf("Untracked = %v, want [a.txt] after Unstage (back to untracked)", st.Untracked)
+	}
+}
+
+// TestApplyPatchCachedStagesExactlyOneHunk is the discriminating test
+// for hunk staging: a file with two independent, far-apart changes
+// (so `git diff` produces two separate hunks, default -U3 context)
+// staging only the first hunk's own patch must leave the file "MM" —
+// that one hunk staged *and* the second hunk still unstaged — not the
+// whole file staged, and not the other hunk silently dropped either.
+func TestApplyPatchCachedStagesExactlyOneHunk(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	var original []string
+	for i := 1; i <= 20; i++ {
+		original = append(original, fmt.Sprintf("line %d", i))
+	}
+	writeFile(t, dir, "a.txt", strings.Join(original, "\n")+"\n")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "initial")
+
+	changed := append([]string{}, original...)
+	changed[1] = "line 2 changed"   // near the top — its own hunk
+	changed[17] = "line 18 changed" // near the bottom — a separate hunk, >3 lines of context away
+	writeFile(t, dir, "a.txt", strings.Join(changed, "\n")+"\n")
+
+	diff, err := Diff(context.Background(), dir, "a.txt", false)
+	if err != nil {
+		t.Fatalf("Diff: %v", err)
+	}
+	lines := strings.Split(diff, "\n")
+	var hunkStarts []int
+	for i, l := range lines {
+		if strings.HasPrefix(l, "@@") {
+			hunkStarts = append(hunkStarts, i)
+		}
+	}
+	if len(hunkStarts) != 2 {
+		t.Fatalf("setup: diff has %d hunks, want 2:\n%s", len(hunkStarts), diff)
+	}
+	header := strings.Join(lines[:hunkStarts[0]], "\n")
+	firstHunk := strings.Join(lines[hunkStarts[0]:hunkStarts[1]], "\n")
+	patch := header + "\n" + firstHunk + "\n"
+
+	if err := ApplyPatchCached(context.Background(), dir, patch); err != nil {
+		t.Fatalf("ApplyPatchCached: %v", err)
+	}
+
+	st, err := Fetch(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if !containsPath(changePaths(st.Staged), "a.txt") {
+		t.Fatalf("Staged = %v, want a.txt staged (the first hunk)", st.Staged)
+	}
+	if !containsPath(changePaths(st.Unstaged), "a.txt") {
+		t.Fatalf("Unstaged = %v, want a.txt still unstaged (the second hunk)", st.Unstaged)
+	}
+
+	stagedDiff, err := Diff(context.Background(), dir, "a.txt", true)
+	if err != nil {
+		t.Fatalf("Diff(staged): %v", err)
+	}
+	if !strings.Contains(stagedDiff, "line 2 changed") {
+		t.Errorf("staged diff missing the first hunk's own change:\n%s", stagedDiff)
+	}
+	if strings.Contains(stagedDiff, "line 18 changed") {
+		t.Errorf("staged diff contains the second hunk's own change, want only the first:\n%s", stagedDiff)
 	}
 }
 

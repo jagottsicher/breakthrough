@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "size": 83107,
-      "sha256": "6b05102f1f6ab2afbae574f70995cf28762e25e06c474e7848efcc224231cd83"
+      "size": 83216,
+      "sha256": "cb49dc782671d147339057205cc2a933b4d9ad078358b5e0071faa1090c698d3"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -153,8 +153,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 184803,
-      "sha256": "ec91bab52714c93f80e2614e493515a8f7ca10b8b1dbcdc45aa52d210eec95eb"
+      "size": 185281,
+      "sha256": "7d153a9488f8598a10d264b5fe17183079817b004a354206676ba521f399ec72"
     },
     {
       "path": "docs/whitepaper.md",
@@ -1108,8 +1108,8 @@
     },
     {
       "path": "internal/git/git_test.go",
-      "size": 12763,
-      "sha256": "1bb2856bea611ad3b887c793b74771531cea2fafa979aeefc3d8d7a41e47b834"
+      "size": 15281,
+      "sha256": "ad4d7d9433a57a682a7152708ae3b93526679b907b65df20f9243abcf6528eaf"
     },
     {
       "path": "internal/git/graph.go",
@@ -1123,8 +1123,8 @@
     },
     {
       "path": "internal/git/ops.go",
-      "size": 4574,
-      "sha256": "ee403bae2f9fb8af9f32c5cf837f0289c1525d3507200ff9f1abb0041365e5d6"
+      "size": 5690,
+      "sha256": "0bad5a256873cda6e200144f598ae63805abda47199ed789019586f21660e1cb"
     },
     {
       "path": "internal/git/stash.go",
@@ -2277,9 +2277,19 @@
       "sha256": "5fd8d4bc265ca69e6b37017570395fa63633afcb8dfb5aa610e6fd4ff0bf3237"
     },
     {
+      "path": "internal/ui/gitbreachhunkstage.go",
+      "size": 5482,
+      "sha256": "d881af70a9f982096c0a17bba49615bbd1ab895779bd2406f7735e87dd19bada"
+    },
+    {
+      "path": "internal/ui/gitbreachhunkstage_test.go",
+      "size": 6121,
+      "sha256": "846a14304dc4de5a215545f3223ee43126ddd04f3f8f2a8df6a15717c7294720"
+    },
+    {
       "path": "internal/ui/gitbreachscreen.go",
-      "size": 92342,
-      "sha256": "e96691ab2eb45af1044aedfccfb01049df30452bc7cce78646863ed8ebca77bc"
+      "size": 92719,
+      "sha256": "62faa0666180e38f00b110d89c7a7ec8c62a308f94f91824eac67d435f98018c"
     },
     {
       "path": "internal/ui/gitstatus.go",
@@ -2293,8 +2303,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 123738,
-      "sha256": "f56b0dcd15723ab5009d75581b536dcd3fb5dcbc0bec134af8d94c1a6a22c225"
+      "size": 124692,
+      "sha256": "c6d351382ac6a322e377240d0e8036e023bb83e474b5e518d4ad0324a6d17a2b"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -4331,6 +4341,8 @@
         "internal/ui/gitbreachcolorize_test.go",
         "internal/ui/gitbreachdiffsplit.go",
         "internal/ui/gitbreachdiffsplit_test.go",
+        "internal/ui/gitbreachhunkstage.go",
+        "internal/ui/gitbreachhunkstage_test.go",
         "internal/ui/gitbreachscreen.go",
         "internal/ui/gitstatus.go",
         "internal/ui/gitstatus_test.go",
@@ -15507,140 +15519,147 @@
       "file": "internal/git/git_test.go",
       "name": "requireGit",
       "kind": "function",
-      "line": 13
+      "line": 15
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "gitTestEnv",
       "kind": "function",
-      "line": 28
+      "line": 30
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "runGit",
       "kind": "function",
-      "line": 36
+      "line": 38
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "initRepo",
       "kind": "function",
-      "line": 57
+      "line": 59
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "writeFile",
       "kind": "function",
-      "line": 67
+      "line": 69
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestRootOnADirectoryThatIsNotARepository",
       "kind": "function",
-      "line": 79
+      "line": 81
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestRootFindsTheTopLevelFromANestedSubdirectory",
       "kind": "function",
-      "line": 92
+      "line": 94
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestFetchOnACleanRepository",
       "kind": "function",
-      "line": 124
+      "line": 126
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestFetchReportsStagedUnstagedAndUntracked",
       "kind": "function",
-      "line": 143
+      "line": 145
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestFetchReportsARenameWithItsOriginalPath",
       "kind": "function",
-      "line": 185
+      "line": 187
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestFetchReportsAConflict",
       "kind": "function",
-      "line": 212
+      "line": 214
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestStageAndUnstageRoundTrip",
       "kind": "function",
-      "line": 241
+      "line": 243
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/git_test.go",
+      "name": "TestApplyPatchCachedStagesExactlyOneHunk",
+      "kind": "function",
+      "line": 280
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestCommitCreatesARealCommit",
       "kind": "function",
-      "line": 272
+      "line": 341
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestCommitWithNothingStagedFails",
       "kind": "function",
-      "line": 293
+      "line": 362
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestCommitIsCancellable",
       "kind": "function",
-      "line": 305
+      "line": 374
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestDiffUnstagedVsStaged",
       "kind": "function",
-      "line": 320
+      "line": 389
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestFetchHandlesPathsWithSpacesAndNonASCIIBytes",
       "kind": "function",
-      "line": 361
+      "line": 430
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestUntrackedContentReadsTheFileDirectly",
       "kind": "function",
-      "line": 395
+      "line": 464
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "changePaths",
       "kind": "function",
-      "line": 409
+      "line": 478
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "containsPath",
       "kind": "function",
-      "line": 417
+      "line": 486
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
@@ -15841,23 +15860,30 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/ops.go",
+      "name": "ApplyPatchCached",
+      "kind": "function",
+      "line": 68
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/ops.go",
       "name": "Commit",
       "kind": "function",
-      "line": 67
+      "line": 94
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/ops.go",
       "name": "Diff",
       "kind": "function",
-      "line": 90
+      "line": 117
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/ops.go",
       "name": "UntrackedContent",
       "kind": "function",
-      "line": 120
+      "line": 147
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
@@ -40386,6 +40412,85 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage.go",
+      "name": "gitBreachHunkRanges",
+      "kind": "function",
+      "line": 15
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage.go",
+      "name": "gitBreachHunkAt",
+      "kind": "function",
+      "line": 33
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage.go",
+      "name": "gitBreachHunkPatch",
+      "kind": "function",
+      "line": 64
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage.go",
+      "name": "gitBreachMainShowsAStageableHunk",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 87
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage.go",
+      "name": "openGitBreachStageHunk",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 108
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage_test.go",
+      "name": "twoHunkDiff",
+      "kind": "const",
+      "line": 17
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage_test.go",
+      "name": "TestGitBreachHunkAtPicksTheRightHunkForEveryLineIndex",
+      "kind": "function",
+      "line": 37
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage_test.go",
+      "name": "TestGitBreachHunkAtOnANonHunkedTextReportsFalse",
+      "kind": "function",
+      "line": 68
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage_test.go",
+      "name": "TestGitBreachHunkPatchBuildsAByteExactSingleHunkPatch",
+      "kind": "function",
+      "line": 82
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage_test.go",
+      "name": "TestGitBreachHunkPatchOnAnOutOfRangeIndexReportsFalse",
+      "kind": "function",
+      "line": 135
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachhunkstage_test.go",
+      "name": "TestGitBreachMainShowsAStageableHunkOnlyForFilesUnstagedRows",
+      "kind": "function",
+      "line": 149
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachStatusHeight",
       "kind": "const",
@@ -40515,21 +40620,21 @@
       "name": "refreshGitBreachHint",
       "kind": "method",
       "receiver": "*Root",
-      "line": 688
+      "line": 691
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachFocusable",
       "kind": "type",
-      "line": 699
+      "line": 702
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachFocusEntry",
       "kind": "type",
-      "line": 704
+      "line": 707
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40537,7 +40642,7 @@
       "name": "gitBreachFocusables",
       "kind": "method",
       "receiver": "*Root",
-      "line": 717
+      "line": 720
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40545,7 +40650,7 @@
       "name": "toggleGitBreachFocus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 732
+      "line": 735
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40553,7 +40658,7 @@
       "name": "gitBreachFocusNext",
       "kind": "method",
       "receiver": "*Root",
-      "line": 765
+      "line": 768
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40561,7 +40666,7 @@
       "name": "gitBreachFocusPrev",
       "kind": "method",
       "receiver": "*Root",
-      "line": 772
+      "line": 775
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40569,7 +40674,7 @@
       "name": "reverseToggleGitBreachFocus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 785
+      "line": 788
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40577,7 +40682,7 @@
       "name": "gitBreachMainOwnerIndex",
       "kind": "method",
       "receiver": "*Root",
-      "line": 813
+      "line": 816
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40585,7 +40690,7 @@
       "name": "activateGitBreachMain",
       "kind": "method",
       "receiver": "*Root",
-      "line": 835
+      "line": 838
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40593,7 +40698,7 @@
       "name": "gitBreachMainHasFocus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 847
+      "line": 850
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40601,7 +40706,7 @@
       "name": "deactivateGitBreachMain",
       "kind": "method",
       "receiver": "*Root",
-      "line": 856
+      "line": 859
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40609,7 +40714,7 @@
       "name": "captureGitBreachMainKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 877
+      "line": 883
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40617,7 +40722,7 @@
       "name": "captureGitBreachFilesTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 934
+      "line": 943
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40625,7 +40730,7 @@
       "name": "captureGitBreachBranchesTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 991
+      "line": 1000
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40633,7 +40738,7 @@
       "name": "gitBreachFocusBranchesOnClick",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1052
+      "line": 1061
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40641,7 +40746,7 @@
       "name": "captureGitBreachCommitsTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1072
+      "line": 1081
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40649,7 +40754,7 @@
       "name": "gitBreachFocusCommitsOnClick",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1118
+      "line": 1127
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40657,7 +40762,7 @@
       "name": "captureGitBreachStashTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1132
+      "line": 1141
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40665,7 +40770,7 @@
       "name": "gitBreachFocusStashOnClick",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1178
+      "line": 1187
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40673,7 +40778,7 @@
       "name": "renderGitBreach",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1190
+      "line": 1199
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40681,7 +40786,7 @@
       "name": "renderGitBreachStatus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1208
+      "line": 1217
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40689,14 +40794,14 @@
       "name": "renderGitBreachFiles",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1250
+      "line": 1259
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "section",
       "kind": "type",
-      "line": 1254
+      "line": 1263
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40704,7 +40809,7 @@
       "name": "renderGitBreachBranchesHeader",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1360
+      "line": 1369
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40712,7 +40817,7 @@
       "name": "renderGitBreachBranches",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1368
+      "line": 1377
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40720,42 +40825,42 @@
       "name": "renderGitBreachTags",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1445
+      "line": 1454
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachAuthorColors",
       "kind": "var",
-      "line": 1496
+      "line": 1505
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachAuthorColor",
       "kind": "function",
-      "line": 1520
+      "line": 1529
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachLaneColor",
       "kind": "function",
-      "line": 1533
+      "line": 1542
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachGraphGlyph",
       "kind": "function",
-      "line": 1543
+      "line": 1552
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachGraphPrefix",
       "kind": "function",
-      "line": 1573
+      "line": 1582
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40763,7 +40868,7 @@
       "name": "renderGitBreachCommitsHeader",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1602
+      "line": 1611
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40771,14 +40876,14 @@
       "name": "renderGitBreachDiffHeader",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1628
+      "line": 1637
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachDiffPage",
       "kind": "function",
-      "line": 1672
+      "line": 1681
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40786,7 +40891,7 @@
       "name": "renderGitBreachCommits",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1676
+      "line": 1685
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40794,35 +40899,35 @@
       "name": "renderGitBreachStash",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1730
+      "line": 1739
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachMainOwnerKind",
       "kind": "type",
-      "line": 1771
+      "line": 1780
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachMainOwnerFiles",
       "kind": "const",
-      "line": 1774
+      "line": 1783
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachMainOwnerCommits",
       "kind": "const",
-      "line": 1775
+      "line": 1784
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachMainOwnerStash",
       "kind": "const",
-      "line": 1776
+      "line": 1785
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40830,7 +40935,7 @@
       "name": "startGitBreachFilesDiffIfOwner",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1788
+      "line": 1797
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40838,7 +40943,7 @@
       "name": "startGitBreachCommitsDiffIfOwner",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1798
+      "line": 1807
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40846,98 +40951,98 @@
       "name": "startGitBreachStashDiffIfOwner",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1808
+      "line": 1817
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachFirstDataRow",
       "kind": "function",
-      "line": 1820
+      "line": 1829
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachRowText",
       "kind": "function",
-      "line": 1839
+      "line": 1848
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachRowColor",
       "kind": "function",
-      "line": 1859
+      "line": 1868
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachColorizeDiff",
       "kind": "function",
-      "line": 1931
+      "line": 1940
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachDiffLineKind",
       "kind": "type",
-      "line": 1998
+      "line": 2007
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachDiffLineHeader",
       "kind": "const",
-      "line": 2001
+      "line": 2010
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachDiffLineAdded",
       "kind": "const",
-      "line": 2002
+      "line": 2011
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachDiffLineRemoved",
       "kind": "const",
-      "line": 2003
+      "line": 2012
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachDiffLineContext",
       "kind": "const",
-      "line": 2004
+      "line": 2013
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachDiffLinePlan",
       "kind": "type",
-      "line": 2013
+      "line": 2022
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "renderReconstructedFiles",
       "kind": "function",
-      "line": 2034
+      "line": 2043
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachDiffHeaderPath",
       "kind": "function",
-      "line": 2055
+      "line": 2064
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachWrapDiffLine",
       "kind": "function",
-      "line": 2071
+      "line": 2080
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41112,14 +41217,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -41136,7 +41241,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2010
+      "line": 2026
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41144,7 +41249,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2035
+      "line": 2051
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41152,7 +41257,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2052
+      "line": 2068
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41160,7 +41265,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2068
+      "line": 2084
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41168,7 +41273,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2088
+      "line": 2104
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41176,7 +41281,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2104
+      "line": 2120
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41184,7 +41289,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2130
+      "line": 2146
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41192,7 +41297,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2160
+      "line": 2176
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41200,7 +41305,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 2178
+      "line": 2194
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -65737,5 +65842,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "205029492d7ce820037e239923662a5cc17895cdeda185083ee7c63f52ce0fe3"
+  "merkle_root": "c06825b7647770a1d649a6b9e2fa09b57703d8e2529befa4eca31bef1503e426"
 }
