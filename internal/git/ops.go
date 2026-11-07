@@ -55,6 +55,33 @@ func Unstage(ctx context.Context, root string, paths []string) error {
 	return run(ctx, root, append([]string{"reset", "-q", "HEAD", "--"}, paths...)...)
 }
 
+// ApplyPatchCached stages exactly patch — a complete, directly
+// applicable unified-diff fragment (see internal/ui's own
+// gitBreachHunkPatch, which builds one for a single hunk out of an
+// already-fetched diff) — against the index, via `git apply --cached`
+// with patch fed on stdin. Deliberately not built on run() above:
+// that helper has no way to attach a stdin reader at all, and a
+// patch belongs on stdin, never a temp file or (worse) an argv —
+// unlike every other value this package passes to git, a diff can be
+// arbitrarily large and routinely contains characters a shell would
+// otherwise need escaping for.
+func ApplyPatchCached(ctx context.Context, root, patch string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "apply", "--cached")
+	cmd.Stdin = strings.NewReader(patch)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("git apply: %s", msg)
+		}
+		return fmt.Errorf("git apply: %w", err)
+	}
+	return nil
+}
+
 // Commit runs `git commit -m message` against root — GIT_EDITOR=true
 // guarantees this never blocks the UI goroutine's own caller waiting
 // on an interactive editor, even against a repository whose

@@ -667,6 +667,9 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 				hintKey("v", "side by side", func(r *Root) { r.toggleGitBreachDiffSplit() }),
 			)
 		}
+		if r.gitBreachMainShowsAStageableHunk() {
+			entries = append(entries, hintKey("s", "stage hunk", func(r *Root) { r.openGitBreachStageHunk() }))
+		}
 	}
 	entries = append(entries,
 		hintKey("c", "commit", func(r *Root) { r.openGitBreachCommitPrompt() }),
@@ -865,9 +868,12 @@ func (r *Root) deactivateGitBreachMain() {
 // context-dependent exception, since here it's "back out of the diff",
 // not "close the dashboard"), Tab/Backtab continue the ring from the
 // owning box's own position, "c"/"r" keep working here too since both
-// are already documented as focus-independent, and "g" starts the AI
+// are already documented as focus-independent, "g" starts the AI
 // Consigliere chord (see below — a deliberate exception to the
-// paragraph that follows, not an oversight). Everything else
+// paragraph that follows, not an oversight), and "s" stages whichever
+// hunk is at the top of the visible area (see
+// openGitBreachStageHunk — a no-op unless Files' own unstaged diff is
+// what's actually showing). Everything else
 // (Up/Down/PgUp/PgDn/Right/Home/End, "G", and TextView's own vim-style
 // h/j/k/l) is left untouched and falls through to tview.TextView's own
 // already-correct scrolling — no forwarding hack needed now that Main
@@ -902,6 +908,9 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case 'v':
 			r.toggleGitBreachDiffSplit()
+			return nil
+		case 's':
+			r.openGitBreachStageHunk()
 			return nil
 		case 'g':
 			// "gC" reaches the AI Consigliere — see
