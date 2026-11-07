@@ -81,6 +81,69 @@ func TestCommitDiffShowsTheCommitsOwnChange(t *testing.T) {
 	}
 }
 
+// TestDiffRefsComparesTwoArbitraryRefsDirectly pins that DiffRefs
+// isn't limited to parent/child the way CommitDiff is: a tag and a
+// branch, neither one the other's ancestor, diff cleanly against each
+// other.
+func TestDiffRefsComparesTwoArbitraryRefsDirectly(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "line one\n")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "first")
+	runGit(t, dir, "tag", "v1")
+	writeFile(t, dir, "a.txt", "line one\nline two\n")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "second")
+
+	diff, err := DiffRefs(context.Background(), dir, "v1", "main")
+	if err != nil {
+		t.Fatalf("DiffRefs: %v", err)
+	}
+	if !strings.Contains(diff, "+line two") {
+		t.Errorf("DiffRefs(v1, main) = %q, want it to contain the added line", diff)
+	}
+}
+
+// TestDiffRefsReversedSwapsAddedAndRemoved pins the whole of this
+// package's own "reverse diff" feature: swapping the two arguments,
+// nothing else.
+func TestDiffRefsReversedSwapsAddedAndRemoved(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "line one\n")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "first")
+	runGit(t, dir, "tag", "v1")
+	writeFile(t, dir, "a.txt", "line one\nline two\n")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "second")
+
+	reversed, err := DiffRefs(context.Background(), dir, "main", "v1")
+	if err != nil {
+		t.Fatalf("DiffRefs: %v", err)
+	}
+	if !strings.Contains(reversed, "-line two") {
+		t.Errorf("DiffRefs(main, v1) = %q, want the added line to show as removed", reversed)
+	}
+}
+
+// TestDiffRefsOnAnUnresolvableRefSurfacesGitsOwnError pins that an
+// invalid ref name comes back as a real error, not an empty diff —
+// the likely failure mode once this is reachable from a free-text
+// prompt rather than only a picker of refs git already knows about.
+func TestDiffRefsOnAnUnresolvableRefSurfacesGitsOwnError(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "a")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "initial")
+
+	if _, err := DiffRefs(context.Background(), dir, "main", "no-such-ref"); err == nil {
+		t.Error("DiffRefs with an unresolvable ref = nil error, want git's own refusal")
+	}
+}
+
 // TestCommitDiffOnTheRootCommit pins the exact reason CommitDiff uses
 // `git show`, not `git diff <hash>^ <hash>`: the root commit has no
 // parent to diff against, which the latter form fails on outright.
