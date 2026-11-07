@@ -1278,7 +1278,9 @@ Lightning Network ⚡️ using the sponsor button above.
   checkout on Enter, delete with "d" — Left/Right switch this box to
   a Tags sub-tab, "a" to create a new tag at HEAD, "d" to delete
   one), Commits (newest first, colored
-  by author, a lane/branch graph for merges, loads 200 at a time) and
+  by author, a lane/branch graph for merges, loads 200 at a time, "d"
+  to diff the selected commit against a picked branch/tag/other
+  commit) and
   Stash (apply with "a", drop with "d") are all live. The Main pane on
   the right shows whichever side box currently has focus — Files' own
   diff, an untracked file's raw content, or a Commits/Stash row's full

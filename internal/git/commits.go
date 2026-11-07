@@ -162,3 +162,29 @@ func CommitDiff(ctx context.Context, root, hash string) (string, error) {
 	}
 	return stdout.String(), nil
 }
+
+// DiffRefs diffs two arbitrary refs against each other directly — any
+// commit hash, branch, or tag name git itself can resolve — rather
+// than CommitDiff's own "this commit against its one parent" shape.
+// `git diff a b` (not `a..b`, though both mean the same thing to
+// `diff` specifically — unlike `log`, where they'd mean something
+// completely different): a plain two-tree comparison, oldest-named
+// argument first, exactly as the caller named them. Swapping the two
+// arguments at the call site is the whole of a reverse diff; no
+// separate flag or function for it.
+func DiffRefs(ctx context.Context, root, a, b string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "diff", a, b)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return "", fmt.Errorf("git diff: %s", msg)
+		}
+		return "", fmt.Errorf("git diff: %w", err)
+	}
+	return stdout.String(), nil
+}
