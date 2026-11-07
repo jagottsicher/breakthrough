@@ -1341,7 +1341,7 @@ list.
 | Status | Branch, ahead/behind, a one-line summary |
 | Files | Staged/unstaged/untracked changes (Conflicts first, if any), real syntax coloring on every change |
 | Branches | Every local branch, the current one marked — `Left`/`Right` switch this box to its Tags sub-tab and back (see below) |
-| Commits | The most recent commits, newest first, each colored by its own author, with a lane/branch graph; loads 200 at a time, fetching 200 more automatically once you reach the last loaded row |
+| Commits | The most recent commits, newest first, each colored by its own author, with a lane/branch graph; loads 200 at a time, fetching 200 more automatically once you reach the last loaded row — `d` diffs the selected commit against a picked branch, tag, or other loaded commit |
 | Stash | Every stashed change, newest first |
 
 Main, on the right, shows the diff of whichever box currently has
@@ -1378,6 +1378,7 @@ of this yet.
 | `Left` / `Right` | (Branches) Switch between the Branches and Tags sub-tabs |
 | `Enter` | (Branches sub-tab) Check out the branch under the cursor, confirming first if the working tree isn't clean |
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
+| `d` | (Commits) Diff the commit under the cursor against a picked ref — any local branch, tag, or other loaded commit |
 | `d` | (Branches sub-tab) Delete the branch under the cursor, after confirming — refuses on an unmerged branch the same way `git` itself does |
 | `a` | (Tags sub-tab) Create a new tag at `HEAD`, after typing a name |
 | `d` | (Tags sub-tab) Delete the tag under the cursor, after confirming |

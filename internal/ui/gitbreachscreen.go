@@ -629,6 +629,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 	case r.gitBreach.CommitsTable.HasFocus():
 		entries = append(entries,
 			hintKey("Enter/Space/→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+			hintKey("d", "diff against ref...", func(r *Root) { r.openGitBreachDiffAgainstRef() }),
 		)
 	case r.gitBreach.StashTable.HasFocus():
 		entries = append(entries,
@@ -1061,11 +1062,13 @@ func (r *Root) gitBreachFocusBranchesOnClick(action tview.MouseAction, event *tc
 // explicit point: committing what's already staged has nothing to do
 // with which row is selected here, so it works regardless of focus,
 // unlike Space/Enter which only ever act on a Files/Branches row),
-// Escape closes — no Enter action yet, since this first Ausbaustufe
-// only ever shows a commit's own diff in Main (via Commits' own
-// SetSelectionChangedFunc/FocusFunc), with no action a commit row
-// itself triggers (checkout/revert/cherry-pick/reset are explicitly
-// later Ausbaustufen — see feature_ideas.txt's own list).
+// "d" diffs the row under the cursor against a picked ref (see
+// openGitBreachDiffAgainstRef), Escape closes — no Enter action
+// beyond jumping into Main, since this first Ausbaustufe only ever
+// shows a commit's own diff there (via Commits' own
+// SetSelectionChangedFunc/FocusFunc), with no other action a commit
+// row itself triggers (checkout/revert/cherry-pick/reset are
+// explicitly later Ausbaustufen — see feature_ideas.txt's own list).
 func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeGitBreach()
@@ -1093,6 +1096,9 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 			return nil
 		case 'c':
 			r.openGitBreachCommitPrompt()
+			return nil
+		case 'd':
+			r.openGitBreachDiffAgainstRef()
 			return nil
 		case 'g':
 			// "gC" reaches the AI Consigliere — see
