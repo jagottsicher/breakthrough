@@ -1280,7 +1280,8 @@ Lightning Network ⚡️ using the sponsor button above.
   one), Commits (newest first, colored
   by author, a lane/branch graph for merges, loads 200 at a time, "d"
   to diff the selected commit against a picked branch/tag/other
-  commit) and
+  commit, "B" to start a bisect with it as "good" ("G"/"X" mark a
+  step good/bad, "E" ends it) and
   Stash (apply with "a", drop with "d") are all live. The Main pane on
   the right shows whichever side box currently has focus — Files' own
   diff, an untracked file's raw content, or a Commits/Stash row's full
