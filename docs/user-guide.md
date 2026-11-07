@@ -624,7 +624,10 @@ as wide as that title, even when every row inside is shorter.
   submenus below): `l` already belongs to **Look**.
 - **▸ More actions** — New file (`f`, also `mf`), New dir (`d`, also
   `md`), `tail -f` (files only, `t`, also `mt`), `chown` (`o`), `chmod`
-  (`m`), `sed` (`S`), Batch rename (`B`), Undo last rename (`u`),
+  (`m`), `sed` (`S`), **▸ Batch rename** — "Rename..." (`B`, the full
+  pipeline below) and "Prefix..." (`p`, a quick action: asks for just a
+  prefix, then opens the same pipeline with it already filled into the
+  Template step and focus on the live preview) — Undo last rename (`u`),
   Compare (`C`), Rsync (`R`), [Compress…](#compress) (`c`, also `jc`),
   [Extract](#extract)/"Extract, del org" (`e`/`E`, also
   `je`/`jE`, shown only for a recognized archive), Remove (`D`, the
@@ -867,7 +870,16 @@ destination reloads once it's done.
 ## Batch rename
 
 Renames a whole selection through a fixed pipeline, with a live preview
-of the result. Reached from the context menu's "Batch rename".
+of the result. Reached from the context menu's "Batch rename", itself
+a `▸` submenu with two entries: "Rename..." opens the full pipeline
+described here, and "Prefix..." is a quick action for the single most
+common case — it asks for just a prefix, then opens this same screen
+with the Template step (see below) already set to `<prefix>{name}`
+and keyboard focus on the live preview instead of the fields, so the
+result is the first thing you see rather than the step that produced
+it. Nothing about the engine differs between the two: "Prefix..." is a
+shorter way into the exact same Template step, not a second rename
+path.
 
 Applying it to a single folder (nothing else selected) renames the
 files and subfolders *inside* it, not the folder itself — multi-select

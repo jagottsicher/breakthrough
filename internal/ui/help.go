@@ -1217,6 +1217,12 @@ var helpText = strings.TrimLeft(`
 
 [::b]Batch rename (context menu's "Batch rename")[::-]
 
+  "Batch rename" is itself a submenu: "Rename..." opens the full
+  pipeline below; "Prefix..." asks for just a prefix, then opens this
+  same screen with the Template step already set to "<prefix>{name}"
+  and focus on the preview — a shortcut into the same engine, not a
+  second one.
+
   Steps down the left, that step's own settings on the right, a live
   preview of every selected file underneath — updated on every change,
   no separate "Preview" button to press first.
