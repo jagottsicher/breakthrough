@@ -605,6 +605,93 @@ func TestOpenGitBreachCreateTagThenOpenGitBreachDeleteTagRoundTrip(t *testing.T)
 	}
 }
 
+// TestOpenGitBreachDiffAgainstRefListsBranchesTagsAndOtherCommits pins
+// openGitBreachDiffAgainstRef's own picker contents: every local
+// branch, every tag, and every loaded commit except the one under
+// the cursor itself (diffing a commit against itself is never
+// useful).
+func TestOpenGitBreachDiffAgainstRefListsBranchesTagsAndOtherCommits(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "first")
+	runGitBreach(t, dir, "tag", "v1")
+	runGitBreach(t, dir, "branch", "feature-x")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "second")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	// 2 branches (main, feature-x) + 1 tag (v1) + 1 other commit
+	// ("first" — "second" itself, under the cursor, is excluded).
+	const want = 4
+	if got := len(r.gitBreach.Commits); got != 2 {
+		t.Fatalf("setup: Commits = %d, want 2", got)
+	}
+	r.gitBreach.CommitsTable.Select(0, 0) // "second", the newest
+
+	r.openGitBreachDiffAgainstRef()
+
+	if r.activePage != pickerPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, pickerPage)
+	}
+	if got := r.picker.GetItemCount(); got != want {
+		t.Errorf("picker item count = %d, want %d (2 branches + 1 tag + 1 other commit)", got, want)
+	}
+	for i := 0; i < r.picker.GetItemCount(); i++ {
+		main, _ := r.picker.GetItemText(i)
+		if strings.HasPrefix(main, "second") {
+			t.Errorf("picker item %d = %q, the selected commit itself should be excluded", i, main)
+		}
+	}
+}
+
+// TestOpenGitBreachDiffAgainstRefPickingARefShowsTheDiffAndClosesThePicker
+// pins the synchronous half of the whole action: picking a ref closes
+// the picker, returns to the dashboard, and switches
+// gitBreach.DiffScrollKey to its own "R:" prefix before the actual
+// git diff fetch (async — see startGitBreachRefDiff's own doc
+// comment) has any chance to land.
+func TestOpenGitBreachDiffAgainstRefPickingARefShowsTheDiffAndClosesThePicker(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "first")
+	runGitBreach(t, dir, "tag", "v1")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.gitBreach.CommitsTable.Select(0, 0)
+	c, ok := r.gitBreachCommitAt(0)
+	if !ok {
+		t.Fatal("setup: no commit at row 0")
+	}
+
+	r.openGitBreachDiffAgainstRef()
+	// Item 0 is "main" (branches before tags before commits — see
+	// openGitBreachDiffAgainstRef's own build order); item 1 is "v1",
+	// the only tag, with no other commit in this fixture to add a
+	// third item.
+	r.picker.SetCurrentItem(1)
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.activePage != gitBreachPage {
+		t.Errorf("activePage = %q, want back to %q once a ref is picked", r.activePage, gitBreachPage)
+	}
+	if want := "R:v1:" + c.Hash; r.gitBreach.DiffScrollKey != want {
+		t.Errorf("DiffScrollKey = %q, want %q", r.gitBreach.DiffScrollKey, want)
+	}
+}
+
 // TestOpenGitBreachCreateTagOnAnAlreadyExistingNameKeepsTheDashboardOpen
 // is the regression guard for a real, live-caught bug: git.CreateTag's
 // own refusal went through showError, whose own showOverlay calls

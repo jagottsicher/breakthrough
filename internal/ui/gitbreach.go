@@ -950,6 +950,115 @@ func (r *Root) startGitBreachCommitDiff(row int) {
 	})
 }
 
+// openGitBreachDiffAgainstRef is "d" on the Commits table — opens
+// r.picker listing every ref already on screen (every local branch,
+// every tag, every loaded commit — see feature_ideas.txt's own #21
+// item 5 for the "beliebige zwei Commits/Branches/Refs" item this
+// implements), and diffs the row under the cursor against whichever
+// one gets picked. git itself can resolve plenty more refs than these
+// three boxes list (a remote-tracking ref, HEAD~3), but a second git
+// call just to enumerate them isn't worth it when every ref a user
+// would actually reach for here is already loaded and on screen.
+func (r *Root) openGitBreachDiffAgainstRef() {
+	row, _ := r.gitBreach.CommitsTable.GetSelection()
+	c, ok := r.gitBreachCommitAt(row)
+	if !ok {
+		return
+	}
+
+	r.picker.Clear()
+	for _, b := range r.gitBreach.Branches {
+		name := b.Name
+		r.picker.AddItem(name, "", 0, func() {
+			r.hideOverlay()
+			r.startGitBreachRefDiff(c, name)
+		})
+	}
+	for _, tg := range r.gitBreach.Tags {
+		name := tg.Name
+		r.picker.AddItem(name, "", 0, func() {
+			r.hideOverlay()
+			r.startGitBreachRefDiff(c, name)
+		})
+	}
+	for _, other := range r.gitBreach.Commits {
+		if other.Hash == c.Hash {
+			continue // diffing a commit against itself is never useful
+		}
+		hash, label := other.Hash, other.Short+" "+other.Subject
+		r.picker.AddItem(label, "", 0, func() {
+			r.hideOverlay()
+			r.startGitBreachRefDiff(c, hash)
+		})
+	}
+	r.picker.SetDoneFunc(func() { r.hideOverlay() })
+
+	width, _ := listSize(r.picker)
+	height := pickerHeight
+	if n := r.picker.GetItemCount(); n < height {
+		height = n
+	}
+	x, y := r.centeredOnScreen(width, height)
+	x, y, width, height = r.clampToPanel(x, y, width, height)
+	r.picker.SetRect(x, y, width, height)
+	r.picker.SetCurrentItem(0)
+
+	r.pushOverlay(pickerPage, r.picker, nil)
+}
+
+// startGitBreachRefDiff fetches ref's own diff against c (git diff
+// ref c.Hash — see git.DiffRefs' own doc comment on argument order
+// and what a reverse diff would mean here) and shows it in Main, same
+// async shape as startGitBreachCommitDiff minus the debounce: a
+// deliberate action (picked from openGitBreachDiffAgainstRef's own
+// overlay), not cursor-movement noise. Its own "R:" scroll key keeps
+// a ref-diff's remembered position separate from that commit's own
+// ordinary diff. Moving the cursor afterward hands Main straight back
+// to the ordinary commit diff via Commits' own
+// SetSelectionChangedFunc — a one-shot look, the same convention
+// startGitBreachBlame already establishes for the Files box.
+func (r *Root) startGitBreachRefDiff(c git.LogEntry, ref string) {
+	r.cancelGitBreachDiff()
+	key := "R:" + ref + ":" + c.Hash
+	r.gitBreachActivateDiffKey(key)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r.gitBreach.DiffCancel = cancel
+	root := r.gitBreach.Root
+
+	r.safeGo("Git breach ref diff", r.cancelGitBreachDiff, func() {
+		fetchCtx, fetchCancel := context.WithTimeout(ctx, gitBreachFetchTimeout)
+		text, err := git.DiffRefs(fetchCtx, root, ref, c.Hash)
+		fetchCancel()
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil && text == "" {
+			text = fmt.Sprintf("%s..%s: no diff to show.", ref, c.Short)
+		}
+
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			curRow, _ := r.gitBreach.CommitsTable.GetSelection()
+			curC, ok := r.gitBreachCommitAt(curRow)
+			if !ok || curC.Hash != c.Hash {
+				return // the cursor moved to a different row before this landed
+			}
+			if err != nil {
+				// showTransientErrorOverOverlay, not showError — same
+				// reasoning as openGitBreachCreateTag's own doc
+				// comment: Git Breach is itself an overlay, and
+				// showError's own showOverlay would close it first.
+				r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+				return
+			}
+			r.gitBreachSetDiffText(key, gitBreachColorizeDiff(text, "", r.theme), text)
+		})
+	})
+}
+
 // gitBreachStashAt returns gitBreach.Stash[row] — mirrors
 // gitBreachCommitAt exactly (no non-selectable header rows in the
 // Stash table either).
