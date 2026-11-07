@@ -756,12 +756,12 @@ func detailsMetadataErrorMessage(err error) string {
 }
 
 // fetchDetailsMetadata is "M"/the metadata hint's click zone's own
-// action. Images, PDF, DOCX/XLSX/PPTX, EPUB, and the old binary Office
-// formats (DOC/XLS/PPT — see filemeta.IsOLE2Path) today (see
-// filemeta.ForPath's own doc comment on how it picks an extractor, and
-// renderDetailsSidebar's own gate on when this section is shown at
-// all); video-container metadata (duration/codec/resolution) is the
-// one remaining piece of feature_ideas.txt #26 not built yet.
+// action. Images, PDF, DOCX/XLSX/PPTX, EPUB, the old binary Office
+// formats (DOC/XLS/PPT — see filemeta.IsOLE2Path), and video
+// containers (duration/codec/resolution, via ffprobe — see
+// filemeta.ForVideo) are all covered today (see filemeta.ForPath's own
+// doc comment on how it picks an extractor, and renderDetailsSidebar's
+// own gate on when this section is shown at all).
 //
 // Mirrors computeDetailsHashes' own async shape (safeGo, a cancellable
 // context, QueueUpdateDraw, re-checking the target hasn't changed before

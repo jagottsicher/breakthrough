@@ -2113,8 +2113,8 @@
     },
     {
       "path": "internal/ui/detailssidebar.go",
-      "size": 82174,
-      "sha256": "cff723ec88e5c41ac06283d4069d0a8e304fc45a1b89dde106ef0b23fd7af9d3"
+      "size": 82155,
+      "sha256": "511668c574a2dfe44a45739698f2c8979742a312ea7a9d8737488df5132fe374"
     },
     {
       "path": "internal/ui/detailssidebar_test.go",
@@ -2303,8 +2303,8 @@
     },
     {
       "path": "internal/ui/keymap.go",
-      "size": 56617,
-      "sha256": "17b96a1fe1301ffd09b781386cd75696b6a90a873699cb65938be8ab826b5b9a"
+      "size": 56592,
+      "sha256": "ce8aa8f20354325f038837bf7ab1f0a7340dfe4643419c16da60c6cb5b2c6032"
     },
     {
       "path": "internal/ui/keymap_test.go",
@@ -65288,5 +65288,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "7677268ff16d7572b088906df01f85a539ac988e376364309c0c2e9ace602d8e"
+  "merkle_root": "252e319fe863825a782c94a2bd11b08843e3ad133c4071f4fc66b0293c806f61"
 }
