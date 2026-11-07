@@ -574,7 +574,9 @@ Lightning Network ⚡️ using the sponsor button above.
   open beside it): "Label" (set/clear one of 9 colors — see `zl` above
   — each shown as a small colored swatch next to its name), "More
   actions" (New file, New dir, `tail -f`, chown,
-  chmod, Sed Replace, Batch rename, Undo last rename, Compare, Rsync,
+  chmod, Sed Replace, Batch rename (itself a `▸` submenu — "Rename..."
+  for the full pipeline, "Prefix..." for the quick action above),
+  Undo last rename, Compare, Rsync,
   Compress…, Extract/Extract-delete-original (the latter two only for a
   recognized archive), Remove, Paste following symlinks), "Selection"
   (Select all/Deselect all/glob-pattern Select +/-), and "Tabs & Split"
@@ -852,8 +854,12 @@ Lightning Network ⚡️ using the sponsor button above.
   loaded back later — plain JSON files under
   `~/.config/breakthrough/rename-presets/`. Nothing is written until
   Rename is confirmed, and "Undo last rename" reverses the whole batch
-  afterwards. See [docs/user-guide.md](docs/user-guide.md#batch-rename)
-  for the step reference.
+  afterwards. The context menu's "Batch rename" is itself a submenu:
+  "Rename..." opens the full pipeline above, "Prefix..." asks for just
+  a prefix and drops straight into the same engine's Template step with
+  it already filled in, landing on the live preview for a final look.
+  See [docs/user-guide.md](docs/user-guide.md#batch-rename) for the
+  step reference.
 - Compare (`C`, or the context menu): "are these two things the same,
   and if not, what's different" — for two files (mark them, or use
   split view with the cursor on one in each pane) or two whole

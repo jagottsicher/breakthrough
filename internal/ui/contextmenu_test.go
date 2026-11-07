@@ -246,6 +246,33 @@ func TestContextMenuSubmenuShowsItsOwnEntries(t *testing.T) {
 // TestContextMenuBackRowReturnsToTopLevel pins that selecting "◂ Back"
 // (the same as clicking it) returns to the top-level list, not just
 // closes the submenu view some other way.
+// TestContextMenuBatchRenameIsASubmenuWithRenameAndPrefix pins that
+// "Batch rename" (inside "More actions") drills into its own two
+// entries instead of running the full wizard directly — the quick
+// action lives next to it rather than widening "More actions" itself
+// with a second top-level row (see contextmenu.go's own doc comment on
+// why this menu stays slimmer rather than growing new rows).
+func TestContextMenuBatchRenameIsASubmenuWithRenameAndPrefix(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRow(t, r, 2) // apple.txt
+
+	selectMenuItem(t, r, menuGroupGlyph+"More actions")
+	selectMenuItem(t, r, menuGroupGlyph+"Batch rename")
+
+	want := []string{menuBackGlyph, "Rename...", "Prefix..."}
+	if got := r.menu.GetItemCount(); got != len(want) {
+		t.Fatalf("submenu has %d items, want %d: %v", got, len(want), want)
+	}
+	for i, label := range want {
+		if main, _ := r.menu.GetItemText(i); main != label {
+			t.Errorf("item %d = %q, want %q", i, main, label)
+		}
+	}
+}
+
 func TestContextMenuBackRowReturnsToTopLevel(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)

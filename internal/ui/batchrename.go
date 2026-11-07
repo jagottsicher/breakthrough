@@ -415,26 +415,68 @@ func (r *Root) expandLoneDirectoryTarget(targets []string) ([]string, error) {
 // having to re-enter a pipeline that was actually meant for the files
 // it was built against.
 func (r *Root) openBatchRename() {
+	targets, ok := r.batchRenameTargets()
+	if !ok {
+		return
+	}
+	r.openBatchRenameWithRules(targets, batchrename.Rules{})
+}
+
+// openBatchRenamePrefix is the context menu's "Batch rename ▸ Prefix…"
+// — a one-field shortcut into the exact same wizard and engine
+// openBatchRename opens, not a second rename path: it just starts the
+// Template step pre-filled with "<prefix>{name}" instead of making the
+// user walk Left/Down×3/Right/Enter to reach that step by hand (13
+// keystrokes, live-measured in tmux, to prefix a selection by hand —
+// see feature_ideas.txt's own Ablaufplan entry). A prefix that happens
+// to contain a literal "{token}" expands exactly as it would if typed
+// directly into the Template field — the same behavior Template
+// already has, not a new quirk this adds.
+func (r *Root) openBatchRenamePrefix() {
+	targets, ok := r.batchRenameTargets()
+	if !ok {
+		return
+	}
+	r.openPrompt("Prefix:", "", func(prefix string) {
+		r.openBatchRenameWithRules(targets, batchrename.Rules{Template: prefix + "{name}"})
+	})
+}
+
+// batchRenameTargets is openBatchRename/openBatchRenamePrefix's shared
+// guard-and-target resolution — identical for both, since the quick
+// action only shortens what happens *inside* the wizard, never which
+// files it opens for.
+func (r *Root) batchRenameTargets() ([]string, bool) {
 	if r.panel.inArchiveView() {
 		r.showError(errNotSupportedInArchive)
-		return
+		return nil, false
 	}
 	if r.panel.isRemote() {
 		r.showError(errNotSupportedRemote)
-		return
+		return nil, false
 	}
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
-		return
+		return nil, false
 	}
 	targets, err := r.expandLoneDirectoryTarget(targets)
 	if err != nil {
 		r.showError(err)
-		return
+		return nil, false
 	}
+	return targets, true
+}
+
+// openBatchRenameWithRules is openBatchRename's own setup, shared with
+// openBatchRenamePrefix — same screen, same engine, just a different
+// starting point for Rules. A non-empty starting Template (the quick-
+// action path) lands keyboard focus on the live preview instead of the
+// fields table, so the result of the one field already filled in is
+// the first thing seen, rather than the field that produced it.
+func (r *Root) openBatchRenameWithRules(targets []string, rules batchrename.Rules) {
 	r.batch.Targets = targets
 	r.batch.Excluded = map[string]bool{}
-	r.batch.Rules = batchrename.Rules{}
+	r.batch.Rules = rules
 	r.batch.Step = 0
 	if r.batch.PresetDir == "" {
 		if dir := config.UserDir(); dir != "" {
@@ -447,13 +489,19 @@ func (r *Root) openBatchRename() {
 	r.batch.PreviewTable.Select(1, 0) // top of this selection, not wherever the last one's cursor was left
 	r.renderBatchRenamePreview()
 
+	focus := r.batch.FieldsTable
+	if rules.Template != "" {
+		focus = r.batch.PreviewTable
+	}
+
 	// The whole layout is the overlay, not just the fields table — the
 	// same fix captureOutsideClick's own doc comment on openOptions
 	// documents: registering a narrower widget makes a click on the
 	// steps list, the preview, or the buttons count as "outside" and
 	// close the screen.
 	//
-	// Restores to the fields table, not the steps list: this same
+	// Restores to the fields table (or, from the Prefix quick action,
+	// the preview — see focus above), not the steps list: this same
 	// callback also fires when a *nested* overlay closes (the typed-
 	// value editor — see editBatchRenameField), and every field lives
 	// on the fields table, never on the steps list — a real bug, caught
@@ -461,7 +509,7 @@ func (r *Root) openBatchRename() {
 	// back on the steps list, so the very next Down arrow moved between
 	// steps instead of between that step's own fields.
 	r.showOverlayWithRestore(batchRenamePage, r.batch.Layout, func() {
-		r.app.SetFocus(r.batch.FieldsTable)
+		r.app.SetFocus(focus)
 	})
 }
 
