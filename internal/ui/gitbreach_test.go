@@ -475,6 +475,102 @@ func gitBreachBranchRow(r *Root, name string) (int, bool) {
 	return 0, false
 }
 
+// gitBreachTagRow mirrors gitBreachBranchRow exactly, for the Tags
+// sub-tab sharing the same BranchesTable widget.
+func gitBreachTagRow(r *Root, name string) (int, bool) {
+	for row := 0; row < r.gitBreach.BranchesTable.GetRowCount(); row++ {
+		if tg, ok := r.gitBreachTagAt(row); ok && tg.Name == name {
+			return row, true
+		}
+	}
+	return 0, false
+}
+
+// TestToggleGitBreachBranchesTabSwitchesBetweenBranchesAndTags pins
+// the sub-tab switch itself: Left/Right on the Branches table flips
+// gitBreach.BranchesShowTags and re-renders the same table with the
+// other kind's rows, landing on its first row rather than keeping a
+// selection index that belonged to the other kind.
+func TestToggleGitBreachBranchesTabSwitchesBetweenBranchesAndTags(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	runGitBreach(t, dir, "tag", "v1")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if r.gitBreach.BranchesShowTags {
+		t.Fatal("setup: BranchesShowTags = true, want a fresh \"jg\" to start on Branches")
+	}
+	if _, ok := r.gitBreachBranchAt(0); !ok {
+		t.Fatal("setup: row 0 isn't a branch before switching tabs")
+	}
+
+	r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+
+	if !r.gitBreach.BranchesShowTags {
+		t.Fatal("Right did not switch to the Tags sub-tab")
+	}
+	if _, ok := gitBreachTagRow(r, "v1"); !ok {
+		t.Error("v1 not found in the table after switching to Tags")
+	}
+
+	r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
+
+	if r.gitBreach.BranchesShowTags {
+		t.Error("Left did not switch back to the Branches sub-tab")
+	}
+}
+
+// TestOpenGitBreachCreateTagThenOpenGitBreachDeleteTagRoundTrip mirrors
+// TestOpenGitBreachDeleteBranchConfirmsThenDeletes' own shape for the
+// Tags sub-tab: create goes through the shared prompt overlay, delete
+// through the shared confirm overlay, same as every other irreversible
+// action in this dashboard.
+func TestOpenGitBreachCreateTagThenOpenGitBreachDeleteTagRoundTrip(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.gitBreach.BranchesShowTags = true
+	r.renderGitBreachBranches()
+
+	r.openGitBreachCreateTag()
+	r.prompt.SetText("v1")
+	r.finishPrompt(tcell.KeyEnter)
+
+	row, ok := gitBreachTagRow(r, "v1")
+	if !ok {
+		t.Fatal("v1 not found in the Tags table after creating it")
+	}
+	r.gitBreach.BranchesTable.Select(row, 0)
+
+	r.openGitBreachDeleteTag()
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the confirm dialog before deleting a tag", r.activePage)
+	}
+	if _, ok := gitBreachTagRow(r, "v1"); !ok {
+		t.Error("v1 already gone before confirming, want the delete to not have run yet")
+	}
+
+	r.pendingConfirm()
+
+	if _, ok := gitBreachTagRow(r, "v1"); ok {
+		t.Error("v1 still present after confirming, want the delete to have run")
+	}
+}
+
 func TestRenderGitBreachBranchesListsLocalBranchesWithCurrentMarked(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
