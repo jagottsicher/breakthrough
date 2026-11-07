@@ -845,6 +845,15 @@ var helpText = strings.TrimLeft(`
   one after another; a gap between two hunks of the same file shows as
   a muted "⋮" row on both sides rather than disappearing silently.
 
+  "s" while Main has focus stages whichever hunk sits at the top of
+  the visible area — a byte-exact patch for just that hunk, built
+  from the already-fetched diff text. Only meaningful for Files' own
+  unstaged diff (not a commit/stash diff, not a Staged row — there's
+  nothing to stage those *into*); does nothing anywhere else. No
+  separate cursor inside the diff: scroll the hunk you want to the
+  top, then press "s". Line-level staging isn't part of this yet —
+  a whole hunk at a time, see the key list below.
+
     Tab/     Switch keyboard focus forwards/backwards between Files,
     Shift-   Branches, Commits and Stash (or, from inside Main's own
     Tab      diff, continue the same cycle from whichever box is still
@@ -923,6 +932,13 @@ var helpText = strings.TrimLeft(`
     →        (Main, side-by-side view only) Scroll the pair right
     v        (Main only) Toggle Main's own diff between the unified
              pager and the side-by-side view
+    s        (Main only, Files' own unstaged diff only) Stage the
+             hunk currently at the top of Main's own visible area —
+             a byte-exact patch for just that hunk. No separate
+             cursor inside the diff: scroll first, then press "s".
+             Does nothing on a commit/stash diff, a Staged row, or
+             anywhere a cursor-moved reload has just replaced what
+             was showing
     c        Commit whatever is currently staged, after typing a
              message (does nothing with nothing staged) — works no
              matter which box currently has focus, since committing

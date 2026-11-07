@@ -1287,7 +1287,9 @@ Lightning Network ⚡️ using the sponsor button above.
   diff — and can take real keyboard focus itself (Right/Enter/Space to
   jump in, arrow keys or PgUp/PgDn to scroll, Left/Enter/Space/Esc to
   step back out), remembering each file/commit/stash entry's own
-  scroll position for the whole session. "c" commits whatever is
+  scroll position for the whole session. "s" (while Files' own
+  unstaged diff is showing) stages whichever hunk is at the top of
+  the visible area. "c" commits whatever is
   currently staged. Local working trees only — there is no
   command-execution channel to run git against a remote session.
 - AI Consigliere (`gC`): a non-modal chat sidebar reachable from the

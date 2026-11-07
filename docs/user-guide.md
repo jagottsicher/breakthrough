@@ -1351,6 +1351,13 @@ file, or a Commits/Stash row's own full diff across every file it
 touched. `v` (with Main focused) toggles between a unified pager and a
 side-by-side pane pair.
 
+`s` (with Main focused, while Files' own unstaged diff is showing)
+stages whichever hunk is currently at the top of the visible area —
+a byte-exact patch for just that hunk, nothing else in the file.
+Scroll so the hunk you want is at the top, then press `s`; there's no
+separate cursor inside the diff to move. Line-level staging isn't
+part of this yet — a whole hunk at a time.
+
 `b` (Files) shows the selected file's own blame instead — each line
 prefixed with the short hash, date and author of the commit that last
 touched it (colored the same way the Commits box colors its own rows),
@@ -1379,6 +1386,7 @@ of this yet.
 | `Enter` | (Branches sub-tab) Check out the branch under the cursor, confirming first if the working tree isn't clean |
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
 | `d` | (Commits) Diff the commit under the cursor against a picked ref — any local branch, tag, or other loaded commit |
+| `s` | (Main, Files' own unstaged diff only) Stage the hunk at the top of the visible area |
 | `d` | (Branches sub-tab) Delete the branch under the cursor, after confirming — refuses on an unmerged branch the same way `git` itself does |
 | `a` | (Tags sub-tab) Create a new tag at `HEAD`, after typing a name |
 | `d` | (Tags sub-tab) Delete the tag under the cursor, after confirming |
