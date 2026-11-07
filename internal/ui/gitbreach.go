@@ -965,30 +965,46 @@ func (r *Root) openGitBreachDiffAgainstRef() {
 	if !ok {
 		return
 	}
+	r.openGitBreachRefPicker(c.Hash, func(ref string) {
+		r.startGitBreachRefDiff(c, ref)
+	})
+}
 
+// openGitBreachRefPicker opens r.picker listing every ref already on
+// screen (every local branch, every tag, every loaded commit except
+// excludeHash), calling onPick with whichever one gets chosen —
+// shared by openGitBreachDiffAgainstRef (see feature_ideas.txt's own
+// #21 item 5) and openGitBreachBisectStart (item 7), both of which
+// need "pick any ref git itself can resolve" and differ only in what
+// they do with the result. git itself can resolve plenty more refs
+// than these three boxes list (a remote-tracking ref, HEAD~3), but a
+// second git call just to enumerate them isn't worth it when every
+// ref a user would actually reach for here is already loaded and on
+// screen.
+func (r *Root) openGitBreachRefPicker(excludeHash string, onPick func(ref string)) {
 	r.picker.Clear()
 	for _, b := range r.gitBreach.Branches {
 		name := b.Name
 		r.picker.AddItem(name, "", 0, func() {
 			r.hideOverlay()
-			r.startGitBreachRefDiff(c, name)
+			onPick(name)
 		})
 	}
 	for _, tg := range r.gitBreach.Tags {
 		name := tg.Name
 		r.picker.AddItem(name, "", 0, func() {
 			r.hideOverlay()
-			r.startGitBreachRefDiff(c, name)
+			onPick(name)
 		})
 	}
 	for _, other := range r.gitBreach.Commits {
-		if other.Hash == c.Hash {
-			continue // diffing a commit against itself is never useful
+		if other.Hash == excludeHash {
+			continue // picking a commit against itself is never useful
 		}
 		hash, label := other.Hash, other.Short+" "+other.Subject
 		r.picker.AddItem(label, "", 0, func() {
 			r.hideOverlay()
-			r.startGitBreachRefDiff(c, hash)
+			onPick(hash)
 		})
 	}
 	r.picker.SetDoneFunc(func() { r.hideOverlay() })
