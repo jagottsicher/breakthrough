@@ -610,6 +610,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 	case r.gitBreach.FilesTable.HasFocus():
 		entries = append(entries,
 			hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }),
+			hintKey("b", "blame", func(r *Root) { r.startGitBreachBlame() }),
 			hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 		)
 	case r.gitBreach.BranchesTable.HasFocus():
@@ -912,7 +913,8 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 }
 
 // captureGitBreachFilesTableKey: Tab switches to the next box, Space
-// toggles stage/unstage, "c" commits, "r" reloads, Escape closes — the
+// toggles stage/unstage, "b" shows blame, "c" commits, "r" reloads,
+// Escape closes — the
 // same per-table InputCapture shape captureLogAuditSelectionTableKey
 // already establishes elsewhere in this package. Tab is intercepted
 // explicitly rather than left to bubble: tview's own Table.InputHandler
@@ -951,6 +953,9 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 			return nil
 		case ' ':
 			r.toggleGitBreachStage()
+			return nil
+		case 'b':
+			r.startGitBreachBlame()
 			return nil
 		case 'c':
 			r.openGitBreachCommitPrompt()

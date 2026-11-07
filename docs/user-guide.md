@@ -1351,10 +1351,21 @@ file, or a Commits/Stash row's own full diff across every file it
 touched. `v` (with Main focused) toggles between a unified pager and a
 side-by-side pane pair.
 
+`b` (Files) shows the selected file's own blame instead — each line
+prefixed with the short hash, date and author of the commit that last
+touched it (colored the same way the Commits box colors its own rows),
+an uncommitted change attributed to git's own "Not Committed Yet"
+placeholder. A one-shot look, not a persistent mode: moving the cursor
+to another row goes straight back to the ordinary diff. Not available
+on an unresolved conflict (no single history to attribute lines to
+without resolving it first) or an untracked file (never added to the
+index, so there's no history yet).
+
 | Key | Action |
 |---|---|
 | `Tab` / `Shift+Tab` | Switch focus between Files, Branches, Commits and Stash |
 | `Space` | (Files) Stage/unstage the row under the cursor |
+| `b` | (Files) Show the selected file's own blame in Main |
 | `Right` | (Files/Commits/Stash) Jump into Main's own diff |
 | `Enter` | (Branches) Check out the branch under the cursor, confirming first if the working tree isn't clean |
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
