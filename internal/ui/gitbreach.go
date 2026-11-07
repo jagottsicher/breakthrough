@@ -503,6 +503,12 @@ func (r *Root) toggleGitBreachBranchesTab() {
 	r.gitBreach.BranchesShowTags = !r.gitBreach.BranchesShowTags
 	r.renderGitBreachBranches()
 	r.renderGitBreachBranchesHeader()
+	// Focus itself never changes here (still the Branches table before
+	// and after), so refreshGitBreachHint's own usual trigger (a
+	// FocusFunc) never fires on its own — has to be called directly,
+	// or the hint bar would keep advertising Enter/checkout and "d
+	// delete branch" after switching to Tags, a real, live-caught bug.
+	r.refreshGitBreachHint()
 }
 
 // openGitBreachCreateTag prompts for a name and creates a new,
@@ -510,16 +516,41 @@ func (r *Root) toggleGitBreachBranchesTab() {
 // why never annotated. Only reachable while the Tags sub-tab is
 // showing (see captureGitBreachBranchesTableKey); nothing here needs
 // a row under the cursor, unlike checkout/delete.
+//
+// Built directly on r.pushOverlay rather than the shared openPrompt
+// helper — same reasoning openGitBreachCommitPrompt's own identical
+// shape already has: openPrompt's own showOverlay calls
+// closeAllOverlays first, which would close Git Breach itself (also
+// an overlay) before ever showing the prompt on top of it, a real,
+// live-caught bug (Enter after typing a name closed the whole
+// dashboard instead of creating the tag).
 func (r *Root) openGitBreachCreateTag() {
-	r.openPrompt("New tag name:", "", func(name string) {
+	r.prompt.SetLabel("New tag name ")
+	r.prompt.SetText("")
+	r.promptSubmit = func(name string) {
+		if name == "" {
+			return
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 		defer cancel()
 		if err := git.CreateTag(ctx, r.gitBreach.Root, name, "HEAD"); err != nil {
-			r.showError(fmt.Errorf("git breach: %w", err))
+			// showTransientErrorOverOverlay, not showError: Git Breach
+			// is itself an overlay, and showError's own showOverlay
+			// closes whatever's already open before showing anything
+			// — a real, live-caught bug (an already-existing tag name
+			// closed the whole dashboard instead of just reporting the
+			// refusal).
+			r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
 			return
 		}
 		r.reloadGitBreach()
-	})
+	}
+
+	const width, height = 56, 1
+	_, _, screenWidth, screenHeight := r.GetRect()
+	x, y, w, h := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
+	r.prompt.SetRect(x, y, w, h)
+	r.pushOverlay(promptPage, r.prompt, nil)
 }
 
 // openGitBreachDeleteTag confirms, then deletes the tag under the
@@ -542,12 +573,14 @@ func (r *Root) openGitBreachDeleteTag() {
 
 // deleteGitBreachTag runs the actual delete and reloads — the same
 // "re-run the real read, don't hand-patch gitBreach.Tags" contract
-// deleteGitBreachBranch already follows for its own box.
+// deleteGitBreachBranch already follows for its own box. Same
+// showTransientErrorOverOverlay reasoning as openGitBreachCreateTag's
+// own doc comment on its own identical error path.
 func (r *Root) deleteGitBreachTag(name string) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
 	if err := git.DeleteTag(ctx, r.gitBreach.Root, name); err != nil {
-		r.showError(fmt.Errorf("git breach: %w", err))
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
 		return
 	}
 	r.reloadGitBreach()

@@ -527,6 +527,40 @@ func TestToggleGitBreachBranchesTabSwitchesBetweenBranchesAndTags(t *testing.T) 
 	}
 }
 
+// TestToggleGitBreachBranchesTabRefreshesTheHintBar is the regression
+// guard for a real, live-caught bug: focus never actually moves when
+// switching sub-tabs (still the same BranchesTable before and after),
+// so refreshGitBreachHint's usual trigger (a FocusFunc) never fired on
+// its own, leaving "Enter checkout"/"d delete branch" advertised while
+// the Tags sub-tab — with neither action — was already showing.
+func TestToggleGitBreachBranchesTabRefreshesTheHintBar(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreach.BranchesTable)
+
+	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") {
+		t.Fatal("setup: Enter/checkout not advertised on the Branches sub-tab")
+	}
+
+	r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+
+	hint := r.gitBreach.Hint.GetText(true)
+	if strings.Contains(hint, "checkout") || strings.Contains(hint, "delete branch") {
+		t.Errorf("hint bar = %q, still advertises Branches-only actions after switching to Tags", hint)
+	}
+	if !strings.Contains(hint, "new tag") || !strings.Contains(hint, "delete tag") {
+		t.Errorf("hint bar = %q, want it to advertise the Tags sub-tab's own actions", hint)
+	}
+}
+
 // TestOpenGitBreachCreateTagThenOpenGitBreachDeleteTagRoundTrip mirrors
 // TestOpenGitBreachDeleteBranchConfirmsThenDeletes' own shape for the
 // Tags sub-tab: create goes through the shared prompt overlay, delete
@@ -568,6 +602,42 @@ func TestOpenGitBreachCreateTagThenOpenGitBreachDeleteTagRoundTrip(t *testing.T)
 
 	if _, ok := gitBreachTagRow(r, "v1"); ok {
 		t.Error("v1 still present after confirming, want the delete to have run")
+	}
+}
+
+// TestOpenGitBreachCreateTagOnAnAlreadyExistingNameKeepsTheDashboardOpen
+// is the regression guard for a real, live-caught bug: git.CreateTag's
+// own refusal went through showError, whose own showOverlay calls
+// closeAllOverlays first — closing Git Breach itself (also an overlay)
+// before ever showing the refusal, so the whole dashboard vanished
+// instead of just reporting it. Fixed via
+// showTransientErrorOverOverlay (see openGitBreachCreateTag's own doc
+// comment); this pins the dashboard staying in the overlay stack,
+// underneath the error, rather than being closed.
+func TestOpenGitBreachCreateTagOnAnAlreadyExistingNameKeepsTheDashboardOpen(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	runGitBreach(t, dir, "tag", "v1")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.gitBreach.BranchesShowTags = true
+	r.renderGitBreachBranches()
+
+	r.openGitBreachCreateTag()
+	r.prompt.SetText("v1")
+	r.finishPrompt(tcell.KeyEnter)
+
+	if len(r.overlayStack) < 2 {
+		t.Fatalf("overlayStack = %+v, want Git Breach still open underneath the error", r.overlayStack)
+	}
+	if r.overlayStack[0].page != gitBreachPage {
+		t.Errorf("overlayStack[0].page = %q, want %q (the dashboard, not closed)", r.overlayStack[0].page, gitBreachPage)
 	}
 }
 
