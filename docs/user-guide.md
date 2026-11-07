@@ -1341,7 +1341,7 @@ list.
 | Status | Branch, ahead/behind, a one-line summary |
 | Files | Staged/unstaged/untracked changes (Conflicts first, if any), real syntax coloring on every change |
 | Branches | Every local branch, the current one marked — `Left`/`Right` switch this box to its Tags sub-tab and back (see below) |
-| Commits | The most recent commits, newest first, each colored by its own author, with a lane/branch graph; loads 200 at a time, fetching 200 more automatically once you reach the last loaded row — `d` diffs the selected commit against a picked branch, tag, or other loaded commit |
+| Commits | The most recent commits, newest first, each colored by its own author, with a lane/branch graph; loads 200 at a time, fetching 200 more automatically once you reach the last loaded row — `d` diffs the selected commit against a picked branch, tag, or other loaded commit; `B` starts a bisect with the selected commit as "good" |
 | Stash | Every stashed change, newest first |
 
 Main, on the right, shows the diff of whichever box currently has
@@ -1357,6 +1357,15 @@ a byte-exact patch for just that hunk, nothing else in the file.
 Scroll so the hunk you want is at the top, then press `s`; there's no
 separate cursor inside the diff to move. Line-level staging isn't
 part of this yet — a whole hunk at a time.
+
+`B` (Commits) starts a `git bisect` with the commit under the cursor
+as "good" — pick "bad" from the same ref picker `d` opens (any local
+branch, tag, or other loaded commit). Once running, `G`/`X` mark the
+current step good/bad and `E` ends it; git's own real output (the
+next revision to test, or "`<sha>` is the first bad commit") shows in
+Main. Checking out a different commit changes files on disk, so both
+the dashboard and the active panel reload after every step. `skip`
+isn't wired to a key yet.
 
 `b` (Files) shows the selected file's own blame instead — each line
 prefixed with the short hash, date and author of the commit that last
@@ -1387,6 +1396,9 @@ of this yet.
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
 | `d` | (Commits) Diff the commit under the cursor against a picked ref — any local branch, tag, or other loaded commit |
 | `s` | (Main, Files' own unstaged diff only) Stage the hunk at the top of the visible area |
+| `B` | (Commits) Start a bisect with the selected commit as "good", picking "bad" from the ref picker |
+| `G` / `X` | (Commits, while bisecting) Mark the current step good / bad |
+| `E` | (Commits, while bisecting) End the bisect |
 | `d` | (Branches sub-tab) Delete the branch under the cursor, after confirming — refuses on an unmerged branch the same way `git` itself does |
 | `a` | (Tags sub-tab) Create a new tag at `HEAD`, after typing a name |
 | `d` | (Tags sub-tab) Delete the tag under the cursor, after confirming |
