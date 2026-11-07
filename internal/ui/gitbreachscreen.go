@@ -1867,11 +1867,8 @@ func gitBreachRowColor(gr gitBreachRow, theme config.ResolvedTheme) tcell.Color 
 // Line *classification* (file header / hunk header / added / removed /
 // context) is still this function's own hand-rolled "+"/"-"/"@@"
 // prefix check, not chroma's — see the "Deliberately hand-rolled"
-// paragraph below, unchanged from before. What changed, per the user's
-// own explicit follow-up request after trying real syntax highlighting
-// on untracked files (see startGitBreachDiff): an added/removed line's
-// own *content* is no longer painted one single solid green/red
-// foreground. Instead, its whole background tints
+// paragraph below. An added/removed line's own content isn't painted
+// one single solid green/red foreground: its whole background tints
 // (gitBreachDiffAddedBackground/gitBreachDiffRemovedBackground — their
 // own doc comment explains the color choice) and its content is real,
 // per-language syntax highlighting via the exact same
@@ -1884,20 +1881,20 @@ func gitBreachRowColor(gr gitBreachRow, theme config.ResolvedTheme) tcell.Color 
 // changed on them), so a diff doesn't read as "colorful lines, plain
 // white lines" alternating for no reason.
 //
-// Known, accepted limitation, not yet solved (see feature_ideas.txt's
-// own #21 for where this is tracked as a later Ausbaustufe): each
-// line's content is lexed on its own, in isolation from the rest of
-// the file. Most chroma lexers tokenize correctly this way since most
-// constructs end on the same line they start on, but one spanning
-// several lines - a block comment, a multi-line or raw string literal
-// - can come out misclassified, since the lexer never sees the lines
-// around it that would normally tell it "this is still inside a
-// comment/string". The robust fix reconstructs the full old/new file
-// content from the diff's own hunks, highlights each in full (so
-// multi-line constructs lex correctly with their real surrounding
-// context), then maps the resulting tokens back onto each diff line -
-// real but genuinely more work, deferred rather than blocking this
-// step on it.
+// Each file's own old and new content is reconstructed from the diff's
+// hunks first (oldLines/newLines below — every context/removed line
+// feeds oldLines, every context/added line feeds newLines) and lexed
+// once per file, in full, via renderReconstructedFiles — not line by
+// line the way an earlier version of this function did. A multi-line
+// construct (a block comment, a multi-line string) needs real
+// surrounding context to classify correctly; a lexer given one line
+// at a time never sees it and silently falls back to KindPlain for
+// the whole construct (verified directly against chroma's own Go
+// lexer, not assumed). Reconstructing only from the hunks actually
+// present in this diff, not the whole file from disk: every shape
+// this function already has to handle (unstaged, staged, a commit, a
+// stash entry) comes as this same diff text already, with no further
+// git call needed to get a full file body right for each one.
 //
 // "+++"/"---" (the diff's own old/new file-header lines) are checked
 // before the plain "+"/"-" cases below, which would otherwise also
@@ -1922,39 +1919,125 @@ func gitBreachRowColor(gr gitBreachRow, theme config.ResolvedTheme) tcell.Color 
 // diff text; each "diff --git a/X b/Y" header line updates which path
 // every following line is lexed against, via gitBreachDiffHeaderPath,
 // rather than lexing every file in the commit as whatever the one
-// fixed path argument says.
+// fixed path argument says. oldLines/newLines are keyed by this same
+// path, so a multi-file commit diff reconstructs — and lexes — each
+// file separately rather than concatenating unrelated files together.
 func gitBreachColorizeDiff(diff, path string, theme config.ResolvedTheme) string {
 	palette := paletteFor(theme.SurfaceBackground)
-	lines := strings.Split(diff, "\n")
-	var b strings.Builder
+	rawLines := strings.Split(diff, "\n")
+
+	// First pass: classify every raw line and, for a content line,
+	// reconstruct it into its file's own old/new content — oldIndex/
+	// newIndex below are this line's own position in that
+	// reconstruction, resolved against the second pass's rendered
+	// result once that's ready.
+	plan := make([]gitBreachDiffLinePlan, len(rawLines))
+	oldLines := map[string][]string{}
+	newLines := map[string][]string{}
 	currentPath := path
-	for i, line := range lines {
+	for i, line := range rawLines {
 		switch {
 		case strings.HasPrefix(line, "diff --git "):
 			if p, ok := gitBreachDiffHeaderPath(line); ok {
 				currentPath = p
 			}
-			b.WriteString(wrapColor(theme.MutedTextColor, tview.Escape(line)))
-		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
-			b.WriteString(wrapColor(theme.MutedTextColor, tview.Escape(line)))
+			plan[i] = gitBreachDiffLinePlan{raw: line, kind: gitBreachDiffLineHeader}
+		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"),
+			strings.HasPrefix(line, "@@"), strings.HasPrefix(line, "index "):
+			plan[i] = gitBreachDiffLinePlan{raw: line, kind: gitBreachDiffLineHeader}
 		case strings.HasPrefix(line, "+"):
-			b.WriteString(gitBreachColorizeDiffLine(line, currentPath, palette, gitBreachDiffAddedColor, gitBreachDiffAddedBackground))
+			newLines[currentPath] = append(newLines[currentPath], line[1:])
+			plan[i] = gitBreachDiffLinePlan{raw: line, kind: gitBreachDiffLineAdded, path: currentPath, newIndex: len(newLines[currentPath]) - 1}
 		case strings.HasPrefix(line, "-"):
-			b.WriteString(gitBreachColorizeDiffLine(line, currentPath, palette, theme.CriticalText, gitBreachDiffRemovedBackground))
-		case strings.HasPrefix(line, "@@"), strings.HasPrefix(line, "index "):
-			b.WriteString(wrapColor(theme.MutedTextColor, tview.Escape(line)))
+			oldLines[currentPath] = append(oldLines[currentPath], line[1:])
+			plan[i] = gitBreachDiffLinePlan{raw: line, kind: gitBreachDiffLineRemoved, path: currentPath, oldIndex: len(oldLines[currentPath]) - 1}
 		default:
-			// A context line — real file content too, so it gets the
-			// same per-language coloring as an added/removed line's own
-			// content, just with no background tint (nothing about it
-			// changed).
-			b.WriteString(renderSyntax(viewer.Highlight(currentPath, line), palette))
+			// A context line — real file content on both sides at
+			// once, so it feeds both reconstructions; either one
+			// renders identically, since nothing about it changed.
+			oldLines[currentPath] = append(oldLines[currentPath], line)
+			newLines[currentPath] = append(newLines[currentPath], line)
+			plan[i] = gitBreachDiffLinePlan{
+				raw: line, kind: gitBreachDiffLineContext, path: currentPath,
+				oldIndex: len(oldLines[currentPath]) - 1, newIndex: len(newLines[currentPath]) - 1,
+			}
 		}
-		if i < len(lines)-1 {
+	}
+
+	oldRendered := renderReconstructedFiles(oldLines, palette)
+	newRendered := renderReconstructedFiles(newLines, palette)
+
+	var b strings.Builder
+	for i, pl := range plan {
+		switch pl.kind {
+		case gitBreachDiffLineHeader:
+			b.WriteString(wrapColor(theme.MutedTextColor, tview.Escape(pl.raw)))
+		case gitBreachDiffLineAdded:
+			b.WriteString(gitBreachWrapDiffLine(pl.raw[:1], newRendered[pl.path][pl.newIndex], gitBreachDiffAddedColor, gitBreachDiffAddedBackground))
+		case gitBreachDiffLineRemoved:
+			b.WriteString(gitBreachWrapDiffLine(pl.raw[:1], oldRendered[pl.path][pl.oldIndex], theme.CriticalText, gitBreachDiffRemovedBackground))
+		default: // gitBreachDiffLineContext
+			b.WriteString(newRendered[pl.path][pl.newIndex])
+		}
+		if i < len(plan)-1 {
 			b.WriteString("\n")
 		}
 	}
 	return b.String()
+}
+
+// gitBreachDiffLineKind is one raw diff line's own role —
+// gitBreachColorizeDiff's first pass classifies every line into
+// exactly one of these before the second pass renders any of them.
+type gitBreachDiffLineKind int
+
+const (
+	gitBreachDiffLineHeader  gitBreachDiffLineKind = iota // file/hunk header — shown muted, verbatim
+	gitBreachDiffLineAdded                                // "+" line
+	gitBreachDiffLineRemoved                              // "-" line
+	gitBreachDiffLineContext                              // unchanged line
+)
+
+// gitBreachDiffLinePlan is gitBreachColorizeDiff's own first-pass
+// result for one raw diff line — enough to either emit it unchanged
+// (a header) or look up its already-highlighted content from the
+// second pass's per-file reconstruction (oldIndex/newIndex index into
+// oldRendered[path]/newRendered[path] respectively; only the one(s)
+// that apply to this line's own kind are ever actually set).
+type gitBreachDiffLinePlan struct {
+	raw      string
+	kind     gitBreachDiffLineKind
+	path     string
+	oldIndex int
+	newIndex int
+}
+
+// renderReconstructedFiles highlights each file's own reconstructed
+// content once — not line by line — for correct multi-line-construct
+// classification (see gitBreachColorizeDiff's own doc comment), then
+// splits the result back into one already-rendered string per line
+// via splitHighlightedTokensByLine, so gitBreachColorizeDiff's second
+// pass can still render each diff line separately. Falls back to
+// lexing that one file's lines individually — the previous, always-
+// correct-count behavior — if splitHighlightedTokensByLine's own
+// line-count invariant doesn't hold for it: that invariant rests on
+// viewer.Highlight's own contract, not provable here for every lexer
+// chroma ships, and a wrong count would silently mis-color every
+// following line in that file rather than just losing the multi-line
+// improvement for it.
+func renderReconstructedFiles(lines map[string][]string, palette syntaxPalette) map[string][]string {
+	rendered := make(map[string][]string, len(lines))
+	for path, ls := range lines {
+		split := splitHighlightedTokensByLine(viewer.Highlight(path, strings.Join(ls, "\n")), palette)
+		if len(split) != len(ls) {
+			split = make([]string, len(ls))
+			for i, l := range ls {
+				split[i] = renderSyntax(viewer.Highlight(path, l), palette)
+			}
+		}
+		rendered[path] = split
+	}
+	return rendered
 }
 
 // gitBreachDiffHeaderPath extracts the post-change ("b/...") path out
@@ -1967,21 +2050,19 @@ func gitBreachDiffHeaderPath(line string) (string, bool) {
 	return git.DiffHeaderPath(line)
 }
 
-// gitBreachColorizeDiffLine renders one added/removed line: markerColor
+// gitBreachWrapDiffLine renders one added/removed line: markerColor
 // for the leading "+"/"-" glyph itself (gitBreachDiffAddedColor/
 // theme.CriticalText — not code, so it stays outside the per-language
-// coloring below), then the rest of the line's own content
-// (everything after that one marker character) run through
-// internal/viewer.Highlight/renderSyntax exactly as a context line or
-// an untracked file's own content already is — the one difference an
-// added/removed line gets at all is the background tint wrapping both
-// pieces together, via nameHighlightTags's own "[:#rrggbb:]...[-:-:-]"
-// background-only tag shape (panel.go) — an empty foreground field
-// leaves whatever renderSyntax/wrapColor already set alone, so the
-// background tint and the per-language foreground coloring never fight
-// over the same tag.
-func gitBreachColorizeDiffLine(line, path string, palette syntaxPalette, markerColor, background tcell.Color) string {
-	marker, content := line[:1], line[1:]
-	highlighted := wrapColor(markerColor, tview.Escape(marker)) + renderSyntax(viewer.Highlight(path, content), palette)
+// coloring already baked into highlightedContent), then
+// highlightedContent as-is (the rest of the line's own content,
+// already rendered by renderReconstructedFiles). The one difference
+// an added/removed line gets at all is the background tint wrapping
+// both pieces together, via nameHighlightTags's own "[:#rrggbb:]...
+// [-:-:-]" background-only tag shape (panel.go) — an empty foreground
+// field leaves whatever's already set alone, so the background tint
+// and the per-language foreground coloring never fight over the same
+// tag.
+func gitBreachWrapDiffLine(marker, highlightedContent string, markerColor, background tcell.Color) string {
+	highlighted := wrapColor(markerColor, tview.Escape(marker)) + highlightedContent
 	return fmt.Sprintf("[:#%06x:]%s[-:-:-]", uint32(background.Hex())&0xffffff, highlighted)
 }

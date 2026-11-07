@@ -130,3 +130,40 @@ func renderSyntax(tokens []viewer.Token, palette syntaxPalette) string {
 	}
 	return b.String()
 }
+
+// splitHighlightedTokensByLine renders tokens (as renderSyntax would,
+// one call per already-known-kind fragment so each keeps its own
+// color) but split back into one already-rendered string per line of
+// the original, "\n"-joined content tokens came from — for a caller
+// that lexed several lines at once, for correct multi-line-construct
+// classification (a block comment, a multi-line string — see
+// viewer.Highlight's own doc comment on why that needs real
+// surrounding context no single line has on its own), but still has
+// to render each line separately afterward (gitBreachColorizeDiff's
+// own reason: an added/removed line needs its own marker and
+// background tint, which a single multi-line block of markup can't
+// carry per-line).
+//
+// A token's own Text can itself contain embedded "\n" (chroma has no
+// reason to break a token at a line boundary that isn't otherwise
+// meaningful to it — a multi-line string literal is exactly this), so
+// a line boundary can fall *inside* a token: each one is split on
+// "\n" first, and only the fragment up to the next boundary is
+// rendered and appended to the line currently being built.
+func splitHighlightedTokensByLine(tokens []viewer.Token, palette syntaxPalette) []string {
+	var lines []string
+	var b strings.Builder
+	for _, t := range tokens {
+		parts := strings.Split(t.Text, "\n")
+		for i, part := range parts {
+			if part != "" {
+				b.WriteString(renderSyntax([]viewer.Token{{Kind: t.Kind, Text: part}}, palette))
+			}
+			if i < len(parts)-1 {
+				lines = append(lines, b.String())
+				b.Reset()
+			}
+		}
+	}
+	return append(lines, b.String())
+}

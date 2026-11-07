@@ -1978,8 +1978,8 @@
     },
     {
       "path": "internal/ui/comparediff.go",
-      "size": 31265,
-      "sha256": "02fbb10e3653d582088c8f70f9013d9c8abd162996debf7555bcdcd23934c801"
+      "size": 31552,
+      "sha256": "82828290524116c61e719e5221b0cde763253a34b8dd707bffdb4587a333731d"
     },
     {
       "path": "internal/ui/comparediff_scrollbar_test.go",
@@ -2262,6 +2262,11 @@
       "sha256": "5fba49b60347c66601c424c50608eeb8afe89bd2e4ce7e82dafba5d007376f6e"
     },
     {
+      "path": "internal/ui/gitbreachcolorize_test.go",
+      "size": 3557,
+      "sha256": "88a48335b3b16b569f5eaad382a6b05ef18fc68efb78b53c5295538f2850947c"
+    },
+    {
       "path": "internal/ui/gitbreachdiffsplit.go",
       "size": 22640,
       "sha256": "82f16a837fa3c743c44fc90d7a69bc7e89bd5a3adb0c6242178a97e8f3b283b2"
@@ -2273,8 +2278,8 @@
     },
     {
       "path": "internal/ui/gitbreachscreen.go",
-      "size": 88330,
-      "sha256": "7b99bad7b5bdf0ecd8a85ca9bf2eec55978920c4c9c96de969369a4d07c81d5a"
+      "size": 92068,
+      "sha256": "75b38eee394a2a6025e634c66819b14c6c8c17cddedef9e2e4e8538a85b0afee"
     },
     {
       "path": "internal/ui/gitstatus.go",
@@ -2798,13 +2803,13 @@
     },
     {
       "path": "internal/ui/syntax.go",
-      "size": 5615,
-      "sha256": "c6fa5569bec84683fd15faf68a76fa58424691d16b632b6d8997712cf077de64"
+      "size": 7247,
+      "sha256": "21ceaa2262b839510805acfdacf57238fb10227e3b471e6a65f34ca47c86465b"
     },
     {
       "path": "internal/ui/syntax_test.go",
-      "size": 2739,
-      "sha256": "dcd575cb1771f957b3007f02f84b18741037ce05746e53d77c28b70c1b87a116"
+      "size": 5249,
+      "sha256": "11bfabe400e9a76080efe9bf2da0570ef0f5d0b45a2895a067708d0a1b3116d1"
     },
     {
       "path": "internal/ui/systeminfo.go",
@@ -4323,6 +4328,7 @@
         "internal/ui/gitbreach.go",
         "internal/ui/gitbreach_scrollbar_test.go",
         "internal/ui/gitbreach_test.go",
+        "internal/ui/gitbreachcolorize_test.go",
         "internal/ui/gitbreachdiffsplit.go",
         "internal/ui/gitbreachdiffsplit_test.go",
         "internal/ui/gitbreachscreen.go",
@@ -30076,21 +30082,21 @@
       "name": "renderCompareDiff",
       "kind": "method",
       "receiver": "*Root",
-      "line": 398
+      "line": 403
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "compareDiffGutterWidth",
       "kind": "const",
-      "line": 428
+      "line": 433
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "writeCompareDiffLine",
       "kind": "function",
-      "line": 441
+      "line": 446
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30098,21 +30104,21 @@
       "name": "renderCompareDiffTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 462
+      "line": 467
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "compareDiffCloseButtonCol",
       "kind": "function",
-      "line": 482
+      "line": 487
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "compareDiffLinkButtonCol",
       "kind": "function",
-      "line": 490
+      "line": 495
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30120,7 +30126,7 @@
       "name": "captureCompareDiffTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 498
+      "line": 503
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30128,7 +30134,7 @@
       "name": "toggleCompareDiffLinked",
       "kind": "method",
       "receiver": "*Root",
-      "line": 547
+      "line": 552
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30136,7 +30142,7 @@
       "name": "activeCompareDiffPane",
       "kind": "method",
       "receiver": "*Root",
-      "line": 561
+      "line": 566
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30144,7 +30150,7 @@
       "name": "inactiveCompareDiffPane",
       "kind": "method",
       "receiver": "*Root",
-      "line": 568
+      "line": 573
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30152,7 +30158,7 @@
       "name": "captureCompareDiffPaneKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 584
+      "line": 589
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30160,7 +30166,7 @@
       "name": "compareDiffPageStep",
       "kind": "method",
       "receiver": "*Root",
-      "line": 625
+      "line": 630
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30168,7 +30174,7 @@
       "name": "cycleCompareDiffFocus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 636
+      "line": 641
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30176,7 +30182,7 @@
       "name": "scrollCompareDiff",
       "kind": "method",
       "receiver": "*Root",
-      "line": 652
+      "line": 657
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30184,7 +30190,7 @@
       "name": "captureCompareDiffPaneMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 681
+      "line": 686
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40063,6 +40069,20 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachcolorize_test.go",
+      "name": "TestGitBreachColorizeDiffClassifiesAMultiLineCommentAcrossLines",
+      "kind": "function",
+      "line": 19
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachcolorize_test.go",
+      "name": "TestGitBreachColorizeDiffKeepsFilesSeparateInAMultiFileDiff",
+      "kind": "function",
+      "line": 57
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachdiffsplit.go",
       "name": "gitBreachDiffUnifiedPage",
       "kind": "const",
@@ -40796,21 +40816,70 @@
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachColorizeDiff",
       "kind": "function",
-      "line": 1926
+      "line": 1925
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachscreen.go",
+      "name": "gitBreachDiffLineKind",
+      "kind": "type",
+      "line": 1992
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachscreen.go",
+      "name": "gitBreachDiffLineHeader",
+      "kind": "const",
+      "line": 1995
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachscreen.go",
+      "name": "gitBreachDiffLineAdded",
+      "kind": "const",
+      "line": 1996
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachscreen.go",
+      "name": "gitBreachDiffLineRemoved",
+      "kind": "const",
+      "line": 1997
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachscreen.go",
+      "name": "gitBreachDiffLineContext",
+      "kind": "const",
+      "line": 1998
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachscreen.go",
+      "name": "gitBreachDiffLinePlan",
+      "kind": "type",
+      "line": 2007
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreachscreen.go",
+      "name": "renderReconstructedFiles",
+      "kind": "function",
+      "line": 2028
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachDiffHeaderPath",
       "kind": "function",
-      "line": 1966
+      "line": 2049
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachscreen.go",
-      "name": "gitBreachColorizeDiffLine",
+      "name": "gitBreachWrapDiffLine",
       "kind": "function",
-      "line": 1983
+      "line": 2065
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40985,14 +41054,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -59751,6 +59820,13 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/syntax.go",
+      "name": "splitHighlightedTokensByLine",
+      "kind": "function",
+      "line": 153
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/syntax_test.go",
       "name": "TestIsLightColor",
       "kind": "function",
@@ -59776,6 +59852,20 @@
       "name": "TestRenderSyntaxRoundTripsThroughTviewParsing",
       "kind": "function",
       "line": 73
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/syntax_test.go",
+      "name": "TestSplitHighlightedTokensByLineLineCountInvariant",
+      "kind": "function",
+      "line": 95
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/syntax_test.go",
+      "name": "TestSplitHighlightedTokensByLinePreservesClassificationAcrossLines",
+      "kind": "function",
+      "line": 129
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -65589,5 +65679,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "d6cf345609ed72abb5f404f2b62f828024894bc81e82de6eaa77e89fd28e680b"
+  "merkle_root": "e113eff3b174b9dd56c9d9689a3bdc4e974aa6e0daa7841d45617a0dc386916f"
 }
