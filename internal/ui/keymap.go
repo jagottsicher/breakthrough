@@ -213,7 +213,7 @@ func plainCommands() []plainCommand {
 		// only once one of the two windows already happens to be open.
 		{key: 'h', label: "Compute hashes (Properties/Details, whichever applies)", alsoOverProperties: true, action: func(r *Root) { r.ComputeHashesShortcut() }},
 		{key: 'k', label: "Compute directory size, recursively (Details)", alsoOverProperties: true, action: func(r *Root) { r.ComputeDirSizeShortcut() }},
-		{key: 'M', label: "Load image metadata (Details) — not implemented yet", alsoOverProperties: true, action: func(r *Root) { r.FetchMetadataShortcut() }},
+		{key: 'M', label: "Load file metadata (Details)", alsoOverProperties: true, action: func(r *Root) { r.FetchMetadataShortcut() }},
 		// Moved off 'E' to make room for "Execute" above (per the user's
 		// own explicit request) — 'S' was free and still reads as "Sed".
 		{key: 'S', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
