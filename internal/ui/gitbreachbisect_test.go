@@ -108,6 +108,47 @@ func TestOpenGitBreachBisectStartDoesNothingWhileABisectIsAlreadyRunning(t *test
 	}
 }
 
+// TestGitBreachBisectHintBarUpdatesThroughTheWholeLifecycle is the
+// regression guard for a real, live-caught bug: the Commits table
+// keeps keyboard focus throughout start/mark/end, so
+// refreshGitBreachHint's usual trigger (a focus change) never fired
+// on its own — the hint bar kept advertising "G mark good"/"X mark
+// bad"/"E end bisect" after the bisect had already ended.
+func TestGitBreachBisectHintBarUpdatesThroughTheWholeLifecycle(t *testing.T) {
+	r := newGitBreachBisectFixture(t)
+
+	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "B") {
+		t.Fatal("setup: \"B\" (bisect start) not advertised before any bisect")
+	}
+
+	r.gitBreach.CommitsTable.Select(4, 0) // c1
+	r.openGitBreachBisectStart()
+	r.picker.SetCurrentItem(0) // "main"
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	// Picking a ref always restores focus to Files (the same
+	// restoreGitBreachFocus every overlay close falls back to) —
+	// live-verified real usage needs an explicit Tab back to Commits
+	// before "G"/"X"/"E" are reachable at all; mirrored here rather
+	// than asserting against a focus state real usage never has.
+	r.app.SetFocus(r.gitBreach.CommitsTable)
+
+	if gitBreachHintHasKey(r.gitBreachHintEntries(), "B") {
+		t.Error("\"B\" still advertised right after starting a bisect, want \"G\"/\"X\"/\"E\" instead")
+	}
+	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "G") {
+		t.Error("\"G\" (mark good) not advertised while a bisect is running")
+	}
+
+	r.openGitBreachBisectEnd()
+
+	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "B") {
+		t.Error("\"B\" not advertised again after ending the bisect")
+	}
+	if gitBreachHintHasKey(r.gitBreachHintEntries(), "G") {
+		t.Error("\"G\" still advertised after the bisect ended, want it gone")
+	}
+}
+
 // TestOpenGitBreachBisectMarkAndEndDoNothingWithoutABisectRunning
 // pins the mirror-image guard: "G"/"X"/"E" are no-ops before any
 // bisect has started.

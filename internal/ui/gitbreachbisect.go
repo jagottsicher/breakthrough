@@ -81,6 +81,18 @@ func (r *Root) openGitBreachBisectEnd() {
 // git's own real stdout verbatim in Main — that text (the next
 // revision to test, or "<sha> is the first bad commit") is the
 // feature, not something to parse into a derived status here.
+//
+// cancelGitBreachDiff, right after reloadGitBreach, is a real,
+// live-caught race fix: openGitBreachBisectStart gets here through
+// r.picker's own onPick, whose hideOverlay restores keyboard focus to
+// Files *before* fn above even runs (picking any ref always does
+// this — see openGitBreachRefPicker). reloadGitBreach's own render
+// then sees Files as Main's current owner and arms its usual
+// debounced diff refresh against it — against the exact same
+// DiffCancel field startGitBreachRefDiff/startGitBreachBlame already
+// cancel before their own gitBreachSetDiffText. Without cancelling it
+// here too, that refresh lands moments later and quietly overwrites
+// the bisect status with whatever Files' own diff happens to be.
 func (r *Root) runGitBreachBisect(fn func(context.Context) (string, error)) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
@@ -93,7 +105,20 @@ func (r *Root) runGitBreachBisect(fn func(context.Context) (string, error)) {
 	if loadErr := r.panel.load(r.panel.path); loadErr != nil {
 		r.showTransientErrorOverOverlay(loadErr)
 	}
+	r.cancelGitBreachDiff()
+	r.gitBreachActivateDiffKey(gitBreachBisectDiffKey)
 	r.gitBreachSetDiffText(gitBreachBisectDiffKey, tview.Escape(out), "")
+
+	// Another real, live-caught gap, same shape as
+	// toggleGitBreachBranchesTab's own fix: the Commits table keeps
+	// keyboard focus throughout every bisect action (start/good/bad/
+	// end all run from there), so refreshGitBreachHint's usual trigger
+	// (a focus change) never fires — the hint bar kept advertising
+	// "G"/"X"/"E" after a bisect had already ended, since
+	// gitBreachBisectAvailable (what the hint bar actually reads) had
+	// flipped back to true with nothing forcing a redraw of the hint
+	// bar itself.
+	r.refreshGitBreachHint()
 }
 
 // gitBreachBisectAvailable reports whether "B" should do anything
