@@ -687,7 +687,7 @@ func TestOpenGitBreachDiffAgainstRefPickingARefShowsTheDiffAndClosesThePicker(t 
 	if r.activePage != gitBreachPage {
 		t.Errorf("activePage = %q, want back to %q once a ref is picked", r.activePage, gitBreachPage)
 	}
-	if want := "R:v1:" + c.Hash; r.gitBreach.DiffScrollKey != want {
+	if want := "R:" + c.Hash + ":v1"; r.gitBreach.DiffScrollKey != want {
 		t.Errorf("DiffScrollKey = %q, want %q", r.gitBreach.DiffScrollKey, want)
 	}
 }

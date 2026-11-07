@@ -783,7 +783,9 @@ var helpText = strings.TrimLeft(`
   Commits (the most recent commits, newest first, each one colored by
   its own author — loads 200 at a time, reaching the last loaded row
   fetches 200 more automatically, with a "loaded/total" hint in the
-  box's own header while there's still more to reach), and Stash (every
+  box's own header while there's still more to reach; "d" diffs the
+  selected commit against a picked branch, tag, or other loaded
+  commit — see the key list below), and Stash (every
   stashed change, newest first). The Main box on the right shows the
   diff of whichever box currently has keyboard focus: Files' own
   staged/unstaged diff (also syntax-colored, background tinted green/
@@ -878,6 +880,16 @@ var helpText = strings.TrimLeft(`
     Space    keys that are otherwise free there — Space already stages
              a Files row and Stash's own diff is already fully visible
              on selection, so neither gains this second meaning there
+    d        (Commits only) Diff the commit under the cursor against a
+             picked ref — opens a list of every local branch, tag, and
+             other loaded commit; picking one shows the selected
+             commit's own diff against it (not the other way around —
+             the direction a user who selected this commit and picked
+             something to compare it *to* actually expects). A
+             one-shot look, like "b" on Files: moving the cursor
+             afterward goes straight back to the ordinary commit diff.
+             No reverse-diff key yet — swapping the two refs would be
+             the whole of it, just not wired to a key
     d        (Branches sub-tab) Delete the branch under the cursor,
              after confirming — always confirms, unlike Enter, since
              deleting a branch is itself the irreversible action.

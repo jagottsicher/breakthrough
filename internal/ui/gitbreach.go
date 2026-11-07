@@ -1006,9 +1006,13 @@ func (r *Root) openGitBreachDiffAgainstRef() {
 	r.pushOverlay(pickerPage, r.picker, nil)
 }
 
-// startGitBreachRefDiff fetches ref's own diff against c (git diff
-// ref c.Hash — see git.DiffRefs' own doc comment on argument order
-// and what a reverse diff would mean here) and shows it in Main, same
+// startGitBreachRefDiff fetches c's own diff against ref (git diff
+// c.Hash ref — c first, the direction a user who selected c and then
+// picked ref to compare it *to* actually expects, live-caught to be
+// the opposite of openGitBreachDiffAgainstRef's own (ref, c)
+// parameter order; see git.DiffRefs' own doc comment on argument
+// order and what a reverse diff would mean here) and shows it in
+// Main, same
 // async shape as startGitBreachCommitDiff minus the debounce: a
 // deliberate action (picked from openGitBreachDiffAgainstRef's own
 // overlay), not cursor-movement noise. Its own "R:" scroll key keeps
@@ -1019,7 +1023,7 @@ func (r *Root) openGitBreachDiffAgainstRef() {
 // startGitBreachBlame already establishes for the Files box.
 func (r *Root) startGitBreachRefDiff(c git.LogEntry, ref string) {
 	r.cancelGitBreachDiff()
-	key := "R:" + ref + ":" + c.Hash
+	key := "R:" + c.Hash + ":" + ref
 	r.gitBreachActivateDiffKey(key)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1028,13 +1032,20 @@ func (r *Root) startGitBreachRefDiff(c git.LogEntry, ref string) {
 
 	r.safeGo("Git breach ref diff", r.cancelGitBreachDiff, func() {
 		fetchCtx, fetchCancel := context.WithTimeout(ctx, gitBreachFetchTimeout)
-		text, err := git.DiffRefs(fetchCtx, root, ref, c.Hash)
+		// c.Hash first, ref second: "what would change going from the
+		// row under the cursor to the picked ref" — the direction a
+		// user who selected a commit and then picked something to
+		// compare it *to* actually expects, live-caught to be the
+		// opposite of what picking argument order to match
+		// openGitBreachDiffAgainstRef's own (ref, c) parameter order
+		// would have given.
+		text, err := git.DiffRefs(fetchCtx, root, c.Hash, ref)
 		fetchCancel()
 		if ctx.Err() != nil {
 			return
 		}
 		if err == nil && text == "" {
-			text = fmt.Sprintf("%s..%s: no diff to show.", ref, c.Short)
+			text = fmt.Sprintf("%s..%s: no diff to show.", c.Short, ref)
 		}
 
 		r.app.QueueUpdateDraw(func() {
