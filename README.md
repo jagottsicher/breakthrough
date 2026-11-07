@@ -1273,7 +1273,8 @@ Lightning Network ⚡️ using the sponsor button above.
   the system's own `git` rather than reimplementing it. Status
   (branch, ahead/behind, a one-line summary), Files (staged/unstaged/
   untracked, conflicts first, syntax-colored diffs — Space stages/
-  unstages the row under the cursor), Branches (every local branch,
+  unstages the row under the cursor, "b" shows that file's own blame
+  in Main instead, colored by author), Branches (every local branch,
   checkout on Enter, delete with "d"), Commits (newest first, colored
   by author, a lane/branch graph for merges, loads 200 at a time) and
   Stash (apply with "a", drop with "d") are all live. The Main pane on

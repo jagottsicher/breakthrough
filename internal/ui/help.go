@@ -784,7 +784,9 @@ var helpText = strings.TrimLeft(`
   staged/unstaged diff (also syntax-colored, background tinted green/
   red for added/removed lines) or the raw content for an untracked
   file, or a Commits/Stash row's own full diff across every file it
-  touched. Tab/Shift-Tab switches keyboard focus forwards/backwards
+  touched. "b" on a Files row shows that file's own blame there
+  instead (see the key list below). Tab/Shift-Tab switches keyboard
+  focus forwards/backwards
   between Files, Branches, Commits and Stash, the dashboard's own four
   real, navigable boxes so far — no action on a Commits row yet
   (checkout/revert/cherry-pick/reset are later Ausbaustufen). A Stash
@@ -844,6 +846,17 @@ var helpText = strings.TrimLeft(`
              unstage it if it is (does nothing on a Conflicts row) —
              only shown in the hint bar while Files has focus, since
              it has no meaning on any other box's own row
+    b        (Files only) Show the selected file's own blame in Main
+             instead of its diff — each line prefixed with the short
+             hash/date/author of the commit that last touched it
+             (colored the same as Commits' own author coloring), an
+             uncommitted change attributed to git's own "Not Committed
+             Yet". A one-shot look: moving the cursor goes straight
+             back to the ordinary diff. Does nothing useful on a
+             Conflicts row (no single history to attribute lines to
+             without resolving it first) or an untracked file (never
+             added to the index, so no history yet) — both show a
+             short message instead of attempting it
     Right    (Files/Commits/Stash) Jump into Main's own diff, giving it
              real keyboard focus — only shown in the hint bar while one
              of these three has focus, since Branches has no diff of
