@@ -132,6 +132,39 @@ func Remotes(ctx context.Context, root string) ([]Remote, error) {
 // the TUI itself has in raw mode), which neither git's own flag above
 // nor a background goroutine can prevent on its own; verified directly
 // against a real SSH remote that refuses access, not guessed.
+// PushRemote runs `git push <remote> <branch>` — explicit about which
+// local branch, rather than a bare `git push <remote>` relying on
+// whatever upstream tracking (or lack of it) happens to already be
+// configured: the caller (openGitBreachPushRemote) shows this exact
+// command in its own confirm dialog first, so what actually runs has
+// to match that literally, not depend on config this dialog never
+// showed. Same GIT_TERMINAL_PROMPT/GIT_SSH_COMMAND overrides as
+// FetchRemote, for the identical reason — a push is every bit as much
+// a real network call as a fetch is.
+//
+// Unlike CherryPick/Merge, a rejected push (most commonly: the remote
+// has commits this branch doesn't, "non-fast-forward") is always a
+// real, reportable failure here, never silently reinterpreted as
+// something else — there is no local conflict state for this package
+// to resolve the way there is for those two; the user's own next step
+// is a Pull first, a separate later patch.
+func PushRemote(ctx context.Context, root, remote, branch string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "push", remote, branch)
+	cmd.Env = cmdEnvironWithoutPrompts()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("git push: %s", msg)
+		}
+		return fmt.Errorf("git push: %w", err)
+	}
+	return nil
+}
+
 func FetchRemote(ctx context.Context, root, remote string) error {
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "fetch", remote)
 	cmd.Env = cmdEnvironWithoutPrompts()

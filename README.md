@@ -1302,8 +1302,9 @@ Lightning Network ⚡️ using the sponsor button above.
   create a new tag at HEAD, "d" to delete one; Remotes lists every
   configured remote by name and URL, "f" fetches one in the
   background (no confirm — never touches the remote itself, only
-  this repository's own remote-tracking refs), Push/Pull aren't
-  part of this yet), Commits (newest first, colored
+  this repository's own remote-tracking refs), "p" pushes the
+  current branch to one — always confirms first, showing the exact
+  command about to run; Pull isn't part of this yet), Commits (newest first, colored
   by author, a lane/branch graph for merges, loads 200 at a time, "d"
   to diff the selected commit against a picked branch/tag/other
   commit, "B" to start a bisect with it as "good" ("G"/"X" mark a

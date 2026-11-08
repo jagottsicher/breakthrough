@@ -1440,7 +1440,10 @@ either way. Remotes lists every configured remote by name and URL
 (`git config --get-regexp`, not the human-facing `git remote -v`).
 `f` fetches the remote under the cursor in the background (no
 confirm — it only ever updates this repository's own remote-tracking
-refs, never the remote itself); Push/Pull aren't wired up yet.
+refs, never the remote itself). `p` pushes the current branch to it
+— always confirms first, showing the exact command (`git push
+<remote> <branch>`) about to run; does nothing on a detached HEAD.
+Pull isn't wired up yet.
 
 On the Tags sub-tab: `a` prompts for a name and creates a new,
 lightweight tag at `HEAD`; `d` deletes the one under the cursor,
@@ -1467,6 +1470,7 @@ of this yet.
 | `P` | (Commits) Open the ref picker and cherry-pick whichever branch, tag, or loaded commit gets picked onto whatever is currently checked out, confirming first only on a dirty tree |
 | `d` | (Branches sub-tab) Delete the branch under the cursor, after confirming — refuses on an unmerged branch the same way `git` itself does |
 | `f` | (Remotes sub-tab) Fetch the remote under the cursor in the background — no confirm |
+| `p` | (Remotes sub-tab) Push the current branch to the remote under the cursor, confirming first with the exact command — does nothing on a detached HEAD |
 | `a` | (Tags sub-tab) Create a new tag at `HEAD`, after typing a name |
 | `d` | (Tags sub-tab) Delete the tag under the cursor, after confirming |
 | `a` | (Stash) Apply the entry under the cursor (never pops it) |

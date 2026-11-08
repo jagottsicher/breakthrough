@@ -732,6 +732,64 @@ func (r *Root) applyGitBreachFetchRemote(root, name string, err error) {
 	r.reloadGitBreach()
 }
 
+// openGitBreachPushRemote is "p" on a Remotes row — always confirms
+// first, showing the exact command about to run (feature_ideas.txt's
+// own explicit requirement for this action: "ein Remote-Push ist ein
+// Netzwerk-Schreibzugriff mit anderem Blast-Radius... eigener
+// Bestätigungsdialog, exakter Befehl vorab sichtbar"). Refuses outright
+// on a detached HEAD — there's no branch name to push at all in that
+// state, the same "nothing sane to act on" reasoning Checkout/Merge's
+// own guards already apply elsewhere in this box.
+func (r *Root) openGitBreachPushRemote() {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabRemotes {
+		return
+	}
+	if r.gitBreach.Status.Detached || r.gitBreach.Status.Branch == "" {
+		return
+	}
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	rm, ok := r.gitBreachRemoteAt(row)
+	if !ok {
+		return
+	}
+	branch := r.gitBreach.Status.Branch
+	r.openConfirm(
+		fmt.Sprintf("Run %q?", fmt.Sprintf("git push %s %s", rm.Name, branch)),
+		"Yes, push",
+		func() { r.startGitBreachPushRemote(rm.Name, branch) },
+	)
+}
+
+// startGitBreachPushRemote/applyGitBreachPushRemote mirror
+// startGitBreachFetchRemote/applyGitBreachFetchRemote exactly — same
+// async dispatch shape, same staleness guard, same "Verb-ing %q…"
+// placeholder. The one real difference is git.PushRemote's own: a
+// rejected push is always a real, reportable error here, never
+// reinterpreted as something else (see its own doc comment).
+func (r *Root) startGitBreachPushRemote(remote, branch string) {
+	root := r.gitBreach.Root
+	showTablePlaceholder(r.gitBreach.BranchesTable, fmt.Sprintf("Pushing %q…", remote), r.theme.MutedTextColor)
+
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachNetworkTimeout)
+	r.safeGo("Git breach push", cancel, func() {
+		err := git.PushRemote(ctx, root, remote, branch)
+		cancel()
+		r.app.QueueUpdateDraw(func() {
+			r.applyGitBreachPushRemote(root, remote, err)
+		})
+	})
+}
+
+func (r *Root) applyGitBreachPushRemote(root, name string, err error) {
+	if r.gitBreach.Root != root {
+		return
+	}
+	if err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: push %q: %w", name, err))
+	}
+	r.reloadGitBreach()
+}
+
 // toggleGitBreachBranchesTab/reverseToggleGitBreachBranchesTab cycle
 // the Branches box forward/backward through its own three sub-tabs —
 // Branches → Tags → Remotes → Branches again, wrapping either
