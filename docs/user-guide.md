@@ -1436,8 +1436,10 @@ for at all.
 
 `Left`/`Right` on the Branches box cycle it through its own three
 sub-tabs — Branches (above), Tags, and Remotes, one shared table
-either way. Remotes is currently a placeholder — no Fetch/Push/Pull
-wired up yet.
+either way. Remotes lists every configured remote by name and URL
+(`git config --get-regexp`, not the human-facing `git remote -v`),
+read-only for now — no Fetch/Push/Pull wired up yet.
+
 On the Tags sub-tab: `a` prompts for a name and creates a new,
 lightweight tag at `HEAD`; `d` deletes the one under the cursor,
 after confirming. `Enter` does nothing there — a tag has no
