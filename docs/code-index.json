@@ -2583,8 +2583,8 @@
     },
     {
       "path": "internal/ui/optioncatalog.go",
-      "size": 115411,
-      "sha256": "e9fb5eede23dc6a2b52f12467f39409656f5dc51a3b6a3c67efb049fd540c3b8"
+      "size": 115381,
+      "sha256": "123d7c92c1a683ebbc30a779f611d6bf3270cdb6e9db2f3219b1720f7a3e1c38"
     },
     {
       "path": "internal/ui/options.go",
@@ -66745,5 +66745,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "c45d68cc5fa11debae2d8a6f9001c5389557464a2f6f697b0dc20de33b8d025a"
+  "merkle_root": "5549297762b2e0aee93109ff6150c75381dfc56a3bb482ba1e773bcc01ee1f07"
 }
