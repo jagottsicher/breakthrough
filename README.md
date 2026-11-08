@@ -791,7 +791,7 @@ Lightning Network ⚡️ using the sponsor button above.
   current value; Cancel and Duplicate sit bottom-left/bottom-right, the
   same as every other dialog's own confirm/cancel pair in this app.
   Whatever's chosen becomes the new default shown next time (Options →
-  Behavior → Duplicate) — the one setting group in this whole app that
+  Duplicate) — the one setting group in this whole app that
   adapts itself this way — but only once "Duplicate" is actually
   pressed; Cancel never touches the sticky default.
 - Execute (`E`, or the context menu, files only): runs the current
