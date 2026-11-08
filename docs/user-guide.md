@@ -1406,7 +1406,17 @@ of this yet.
 | `d` | (Stash) Drop the entry under the cursor, after confirming |
 | `c` | Commit whatever is currently staged, after typing a message |
 | `r` | Re-read status/branches/commits/stash |
+| `/` | (Files/Branches/Tags/Stash) Filter that box by a plain substring, or clear its filter if one is already active |
 | `Esc` | Back out of Main's own diff, or close the dashboard from anywhere else |
+
+`/` filters Files, Branches, Tags, and Stash independently — a
+plain, case-insensitive substring (not this app's own glob/regex
+filter menu), matched against a file's path, a branch/tag's name, or
+a stash entry's ref and message together. Pressing `/` again while a
+filter is active clears it instead of prompting for a new one; the
+box's own header shows the active filter so a short list never reads
+as missing data. Commits has no filter — its own lane/branch graph
+is computed over the whole, unfiltered list.
 
 Selecting a Files/Commits/Stash row you haven't viewed yet this
 session starts its diff fresh at the top; returning to one you have —
