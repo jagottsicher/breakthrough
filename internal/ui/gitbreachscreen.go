@@ -13,11 +13,15 @@ import (
 )
 
 // gitBreachStatusHeight is the fixed row count Status gets in the left
-// column's own Flex — its own header plus a two-line summary, nothing
-// more. Files/Branches/Commits/Stash, the real lists, share whatever's
-// left proportionally (see newGitBreachScreen's own AddItem
-// proportions) — none of them are a fixed-height stub anymore.
-const gitBreachStatusHeight = 3
+// column's own Flex — its own header plus a summary of up to three
+// lines (branch, severity, and — only while one is actually running —
+// the in-progress merge/rebase/cherry-pick/revert, see
+// renderGitBreachStatus), nothing more. Files/Branches/Commits/Stash,
+// the real lists, share whatever's left proportionally (see
+// newGitBreachScreen's own AddItem proportions) — none of them are a
+// fixed-height stub anymore. Bumped from 3 to 4 (2026-11-08) to make
+// room for that third line without clipping it.
+const gitBreachStatusHeight = 4
 
 // gitBreachDiffAddedColor is a dedicated, brighter green for a diff's
 // own added-line marker ("+") — per the user's own explicit request for
@@ -694,6 +698,15 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		hintKey("c", "commit", func(r *Root) { r.openGitBreachCommitPrompt() }),
 		hintKey("r", "reload", func(r *Root) { r.reloadGitBreach() }),
 	)
+	if r.gitBreach.Operation != git.OperationNone {
+		entries = append(entries,
+			hintKey("C", "continue "+r.gitBreach.Operation.String(), func(r *Root) { r.openGitBreachOperationContinue() }),
+			hintKey("A", "abort "+r.gitBreach.Operation.String(), func(r *Root) { r.openGitBreachOperationAbort() }),
+		)
+		if r.gitBreach.Operation != git.OperationMerge {
+			entries = append(entries, hintKey("K", "skip", func(r *Root) { r.openGitBreachOperationSkip() }))
+		}
+	}
 	if r.gitBreachMainHasFocus() {
 		entries = append(entries, hintKey("Esc", "back", func(r *Root) { r.deactivateGitBreachMain() }))
 	} else {
@@ -922,6 +935,15 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 		case 'c':
 			r.openGitBreachCommitPrompt()
 			return nil
+		case 'C':
+			r.openGitBreachOperationContinue()
+			return nil
+		case 'A':
+			r.openGitBreachOperationAbort()
+			return nil
+		case 'K':
+			r.openGitBreachOperationSkip()
+			return nil
 		case 'r':
 			r.reloadGitBreach()
 			return nil
@@ -1004,6 +1026,15 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 		case 'c':
 			r.openGitBreachCommitPrompt()
 			return nil
+		case 'C':
+			r.openGitBreachOperationContinue()
+			return nil
+		case 'A':
+			r.openGitBreachOperationAbort()
+			return nil
+		case 'K':
+			r.openGitBreachOperationSkip()
+			return nil
 		case 'r':
 			r.reloadGitBreach()
 			return nil
@@ -1056,6 +1087,15 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			return nil
 		case 'c':
 			r.openGitBreachCommitPrompt()
+			return nil
+		case 'C':
+			r.openGitBreachOperationContinue()
+			return nil
+		case 'A':
+			r.openGitBreachOperationAbort()
+			return nil
+		case 'K':
+			r.openGitBreachOperationSkip()
 			return nil
 		case 'a':
 			if r.gitBreach.BranchesShowTags {
@@ -1148,6 +1188,15 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 		case 'c':
 			r.openGitBreachCommitPrompt()
 			return nil
+		case 'C':
+			r.openGitBreachOperationContinue()
+			return nil
+		case 'A':
+			r.openGitBreachOperationAbort()
+			return nil
+		case 'K':
+			r.openGitBreachOperationSkip()
+			return nil
 		case 'd':
 			r.openGitBreachDiffAgainstRef()
 			return nil
@@ -1216,6 +1265,15 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 			return nil
 		case 'c':
 			r.openGitBreachCommitPrompt()
+			return nil
+		case 'C':
+			r.openGitBreachOperationContinue()
+			return nil
+		case 'A':
+			r.openGitBreachOperationAbort()
+			return nil
+		case 'K':
+			r.openGitBreachOperationSkip()
 			return nil
 		case 'a':
 			r.openGitBreachStashApply()
@@ -1294,6 +1352,16 @@ func (r *Root) renderGitBreachStatus() {
 		lines = append(lines, "Working tree clean")
 	default:
 		lines = append(lines, fmt.Sprintf("%d staged, %d unstaged, %d untracked", len(st.Staged), len(st.Unstaged), len(st.Untracked)))
+	}
+	// Surfaced on its own line, not folded into the severity line
+	// above: a merge/rebase/cherry-pick/revert can be mid-flight with
+	// zero remaining conflicts (every section already resolved, see
+	// gitBreachMainShowsAConflict's own doc comment) — git itself still
+	// refuses a plain checkout/commit until Continue or Abort actually
+	// runs, so this has to stay visible independent of the conflict
+	// count reaching zero.
+	if r.gitBreach.Operation != git.OperationNone {
+		lines = append(lines, fmt.Sprintf("%s in progress", r.gitBreach.Operation))
 	}
 
 	if r.gitBreach.FetchErr != nil {

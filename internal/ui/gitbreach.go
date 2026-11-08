@@ -87,21 +87,29 @@ type gitBreachState struct {
 	// RowIndex, which renderGitBreachFiles only ever populates for
 	// rows it actually drew — a filtered-out row simply never gets an
 	// entry, no second slice needed.
-	FilesFilter         string
-	BranchesFilter      string
-	TagsFilter          string
-	StashFilter         string
-	BranchesShown       []git.Branch
-	TagsShown           []git.Tag
-	StashShown          []git.Stash
-	Commits             []git.LogEntry
-	CommitsErr          error
-	CommitsReady        bool
-	CommitsLimit        int
-	CommitsTotal        int
-	Stash               []git.Stash
-	StashErr            error
-	StashReady          bool
+	FilesFilter    string
+	BranchesFilter string
+	TagsFilter     string
+	StashFilter    string
+	BranchesShown  []git.Branch
+	TagsShown      []git.Tag
+	StashShown     []git.Stash
+	Commits        []git.LogEntry
+	CommitsErr     error
+	CommitsReady   bool
+	CommitsLimit   int
+	CommitsTotal   int
+	Stash          []git.Stash
+	StashErr       error
+	StashReady     bool
+	// Operation is whichever merge/rebase/cherry-pick/revert (if any)
+	// currently has the working tree mid-flight — see
+	// git.InProgressOperation, re-checked on every reloadGitBreach the
+	// same way Status itself is, never patched in place. Drives both
+	// the Status box's own severity line (renderGitBreachStatus) and
+	// whether "C"/"A"/"K" (Continue/Abort/Skip — see
+	// gitbreachoperation.go) do anything at all.
+	Operation           git.Operation
 	MainOwner           gitBreachMainOwnerKind
 	DiffCancel          context.CancelFunc
 	DiffScroll          map[string]int
@@ -218,6 +226,7 @@ func (r *Root) reloadGitBreach() {
 	r.gitBreach.Status = status
 	r.gitBreach.FetchErr = err
 	r.gitBreach.Rows = buildGitBreachRows(status)
+	r.gitBreach.Operation = git.InProgressOperation(r.gitBreach.Root)
 
 	branches, branchesErr := git.Branches(ctx, r.gitBreach.Root)
 	r.gitBreach.Branches = branches
