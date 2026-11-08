@@ -706,8 +706,9 @@ func (r *Root) releaseLogAuditEntriesIfDiskCached() {
 // every file fresh each tick (see tickLogAuditFollow) rather
 // than tailing byte offsets — the simpler, correct-by-construction
 // choice for a first version; worth revisiting only if a real,
-// large log file makes 2s full re-reads feel sluggish.
-const logAuditFollowInterval = 2 * time.Second
+// large log file makes 2s full re-reads feel sluggish. The interval
+// itself is Options → Log Holepunch → "Follow interval (ms)"
+// (log_audit_follow_interval_ms), 2 seconds by default.
 
 // toggleLogAuditFollow is "f" in the viewer — starts or stops a
 // running follow.
@@ -755,8 +756,10 @@ func (r *Root) startLogAuditFollow() {
 	source := r.currentLogAuditSource()
 	skipCompressed := r.log.SkipCompressed
 	journalMode := r.log.JournalMode
+	journalLines := r.settings.LogAuditJournalLines
+	followInterval := time.Duration(r.settings.LogAuditFollowIntervalMS) * time.Millisecond
 	r.safeGo("log audit follow", func() { r.stopLogAuditFollow() }, func() {
-		ticker := time.NewTicker(logAuditFollowInterval)
+		ticker := time.NewTicker(followInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -768,7 +771,7 @@ func (r *Root) startLogAuditFollow() {
 				var files, skipped, excluded int
 				var err error
 				if journalMode {
-					entries, err = logview.ReadJournal(ctx, logview.JournalOptions{Lines: logAuditJournalWindowLines})
+					entries, err = logview.ReadJournal(ctx, logview.JournalOptions{Lines: journalLines})
 					if err == nil {
 						files = 1
 					}
