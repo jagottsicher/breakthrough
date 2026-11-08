@@ -1392,6 +1392,16 @@ Main. Checking out a different commit changes files on disk, so both
 the dashboard and the active panel reload after every step. `skip`
 isn't wired to a key yet.
 
+`P` (Commits) opens the same ref picker `d`/`B` already use and
+cherry-picks whichever branch, tag, or loaded commit gets picked onto
+whatever is currently checked out — confirms first only on a dirty
+tree. Deliberately not the row under the cursor itself: every row
+Commits shows is already part of the current branch's own history,
+so picking one back onto the same branch would just be refused as an
+empty pick. A single commit at a time, always onto whatever's already
+checked out — marking several at once, or picking onto a different
+branch without checking it out first, aren't part of this yet.
+
 `b` (Files) shows the selected file's own blame instead — each line
 prefixed with the short hash, date and author of the commit that last
 touched it (colored the same way the Commits box colors its own rows),
@@ -1448,6 +1458,7 @@ of this yet.
 | `B` | (Commits) Start a bisect with the selected commit as "good", picking "bad" from the ref picker |
 | `G` / `X` | (Commits, while bisecting) Mark the current step good / bad |
 | `E` | (Commits, while bisecting) End the bisect |
+| `P` | (Commits) Open the ref picker and cherry-pick whichever branch, tag, or loaded commit gets picked onto whatever is currently checked out, confirming first only on a dirty tree |
 | `d` | (Branches sub-tab) Delete the branch under the cursor, after confirming — refuses on an unmerged branch the same way `git` itself does |
 | `a` | (Tags sub-tab) Create a new tag at `HEAD`, after typing a name |
 | `d` | (Tags sub-tab) Delete the tag under the cursor, after confirming |

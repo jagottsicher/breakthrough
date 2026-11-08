@@ -638,6 +638,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		entries = append(entries,
 			hintKey("Enter/Space/→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 			hintKey("d", "diff against ref...", func(r *Root) { r.openGitBreachDiffAgainstRef() }),
+			hintKey("P", "cherry-pick...", func(r *Root) { r.openGitBreachCherryPick() }),
 		)
 		if r.gitBreachBisectAvailable() {
 			entries = append(entries, hintKey("B", "bisect start...", func(r *Root) { r.openGitBreachBisectStart() }))
@@ -1204,6 +1205,9 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 			return nil
 		case 'd':
 			r.openGitBreachDiffAgainstRef()
+			return nil
+		case 'P':
+			r.openGitBreachCherryPick()
 			return nil
 		case 'B':
 			r.openGitBreachBisectStart()

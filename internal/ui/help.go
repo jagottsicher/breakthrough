@@ -907,6 +907,18 @@ var helpText = strings.TrimLeft(`
   reload each time. "skip" isn't wired to a key yet, nor is
   "git bisect run", log/replay, or visualizing the remaining range.
 
+  "P" on a Commits row opens the same ref picker "d"/"B" already use
+  and cherry-picks whichever branch, tag, or loaded commit gets picked
+  onto whatever is currently checked out — confirms first only if the
+  working tree isn't clean. Deliberately not "the row under the
+  cursor" itself: every row Commits shows is already part of the
+  current branch's own history, so cherry-picking one back onto the
+  same branch would just be refused as an empty pick; the picker is
+  where a genuinely different commit actually comes from. Only a
+  single commit at a time, and always onto whatever is already
+  checked out — marking several at once, or picking onto a different
+  branch without checking it out first, aren't part of this yet.
+
     Tab/     Switch keyboard focus forwards/backwards between Files,
     Shift-   Branches, Commits and Stash (or, from inside Main's own
     Tab      diff, continue the same cycle from whichever box is still
@@ -1011,6 +1023,10 @@ var helpText = strings.TrimLeft(`
              good/bad
     E        (Commits only, while bisecting) End the bisect —
              "git bisect reset"
+    P        (Commits only) Open the ref picker and cherry-pick
+             whichever branch, tag, or loaded commit gets picked onto
+             whatever is currently checked out — confirms first only
+             on a dirty tree
     o/t      (Main only, a Conflicts row's own view) Resolve the
              topmost still-unresolved section by keeping "ours"/
              "theirs" — re-stages the file automatically once every
