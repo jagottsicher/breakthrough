@@ -373,6 +373,15 @@ type Root struct {
 	// reloadMounts (on open, and on "r").
 	mounts mountsState
 
+	// The Services screen (see services.go) — a read-only overview of
+	// every systemd service unit on this host (internal/systemd), the
+	// same "its own destination, not folded into the Toolbox" shape
+	// Mounts/Firewall already establish. services.Units/services.Err
+	// hold the last read result, refreshed by reloadServices (on open,
+	// and on "r"). Starting/stopping/enabling/disabling a unit is
+	// deliberately out of scope for this first version.
+	services servicesState
+
 	// The Firewall screen (see firewall.go) — a fourth full-screen
 	// catalog, showing this host's own actual firewall rules (whichever
 	// single backend actually governs traffic right now; see
@@ -2685,6 +2694,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// catalog, same build-once/repopulate-on-open shape.
 	r.newMountsScreen()
 
+	// The Services screen (see services.go/openServices) — a read-only
+	// systemd unit overview, same build-once/repopulate-on-open shape.
+	r.newServicesScreen()
+
 	// The Firewall screen (see firewall.go/openFirewall) — a fourth
 	// full-screen catalog, same build-once/repopulate-on-open shape.
 	r.newFirewallScreen()
@@ -2918,6 +2931,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning the Options/Toolbox screens' own
 	// comments above give.
 	r.AddPage(mountsPage, r.mounts.Layout, true, false)
+	// resize=true: the Services screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox/Mounts
+	// screens' own comments above give.
+	r.AddPage(servicesPage, r.services.Layout, true, false)
 	// resize=true: the Firewall screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts
 	// screens' own comments above give.

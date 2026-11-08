@@ -114,6 +114,7 @@ var helpText = strings.TrimLeft(`
                 under the active panel) ·
                 jC Compare Faultline (same as plain "C") ·
                 jm Mounts screen (what's mounted right now) ·
+                ju Services screen (systemd service units, read-only) ·
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen ·
                 js Sessions screen (local screen/tmux/zellij sessions) ·
@@ -692,6 +693,24 @@ var helpText = strings.TrimLeft(`
   without it was mounted by hand (or by something other than the
   boot-time fstab pass) at some point since, shown in a warning color so
   it stands out at a glance.
+
+[::b]Services screen ("ju")[::-]
+
+  A read-only, live view of every systemd service unit on this host
+  (Linux only — systemd doesn't exist on macOS/BSD), via the real
+  systemctl command, never reimplemented. Grouped Failed first, then
+  Active, then Inactive, each a bold "<group> (N)" header row — a
+  failed service always shown in red regardless of which group's
+  count would otherwise bury it on a busy host.
+
+  Up / Down         Move between units
+  r                 Re-read the live unit list
+  Escape            Close the Services screen
+
+  The reload glyph (⭯) in the title bar's own top-right corner is a
+  mouse-clickable equivalent to "r" — a unit's state can change while
+  this screen is open. Starting, stopping, enabling, or disabling a
+  unit isn't wired to a key yet — this first version is read-only.
 
 [::b]Firewall screen ("jf")[::-]
 
