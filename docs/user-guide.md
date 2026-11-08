@@ -2764,16 +2764,26 @@ choices cycle, numbers open a one-line field where `Enter` commits and
 A setting whose value differs from the built-in default shows a dim
 `default: …` hint beside it, so you can always see what you've changed.
 
-**Reset removes, it doesn't overwrite.** "Reset category" and "Reset
-all" delete your override from your own config file rather than writing
-a default into it, so the value falls back through the tiers — to your
-administrator's system-wide setting where there is one, and only to
-breakthrough's built-in default where there isn't. Both ask first.
+**Reset removes, it doesn't overwrite.** "Reset \<category\>" (its own
+label always names whichever category is currently selected, e.g.
+"Reset Behavior") and "Reset all" delete your override from your own
+config file rather than writing a default into it, so the value falls
+back through the tiers — to your administrator's system-wide setting
+where there is one, and only to breakthrough's built-in default where
+there isn't. Both ask first.
 
 "Edit config file" opens your config in your editor, creating it — fully
-commented, every setting listed — if you don't have one yet. "New color
-scheme" copies the active scheme under a fresh name and opens that.
-Either way, changes are picked up as soon as the editor closes.
+commented, every setting listed — if you don't have one yet.
+
+The button row shows only three buttons — "Reset \<category\>", "Reset
+all", "Edit config file" — on most categories; these three are the
+only ones that work from anywhere. A handful of further buttons only
+make sense for one specific category and appear only while it's
+selected: "New color scheme" (Appearance, copies the active scheme
+under a fresh name and opens that), "Remove orphaned labels" (Label,
+see below), and "Edit system prompt"/"Reset system prompt" (AI
+Consigliere, see below). Changes from any of these are picked up as
+soon as the editor closes.
 
 "Remove orphaned labels" scans every path that currently carries a
 color label (see the `zl` chord) in the background — the status bar
