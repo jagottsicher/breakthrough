@@ -2343,8 +2343,8 @@
     },
     {
       "path": "internal/ui/gitbreachfetch_test.go",
-      "size": 4453,
-      "sha256": "7b85ddbc9eec49a0d01eed32454c2b0e9770f89673762289fa1c1116a41dbbc2"
+      "size": 5330,
+      "sha256": "9298c964c13d3cb6812ce50232f69263258edb5c7076ccb2994fd882c17b2459"
     },
     {
       "path": "internal/ui/gitbreachfilter.go",
@@ -41686,9 +41686,9 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachfetch_test.go",
-      "name": "TestApplyGitBreachFetchRemoteOnFailureShowsAnErrorThenReloads",
+      "name": "TestApplyGitBreachFetchRemoteOnFailureStillReloads",
       "kind": "function",
-      "line": 107
+      "line": 122
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -67783,5 +67783,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "84a924eea5d2256c0161db96cd77dd32f3a0b08a499b42d110ba97701af06cb4"
+  "merkle_root": "cb0099172382a1de074450a0117099fe625b0815351f25a630ba431e7882a5d4"
 }
