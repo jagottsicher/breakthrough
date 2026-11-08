@@ -806,8 +806,9 @@ var helpText = strings.TrimLeft(`
   and back (one shared table either way); "a" on Tags creates a new,
   lightweight tag at HEAD, "d" deletes the one under the cursor after
   confirming, and Enter does nothing — a tag has no checkout
-  equivalent; pushing a tag isn't part of this yet. Remotes is
-  currently a placeholder — no Fetch/Push/Pull wired up yet),
+  equivalent; pushing a tag isn't part of this yet. Remotes lists
+  every configured remote by name and URL, read-only for
+  now — no Fetch/Push/Pull wired up yet),
   Commits (the most recent commits, newest first, each one colored by
   its own author — loads 200 at a time, reaching the last loaded row
   fetches 200 more automatically, with a "loaded/total" hint in the
