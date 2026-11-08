@@ -4,9 +4,22 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
+
+// cmdEnvironWithoutPrompts is os.Environ() plus the two overrides
+// FetchRemote's own doc comment explains — shared here rather than
+// duplicated once Push/Pull (later Phase D patches) need the
+// identical "never block on an interactive credential prompt"
+// guarantee for their own network calls.
+func cmdEnvironWithoutPrompts() []string {
+	return append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_SSH_COMMAND=ssh -o BatchMode=yes",
+	)
+}
 
 // Remote is one configured remote — Name is whatever the user (or
 // `git clone`) called it ("origin", "upstream", ...), FetchURL is
@@ -101,4 +114,37 @@ func Remotes(ctx context.Context, root string) ([]Remote, error) {
 		remotes[i] = r
 	}
 	return remotes, nil
+}
+
+// FetchRemote runs `git fetch <remote>` — a real network call, unlike
+// everything else this package exposes to internal/ui, so the caller
+// is expected to run it off the UI goroutine with a much longer
+// timeout than this package's other operations get (see internal/ui's
+// own gitBreachNetworkTimeout).
+//
+// Two environment overrides, both there for the same reason Commit's
+// own GIT_EDITOR=true is: nothing here can ever answer an interactive
+// prompt. GIT_TERMINAL_PROMPT=0 makes git itself fail fast instead of
+// prompting for an HTTPS username/password with no terminal reading
+// for it to use. GIT_SSH_COMMAND with BatchMode=yes is the SSH-side
+// equivalent — without it, ssh still tries to prompt for a
+// passphrase on this process's own controlling terminal (the same one
+// the TUI itself has in raw mode), which neither git's own flag above
+// nor a background goroutine can prevent on its own; verified directly
+// against a real SSH remote that refuses access, not guessed.
+func FetchRemote(ctx context.Context, root, remote string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "fetch", remote)
+	cmd.Env = cmdEnvironWithoutPrompts()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("git fetch: %s", msg)
+		}
+		return fmt.Errorf("git fetch: %w", err)
+	}
+	return nil
 }
