@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"os"
 	"testing"
 )
 
@@ -146,5 +147,73 @@ func TestDeleteBranchFailsOnTheCurrentBranch(t *testing.T) {
 
 	if err := DeleteBranch(context.Background(), dir, "main"); err == nil {
 		t.Error("DeleteBranch(main) on the current branch: err = nil, want an error")
+	}
+}
+
+func TestMergeFastForwardsCleanlyWithNoConflict(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	runGit(t, dir, "checkout", "-q", "-b", "side")
+	writeFile(t, dir, "b.txt", "side")
+	runGit(t, dir, "add", "b.txt")
+	runGit(t, dir, "commit", "-q", "-m", "side change")
+	runGit(t, dir, "checkout", "-q", "main")
+
+	if err := Merge(context.Background(), dir, "side"); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	if InProgressOperation(dir) != OperationNone {
+		t.Error("InProgressOperation = true after a clean fast-forward merge, want OperationNone")
+	}
+	if _, err := os.Stat(dir + "/b.txt"); err != nil {
+		t.Errorf("b.txt missing after merging side into main: %v", err)
+	}
+}
+
+// TestMergeOnARealConflictReportsNoErrorButLeavesAMergeInProgress pins
+// Merge's own discriminating behavior: a conflicting merge is not an
+// error at all from this function's own point of view — see its own
+// doc comment on why, and gitbreach.go's own mergeGitBreachBranch for
+// the UI-layer caller that actually depends on this distinction.
+func TestMergeOnARealConflictReportsNoErrorButLeavesAMergeInProgress(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base\n")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	runGit(t, dir, "checkout", "-q", "-b", "side")
+	writeFile(t, dir, "a.txt", "side change\n")
+	runGit(t, dir, "commit", "-q", "-am", "side change")
+	runGit(t, dir, "checkout", "-q", "main")
+	writeFile(t, dir, "a.txt", "main change\n")
+	runGit(t, dir, "commit", "-q", "-am", "main change")
+
+	if err := Merge(context.Background(), dir, "side"); err != nil {
+		t.Fatalf("Merge on a conflicting pair: err = %v, want nil (conflicted, not failed)", err)
+	}
+	if InProgressOperation(dir) != OperationMerge {
+		t.Error("InProgressOperation = false after a conflicting merge, want OperationMerge")
+	}
+}
+
+// TestMergeOnAnUnknownRefFails pins the other half of the same
+// distinction: a merge that never even starts (an unresolvable ref)
+// must still be a real error, not swallowed the same way a genuine
+// conflict is.
+func TestMergeOnAnUnknownRefFails(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+
+	if err := Merge(context.Background(), dir, "no-such-branch"); err == nil {
+		t.Error("Merge(no-such-branch): err = nil, want an error")
+	}
+	if InProgressOperation(dir) != OperationNone {
+		t.Error("InProgressOperation = true after a merge that never started, want OperationNone")
 	}
 }
