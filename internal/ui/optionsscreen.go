@@ -281,46 +281,79 @@ func chainKeyCaptures(first, second func(*tcell.EventKey) *tcell.EventKey) func(
 	}
 }
 
-// newOptionsButtons builds the row of screen-wide actions under the
-// settings table.
+// optionsButtonSpec is one button under the settings table — category
+// "" means it's a true screen-wide action, always shown regardless of
+// which category is selected (Reset all, Edit config file, and Reset
+// category itself, which acts on "whichever category is currently
+// selected" rather than naming one of its own). A non-empty category
+// means the button only makes sense for that one category and is
+// hidden everywhere else — see renderOptionsButtons/
+// visibleOptionsButtons, both of which read this field, so the two can
+// never disagree about which buttons exist right now.
+type optionsButtonSpec struct {
+	button **tview.Button
+	label  string
+	action func()
+	// category, if non-empty, is the one optionCategory.name this
+	// button is shown for. Per the user's own explicit request
+	// (2026-11-08): a button that only ever does something useful on
+	// one specific category used to sit in the row on every other one
+	// too, with no way to tell it apart from a genuinely global action
+	// until you tried it. "Reset category" deliberately keeps "" even
+	// though it only ever touches one category at a time — unlike the
+	// four below, it's useful from every category, not just one named
+	// one, so hiding it anywhere would remove real functionality, not
+	// just a confusing label — renderOptionsButtons instead rewrites
+	// its own text each render to name the category it would actually
+	// reset (e.g. "Reset Behavior"), resolving that ambiguity without
+	// hiding it.
+	category string
+}
+
+// optionsButtonSpecs is the button row's own fixed order and category
+// scoping — shared by newOptionsButtons (which only ever needs to
+// build each widget once), renderOptionsButtons (which decides which
+// of them are actually in the row right now), and optionsButtonList
+// (styling, which still needs every one of them regardless of
+// visibility), so none of the three can drift out of sync about which
+// buttons exist.
 //
 // Reset is offered twice, deliberately: per category (what someone who
 // changed one thing and regretted it wants) and for everything at once
 // (what someone who wants a clean slate wants). Both go through
 // resetSetting, so both mean "stop overriding" rather than "write the
 // default".
-func (r *Root) newOptionsButtons() *tview.Flex {
-	type buttonSpec struct {
-		button **tview.Button
-		label  string
-		action func()
+func (r *Root) optionsButtonSpecs() []optionsButtonSpec {
+	return []optionsButtonSpec{
+		{&r.options.ResetCategoryBtn, "Reset category", r.resetCurrentOptionCategory, ""},
+		{&r.options.ResetAllBtn, "Reset all", r.resetAllOptions, ""},
+		{&r.options.EditFileBtn, "Edit config file", r.editConfigFile, ""},
+		{&r.options.NewSchemeBtn, "New color scheme", r.duplicateColorScheme, "Appearance"},
+		// Placed here rather than inside the "Label" category's own
+		// options table, since every row there is a typed get/set
+		// setting (see optionSpec) and this is an action, not a value —
+		// only actually shown while "Label" is the selected category
+		// (see renderOptionsButtons), not screen-wide the way it used
+		// to read before this field existed.
+		{&r.options.RemoveOrphanLabelsBtn, "Remove orphaned labels", r.startOrphanLabelScan, "Label"},
+		// Same "acts on one specific category" reasoning as "New color
+		// scheme" above — the AI Consigliere's own system prompt is a
+		// whole file (see config.UserConsigliereSystemPromptFile), not
+		// a single-line setting editOptionValue's own input field could
+		// edit, so it gets its own editor-opening action here instead
+		// of a row in the settings table.
+		{&r.options.EditSystemPromptBtn, "Edit system prompt", r.editConsigliereSystemPrompt, "AI Consigliere"},
+		{&r.options.ResetSystemPromptBtn, "Reset system prompt", r.resetConsigliereSystemPrompt, "AI Consigliere"},
 	}
-	specs := []buttonSpec{
-		{&r.options.ResetCategoryBtn, "Reset category", r.resetCurrentOptionCategory},
-		{&r.options.ResetAllBtn, "Reset all", r.resetAllOptions},
-		{&r.options.EditFileBtn, "Edit config file", r.editConfigFile},
-		{&r.options.NewSchemeBtn, "New color scheme", r.duplicateColorScheme},
-		// Not tied to whichever category happens to be selected (unlike
-		// every button above, which all act on "the current category"
-		// or the whole screen) — placed here anyway rather than inside
-		// the "Label" category's own options table, since every row
-		// there is a typed get/set setting (see optionSpec) and this is
-		// an action, not a value. The whole row of buttons is always
-		// visible regardless of category, the same as the three above.
-		{&r.options.RemoveOrphanLabelsBtn, "Remove orphaned labels", r.startOrphanLabelScan},
-		// Same "always visible, acts on one specific category"
-		// reasoning as "New color scheme" above — the AI Consigliere's
-		// own system prompt is a whole file (see
-		// config.UserConsigliereSystemPromptFile), not a single-line
-		// setting editOptionValue's own input field could edit, so it
-		// gets its own editor-opening action here instead of a row in
-		// the settings table.
-		{&r.options.EditSystemPromptBtn, "Edit system prompt", r.editConsigliereSystemPrompt},
-		{&r.options.ResetSystemPromptBtn, "Reset system prompt", r.resetConsigliereSystemPrompt},
-	}
+}
 
-	row := tview.NewFlex().SetDirection(tview.FlexColumn)
-	for _, spec := range specs {
+// newOptionsButtons builds every button widget once, at startup — the
+// same build-once shape every other widget in this screen already
+// follows. Which of them actually sit in the row at any given moment
+// is decided afresh by renderOptionsButtons on every category change,
+// not here.
+func (r *Root) newOptionsButtons() *tview.Flex {
+	for _, spec := range r.optionsButtonSpecs() {
 		b := tview.NewButton(spec.label)
 		b.SetSelectedFunc(spec.action)
 		// The screen's shared Tab/Escape handling first, then Space as
@@ -328,24 +361,64 @@ func (r *Root) newOptionsButtons() *tview.Flex {
 		// other button in this app (see spaceAlsoActivates).
 		b.SetInputCapture(chainKeyCaptures(r.captureOptionsKey, spaceAlsoActivates(spec.action)))
 		*spec.button = b
-		row.AddItem(b, 0, 1, false)
 	}
-	return row
+	return tview.NewFlex().SetDirection(tview.FlexColumn)
 }
 
-// optionsButtonList is the button row's own fixed order — shared by the
-// row's own construction and by the focus ring, so the two can't
-// disagree about which buttons exist.
-func (r *Root) optionsButtonList() []*tview.Button {
-	return []*tview.Button{
-		r.options.ResetCategoryBtn,
-		r.options.ResetAllBtn,
-		r.options.EditFileBtn,
-		r.options.NewSchemeBtn,
-		r.options.RemoveOrphanLabelsBtn,
-		r.options.EditSystemPromptBtn,
-		r.options.ResetSystemPromptBtn,
+// renderOptionsButtons rebuilds r.options.Buttons' own children to
+// whichever subset of optionsButtonSpecs applies to the currently
+// selected category (see visibleOptionsButtons) — called from
+// renderOptions, so every category change (arrow keys, mouse click, or
+// the initial openOptions) re-decides the row fresh, the same
+// "rebuilt rather than kept in sync" shape renderOptionCategories'
+// own doc comment already establishes for this screen's other list.
+func (r *Root) renderOptionsButtons() {
+	r.options.Buttons.Clear()
+	if cat, ok := r.currentOptionCategory(); ok {
+		r.options.ResetCategoryBtn.SetLabel("Reset " + cat.name)
+	} else {
+		r.options.ResetCategoryBtn.SetLabel("Reset category")
 	}
+	for _, b := range r.visibleOptionsButtons() {
+		r.options.Buttons.AddItem(b, 0, 1, false)
+	}
+}
+
+// visibleOptionsButtons is optionsButtonSpecs filtered down to
+// whichever ones actually belong in the row for the currently selected
+// category — every spec with category == "", plus whichever one
+// spec.category matches r.currentOptionCategory's own name. Shared by
+// renderOptionsButtons (what's actually in the row) and
+// optionsFocusRing (what Tab can actually reach), so the two can never
+// disagree about which buttons exist right now.
+func (r *Root) visibleOptionsButtons() []*tview.Button {
+	catName := ""
+	if cat, ok := r.currentOptionCategory(); ok {
+		catName = cat.name
+	}
+	var out []*tview.Button
+	for _, spec := range r.optionsButtonSpecs() {
+		if spec.category != "" && spec.category != catName {
+			continue
+		}
+		out = append(out, *spec.button)
+	}
+	return out
+}
+
+// optionsButtonList is every button this screen has, regardless of
+// whether it's currently shown — applyOptionsTheme styles all of them
+// unconditionally (a hidden button still needs to be themed correctly
+// for the moment it reappears), unlike optionsFocusRing/
+// visibleOptionsButtons, which only care about the ones Tab can
+// actually reach right now.
+func (r *Root) optionsButtonList() []*tview.Button {
+	specs := r.optionsButtonSpecs()
+	out := make([]*tview.Button, len(specs))
+	for i, spec := range specs {
+		out[i] = *spec.button
+	}
+	return out
 }
 
 // optionsFocusRing is Tab's own stop order within the Options screen:
@@ -357,7 +430,7 @@ func (r *Root) optionsButtonList() []*tview.Button {
 // than dead-end on the last button.
 func (r *Root) optionsFocusRing() []tview.Primitive {
 	ring := []tview.Primitive{r.options.Categories, r.options.Table}
-	for _, b := range r.optionsButtonList() {
+	for _, b := range r.visibleOptionsButtons() {
 		ring = append(ring, b)
 	}
 	return ring
@@ -594,6 +667,7 @@ func optionCategoryDisplayRows(r *Root, cat optionCategory) []optionDisplayRow {
 // header it can never move off of with the arrow keys alone.
 func (r *Root) renderOptions() {
 	r.options.Table.Clear()
+	r.renderOptionsButtons()
 
 	categories := optionCategories()
 	if r.options.Category < 0 || r.options.Category >= len(categories) {
