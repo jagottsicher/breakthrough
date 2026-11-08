@@ -165,6 +165,39 @@ func PushRemote(ctx context.Context, root, remote, branch string) error {
 	return nil
 }
 
+// PullRemote runs `git pull --no-rebase <remote> <branch>` — a real
+// fetch followed by a real merge, in one step. --no-rebase is
+// deliberate, not the default: `git pull` otherwise follows whatever
+// pull.rebase this repository or the user's own global config
+// happens to have set, which would make this dashboard's own
+// conflict handling depend on config it never shows or asks about.
+// Forcing the merge strategy keeps this predictable and keeps a
+// conflicting pull landing in exactly the same conflict surface a
+// conflicting Merge already does (OperationMerge, resolved with
+// "o"/"t" then "C"/"A"/"K") — the same disambiguation Merge's own doc
+// comment already explains, reused verbatim here since `git pull`
+// without --rebase is, underneath, exactly a fetch plus a merge.
+func PullRemote(ctx context.Context, root, remote, branch string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "pull", "--no-rebase", remote, branch)
+	cmd.Env = cmdEnvironWithoutPrompts()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if InProgressOperation(root) == OperationMerge {
+			return nil
+		}
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("git pull: %s", msg)
+		}
+		return fmt.Errorf("git pull: %w", err)
+	}
+	return nil
+}
+
 func FetchRemote(ctx context.Context, root, remote string) error {
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "fetch", remote)
 	cmd.Env = cmdEnvironWithoutPrompts()

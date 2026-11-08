@@ -790,6 +790,71 @@ func (r *Root) applyGitBreachPushRemote(root, name string, err error) {
 	r.reloadGitBreach()
 }
 
+// openGitBreachPullRemote is "P" on a Remotes row — mirrors
+// openGitBreachMerge's own guard shape, not Push's always-confirm:
+// a conflicting pull lands in the same conflict surface a conflicting
+// Merge already does (see git.PullRemote's own doc comment), so the
+// risk this confirm exists to flag is the dirty-tree case, same as
+// Merge, not "this writes to the remote" the way Push's own always-
+// confirm is about. Refuses on a detached HEAD, same reasoning as
+// Push.
+func (r *Root) openGitBreachPullRemote() {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabRemotes {
+		return
+	}
+	if r.gitBreach.Status.Detached || r.gitBreach.Status.Branch == "" {
+		return
+	}
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	rm, ok := r.gitBreachRemoteAt(row)
+	if !ok {
+		return
+	}
+	branch := r.gitBreach.Status.Branch
+
+	st := r.gitBreach.Status
+	if len(st.Staged) > 0 || len(st.Unstaged) > 0 || len(st.Conflicts) > 0 {
+		r.openConfirm(
+			fmt.Sprintf("Pull %q with uncommitted changes in the working tree?", rm.Name),
+			"Yes, pull",
+			func() { r.startGitBreachPullRemote(rm.Name, branch) },
+		)
+		return
+	}
+	r.startGitBreachPullRemote(rm.Name, branch)
+}
+
+// startGitBreachPullRemote/applyGitBreachPullRemote mirror Fetch/Push's
+// own async dispatch shape exactly. applyGitBreachPullRemote always
+// reloads on success too, the same as a conflicting result — a
+// conflicting pull needs it to pick up the new Conflicts rows and
+// Operation state, landing the user in Phase B's own conflict surface
+// rather than at an error overlay, exactly like mergeGitBreachBranch's
+// own identical reasoning.
+func (r *Root) startGitBreachPullRemote(remote, branch string) {
+	root := r.gitBreach.Root
+	showTablePlaceholder(r.gitBreach.BranchesTable, fmt.Sprintf("Pulling %q…", remote), r.theme.MutedTextColor)
+
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachNetworkTimeout)
+	r.safeGo("Git breach pull", cancel, func() {
+		err := git.PullRemote(ctx, root, remote, branch)
+		cancel()
+		r.app.QueueUpdateDraw(func() {
+			r.applyGitBreachPullRemote(root, remote, err)
+		})
+	})
+}
+
+func (r *Root) applyGitBreachPullRemote(root, name string, err error) {
+	if r.gitBreach.Root != root {
+		return
+	}
+	if err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: pull %q: %w", name, err))
+	}
+	r.reloadGitBreach()
+}
+
 // toggleGitBreachBranchesTab/reverseToggleGitBreachBranchesTab cycle
 // the Branches box forward/backward through its own three sub-tabs —
 // Branches → Tags → Remotes → Branches again, wrapping either
