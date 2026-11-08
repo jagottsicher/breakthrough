@@ -1363,9 +1363,9 @@ list.
 
 | Box | Shows |
 |---|---|
-| Status | Branch, ahead/behind, a one-line summary |
+| Status | Branch, ahead/behind, a one-line summary, plus a fourth line naming whichever merge/rebase/cherry-pick/revert is actually in progress, if any |
 | Files | Staged/unstaged/untracked changes (Conflicts first, if any), real syntax coloring on every change |
-| Branches | Every local branch, the current one marked — `Left`/`Right` switch this box to its Tags sub-tab and back (see below) |
+| Branches | Every local branch, the current one marked — `m` merges it into whatever is checked out, `Left`/`Right` switch this box to its Tags sub-tab and back (see below) |
 | Commits | The most recent commits, newest first, each colored by its own author, with a lane/branch graph; loads 200 at a time, fetching 200 more automatically once you reach the last loaded row — `d` diffs the selected commit against a picked branch, tag, or other loaded commit; `B` starts a bisect with the selected commit as "good" |
 | Stash | Every stashed change, newest first |
 
@@ -1402,6 +1402,28 @@ on an unresolved conflict (no single history to attribute lines to
 without resolving it first) or an untracked file (never added to the
 index, so there's no history yet).
 
+`m` (Branches) merges the branch under the cursor into whatever is
+currently checked out — confirms first only if the working tree isn't
+clean, the same restraint `Enter`'s own checkout already has; does
+nothing on the current branch itself. A conflicting merge isn't an
+error: it lands you in the conflict view below, merge already in
+progress.
+
+An unresolved Files row — from a conflicting merge, rebase,
+cherry-pick, revert, or `p` (stash pop, below) — shows every
+`<<<<<<<`/`=======`/`>>>>>>>` section in Main instead of an ordinary
+diff: "ours" tinted the same green an added diff line already uses,
+"theirs" the same red a removed one does. `o`/`t` (with Main focused)
+resolve the topmost still-unresolved section by keeping that side,
+re-staging the file automatically once every section in it is gone.
+`C`/`A`/`K` — available no matter which box has focus, not just Main
+— continue, abort, or skip whichever operation Status's own fourth
+line names: `C` only once every conflicted path is actually resolved
+(git itself refuses otherwise, naming which path still isn't), `A`
+always confirms first (discards any resolution made so far), and `K`
+does nothing during a plain merge, which git itself has no skip step
+for at all.
+
 `Left`/`Right` on the Branches box switch it between its own two
 sub-tabs — Branches (above) and Tags, one shared table either way.
 On the Tags sub-tab: `a` prompts for a name and creates a new,
@@ -1418,9 +1440,11 @@ of this yet.
 | `Right` | (Files/Commits/Stash) Jump into Main's own diff |
 | `Left` / `Right` | (Branches) Switch between the Branches and Tags sub-tabs |
 | `Enter` | (Branches sub-tab) Check out the branch under the cursor, confirming first if the working tree isn't clean |
+| `m` | (Branches sub-tab) Merge the branch under the cursor into whatever is checked out, confirming first if the working tree isn't clean — does nothing on the current branch |
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
 | `d` | (Commits) Diff the commit under the cursor against a picked ref — any local branch, tag, or other loaded commit |
 | `s` | (Main, Files' own unstaged diff only) Stage the hunk at the top of the visible area |
+| `o` / `t` | (Main, a Conflicts row's own view) Resolve the topmost still-unresolved section by keeping "ours" / "theirs" |
 | `B` | (Commits) Start a bisect with the selected commit as "good", picking "bad" from the ref picker |
 | `G` / `X` | (Commits, while bisecting) Mark the current step good / bad |
 | `E` | (Commits, while bisecting) End the bisect |
@@ -1428,9 +1452,13 @@ of this yet.
 | `a` | (Tags sub-tab) Create a new tag at `HEAD`, after typing a name |
 | `d` | (Tags sub-tab) Delete the tag under the cursor, after confirming |
 | `a` | (Stash) Apply the entry under the cursor (never pops it) |
+| `p` | (Stash) Pop the entry under the cursor — apply and drop in one step; a conflicting pop keeps the stash anyway and lands you in the conflict view |
 | `d` | (Stash) Drop the entry under the cursor, after confirming |
 | `c` | Commit whatever is currently staged, after typing a message |
 | `r` | Re-read status/branches/commits/stash |
+| `C` | Continue whatever operation Status's own fourth line names — does nothing without one in progress |
+| `A` | Abort whatever operation is in progress, after confirming |
+| `K` | Skip the commit currently causing a conflict during a rebase/cherry-pick/revert — does nothing during a plain merge |
 | `/` | (Files/Branches/Tags/Stash) Filter that box by a plain substring, or clear its filter if one is already active |
 | `Esc` | Back out of Main's own diff, or close the dashboard from anywhere else |
 
