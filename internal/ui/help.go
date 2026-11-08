@@ -1832,7 +1832,7 @@ var helpText = strings.TrimLeft(`
   right now, given every field's current value.
 
   Whatever's chosen here becomes the new default shown next time (all
-  of the above, under Options → Behavior → Duplicate) — the one
+  of the above, under Options → Duplicate) — the one
   setting group in this whole app that adapts itself this way, per its
   own explicit design. Only on actually pressing "Duplicate": editing a
   field and then Cancel never touches the sticky default at all.
