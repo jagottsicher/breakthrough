@@ -612,6 +612,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 			hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }),
 			hintKey("b", "blame", func(r *Root) { r.startGitBreachBlame() }),
 			hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+			hintKey("/", gitBreachFilterHintLabel(r.gitBreach.FilesFilter), func(r *Root) { r.openGitBreachFilesFilter() }),
 		)
 	case r.gitBreach.BranchesTable.HasFocus():
 		entries = append(entries, hintKey("←/→", "switch tab", func(r *Root) { r.toggleGitBreachBranchesTab() }))
@@ -619,11 +620,13 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 			entries = append(entries,
 				hintKey("a", "new tag", func(r *Root) { r.openGitBreachCreateTag() }),
 				hintKey("d", "delete tag", func(r *Root) { r.openGitBreachDeleteTag() }),
+				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.TagsFilter), func(r *Root) { r.openGitBreachBranchesOrTagsFilter() }),
 			)
 		} else {
 			entries = append(entries,
 				hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }),
 				hintKey("d", "delete branch", func(r *Root) { r.openGitBreachDeleteBranch() }),
+				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.BranchesFilter), func(r *Root) { r.openGitBreachBranchesOrTagsFilter() }),
 			)
 		}
 	case r.gitBreach.CommitsTable.HasFocus():
@@ -645,6 +648,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 			hintKey("a", "apply stash", func(r *Root) { r.openGitBreachStashApply() }),
 			hintKey("d", "drop stash", func(r *Root) { r.openGitBreachStashDrop() }),
 			hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+			hintKey("/", gitBreachFilterHintLabel(r.gitBreach.StashFilter), func(r *Root) { r.openGitBreachStashFilter() }),
 		)
 	case r.gitBreachMainHasFocus():
 		entries = append(entries,
@@ -941,7 +945,8 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 
 // captureGitBreachFilesTableKey: Tab switches to the next box, Space
 // toggles stage/unstage, "b" shows blame, "c" commits, "r" reloads,
-// Escape closes — the
+// "/" filters by path (see openGitBreachFilesFilter — a second "/"
+// clears it), Escape closes — the
 // same per-table InputCapture shape captureLogAuditSelectionTableKey
 // already establishes elsewhere in this package. Tab is intercepted
 // explicitly rather than left to bubble: tview's own Table.InputHandler
@@ -989,6 +994,9 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 			return nil
 		case 'r':
 			r.reloadGitBreach()
+			return nil
+		case '/':
+			r.openGitBreachFilesFilter()
 			return nil
 		}
 	}
@@ -1057,6 +1065,9 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			// *tview.Table).
 			r.startConsigliereChord(r.gitBreachFocusables()[0].body)
 			return nil
+		case '/':
+			r.openGitBreachBranchesOrTagsFilter()
+			return nil
 		}
 	}
 	return event
@@ -1091,6 +1102,12 @@ func (r *Root) gitBreachFocusBranchesOnClick(action tview.MouseAction, event *tc
 // SetSelectionChangedFunc/FocusFunc), with no other action a commit
 // row itself triggers (checkout/revert/cherry-pick/reset are
 // explicitly later Ausbaustufen — see feature_ideas.txt's own list).
+// Deliberately no "/" filter here, unlike Files/Branches/Tags/Stash:
+// git.CommitLanes' own lane/branch graph is computed over the whole,
+// unfiltered list, and filtering rows out from under an already-
+// drawn graph is real complexity this project's own "keep it simple"
+// instruction (2026-11-08) doesn't cover — noted in feature_ideas.txt
+// as a separate, later step.
 func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeGitBreach()
@@ -1202,6 +1219,9 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 			// *tview.Table).
 			r.startConsigliereChord(r.gitBreachFocusables()[0].body)
 			return nil
+		case '/':
+			r.openGitBreachStashFilter()
+			return nil
 		}
 	}
 	return event
@@ -1271,6 +1291,19 @@ func (r *Root) renderGitBreachStatus() {
 	r.gitBreach.StatusView.SetText(strings.Join(lines, "\n"))
 }
 
+// renderGitBreachFilesHeader shows Files' own active filter, if any
+// — without this, a filter that hides every row but a few would read
+// as "most of the working tree vanished" rather than "filtered",
+// exactly the kind of silent staleness this project's own
+// conventions elsewhere already guard against.
+func (r *Root) renderGitBreachFilesHeader() {
+	title := " Files "
+	if r.gitBreach.FilesFilter != "" {
+		title = fmt.Sprintf(" Files  /%s ", r.gitBreach.FilesFilter)
+	}
+	r.gitBreach.FilesHeader.SetText(title)
+}
+
 // renderGitBreachFiles rebuilds the Files table: one bold, non-
 // selectable header row per non-empty section ("Staged (n)" etc.,
 // Conflicts first — the same "most urgent first" ordering
@@ -1284,6 +1317,7 @@ func (r *Root) renderGitBreachStatus() {
 func (r *Root) renderGitBreachFiles() {
 	r.gitBreach.FilesTable.Clear()
 	r.gitBreach.RowIndex = map[int]int{}
+	r.renderGitBreachFilesHeader()
 
 	type section struct {
 		label string
@@ -1300,7 +1334,7 @@ func (r *Root) renderGitBreachFiles() {
 	for _, sec := range sections {
 		var indices []int
 		for i, gr := range r.gitBreach.Rows {
-			if gr.kind == sec.kind {
+			if gr.kind == sec.kind && gitBreachFilterMatches(r.gitBreach.FilesFilter, gr.path) {
 				indices = append(indices, i)
 			}
 		}
@@ -1331,7 +1365,11 @@ func (r *Root) renderGitBreachFiles() {
 		return
 	}
 	if row == 0 {
-		showTablePlaceholder(r.gitBreach.FilesTable, "Working tree clean.", r.theme.MutedTextColor)
+		msg := "Working tree clean."
+		if r.gitBreach.FilesFilter != "" && len(r.gitBreach.Rows) > 0 {
+			msg = fmt.Sprintf("No files match %q.", r.gitBreach.FilesFilter)
+		}
+		showTablePlaceholder(r.gitBreach.FilesTable, msg, r.theme.MutedTextColor)
 		r.cancelGitBreachDiff()
 		r.gitBreach.DiffView.SetText("")
 		return
@@ -1393,8 +1431,13 @@ func (r *Root) renderGitBreachFiles() {
 // header specifically, for one glyph's worth of difference.
 func (r *Root) renderGitBreachBranchesHeader() {
 	title := " ● Branches   Tags "
+	filter := r.gitBreach.BranchesFilter
 	if r.gitBreach.BranchesShowTags {
 		title = "   Branches  ● Tags "
+		filter = r.gitBreach.TagsFilter
+	}
+	if filter != "" {
+		title += fmt.Sprintf(" /%s ", filter)
 	}
 	r.gitBreach.BranchesHeader.SetText(title)
 }
@@ -1435,7 +1478,12 @@ func (r *Root) renderGitBreachBranches() {
 	// plain text color — the current branch reads as the single
 	// obvious answer to "which one am I on" at a glance rather than
 	// needing a separate marker column.
+	r.gitBreach.BranchesShown = nil
 	for _, b := range r.gitBreach.Branches {
+		if !gitBreachFilterMatches(r.gitBreach.BranchesFilter, b.Name) {
+			continue
+		}
+		r.gitBreach.BranchesShown = append(r.gitBreach.BranchesShown, b)
 		text, color := "  "+b.Name, r.theme.Text
 		if b.Current {
 			text, color = "* "+b.Name, r.theme.EntryExecutable
@@ -1444,8 +1492,12 @@ func (r *Root) renderGitBreachBranches() {
 		row++
 	}
 
-	if len(r.gitBreach.Branches) == 0 {
-		showTablePlaceholder(r.gitBreach.BranchesTable, "No local branches found.", r.theme.MutedTextColor)
+	if len(r.gitBreach.BranchesShown) == 0 {
+		msg := "No local branches found."
+		if r.gitBreach.BranchesFilter != "" && len(r.gitBreach.Branches) > 0 {
+			msg = fmt.Sprintf("No branches match %q.", r.gitBreach.BranchesFilter)
+		}
+		showTablePlaceholder(r.gitBreach.BranchesTable, msg, r.theme.MutedTextColor)
 		return
 	}
 
@@ -1481,12 +1533,22 @@ func (r *Root) renderGitBreachTags() {
 		showTablePlaceholder(r.gitBreach.BranchesTable, r.gitBreach.TagsErr.Error(), r.theme.EntryError)
 		return
 	}
-	if len(r.gitBreach.Tags) == 0 {
-		showTablePlaceholder(r.gitBreach.BranchesTable, "No tags found.", r.theme.MutedTextColor)
+	r.gitBreach.TagsShown = nil
+	for _, tg := range r.gitBreach.Tags {
+		if gitBreachFilterMatches(r.gitBreach.TagsFilter, tg.Name) {
+			r.gitBreach.TagsShown = append(r.gitBreach.TagsShown, tg)
+		}
+	}
+	if len(r.gitBreach.TagsShown) == 0 {
+		msg := "No tags found."
+		if r.gitBreach.TagsFilter != "" && len(r.gitBreach.Tags) > 0 {
+			msg = fmt.Sprintf("No tags match %q.", r.gitBreach.TagsFilter)
+		}
+		showTablePlaceholder(r.gitBreach.BranchesTable, msg, r.theme.MutedTextColor)
 		return
 	}
 
-	for row, tg := range r.gitBreach.Tags {
+	for row, tg := range r.gitBreach.TagsShown {
 		r.gitBreach.BranchesTable.SetCell(row, 0, tview.NewTableCell("  "+tg.Name).SetTextColor(r.theme.Text))
 	}
 
@@ -1757,23 +1819,44 @@ func (r *Root) renderGitBreachCommits() {
 	r.startGitBreachCommitsDiffIfOwner()
 }
 
+// renderGitBreachStashHeader mirrors renderGitBreachFilesHeader
+// exactly, for Stash's own active filter.
+func (r *Root) renderGitBreachStashHeader() {
+	title := " Stash "
+	if r.gitBreach.StashFilter != "" {
+		title = fmt.Sprintf(" Stash  /%s ", r.gitBreach.StashFilter)
+	}
+	r.gitBreach.StashHeader.SetText(title)
+}
+
 // renderGitBreachStash rebuilds the Stash table — same shape as
 // renderGitBreachCommits (no section headers, one row per entry), same
 // gitBreach.StashReady fix for the same construction-time-placeholder
 // reason (see its own doc comment on Root).
 func (r *Root) renderGitBreachStash() {
 	r.gitBreach.StashTable.Clear()
+	r.renderGitBreachStashHeader()
 
 	if r.gitBreach.StashErr != nil {
 		showTablePlaceholder(r.gitBreach.StashTable, r.gitBreach.StashErr.Error(), r.theme.EntryError)
 		return
 	}
-	if len(r.gitBreach.Stash) == 0 {
-		showTablePlaceholder(r.gitBreach.StashTable, "No stashed changes.", r.theme.MutedTextColor)
+	r.gitBreach.StashShown = nil
+	for _, s := range r.gitBreach.Stash {
+		if gitBreachFilterMatches(r.gitBreach.StashFilter, s.Ref+" "+s.Message) {
+			r.gitBreach.StashShown = append(r.gitBreach.StashShown, s)
+		}
+	}
+	if len(r.gitBreach.StashShown) == 0 {
+		msg := "No stashed changes."
+		if r.gitBreach.StashFilter != "" && len(r.gitBreach.Stash) > 0 {
+			msg = fmt.Sprintf("No stash entries match %q.", r.gitBreach.StashFilter)
+		}
+		showTablePlaceholder(r.gitBreach.StashTable, msg, r.theme.MutedTextColor)
 		return
 	}
 
-	for row, s := range r.gitBreach.Stash {
+	for row, s := range r.gitBreach.StashShown {
 		text := fmt.Sprintf("%s %s", s.Ref, s.Message)
 		r.gitBreach.StashTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(r.theme.Text))
 	}
@@ -1792,7 +1875,7 @@ func (r *Root) renderGitBreachStash() {
 	// render can pass as "valid" here too, the same bug Branches/
 	// Commits had.
 	cur, _ := r.gitBreach.StashTable.GetSelection()
-	if cur < 0 || cur >= len(r.gitBreach.Stash) || !r.gitBreach.StashReady {
+	if cur < 0 || cur >= len(r.gitBreach.StashShown) || !r.gitBreach.StashReady {
 		r.gitBreach.StashTable.Select(0, 0)
 	}
 	r.gitBreach.StashReady = true
