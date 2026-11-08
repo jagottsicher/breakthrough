@@ -802,11 +802,12 @@ var helpText = strings.TrimLeft(`
   change), Branches (every local branch, the current one marked —
   "m" merges the one under the cursor into whatever is currently
   checked out (does nothing on the current branch itself) —
-  Left/Right switch this box to its own Tags sub-tab and back, one
-  shared table either way; "a" there creates a new, lightweight tag
-  at HEAD, "d" deletes the one under the cursor after confirming, and
-  Enter does nothing — a tag has no checkout equivalent; pushing a
-  tag isn't part of this yet),
+  Left/Right cycle this box through its own Tags and Remotes sub-tabs
+  and back (one shared table either way); "a" on Tags creates a new,
+  lightweight tag at HEAD, "d" deletes the one under the cursor after
+  confirming, and Enter does nothing — a tag has no checkout
+  equivalent; pushing a tag isn't part of this yet. Remotes is
+  currently a placeholder — no Fetch/Push/Pull wired up yet),
   Commits (the most recent commits, newest first, each one colored by
   its own author — loads 200 at a time, reaching the last loaded row
   fetches 200 more automatically, with a "loaded/total" hint in the
@@ -942,9 +943,9 @@ var helpText = strings.TrimLeft(`
              real keyboard focus — only shown in the hint bar while one
              of these three has focus, since Branches has no diff of
              its own to jump into
-    Left/    (Branches only) Switch this box between its own Branches
-    Right    and Tags sub-tabs — one shared table either way, so
-             nothing else about the focus ring changes
+    Left/    (Branches only) Cycle this box backward/forward through
+    Right    its own Branches/Tags/Remotes sub-tabs — one shared table
+             either way, so nothing else about the focus ring changes
     Enter    (Branches sub-tab) Check out the branch under the
              cursor — confirms first if the working tree isn't clean
              — only shown in the hint bar while Branches has focus;

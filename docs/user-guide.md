@@ -1365,7 +1365,7 @@ list.
 |---|---|
 | Status | Branch, ahead/behind, a one-line summary, plus a fourth line naming whichever merge/rebase/cherry-pick/revert is actually in progress, if any |
 | Files | Staged/unstaged/untracked changes (Conflicts first, if any), real syntax coloring on every change |
-| Branches | Every local branch, the current one marked — `m` merges it into whatever is checked out, `Left`/`Right` switch this box to its Tags sub-tab and back (see below) |
+| Branches | Every local branch, the current one marked — `m` merges it into whatever is checked out, `Left`/`Right` cycle this box through its Tags and Remotes sub-tabs and back (see below) |
 | Commits | The most recent commits, newest first, each colored by its own author, with a lane/branch graph; loads 200 at a time, fetching 200 more automatically once you reach the last loaded row — `d` diffs the selected commit against a picked branch, tag, or other loaded commit; `B` starts a bisect with the selected commit as "good" |
 | Stash | Every stashed change, newest first |
 
@@ -1434,8 +1434,10 @@ always confirms first (discards any resolution made so far), and `K`
 does nothing during a plain merge, which git itself has no skip step
 for at all.
 
-`Left`/`Right` on the Branches box switch it between its own two
-sub-tabs — Branches (above) and Tags, one shared table either way.
+`Left`/`Right` on the Branches box cycle it through its own three
+sub-tabs — Branches (above), Tags, and Remotes, one shared table
+either way. Remotes is currently a placeholder — no Fetch/Push/Pull
+wired up yet.
 On the Tags sub-tab: `a` prompts for a name and creates a new,
 lightweight tag at `HEAD`; `d` deletes the one under the cursor,
 after confirming. `Enter` does nothing there — a tag has no
@@ -1448,7 +1450,7 @@ of this yet.
 | `Space` | (Files) Stage/unstage the row under the cursor |
 | `b` | (Files) Show the selected file's own blame in Main |
 | `Right` | (Files/Commits/Stash) Jump into Main's own diff |
-| `Left` / `Right` | (Branches) Switch between the Branches and Tags sub-tabs |
+| `Left` / `Right` | (Branches) Cycle backward/forward through the Branches, Tags, and Remotes sub-tabs |
 | `Enter` | (Branches sub-tab) Check out the branch under the cursor, confirming first if the working tree isn't clean |
 | `m` | (Branches sub-tab) Merge the branch under the cursor into whatever is checked out, confirming first if the working tree isn't clean — does nothing on the current branch |
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
