@@ -1109,6 +1109,56 @@ func (r *Root) openGitBreachDiffAgainstRef() {
 	})
 }
 
+// openGitBreachCherryPick is "P" on the Commits table — opens the same
+// ref picker "d"/"B" already use (every local branch, tag, or loaded
+// commit) and applies whichever one gets picked onto whatever's
+// currently checked out. Deliberately not "the row under the cursor":
+// git.Log only ever walks HEAD's own ancestry, so every row the
+// Commits table itself can show is already applied — cherry-picking
+// one back onto the same HEAD is exactly the empty, refused pick
+// excludeHash below guards the obvious case of (HEAD onto itself);
+// the ref picker's branches/tags are where a genuinely different
+// commit actually comes from. Confirms first only if the working tree
+// isn't clean, same restraint openGitBreachMerge's own guard has,
+// applied inside the picker's own onPick callback so the confirm
+// dialog layers on top of the dashboard the same way openGitBreachCheckout's
+// already does, not on top of the picker which has already closed.
+func (r *Root) openGitBreachCherryPick() {
+	var head string
+	if len(r.gitBreach.Commits) > 0 {
+		head = r.gitBreach.Commits[0].Hash
+	}
+	r.openGitBreachRefPicker(head, func(ref string) {
+		st := r.gitBreach.Status
+		if len(st.Staged) > 0 || len(st.Unstaged) > 0 || len(st.Conflicts) > 0 {
+			r.openConfirm(
+				fmt.Sprintf("Cherry-pick %q with uncommitted changes in the working tree?", ref),
+				"Yes, cherry-pick",
+				func() { r.cherryPickGitBreachCommit(ref) },
+			)
+			return
+		}
+		r.cherryPickGitBreachCommit(ref)
+	})
+}
+
+// cherryPickGitBreachCommit runs the actual pick and reloads — same
+// "conflicted is not a real failure" shape as mergeGitBreachBranch,
+// since git.CherryPick already turns one into a nil error. ref is
+// whatever the picker in openGitBreachCherryPick returned — a branch
+// name, tag name, or commit hash, all equally valid arguments to `git
+// cherry-pick`.
+func (r *Root) cherryPickGitBreachCommit(ref string) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.CherryPick(ctx, r.gitBreach.Root, ref); err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+	r.showError(r.panel.load(r.panel.path))
+}
+
 // openGitBreachRefPicker opens r.picker listing every ref already on
 // screen (every local branch, every tag, every loaded commit except
 // excludeHash), calling onPick with whichever one gets chosen —

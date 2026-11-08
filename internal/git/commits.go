@@ -189,23 +189,35 @@ func DiffRefs(ctx context.Context, root, a, b string) (string, error) {
 	return stdout.String(), nil
 }
 
-// CherryPick runs `git cherry-pick hash` onto whatever HEAD currently
+// CherryPick runs `git cherry-pick ref` onto whatever HEAD currently
 // points at — the single-commit, onto-HEAD case feature_ideas.txt's
 // own Phase C item asks for first ("Commit(s) markieren, in einen
 // anderen Branch einfügen" is noted as a later remainder: picking onto
 // a branch other than the current one needs its own checkout step
 // first, and multi-select doesn't exist on any table in this dashboard
-// yet).
+// yet). ref is anything git itself can resolve to a single commit — a
+// hash, branch name, or tag name all work identically.
 //
-// A conflicting pick is deliberately not reported as err, the same
-// disambiguation Merge already has: InProgressOperation(root) ==
-// OperationCherryPick immediately afterward means conflicts are
-// waiting to be resolved, not that the pick failed to start at all
-// (an unknown hash, a dirty tree it refuses to touch).
-func CherryPick(ctx context.Context, root, hash string) error {
-	err := run(ctx, root, "cherry-pick", hash)
-	if err != nil && InProgressOperation(root) == OperationCherryPick {
-		return nil
+// A conflicting pick is deliberately not reported as err — but unlike
+// Merge, checking InProgressOperation(root) == OperationCherryPick
+// alone is not enough to tell a real conflict apart from every other
+// failure here: a real, live-caught bug picking an already-applied
+// ref (git's own cherry-pick sequencer calls this "empty", not a
+// conflict at all) still leaves CHERRY_PICK_HEAD behind with zero
+// actual conflicted paths, which InProgressOperation alone can't
+// distinguish from a genuine conflict waiting to be resolved. Instead,
+// comparing Status.Conflicts before and after — the same technique
+// StashPop's own doc comment already uses, for the identical reason
+// (stash apply/pop has no ref-file state to check at all): more
+// conflicts afterward means this pick caused them, unchanged means a
+// real failure (empty pick, an unknown ref, a dirty tree it refuses).
+func CherryPick(ctx context.Context, root, ref string) error {
+	before, beforeErr := Fetch(ctx, root)
+	err := run(ctx, root, "cherry-pick", ref)
+	if err != nil && beforeErr == nil {
+		if after, afterErr := Fetch(ctx, root); afterErr == nil && len(after.Conflicts) > len(before.Conflicts) {
+			return nil
+		}
 	}
 	return err
 }

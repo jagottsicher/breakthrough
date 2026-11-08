@@ -1303,7 +1303,9 @@ Lightning Network ⚡️ using the sponsor button above.
   by author, a lane/branch graph for merges, loads 200 at a time, "d"
   to diff the selected commit against a picked branch/tag/other
   commit, "B" to start a bisect with it as "good" ("G"/"X" mark a
-  step good/bad, "E" ends it) and
+  step good/bad, "E" ends it), "P" to cherry-pick a branch, tag, or
+  loaded commit onto whatever is currently checked out (confirms
+  first only on a dirty tree) and
   Stash (apply with "a", pop — apply and drop in one step — with "p",
   drop alone with "d") are all live. The Main pane on
   the right shows whichever side box currently has focus — Files' own
