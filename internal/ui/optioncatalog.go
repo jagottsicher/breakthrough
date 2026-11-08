@@ -1642,6 +1642,32 @@ func optionCategories() []optionCategory {
 						)
 					},
 				},
+				intOption("log_audit_journal_lines", "Journal window (lines)",
+					"How many of the systemd journal's own most recent entries the "+
+						"\"systemd-journal\" row reads at once (journalctl -n) — Linux "+
+						"only, since journald doesn't exist elsewhere. Applies the next "+
+						"time that row is opened or \"r\"/follow re-reads it, not "+
+						"retroactively to an already-open view.\n\n"+
+						"2000 by default.",
+					func(r *Root) int { return r.settings.LogAuditJournalLines },
+					func(r *Root, n int) {
+						r.settings.LogAuditJournalLines = n
+						r.persistSetting("log_audit_journal_lines", strconv.Itoa(n))
+					},
+				),
+				intOption("log_audit_follow_interval_ms", "Follow interval (ms)",
+					"How often, in milliseconds, follow mode (\"f\" in the viewer) "+
+						"re-reads — a file family and the systemd journal both use this "+
+						"same interval. A shorter one feels closer to live; a longer one "+
+						"re-reads less often on a heavily loaded host.\n\n"+
+						"2000 (two seconds) by default. Only takes effect the next time "+
+						"follow is started, not on an already-running one.",
+					func(r *Root) int { return r.settings.LogAuditFollowIntervalMS },
+					func(r *Root, n int) {
+						r.settings.LogAuditFollowIntervalMS = n
+						r.persistSetting("log_audit_follow_interval_ms", strconv.Itoa(n))
+					},
+				),
 			},
 		},
 		{
@@ -2280,6 +2306,10 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return config.FormatByteSize(s.LogAuditDiskCacheSize), true
 	case "log_audit_disk_cache_path":
 		return s.LogAuditDiskCachePath, true
+	case "log_audit_journal_lines":
+		return strconv.Itoa(s.LogAuditJournalLines), true
+	case "log_audit_follow_interval_ms":
+		return strconv.Itoa(s.LogAuditFollowIntervalMS), true
 	case "cloud_mount_base_dir":
 		return s.CloudMountBaseDir, true
 	case "compress_format":

@@ -253,6 +253,47 @@ func TestLoadRejectsNonIntegerTrashMaxAgeDays(t *testing.T) {
 	}
 }
 
+func TestLoadParsesLogAuditJournalLinesAndFollowIntervalKeys(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "log_audit_journal_lines = 500\nlog_audit_follow_interval_ms = 5000\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want none", warnings)
+	}
+	if s.LogAuditJournalLines != 500 {
+		t.Errorf("LogAuditJournalLines = %d, want 500", s.LogAuditJournalLines)
+	}
+	if s.LogAuditFollowIntervalMS != 5000 {
+		t.Errorf("LogAuditFollowIntervalMS = %d, want 5000", s.LogAuditFollowIntervalMS)
+	}
+}
+
+func TestDefaultSettingsLogAuditJournalLinesAndFollowInterval(t *testing.T) {
+	s := DefaultSettings()
+	if s.LogAuditJournalLines != 2000 {
+		t.Errorf("LogAuditJournalLines = %d, want 2000", s.LogAuditJournalLines)
+	}
+	if s.LogAuditFollowIntervalMS != 2000 {
+		t.Errorf("LogAuditFollowIntervalMS = %d, want 2000", s.LogAuditFollowIntervalMS)
+	}
+}
+
+func TestLoadRejectsNonIntegerLogAuditJournalLines(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "log_audit_journal_lines = not-a-number\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) == 0 {
+		t.Error("warnings = none, want one for the malformed value")
+	}
+	if s.LogAuditJournalLines != 2000 {
+		t.Errorf("LogAuditJournalLines after a rejected value = %d, want the default (2000) left untouched", s.LogAuditJournalLines)
+	}
+}
+
 func TestLoadWarnsOnInvalidBooleanValue(t *testing.T) {
 	dir := t.TempDir()
 	userPath := filepath.Join(dir, "user")

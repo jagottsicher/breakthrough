@@ -1278,10 +1278,12 @@ Lightning Network ⚡️ using the sponsor button above.
   it and select with the keyboard, to drill the Time field straight to
   that range — a Statistics overlay (counts by level and top sources),
   "e"/"w" to jump between errors and warnings, a follow mode ("f") that
-  re-reads every two seconds, and a raw-line section in the detail view
+  re-reads every two seconds by default (configurable), and a raw-line
+  section in the detail view
   whenever the original line differs from the extracted message. On
   Linux with `journalctl` on `$PATH`, the selection screen also offers
-  a systemd-journal row (`journalctl -o json`, the last 2000 entries)
+  a systemd-journal row (`journalctl -o json`, the last 2000 entries
+  by default, also configurable)
   alongside whatever files it found — the same viewer, filter, follow,
   and timeline, just a different source. Never offered while the
   active panel is connected to a remote session: there is no command-

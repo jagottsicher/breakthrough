@@ -413,6 +413,20 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "log_audit_journal_lines",
+			Default:     strconv.Itoa(d.LogAuditJournalLines),
+			Kind:        KindInt,
+			Summary:     `How many of the systemd journal's own most recent entries Log Holepunch's "systemd-journal" row reads at once (journalctl -n). Linux only.`,
+			Implemented: true,
+		},
+		{
+			Key:         "log_audit_follow_interval_ms",
+			Default:     strconv.Itoa(d.LogAuditFollowIntervalMS),
+			Kind:        KindInt,
+			Summary:     `How often, in milliseconds, Log Holepunch's own follow mode ("f") re-reads — both a file family and the systemd journal.`,
+			Implemented: true,
+		},
+		{
 			Key:         "cloud_mount_base_dir",
 			Default:     d.CloudMountBaseDir,
 			Kind:        KindString,

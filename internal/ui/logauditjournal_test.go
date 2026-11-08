@@ -34,6 +34,23 @@ func TestLogAuditSelectionShowsJournalRowWhenAvailable(t *testing.T) {
 	}
 }
 
+// TestLogAuditSelectionJournalRowLabelUsesConfiguredWindow pins that
+// the row's own "(last N)" label reflects
+// settings.LogAuditJournalLines rather than a hardcoded number — the
+// user-configurable counterpart to the fixed 2000 this used to be.
+func TestLogAuditSelectionJournalRowLabelUsesConfiguredWindow(t *testing.T) {
+	dir := t.TempDir()
+	r := newTestRootForLogAudit(t, dir)
+	r.settings.LogAuditJournalLines = 777
+	r.log.JournalAvailableFn = func() bool { return true }
+	r.reloadLogAuditDiscovery()
+
+	got := r.log.Table.GetCell(1, logAuditSelName).Text
+	if !strings.Contains(got, "777") {
+		t.Errorf("row 1 Name = %q, want it to mention the configured window (777)", got)
+	}
+}
+
 func TestLogAuditSelectionHidesJournalRowWhenUnavailable(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)

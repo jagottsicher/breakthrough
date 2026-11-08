@@ -2884,13 +2884,15 @@ and the Log Holepunch view below have one.
 On Linux, with `journalctl` on `$PATH`, a "systemd-journal" row is
 offered above the file list — the systemd journal's own binary store
 is not a file this directory scan can ever find on its own. Opening it
-runs `journalctl -o json -n 2000` and decodes the result into the same
+runs `journalctl -o json -n <log_audit_journal_lines>` (`2000` by
+default, see [Settings reference](#settings-reference)) and decodes
+the result into the same
 Entry shape every other format already reduces to (timestamp, syslog
 severity, `SYSLOG_IDENTIFIER`/`_COMM`/`_SYSTEMD_UNIT` as Source,
 `MESSAGE`), so the rest of the view — keyword/time/level filtering,
 the timeline, follow, Statistics — works exactly as it does for a
-file. "r" and follow both re-run that same bounded `journalctl -n
-2000` rather than tailing it continuously; there is no unit (`-u`) or
+file. "r" and follow both re-run that same bounded `journalctl -n`
+read rather than tailing it continuously; there is no unit (`-u`) or
 boot (`-b`) selection yet. Never offered while the active panel is
 connected to a remote session — there is no command-execution channel
 to run `journalctl` against one, only ever this machine's own journal.
@@ -2986,7 +2988,7 @@ the only sign anything was actually wrong.
 | `w` | Jump to the next warning (wraps around) |
 | `Enter` | Show this entry's full text, with the current filter still highlighted, plus a Raw section with the original, unparsed line — shown only when it actually differs from the extracted message |
 | `r` | Re-read the same files |
-| `f` | Toggle follow — the same idea as `tail -f`, but merged live across every selected file at once: re-reads the same files every two seconds and re-renders; the cursor follows along if it was already on the last row |
+| `f` | Toggle follow — the same idea as `tail -f`, but merged live across every selected file at once: re-reads the same files every `log_audit_follow_interval_ms` (2 seconds by default) and re-renders; the cursor follows along if it was already on the last row |
 | `s` | Statistics: counts by level and by source (top 10), over whatever currently matches the three filters |
 | `Escape` | Back to file selection |
 
@@ -3114,6 +3116,8 @@ Every key breakthrough recognizes, with its default:
 | `log_audit_disk_cache_enabled` | `true` | Log Holepunch's own persistent, on-disk cache for remote log families — survives past this process exiting, unlike `log_audit_cache_size`'s RAM-only cache |
 | `log_audit_disk_cache_size` | `20GB` | Maximum total size of the disk cache above, across every cached connection combined, by estimated size not file count |
 | `log_audit_disk_cache_path` | `` (default location) | Where the disk cache lives; best changed via Options → "Change disk cache location", which moves existing data — hand-editing this only changes where new data goes |
+| `log_audit_journal_lines` | `2000` | How many of the systemd journal's own most recent entries the "systemd-journal" row reads at once (`journalctl -n`) — Linux only |
+| `log_audit_follow_interval_ms` | `2000` | How often, in milliseconds, Log Holepunch's own follow mode ("f") re-reads — both a file family and the systemd journal |
 | `log_level` | `off` | Activity log detail: `off`, `errors`, `actions`, `detailed`, or `debug` |
 | `log_category_fileops` | `true` | Log File operations (copy, move, rename, trash, remove, multiply, new file/dir) |
 | `log_category_permissions` | `true` | Log permission changes (chmod, chown) |
