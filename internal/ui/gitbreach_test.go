@@ -487,10 +487,11 @@ func gitBreachTagRow(r *Root, name string) (int, bool) {
 }
 
 // TestToggleGitBreachBranchesTabSwitchesBetweenBranchesAndTags pins
-// the sub-tab switch itself: Left/Right on the Branches table flips
-// gitBreach.BranchesShowTags and re-renders the same table with the
-// other kind's rows, landing on its first row rather than keeping a
-// selection index that belonged to the other kind.
+// the sub-tab switch itself: Right on the Branches table cycles
+// gitBreach.BranchesTab forward and re-renders the same table with
+// the next tab's own rows, landing on its first row rather than
+// keeping a selection index that belonged to a different one; Left
+// cycles back.
 func TestToggleGitBreachBranchesTabSwitchesBetweenBranchesAndTags(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
@@ -504,8 +505,8 @@ func TestToggleGitBreachBranchesTabSwitchesBetweenBranchesAndTags(t *testing.T) 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if r.gitBreach.BranchesShowTags {
-		t.Fatal("setup: BranchesShowTags = true, want a fresh \"jg\" to start on Branches")
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabBranches {
+		t.Fatal("setup: BranchesTab != Branches, want a fresh \"jg\" to start there")
 	}
 	if _, ok := r.gitBreachBranchAt(0); !ok {
 		t.Fatal("setup: row 0 isn't a branch before switching tabs")
@@ -513,7 +514,7 @@ func TestToggleGitBreachBranchesTabSwitchesBetweenBranchesAndTags(t *testing.T) 
 
 	r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
 
-	if !r.gitBreach.BranchesShowTags {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabTags {
 		t.Fatal("Right did not switch to the Tags sub-tab")
 	}
 	if _, ok := gitBreachTagRow(r, "v1"); !ok {
@@ -522,8 +523,40 @@ func TestToggleGitBreachBranchesTabSwitchesBetweenBranchesAndTags(t *testing.T) 
 
 	r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
 
-	if r.gitBreach.BranchesShowTags {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabBranches {
 		t.Error("Left did not switch back to the Branches sub-tab")
+	}
+}
+
+// TestToggleGitBreachBranchesTabCyclesThroughRemotesToo pins the third
+// sub-tab specifically: Right from Tags reaches Remotes (not wrapping
+// straight back to Branches), and Right again from Remotes wraps back
+// to Branches.
+func TestToggleGitBreachBranchesTabCyclesThroughRemotesToo(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	r.toggleGitBreachBranchesTab() // Branches -> Tags
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabTags {
+		t.Fatalf("BranchesTab = %v after one Right, want Tags", r.gitBreach.BranchesTab)
+	}
+
+	r.toggleGitBreachBranchesTab() // Tags -> Remotes
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabRemotes {
+		t.Fatalf("BranchesTab = %v after two Right, want Remotes", r.gitBreach.BranchesTab)
+	}
+
+	r.toggleGitBreachBranchesTab() // Remotes -> Branches (wraps)
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabBranches {
+		t.Fatalf("BranchesTab = %v after three Right, want it wrapped back to Branches", r.gitBreach.BranchesTab)
 	}
 }
 
@@ -577,7 +610,7 @@ func TestOpenGitBreachCreateTagThenOpenGitBreachDeleteTagRoundTrip(t *testing.T)
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.gitBreach.BranchesShowTags = true
+	r.gitBreach.BranchesTab = gitBreachBranchesTabTags
 	r.renderGitBreachBranches()
 
 	r.openGitBreachCreateTag()
@@ -713,7 +746,7 @@ func TestOpenGitBreachCreateTagOnAnAlreadyExistingNameKeepsTheDashboardOpen(t *t
 
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
-	r.gitBreach.BranchesShowTags = true
+	r.gitBreach.BranchesTab = gitBreachBranchesTabTags
 	r.renderGitBreachBranches()
 
 	r.openGitBreachCreateTag()

@@ -72,24 +72,31 @@ func (r *Root) openGitBreachFilesFilter() {
 	)
 }
 
-// openGitBreachBranchesOrTagsFilter filters whichever of Branches/
-// Tags the sub-tab toggle (see toggleGitBreachBranchesTab) currently
-// shows, by name — the same "a/d mean different things depending on
-// BranchesShowTags" branch those two keys already use.
+// openGitBreachBranchesOrTagsFilter filters whichever of Branches/Tags
+// the sub-tab cycle (see cycleGitBreachBranchesTab) currently shows,
+// by name — the same "a/d mean different things depending on
+// BranchesTab" branch those two keys already use. A no-op on the
+// Remotes sub-tab (see its own case below).
 func (r *Root) openGitBreachBranchesOrTagsFilter() {
-	if r.gitBreach.BranchesShowTags {
+	switch r.gitBreach.BranchesTab {
+	case gitBreachBranchesTabTags:
 		r.openGitBreachFilter("Filter tags:",
 			func() string { return r.gitBreach.TagsFilter },
 			func(s string) { r.gitBreach.TagsFilter = s },
 			r.renderGitBreachBranches,
 		)
-		return
+	case gitBreachBranchesTabRemotes:
+		// No filter on Remotes yet — there's nothing to filter until
+		// it's actually wired up, the same "no filter here" precedent
+		// Commits' own lane/branch graph already establishes for a
+		// different reason.
+	default:
+		r.openGitBreachFilter("Filter branches:",
+			func() string { return r.gitBreach.BranchesFilter },
+			func(s string) { r.gitBreach.BranchesFilter = s },
+			r.renderGitBreachBranches,
+		)
 	}
-	r.openGitBreachFilter("Filter branches:",
-		func() string { return r.gitBreach.BranchesFilter },
-		func(s string) { r.gitBreach.BranchesFilter = s },
-		r.renderGitBreachBranches,
-	)
 }
 
 // openGitBreachStashFilter filters Stash by ref and message together

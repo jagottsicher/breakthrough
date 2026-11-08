@@ -620,13 +620,18 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		)
 	case r.gitBreach.BranchesTable.HasFocus():
 		entries = append(entries, hintKey("←/→", "switch tab", func(r *Root) { r.toggleGitBreachBranchesTab() }))
-		if r.gitBreach.BranchesShowTags {
+		switch r.gitBreach.BranchesTab {
+		case gitBreachBranchesTabTags:
 			entries = append(entries,
 				hintKey("a", "new tag", func(r *Root) { r.openGitBreachCreateTag() }),
 				hintKey("d", "delete tag", func(r *Root) { r.openGitBreachDeleteTag() }),
 				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.TagsFilter), func(r *Root) { r.openGitBreachBranchesOrTagsFilter() }),
 			)
-		} else {
+		case gitBreachBranchesTabRemotes:
+			// Fetch/Push/Pull land in a later patch — this tab is
+			// currently read-only (nothing but the list itself,
+			// still-empty placeholder included).
+		default:
 			entries = append(entries,
 				hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }),
 				hintKey("m", "merge into current", func(r *Root) { r.openGitBreachMerge() }),
@@ -1073,12 +1078,16 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 		r.reverseToggleGitBreachFocus()
 		return nil
 	}
-	if event.Key() == tcell.KeyLeft || event.Key() == tcell.KeyRight {
+	if event.Key() == tcell.KeyLeft {
+		r.reverseToggleGitBreachBranchesTab()
+		return nil
+	}
+	if event.Key() == tcell.KeyRight {
 		r.toggleGitBreachBranchesTab()
 		return nil
 	}
 	if event.Key() == tcell.KeyEnter {
-		if !r.gitBreach.BranchesShowTags {
+		if r.gitBreach.BranchesTab == gitBreachBranchesTabBranches {
 			r.openGitBreachCheckout()
 		}
 		return nil
@@ -1101,14 +1110,15 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			r.openGitBreachOperationSkip()
 			return nil
 		case 'a':
-			if r.gitBreach.BranchesShowTags {
+			if r.gitBreach.BranchesTab == gitBreachBranchesTabTags {
 				r.openGitBreachCreateTag()
 			}
 			return nil
 		case 'd':
-			if r.gitBreach.BranchesShowTags {
+			switch r.gitBreach.BranchesTab {
+			case gitBreachBranchesTabTags:
 				r.openGitBreachDeleteTag()
-			} else {
+			case gitBreachBranchesTabBranches:
 				r.openGitBreachDeleteBranch()
 			}
 			return nil
@@ -1522,11 +1532,15 @@ func (r *Root) renderGitBreachFiles() {
 // Hint): a bold/colored active label would need it turned on for this
 // header specifically, for one glyph's worth of difference.
 func (r *Root) renderGitBreachBranchesHeader() {
-	title := " ● Branches   Tags "
+	title := " ● Branches   Tags   Remotes "
 	filter := r.gitBreach.BranchesFilter
-	if r.gitBreach.BranchesShowTags {
-		title = "   Branches  ● Tags "
+	switch r.gitBreach.BranchesTab {
+	case gitBreachBranchesTabTags:
+		title = "   Branches  ● Tags   Remotes "
 		filter = r.gitBreach.TagsFilter
+	case gitBreachBranchesTabRemotes:
+		title = "   Branches   Tags  ● Remotes "
+		filter = ""
 	}
 	if filter != "" {
 		title += fmt.Sprintf(" /%s ", filter)
@@ -1538,8 +1552,16 @@ func (r *Root) renderGitBreachBranches() {
 	r.gitBreach.BranchesTable.Clear()
 	r.renderGitBreachBranchesHeader()
 
-	if r.gitBreach.BranchesShowTags {
+	switch r.gitBreach.BranchesTab {
+	case gitBreachBranchesTabTags:
 		r.renderGitBreachTags()
+		return
+	case gitBreachBranchesTabRemotes:
+		// Fetch/Push/Pull land in a later patch — for now this tab is
+		// a plain, always-empty placeholder, the same shape Stash's
+		// own "No stashed changes." already establishes for "nothing
+		// to show yet" (not "broken").
+		showTablePlaceholder(r.gitBreach.BranchesTable, "Remotes aren't wired up yet.", r.theme.MutedTextColor)
 		return
 	}
 
