@@ -928,7 +928,7 @@ func optionCategories() []optionCategory {
 						r.persistSetting("duplicate_separator", v)
 					},
 				),
-				optionSpec{
+				{
 					key:   "duplicate_strategy",
 					label: "Naming strategy",
 					help: "How Duplicate names a copy — always appended after the original " +
@@ -1064,7 +1064,7 @@ func optionCategories() []optionCategory {
 				// it back here (see openCompress/runCompress in
 				// compress.go), so the dialog opens on whichever one was
 				// actually used last instead of always "zip".
-				optionSpec{
+				{
 					key:   "compress_format",
 					label: "Default archive format",
 					help: "Which format Compress's own \"Format\" dropdown starts on.\n\n" +
@@ -1223,7 +1223,7 @@ func optionCategories() []optionCategory {
 				// search.go) — the same four that already stayed put for the
 				// rest of a session, never resetting between searches (see
 				// openSearch's own doc comment), now surviving a restart too.
-				optionSpec{
+				{
 					key:   "search_engine",
 					label: "Default engine",
 					help: "Which Engine the Search dialog starts on: \"find\" or \"locate\" " +
