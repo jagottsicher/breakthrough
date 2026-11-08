@@ -40,25 +40,6 @@ func gitBreachFetchFixture(t *testing.T) (*Root, string) {
 	return r, dir
 }
 
-// TestOpenGitBreachFetchRemoteShowsAFetchingPlaceholderImmediately
-// pins the synchronous half only — see startGitBreachFetchRemote's
-// own doc comment on why the real network call and its own
-// QueueUpdateDraw-delivered result aren't exercised end-to-end in
-// this package's own tests (the async-ui skill's own "don't call the
-// real async entry point directly" rule: nothing here drains
-// QueueUpdateDraw, so it would hang forever).
-func TestOpenGitBreachFetchRemoteShowsAFetchingPlaceholderImmediately(t *testing.T) {
-	r, _ := gitBreachFetchFixture(t)
-
-	r.openGitBreachFetchRemote()
-
-	got := r.gitBreach.BranchesTable.GetCell(1, 0).Text
-	want := fmt.Sprintf("Fetching %q…", "origin")
-	if got != want {
-		t.Errorf("placeholder text = %q, want %q", got, want)
-	}
-}
-
 func TestOpenGitBreachFetchRemoteIsANoOpOffTheRemotesSubTab(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
@@ -86,11 +67,16 @@ func TestOpenGitBreachFetchRemoteIsANoOpOffTheRemotesSubTab(t *testing.T) {
 // staleness guard the async-ui skill's own point 5 requires: a result
 // for a repository that's no longer the one gitBreach.Root currently
 // names (a later "jg" elsewhere while this fetch was still in flight)
-// must never surface an error or reload — this test's own "Fetching"
-// placeholder staying untouched is the observable proof nothing ran.
+// must never surface an error or reload. Deliberately calls
+// applyGitBreachFetchRemote directly rather than going through
+// openGitBreachFetchRemote — see this file's own package doc comment
+// on why: the latter dispatches a real goroutine running a real `git
+// fetch` against this test's own bareDir, which can still be running
+// when t.TempDir() tries to remove it at test end (a real, CI-caught
+// "directory not empty" failure, not hypothetical).
 func TestApplyGitBreachFetchRemoteDiscardsAStaleResult(t *testing.T) {
 	r, _ := gitBreachFetchFixture(t)
-	r.openGitBreachFetchRemote()
+	showTablePlaceholder(r.gitBreach.BranchesTable, `Fetching "origin"…`, r.theme.MutedTextColor)
 	placeholderBefore := r.gitBreach.BranchesTable.GetCell(1, 0).Text
 
 	r.applyGitBreachFetchRemote("/some/other/repo/entirely", "origin", nil)

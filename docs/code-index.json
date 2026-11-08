@@ -2343,8 +2343,8 @@
     },
     {
       "path": "internal/ui/gitbreachfetch_test.go",
-      "size": 4846,
-      "sha256": "0c5fa6b0f8a39bb2dc5db207b4c25ef04e9781205aeb0c16812afcde9dde66be"
+      "size": 4453,
+      "sha256": "7b85ddbc9eec49a0d01eed32454c2b0e9770f89673762289fa1c1116a41dbbc2"
     },
     {
       "path": "internal/ui/gitbreachfilter.go",
@@ -41665,37 +41665,30 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachfetch_test.go",
-      "name": "TestOpenGitBreachFetchRemoteShowsAFetchingPlaceholderImmediately",
-      "kind": "function",
-      "line": 50
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/gitbreachfetch_test.go",
       "name": "TestOpenGitBreachFetchRemoteIsANoOpOffTheRemotesSubTab",
       "kind": "function",
-      "line": 62
+      "line": 43
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachfetch_test.go",
       "name": "TestApplyGitBreachFetchRemoteDiscardsAStaleResult",
       "kind": "function",
-      "line": 91
+      "line": 77
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachfetch_test.go",
       "name": "TestApplyGitBreachFetchRemoteOnSuccessReloads",
       "kind": "function",
-      "line": 106
+      "line": 92
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreachfetch_test.go",
       "name": "TestApplyGitBreachFetchRemoteOnFailureShowsAnErrorThenReloads",
       "kind": "function",
-      "line": 121
+      "line": 107
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -58089,14 +58082,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 27
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 27
     },
@@ -67790,5 +67783,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "09f71d0dea58d650e2c6d98baf650fd60ea6a6ecdfa8e52c2544ccf690567f33"
+  "merkle_root": "84a924eea5d2256c0161db96cd77dd32f3a0b08a499b42d110ba97701af06cb4"
 }
