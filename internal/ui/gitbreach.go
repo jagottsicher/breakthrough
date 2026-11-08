@@ -496,6 +496,66 @@ func (r *Root) checkoutGitBreachBranch(branch string) {
 	r.showError(r.panel.load(r.panel.path))
 }
 
+// openGitBreachMerge is "m" on the Branches table's own Branches sub-
+// tab — merges the row under the cursor into whichever branch is
+// currently checked out. Mirrors openGitBreachCheckout's own guard
+// shape exactly: a no-op, not an error, on the already-current branch
+// (merging a branch into itself is meaningless), and only confirms
+// first if the working tree actually has something to lose (a clean
+// tree merges immediately, same restraint openGitBreachCheckout's own
+// doc comment already explains). Deliberately not reachable from the
+// Tags sub-tab at all — merging a tag is no different from merging
+// whatever commit it points at, and feature_ideas.txt's own Phase C
+// item scopes this to branches specifically.
+func (r *Root) openGitBreachMerge() {
+	if r.gitBreach.BranchesShowTags {
+		return
+	}
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	branch, ok := r.gitBreachBranchAt(row)
+	if !ok || branch.Current {
+		return
+	}
+
+	st := r.gitBreach.Status
+	if len(st.Staged) > 0 || len(st.Unstaged) > 0 || len(st.Conflicts) > 0 {
+		r.openConfirm(
+			fmt.Sprintf("Merge %q with uncommitted changes in the working tree?", branch.Name),
+			"Yes, merge",
+			func() { r.mergeGitBreachBranch(branch.Name) },
+		)
+		return
+	}
+	r.mergeGitBreachBranch(branch.Name)
+}
+
+// mergeGitBreachBranch runs the actual merge and reloads — both this
+// dashboard's own state and the active panel (same reasoning
+// checkoutGitBreachBranch's own doc comment gives: a merge can change
+// files on disk in the exact directory the panel is already showing).
+// A conflicting merge (git.Merge's own InProgressOperation check
+// already distinguishes this from a real failure) reloads exactly the
+// same way a clean one does — reloadGitBreach picks up the new
+// Conflicts rows and Operation state, landing the user in Phase B's
+// own conflict surface (resolveGitBreachConflictSection above, and
+// gitbreachoperation.go's Continue/Abort/Skip) rather than at an error
+// overlay for what both git and this dashboard already treat as an
+// ordinary, expected outcome. Uses showTransientErrorOverOverlay, not
+// showError, for the one case that is a real failure — see its own
+// doc comment on the bug class every *new* Git breach action
+// deliberately avoids from the start, same as
+// resolveGitBreachConflictSection.
+func (r *Root) mergeGitBreachBranch(branch string) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.Merge(ctx, r.gitBreach.Root, branch); err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+	r.showError(r.panel.load(r.panel.path))
+}
+
 // openGitBreachDeleteBranch is "d" on the Branches table — always
 // confirms first, unlike checkout's own "only ask if there's actually
 // something to lose": deleting a branch is itself the irreversible
