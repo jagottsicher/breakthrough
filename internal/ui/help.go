@@ -795,9 +795,13 @@ var helpText = strings.TrimLeft(`
   directory — its own parent directories included, exactly the way a
   real "git status" typed there would find it — and opens a dashboard
   on it. Several boxes at once rather than one full-screen list: Status
-  (branch, ahead/behind, a one-line summary), Files (staged/unstaged/
+  (branch, ahead/behind, a one-line summary, plus a fourth line
+  whenever a merge/rebase/cherry-pick/revert is actually in progress),
+  Files (staged/unstaged/
   untracked, Conflicts first if any, real syntax coloring on every
   change), Branches (every local branch, the current one marked —
+  "m" merges the one under the cursor into whatever is currently
+  checked out (does nothing on the current branch itself) —
   Left/Right switch this box to its own Tags sub-tab and back, one
   shared table either way; "a" there creates a new, lightweight tag
   at HEAD, "d" deletes the one under the cursor after confirming, and
@@ -821,8 +825,8 @@ var helpText = strings.TrimLeft(`
   between Files, Branches, Commits and Stash, the dashboard's own four
   real, navigable boxes so far — no action on a Commits row yet
   (checkout/revert/cherry-pick/reset are later Ausbaustufen). A Stash
-  row can be applied or dropped (never popped — see the key list
-  below). Commits also draws a lane/branch graph to the left of each
+  row can be applied, popped (apply and drop in one step), or dropped
+  alone — see the key list below. Commits also draws a lane/branch graph to the left of each
   row — a merge commit forks its extra parents into their own, newly
   colored lanes, and two lanes converging back on a shared ancestor
   join into one again, the same shape git log --graph/lazygit/gitk all
@@ -877,6 +881,21 @@ var helpText = strings.TrimLeft(`
   separate cursor inside the diff: scroll the hunk you want to the
   top, then press "s". Line-level staging isn't part of this yet —
   a whole hunk at a time, see the key list below.
+
+  A Files row still unresolved from a conflicting merge/rebase/
+  cherry-pick/revert/stash-pop shows every "<<<<<<<"/"======="/
+  ">>>>>>>" section Main found in the file instead of an ordinary
+  diff — "ours" tinted the same green an added diff line already uses,
+  "theirs" the same red a removed one does. "o"/"t" (while Main has
+  focus) resolve the topmost still-unresolved section by keeping that
+  side, re-staging the file automatically once every section in it is
+  gone. "C"/"A"/"K" — available no matter which box has focus, not
+  just Main — continue, abort, or skip whichever operation Status's
+  own fourth line names: "C" only once every conflicted path in it is
+  actually resolved (git itself refuses otherwise, naming which path
+  still isn't), "A" always confirms first (discards any resolution
+  made so far), and "K" does nothing during a plain merge, which git
+  itself has no skip step for at all.
 
   "B" on a Commits row starts a "git bisect" with that commit as
   "good" — "bad" is picked from the same ref picker "d" opens (any
@@ -939,6 +958,13 @@ var helpText = strings.TrimLeft(`
              Refuses with the same error git itself gives for an
              unmerged branch (never force-deletes); does nothing on
              the current branch
+    m        (Branches sub-tab) Merge the branch under the cursor
+             into whatever is currently checked out — confirms first
+             only if the working tree isn't clean, same restraint as
+             Enter's own checkout; does nothing on the current branch
+             itself. A conflicting merge isn't an error: it lands you
+             in the conflict view below with the merge already
+             in progress, ready for "o"/"t" and then "C"
     a        (Tags sub-tab) Create a new, lightweight tag at HEAD,
              after typing a name in a prompt
     d        (Tags sub-tab) Delete the tag under the cursor, after
@@ -947,8 +973,12 @@ var helpText = strings.TrimLeft(`
              safely refuse on the way a branch delete sometimes does
     a        (Stash only) Apply the entry under the cursor onto the
              working tree — confirms first only if the working tree
-             isn't clean; the stash itself is never removed (apply,
-             not pop)
+             isn't clean; the stash itself is never removed
+    p        (Stash only) Pop the entry under the cursor — apply and
+             drop in one step, same confirm restraint as "a". A
+             conflicting pop keeps the stash entry anyway (matching
+             real "git stash pop") and isn't an error: it lands you in
+             the conflict view below, same as a conflicting merge
     d        (Stash only) Drop the entry under the cursor, after
              confirming — always confirms, like Branches' own "d",
              since dropping a stash is itself the irreversible action
@@ -981,6 +1011,21 @@ var helpText = strings.TrimLeft(`
              good/bad
     E        (Commits only, while bisecting) End the bisect —
              "git bisect reset"
+    o/t      (Main only, a Conflicts row's own view) Resolve the
+             topmost still-unresolved section by keeping "ours"/
+             "theirs" — re-stages the file automatically once every
+             section in it is gone
+    C        Continue whatever merge/rebase/cherry-pick/revert Status's
+             own fourth line names — works no matter which box has
+             focus; does nothing without one in progress
+    A        Abort whatever operation is in progress, after
+             confirming — always confirms, since this discards any
+             conflict resolution made so far; works no matter which
+             box has focus
+    K        Skip the commit currently causing a conflict, during a
+             rebase/cherry-pick/revert — does nothing during a plain
+             merge, which git itself has no skip step for; works no
+             matter which box has focus
     c        Commit whatever is currently staged, after typing a
              message (does nothing with nothing staged) — works no
              matter which box currently has focus, since committing

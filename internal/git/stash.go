@@ -55,17 +55,16 @@ func StashList(ctx context.Context, root string) ([]Stash, error) {
 	return stashes, nil
 }
 
-// StashApply runs `git stash apply <ref>` — deliberately apply, never
-// `pop`: pop is apply-then-drop, but on a conflicting apply it *keeps*
-// the stash anyway, leaving the working tree conflicted with no way for
-// this dashboard to resolve it (Git breach has no conflict-resolution
-// UI at all yet — see CommitDiff's own sibling, the Files box's own
-// Conflicts row, which still just says resolving conflicts isn't
-// supported here). Apply alone keeps the stash either way, so a
-// conflict is always recoverable by hand outside this dashboard rather
-// than something this one call could silently strand the user in.
-// Dropping the ref afterward, if desired, is the caller's own separate,
-// explicit StashDrop call — never implicit here.
+// StashApply runs `git stash apply <ref>` — deliberately never drops
+// the stash either way, success or conflict, unlike StashPop's own
+// apply-then-drop. Dropping the ref afterward, if desired, is the
+// caller's own separate, explicit StashDrop call — never implicit
+// here. (Originally the only way to apply a stash this package
+// offered at all, back when Git breach had no conflict-resolution UI
+// yet and StashPop's own "keeps the stash anyway on a conflicting
+// apply" behavior would have stranded the user with no way to resolve
+// it from inside this dashboard — see StashPop's own doc comment now
+// that one exists alongside this.)
 func StashApply(ctx context.Context, root, ref string) error {
 	return run(ctx, root, "stash", "apply", ref)
 }
@@ -83,6 +82,38 @@ func StashApply(ctx context.Context, root, ref string) error {
 // irreversible action, not something that's only risky in some states.
 func StashDrop(ctx context.Context, root, ref string) error {
 	return run(ctx, root, "stash", "drop", ref)
+}
+
+// StashPop runs `git stash pop <ref>` — apply-then-drop in one git
+// call, now offered alongside StashApply/StashDrop since
+// internal/ui's own conflict surface (conflict.go/
+// gitbreachoperation.go) exists to recover from the one gap this was
+// originally withheld for (see this file's own git history): a
+// conflicting pop keeps the stash entry anyway, exactly like a
+// conflicting StashApply already does, but previously left the user
+// with no way to resolve it from inside this dashboard at all.
+//
+// A conflicting pop is deliberately not reported as err, the same
+// "git's own non-zero exit covers both an outright failure and an
+// expected conflict" situation Merge already has — except stash pop
+// has no equivalent of InProgressOperation to disambiguate with:
+// unlike a merge/rebase/cherry-pick/revert, git tracks no "operation in
+// progress" ref file for a conflicting stash apply at all. Comparing
+// Status.Conflicts before and after instead — more of it after than
+// before means this call is what caused it — correctly tells a new
+// conflict apart from a pop that refused outright while unrelated
+// conflicts already existed (git itself refuses a pop/apply immediately
+// in that case, with its own distinct error), which simply comparing
+// the conflict count's own non-zero-ness afterward would get wrong.
+func StashPop(ctx context.Context, root, ref string) error {
+	before, beforeErr := Fetch(ctx, root)
+	err := run(ctx, root, "stash", "pop", ref)
+	if err != nil && beforeErr == nil {
+		if after, afterErr := Fetch(ctx, root); afterErr == nil && len(after.Conflicts) > len(before.Conflicts) {
+			return nil
+		}
+	}
+	return err
 }
 
 // StashDiff returns ref's own diff against the commit it was stashed
