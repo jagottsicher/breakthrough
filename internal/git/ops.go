@@ -108,6 +108,85 @@ func Commit(ctx context.Context, root, message string) error {
 	return nil
 }
 
+// ContinueOperation runs the "--continue" step of op (see
+// InProgressOperation) — GIT_EDITOR=true for the same reason Commit
+// already sets it: merge/rebase/cherry-pick/revert can all open an
+// editor for a commit message along the way (a merge commit, a
+// rebase's own "edit" stop, cherry-pick/revert with no -n), and this
+// runs from the UI goroutine's own caller, which has nowhere to put
+// one. Called only once the dashboard's own conflict surface believes
+// every conflicted path has actually been resolved and staged — git
+// itself still refuses and reports exactly which path is still
+// unmerged if that belief is wrong, surfaced as-is.
+func ContinueOperation(ctx context.Context, root string, op Operation) error {
+	args, ok := operationArgs(op, "--continue")
+	if !ok {
+		return fmt.Errorf("git: no operation in progress")
+	}
+	return runOperation(ctx, root, args)
+}
+
+// AbortOperation runs the "--abort" step of op — every one of the four
+// operations InProgressOperation detects supports it, unlike skip (see
+// SkipOperation).
+func AbortOperation(ctx context.Context, root string, op Operation) error {
+	args, ok := operationArgs(op, "--abort")
+	if !ok {
+		return fmt.Errorf("git: no operation in progress")
+	}
+	return runOperation(ctx, root, args)
+}
+
+// SkipOperation runs the "--skip" step of op. Deliberately refuses
+// OperationMerge: `git merge` itself has no "--skip" at all — there is
+// only ever one merge in flight, nothing after it in the same operation
+// to skip to.
+func SkipOperation(ctx context.Context, root string, op Operation) error {
+	if op == OperationMerge {
+		return fmt.Errorf("git merge: --skip does not exist")
+	}
+	args, ok := operationArgs(op, "--skip")
+	if !ok {
+		return fmt.Errorf("git: no operation in progress")
+	}
+	return runOperation(ctx, root, args)
+}
+
+// operationArgs maps op to its own git subcommand name — the single
+// place that knowledge lives, so Continue/Abort/Skip above can't drift
+// apart on it.
+func operationArgs(op Operation, step string) ([]string, bool) {
+	switch op {
+	case OperationMerge:
+		return []string{"merge", step}, true
+	case OperationRebase:
+		return []string{"rebase", step}, true
+	case OperationCherryPick:
+		return []string{"cherry-pick", step}, true
+	case OperationRevert:
+		return []string{"revert", step}, true
+	default:
+		return nil, false
+	}
+}
+
+func runOperation(ctx context.Context, root string, args []string) error {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_EDITOR=true")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("git %s: %s", args[0], msg)
+		}
+		return fmt.Errorf("git %s: %w", args[0], err)
+	}
+	return nil
+}
+
 // Diff returns path's own diff text — against the index (staged ==
 // true, `git diff --cached`) or against the worktree (staged == false,
 // plain `git diff`). Either call returns "" for an untracked path:

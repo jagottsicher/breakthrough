@@ -13,11 +13,15 @@ import (
 )
 
 // gitBreachStatusHeight is the fixed row count Status gets in the left
-// column's own Flex — its own header plus a two-line summary, nothing
-// more. Files/Branches/Commits/Stash, the real lists, share whatever's
-// left proportionally (see newGitBreachScreen's own AddItem
-// proportions) — none of them are a fixed-height stub anymore.
-const gitBreachStatusHeight = 3
+// column's own Flex — its own header plus a summary of up to three
+// lines (branch, severity, and — only while one is actually running —
+// the in-progress merge/rebase/cherry-pick/revert, see
+// renderGitBreachStatus), nothing more. Files/Branches/Commits/Stash,
+// the real lists, share whatever's left proportionally (see
+// newGitBreachScreen's own AddItem proportions) — none of them are a
+// fixed-height stub anymore. Bumped from 3 to 4 (2026-11-08) to make
+// room for that third line without clipping it.
+const gitBreachStatusHeight = 4
 
 // gitBreachDiffAddedColor is a dedicated, brighter green for a diff's
 // own added-line marker ("+") — per the user's own explicit request for
@@ -683,11 +687,26 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		if r.gitBreachMainShowsAStageableHunk() {
 			entries = append(entries, hintKey("s", "stage hunk", func(r *Root) { r.openGitBreachStageHunk() }))
 		}
+		if r.gitBreachMainShowsAConflict() {
+			entries = append(entries,
+				hintKey("o", "keep ours", func(r *Root) { r.resolveGitBreachConflictSection(git.SideOurs) }),
+				hintKey("t", "keep theirs", func(r *Root) { r.resolveGitBreachConflictSection(git.SideTheirs) }),
+			)
+		}
 	}
 	entries = append(entries,
 		hintKey("c", "commit", func(r *Root) { r.openGitBreachCommitPrompt() }),
 		hintKey("r", "reload", func(r *Root) { r.reloadGitBreach() }),
 	)
+	if r.gitBreach.Operation != git.OperationNone {
+		entries = append(entries,
+			hintKey("C", "continue "+r.gitBreach.Operation.String(), func(r *Root) { r.openGitBreachOperationContinue() }),
+			hintKey("A", "abort "+r.gitBreach.Operation.String(), func(r *Root) { r.openGitBreachOperationAbort() }),
+		)
+		if r.gitBreach.Operation != git.OperationMerge {
+			entries = append(entries, hintKey("K", "skip", func(r *Root) { r.openGitBreachOperationSkip() }))
+		}
+	}
 	if r.gitBreachMainHasFocus() {
 		entries = append(entries, hintKey("Esc", "back", func(r *Root) { r.deactivateGitBreachMain() }))
 	} else {
@@ -916,6 +935,15 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 		case 'c':
 			r.openGitBreachCommitPrompt()
 			return nil
+		case 'C':
+			r.openGitBreachOperationContinue()
+			return nil
+		case 'A':
+			r.openGitBreachOperationAbort()
+			return nil
+		case 'K':
+			r.openGitBreachOperationSkip()
+			return nil
 		case 'r':
 			r.reloadGitBreach()
 			return nil
@@ -924,6 +952,12 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case 's':
 			r.openGitBreachStageHunk()
+			return nil
+		case 'o':
+			r.resolveGitBreachConflictSection(git.SideOurs)
+			return nil
+		case 't':
+			r.resolveGitBreachConflictSection(git.SideTheirs)
 			return nil
 		case 'g':
 			// "gC" reaches the AI Consigliere — see
@@ -992,6 +1026,15 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 		case 'c':
 			r.openGitBreachCommitPrompt()
 			return nil
+		case 'C':
+			r.openGitBreachOperationContinue()
+			return nil
+		case 'A':
+			r.openGitBreachOperationAbort()
+			return nil
+		case 'K':
+			r.openGitBreachOperationSkip()
+			return nil
 		case 'r':
 			r.reloadGitBreach()
 			return nil
@@ -1044,6 +1087,15 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			return nil
 		case 'c':
 			r.openGitBreachCommitPrompt()
+			return nil
+		case 'C':
+			r.openGitBreachOperationContinue()
+			return nil
+		case 'A':
+			r.openGitBreachOperationAbort()
+			return nil
+		case 'K':
+			r.openGitBreachOperationSkip()
 			return nil
 		case 'a':
 			if r.gitBreach.BranchesShowTags {
@@ -1136,6 +1188,15 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 		case 'c':
 			r.openGitBreachCommitPrompt()
 			return nil
+		case 'C':
+			r.openGitBreachOperationContinue()
+			return nil
+		case 'A':
+			r.openGitBreachOperationAbort()
+			return nil
+		case 'K':
+			r.openGitBreachOperationSkip()
+			return nil
 		case 'd':
 			r.openGitBreachDiffAgainstRef()
 			return nil
@@ -1204,6 +1265,15 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 			return nil
 		case 'c':
 			r.openGitBreachCommitPrompt()
+			return nil
+		case 'C':
+			r.openGitBreachOperationContinue()
+			return nil
+		case 'A':
+			r.openGitBreachOperationAbort()
+			return nil
+		case 'K':
+			r.openGitBreachOperationSkip()
 			return nil
 		case 'a':
 			r.openGitBreachStashApply()
@@ -1282,6 +1352,16 @@ func (r *Root) renderGitBreachStatus() {
 		lines = append(lines, "Working tree clean")
 	default:
 		lines = append(lines, fmt.Sprintf("%d staged, %d unstaged, %d untracked", len(st.Staged), len(st.Unstaged), len(st.Untracked)))
+	}
+	// Surfaced on its own line, not folded into the severity line
+	// above: a merge/rebase/cherry-pick/revert can be mid-flight with
+	// zero remaining conflicts (every section already resolved, see
+	// gitBreachMainShowsAConflict's own doc comment) — git itself still
+	// refuses a plain checkout/commit until Continue or Abort actually
+	// runs, so this has to stay visible independent of the conflict
+	// count reaching zero.
+	if r.gitBreach.Operation != git.OperationNone {
+		lines = append(lines, fmt.Sprintf("%s in progress", r.gitBreach.Operation))
 	}
 
 	if r.gitBreach.FetchErr != nil {
@@ -2188,4 +2268,60 @@ func gitBreachDiffHeaderPath(line string) (string, bool) {
 func gitBreachWrapDiffLine(marker, highlightedContent string, markerColor, background tcell.Color) string {
 	highlighted := wrapColor(markerColor, tview.Escape(marker)) + highlightedContent
 	return fmt.Sprintf("[:#%06x:]%s[-:-:-]", uint32(background.Hex())&0xffffff, highlighted)
+}
+
+// gitBreachRenderConflict is Main's own content for a Conflict row —
+// every section git.ParseConflicts found in the file, in order, "ours"
+// tinted the same green gitBreachDiffAddedBackground already uses for
+// an added line and "theirs" the same red gitBreachDiffRemovedBackground
+// already uses for a removed one (not a value judgment either way,
+// purely "two sides, two already-established colors" the way the
+// split diff view's own left/right panes already reuse them). Only the
+// first (topmost) section is ever actionable from the keyboard at a
+// time — resolveGitBreachConflictSection always targets index 0 of
+// whatever ParseConflicts returns fresh, since resolving a section
+// shifts every later one's own position — so only that one gets the
+// "resolve this" hint and the "> " marker; the rest render identically
+// but inert, there to read while deciding, not yet to act on.
+// sections empty (the markers are gone — resolved by some other tool
+// entirely outside this dashboard, or a reload landed between the
+// last resolve and this render) shows a plain status line instead of
+// an empty Main.
+func gitBreachRenderConflict(path string, sections []git.ConflictSection) string {
+	if len(sections) == 0 {
+		return tview.Escape(fmt.Sprintf("%s: no conflict markers found — already resolved (press \"r\" to reload if Files still lists it).", path))
+	}
+
+	var b strings.Builder
+	b.WriteString(tview.Escape(fmt.Sprintf(
+		"%s — %d unresolved conflict(s). \"o\" keeps %s (ours), \"t\" keeps %s (theirs) for the top section.\n\n",
+		path, len(sections), sections[0].OursLabel, sections[0].TheirsLabel,
+	)))
+
+	for i, sec := range sections {
+		marker := "  "
+		if i == 0 {
+			marker = "> "
+		}
+		b.WriteString(tview.Escape(fmt.Sprintf("%s[%d/%d] <<<<<<< %s\n", marker, i+1, len(sections), sec.OursLabel)))
+		for _, line := range sec.Ours {
+			b.WriteString(gitBreachWrapConflictLine(line, gitBreachDiffAddedBackground))
+			b.WriteString("\n")
+		}
+		b.WriteString(tview.Escape("=======\n"))
+		for _, line := range sec.Theirs {
+			b.WriteString(gitBreachWrapConflictLine(line, gitBreachDiffRemovedBackground))
+			b.WriteString("\n")
+		}
+		b.WriteString(tview.Escape(fmt.Sprintf(">>>>>>> %s\n\n", sec.TheirsLabel)))
+	}
+	return b.String()
+}
+
+// gitBreachWrapConflictLine mirrors gitBreachWrapDiffLine's own
+// background-tint tag shape, minus the separate marker glyph: a
+// conflict section's own lines have no per-line "+"/"-" of their own,
+// the whole line is the content.
+func gitBreachWrapConflictLine(content string, background tcell.Color) string {
+	return fmt.Sprintf("[:#%06x:]%s[-:-:-]", uint32(background.Hex())&0xffffff, tview.Escape(content))
 }

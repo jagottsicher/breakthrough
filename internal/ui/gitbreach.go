@@ -87,21 +87,29 @@ type gitBreachState struct {
 	// RowIndex, which renderGitBreachFiles only ever populates for
 	// rows it actually drew — a filtered-out row simply never gets an
 	// entry, no second slice needed.
-	FilesFilter         string
-	BranchesFilter      string
-	TagsFilter          string
-	StashFilter         string
-	BranchesShown       []git.Branch
-	TagsShown           []git.Tag
-	StashShown          []git.Stash
-	Commits             []git.LogEntry
-	CommitsErr          error
-	CommitsReady        bool
-	CommitsLimit        int
-	CommitsTotal        int
-	Stash               []git.Stash
-	StashErr            error
-	StashReady          bool
+	FilesFilter    string
+	BranchesFilter string
+	TagsFilter     string
+	StashFilter    string
+	BranchesShown  []git.Branch
+	TagsShown      []git.Tag
+	StashShown     []git.Stash
+	Commits        []git.LogEntry
+	CommitsErr     error
+	CommitsReady   bool
+	CommitsLimit   int
+	CommitsTotal   int
+	Stash          []git.Stash
+	StashErr       error
+	StashReady     bool
+	// Operation is whichever merge/rebase/cherry-pick/revert (if any)
+	// currently has the working tree mid-flight — see
+	// git.InProgressOperation, re-checked on every reloadGitBreach the
+	// same way Status itself is, never patched in place. Drives both
+	// the Status box's own severity line (renderGitBreachStatus) and
+	// whether "C"/"A"/"K" (Continue/Abort/Skip — see
+	// gitbreachoperation.go) do anything at all.
+	Operation           git.Operation
 	MainOwner           gitBreachMainOwnerKind
 	DiffCancel          context.CancelFunc
 	DiffScroll          map[string]int
@@ -218,6 +226,7 @@ func (r *Root) reloadGitBreach() {
 	r.gitBreach.Status = status
 	r.gitBreach.FetchErr = err
 	r.gitBreach.Rows = buildGitBreachRows(status)
+	r.gitBreach.Operation = git.InProgressOperation(r.gitBreach.Root)
 
 	branches, branchesErr := git.Branches(ctx, r.gitBreach.Root)
 	r.gitBreach.Branches = branches
@@ -325,6 +334,49 @@ func (r *Root) toggleGitBreachStage() {
 		return
 	}
 	r.reloadGitBreach()
+}
+
+// resolveGitBreachConflictSection is "o"/"t" while Main shows a
+// Conflict row (see captureGitBreachMainKey) — always resolves section
+// 0 of whatever git.ParseConflicts currently finds in the file (the
+// topmost one Main's own gitBreachRenderConflict marks "> "), never a
+// cursor-tracked position: Main is a plain *tview.TextView here, with
+// no per-line selection of its own to hang "the current section" off
+// of, and resolving top-down one at a time is unambiguous regardless.
+// Uses showTransientErrorOverOverlay, not showError, on failure — see
+// its own doc comment on the identical class of bug the Tags-tab
+// actions already had to work around; Git breach's own longer-standing
+// showError call sites (Checkout, Delete Branch, Commit, Stash Apply/
+// Drop, Reload) likely share it too, deliberately left alone here as
+// out of this change's own scope.
+func (r *Root) resolveGitBreachConflictSection(side git.ConflictSide) {
+	if !r.gitBreachMainShowsAConflict() {
+		return
+	}
+	row, _ := r.gitBreach.FilesTable.GetSelection()
+	gr, _ := r.gitBreachRowAt(row)
+
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if _, err := git.ResolveConflictSection(ctx, r.gitBreach.Root, gr.path, 0, side); err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+}
+
+// gitBreachMainShowsAConflict mirrors gitBreachMainShowsAStageableHunk's
+// own shape exactly (same MainOwner guard, same Files-row lookup), for
+// the one other case Main's own key capture and hint bar need to tell
+// apart from a plain diff: a Conflict row, where "o"/"t" apply and "s"
+// (stage hunk) does not.
+func (r *Root) gitBreachMainShowsAConflict() bool {
+	if r.gitBreach.MainOwner != gitBreachMainOwnerFiles {
+		return false
+	}
+	row, _ := r.gitBreach.FilesTable.GetSelection()
+	gr, ok := r.gitBreachRowAt(row)
+	return ok && gr.kind == gitBreachRowConflict
 }
 
 // gitBreachRowAt returns the gitBreachRow the Files table's own row
@@ -729,11 +781,6 @@ func (r *Root) startGitBreachDiff(row int) {
 	key := gitBreachFileDiffScrollKey(gr)
 	r.gitBreachActivateDiffKey(key)
 
-	if gr.kind == gitBreachRowConflict {
-		r.gitBreachSetDiffText(key, tview.Escape(fmt.Sprintf("%s: unresolved conflict — resolving conflicts is not yet supported here.", gr.path)), "")
-		return
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	r.gitBreach.DiffCancel = cancel
 	root := r.gitBreach.Root
@@ -754,6 +801,8 @@ func (r *Root) startGitBreachDiff(row int) {
 			if err == nil && text == "" {
 				text = fmt.Sprintf("%s: untracked, empty file.", gr.path)
 			}
+		case gitBreachRowConflict:
+			text, err = git.ReadConflictedFile(root, gr.path)
 		default:
 			text, err = git.Diff(fetchCtx, root, gr.path, gr.kind == gitBreachRowStaged)
 			if err == nil && text == "" {
@@ -795,6 +844,10 @@ func (r *Root) startGitBreachDiff(row int) {
 				// real source file, not a diff, so that rejection
 				// doesn't apply here.
 				r.gitBreachSetDiffText(key, renderSyntax(viewer.Highlight(gr.path, text), paletteFor(r.theme.SurfaceBackground)), "")
+				return
+			}
+			if gr.kind == gitBreachRowConflict {
+				r.gitBreachSetDiffText(key, gitBreachRenderConflict(gr.path, git.ParseConflicts(text)), "")
 				return
 			}
 			r.gitBreachSetDiffText(key, gitBreachColorizeDiff(text, gr.path, r.theme), text)
