@@ -810,7 +810,11 @@ var helpText = strings.TrimLeft(`
   every configured remote by name and URL; "f" fetches the one
   under the cursor in the background, no confirm — it only ever
   updates this repository's own remote-tracking refs, never the
-  remote itself. Push/Pull aren't wired up yet),
+  remote itself. "p" pushes the current branch to it — always
+  confirms first, showing the exact "git push <remote> <branch>"
+  about to run (the exact command, not just a yes/no question,
+  since a push is the one real network write this dashboard makes).
+  Pull isn't wired up yet),
   Commits (the most recent commits, newest first, each one colored by
   its own author — loads 200 at a time, reaching the last loaded row
   fetches 200 more automatically, with a "loaded/total" hint in the
@@ -984,6 +988,10 @@ var helpText = strings.TrimLeft(`
     f        (Remotes sub-tab) Fetch the remote under the cursor in
              the background — no confirm, it only ever updates this
              repository's own remote-tracking refs
+    p        (Remotes sub-tab) Push the current branch to the remote
+             under the cursor — always confirms first, showing the
+             exact command about to run. Does nothing on a detached
+             HEAD (no branch name to push)
     a        (Tags sub-tab) Create a new, lightweight tag at HEAD,
              after typing a name in a prompt
     d        (Tags sub-tab) Delete the tag under the cursor, after
