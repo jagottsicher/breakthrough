@@ -775,7 +775,7 @@
 <!-- (*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo -->
 <g id="node22" class="node">
 <title>(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo</title>
-<g id="a_node22"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo | defined in root.go:3336">
+<g id="a_node22"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo | defined in root.go:3353">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M1983.075,-292.4C1983.075,-292.4 1850.925,-292.4 1850.925,-292.4 1844.925,-292.4 1838.925,-286.4 1838.925,-280.4 1838.925,-280.4 1838.925,-268.4 1838.925,-268.4 1838.925,-262.4 1844.925,-256.4 1850.925,-256.4 1850.925,-256.4 1983.075,-256.4 1983.075,-256.4 1989.075,-256.4 1995.075,-262.4 1995.075,-268.4 1995.075,-268.4 1995.075,-280.4 1995.075,-280.4 1995.075,-286.4 1989.075,-292.4 1983.075,-292.4"/>
 <text text-anchor="middle" x="1917" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">(*Root).SetVersionInfo</text>
 </a>
@@ -829,7 +829,7 @@
 <!-- github.com/jagottsicher/breakthrough/internal/ui.NewRoot -->
 <g id="node26" class="node">
 <title>github.com/jagottsicher/breakthrough/internal/ui.NewRoot</title>
-<g id="a_node26"><a xlink:title="github.com/jagottsicher/breakthrough/internal/ui.NewRoot | defined in root.go:2268">
+<g id="a_node26"><a xlink:title="github.com/jagottsicher/breakthrough/internal/ui.NewRoot | defined in root.go:2277">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M1601.6558,-292.4C1601.6558,-292.4 1548.3442,-292.4 1548.3442,-292.4 1542.3442,-292.4 1536.3442,-286.4 1536.3442,-280.4 1536.3442,-280.4 1536.3442,-268.4 1536.3442,-268.4 1536.3442,-262.4 1542.3442,-256.4 1548.3442,-256.4 1548.3442,-256.4 1601.6558,-256.4 1601.6558,-256.4 1607.6558,-256.4 1613.6558,-262.4 1613.6558,-268.4 1613.6558,-268.4 1613.6558,-280.4 1613.6558,-280.4 1613.6558,-286.4 1607.6558,-292.4 1601.6558,-292.4"/>
 <text text-anchor="middle" x="1575" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">NewRoot</text>
 </a>
