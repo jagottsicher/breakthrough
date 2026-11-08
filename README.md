@@ -1267,7 +1267,13 @@ Lightning Network ⚡️ using the sponsor button above.
   that range — a Statistics overlay (counts by level and top sources),
   "e"/"w" to jump between errors and warnings, a follow mode ("f") that
   re-reads every two seconds, and a raw-line section in the detail view
-  whenever the original line differs from the extracted message.
+  whenever the original line differs from the extracted message. On
+  Linux with `journalctl` on `$PATH`, the selection screen also offers
+  a systemd-journal row (`journalctl -o json`, the last 2000 entries)
+  alongside whatever files it found — the same viewer, filter, follow,
+  and timeline, just a different source. Never offered while the
+  active panel is connected to a remote session: there is no command-
+  execution channel to run `journalctl` against one.
 - Git breach (`jg`): a multi-pane dashboard for the git repository
   containing the active panel's own current directory, shelling out to
   the system's own `git` rather than reimplementing it. Status

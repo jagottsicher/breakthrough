@@ -2846,9 +2846,23 @@ collapse into one row). The "✕" glyph in the title bar's own top-right
 corner is a mouse-clickable equivalent to `Escape` — both this screen
 and the Log Holepunch view below have one.
 
+On Linux, with `journalctl` on `$PATH`, a "systemd-journal" row is
+offered above the file list — the systemd journal's own binary store
+is not a file this directory scan can ever find on its own. Opening it
+runs `journalctl -o json -n 2000` and decodes the result into the same
+Entry shape every other format already reduces to (timestamp, syslog
+severity, `SYSLOG_IDENTIFIER`/`_COMM`/`_SYSTEMD_UNIT` as Source,
+`MESSAGE`), so the rest of the view — keyword/time/level filtering,
+the timeline, follow, Statistics — works exactly as it does for a
+file. "r" and follow both re-run that same bounded `journalctl -n
+2000` rather than tailing it continuously; there is no unit (`-u`) or
+boot (`-b`) selection yet. Never offered while the active panel is
+connected to a remote session — there is no command-execution channel
+to run `journalctl` against one, only ever this machine's own journal.
+
 | Key | Action |
 |---|---|
-| `Enter` | Open the Log Holepunch view for the family under the cursor |
+| `Enter` | Open the Log Holepunch view for the family (or the systemd-journal row) under the cursor |
 | `r` | Re-scan the directory |
 | `z` | Toggle whether opening a family reads its compressed rotations too — global for this screen, not per family; the title bar and each family's own Info column always show the current state |
 | `Escape` | Close |

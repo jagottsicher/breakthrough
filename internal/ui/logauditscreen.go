@@ -50,6 +50,28 @@ type logAuditState struct {
 	Dir             string
 	Groups          []logview.FileGroup
 	DiscoverErr     error
+	// JournalAvailable is reloadLogAuditDiscovery's own "offer a
+	// systemd-journal row at all" gate — journalctl on $PATH and the
+	// active panel not remote (see logauditjournal.go's own doc
+	// comment on why a remote panel must never reach this machine's
+	// own journal instead of its own). Recomputed every "jL"/"r" the
+	// same way log.Groups itself is, so connecting or disconnecting
+	// between two presses changes what's offered next time, not
+	// retroactively.
+	JournalAvailable bool
+	// JournalAvailableFn overrides how reloadLogAuditDiscovery decides
+	// JournalAvailable — nil (the default) uses the real
+	// logview.JournalAvailable() check. Tests set this so the
+	// selection table's own row count/offset stays deterministic
+	// regardless of whether journalctl happens to be installed on the
+	// machine actually running them (see newTestRootForLogAudit).
+	JournalAvailableFn func() bool
+	// JournalMode is true while the viewer is showing
+	// logview.ReadJournal's own result rather than a file group's —
+	// the only thing reopenLogAuditViewer/startLogAuditFollow need to
+	// branch on, since log.GroupOpen itself is a zero value either way
+	// once openLogAuditJournalViewer runs (see its own doc comment).
+	JournalMode bool
 	// SkipCompressed is the selection screen's own "z" toggle (see
 	// toggleLogAuditSkipCompressed, logaudit.go) — false (zero value,
 	// read every file including a compressed rotation) by default, per
@@ -730,14 +752,28 @@ func (r *Root) renderLogAuditSelection() {
 		showTablePlaceholder(r.log.Table, r.log.DiscoverErr.Error(), r.theme.EntryError)
 		return
 	}
-	if len(r.log.Groups) == 0 {
+	if len(r.log.Groups) == 0 && !r.log.JournalAvailable {
 		showTablePlaceholder(r.log.Table, "No log files found in "+r.log.Dir, r.theme.PlaceholderText)
 		return
 	}
 
 	enableTableSelection(r.log.Table)
+	offset := r.logAuditJournalRowOffset()
+	if r.log.JournalAvailable {
+		journalRow := 1
+		click := r.clickLogAuditSelectionCell(journalRow)
+		label := fmt.Sprintf("systemd-journal (last %d)", logAuditJournalWindowLines)
+		r.log.Table.SetCell(journalRow, logAuditSelName,
+			tview.NewTableCell(label).SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
+		r.log.Table.SetCell(journalRow, logAuditSelInfo,
+			tview.NewTableCell("journalctl -o json").SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
+		r.log.Table.SetCell(journalRow, logAuditSelSize,
+			tview.NewTableCell("—").SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
+		r.log.Table.SetCell(journalRow, logAuditSelModified,
+			tview.NewTableCell("—").SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
+	}
 	for i, g := range r.log.Groups {
-		row := i + 1
+		row := i + 1 + offset
 		click := r.clickLogAuditSelectionCell(row)
 		r.log.Table.SetCell(row, logAuditSelName,
 			tview.NewTableCell(g.Base).SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
@@ -759,7 +795,7 @@ func (r *Root) renderLogAuditSelection() {
 			tview.NewTableCell(modText).SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
 	}
 
-	if cur, _ := r.log.Table.GetSelection(); cur < 1 || cur > len(r.log.Groups) {
+	if cur, _ := r.log.Table.GetSelection(); cur < 1 || cur > len(r.log.Groups)+offset {
 		r.log.Table.Select(1, 0)
 	}
 }

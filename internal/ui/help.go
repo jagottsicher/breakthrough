@@ -993,7 +993,18 @@ var helpText = strings.TrimLeft(`
   time. The "✕" glyph in the title bar's own top-right corner is
   a mouse-clickable equivalent to Escape — both screens below have one.
 
-    Enter    Open the Log Holepunch view for the family under the cursor
+  On Linux, with "journalctl" on $PATH, a "systemd-journal" row is
+  offered above the file list — the journal's own binary store is not
+  a file this directory scan can ever find. Opening it reads the last
+  2000 entries via "journalctl -o json"; the rest of the view (filter,
+  timeline, follow, Statistics) works exactly as it does for a file,
+  but "r"/follow re-run that same bounded read rather than tailing it,
+  and there's no unit/boot selection yet. Never offered on a remote-
+  connected panel — no command-execution channel reaches "journalctl"
+  on the other end, only ever this machine's own journal.
+
+    Enter    Open the Log Holepunch view for the family (or the
+             systemd-journal row) under the cursor
     r        Re-scan the directory
     z        Toggle skipping compressed rotations on the next open
              (global for this screen, not per family — the title

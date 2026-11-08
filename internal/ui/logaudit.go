@@ -39,6 +39,14 @@ func (r *Root) reloadLogAuditDiscovery() {
 	groups, err := logview.Discover(r.currentLogAuditSource(), r.log.Dir)
 	r.log.Groups = groups
 	r.log.DiscoverErr = err
+	// Never offered on a remote-connected panel — see logauditjournal.go's
+	// own doc comment for why: there is no command-execution channel to
+	// run journalctl against a remote session, only ever this machine's.
+	journalAvailable := logview.JournalAvailable
+	if r.log.JournalAvailableFn != nil {
+		journalAvailable = r.log.JournalAvailableFn
+	}
+	r.log.JournalAvailable = journalAvailable() && !r.panel.isRemote()
 	r.renderLogAuditSelection()
 }
 
@@ -64,7 +72,7 @@ func (r *Root) toggleLogAuditSkipCompressed() {
 // (1-based, header at 0), the same offset every other screen's own
 // table-row-to-data mapping uses (see e.g. renderActivityLog).
 func (r *Root) logAuditGroupAt(row int) (logview.FileGroup, bool) {
-	idx := row - 1
+	idx := row - 1 - r.logAuditJournalRowOffset()
 	if idx < 0 || idx >= len(r.log.Groups) {
 		return logview.FileGroup{}, false
 	}
@@ -86,10 +94,15 @@ func (r *Root) logAuditGroupAt(row int) (logview.FileGroup, bool) {
 // the selection screen.
 func (r *Root) openLogAuditViewer() {
 	row, _ := r.log.Table.GetSelection()
+	if r.log.JournalAvailable && row == 1 {
+		r.openLogAuditJournalViewer()
+		return
+	}
 	group, ok := r.logAuditGroupAt(row)
 	if !ok {
 		return
 	}
+	r.log.JournalMode = false
 	// A different group than whatever progressive load might still be
 	// running for (or the same one, reopened) — cancel first, the same
 	// "cancel before starting the next thing" rule stopLogAuditFollow
@@ -625,7 +638,11 @@ func readLogAuditFile(source logview.FileSource, f logview.CandidateFile) ([]log
 // "re-run the real read, don't just redraw" contract reloadActivityLog
 // already has.
 func (r *Root) reopenLogAuditViewer() {
-	r.refreshLogAuditCurrentFile()
+	if r.log.JournalMode {
+		r.refreshLogAuditJournal()
+	} else {
+		r.refreshLogAuditCurrentFile()
+	}
 	r.renderLogAuditViewer()
 }
 
@@ -737,6 +754,7 @@ func (r *Root) startLogAuditFollow() {
 	group := r.log.GroupOpen
 	source := r.currentLogAuditSource()
 	skipCompressed := r.log.SkipCompressed
+	journalMode := r.log.JournalMode
 	r.safeGo("log audit follow", func() { r.stopLogAuditFollow() }, func() {
 		ticker := time.NewTicker(logAuditFollowInterval)
 		defer ticker.Stop()
@@ -746,7 +764,17 @@ func (r *Root) startLogAuditFollow() {
 				if ctx.Err() != nil {
 					return
 				}
-				entries, files, skipped, excluded, err := readLogAuditGroup(source, group, skipCompressed)
+				var entries []logview.Entry
+				var files, skipped, excluded int
+				var err error
+				if journalMode {
+					entries, err = logview.ReadJournal(ctx, logview.JournalOptions{Lines: logAuditJournalWindowLines})
+					if err == nil {
+						files = 1
+					}
+				} else {
+					entries, files, skipped, excluded, err = readLogAuditGroup(source, group, skipCompressed)
+				}
 				if ctx.Err() != nil {
 					return
 				}
