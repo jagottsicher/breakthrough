@@ -683,6 +683,12 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		if r.gitBreachMainShowsAStageableHunk() {
 			entries = append(entries, hintKey("s", "stage hunk", func(r *Root) { r.openGitBreachStageHunk() }))
 		}
+		if r.gitBreachMainShowsAConflict() {
+			entries = append(entries,
+				hintKey("o", "keep ours", func(r *Root) { r.resolveGitBreachConflictSection(git.SideOurs) }),
+				hintKey("t", "keep theirs", func(r *Root) { r.resolveGitBreachConflictSection(git.SideTheirs) }),
+			)
+		}
 	}
 	entries = append(entries,
 		hintKey("c", "commit", func(r *Root) { r.openGitBreachCommitPrompt() }),
@@ -924,6 +930,12 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case 's':
 			r.openGitBreachStageHunk()
+			return nil
+		case 'o':
+			r.resolveGitBreachConflictSection(git.SideOurs)
+			return nil
+		case 't':
+			r.resolveGitBreachConflictSection(git.SideTheirs)
 			return nil
 		case 'g':
 			// "gC" reaches the AI Consigliere — see
@@ -2188,4 +2200,60 @@ func gitBreachDiffHeaderPath(line string) (string, bool) {
 func gitBreachWrapDiffLine(marker, highlightedContent string, markerColor, background tcell.Color) string {
 	highlighted := wrapColor(markerColor, tview.Escape(marker)) + highlightedContent
 	return fmt.Sprintf("[:#%06x:]%s[-:-:-]", uint32(background.Hex())&0xffffff, highlighted)
+}
+
+// gitBreachRenderConflict is Main's own content for a Conflict row —
+// every section git.ParseConflicts found in the file, in order, "ours"
+// tinted the same green gitBreachDiffAddedBackground already uses for
+// an added line and "theirs" the same red gitBreachDiffRemovedBackground
+// already uses for a removed one (not a value judgment either way,
+// purely "two sides, two already-established colors" the way the
+// split diff view's own left/right panes already reuse them). Only the
+// first (topmost) section is ever actionable from the keyboard at a
+// time — resolveGitBreachConflictSection always targets index 0 of
+// whatever ParseConflicts returns fresh, since resolving a section
+// shifts every later one's own position — so only that one gets the
+// "resolve this" hint and the "> " marker; the rest render identically
+// but inert, there to read while deciding, not yet to act on.
+// sections empty (the markers are gone — resolved by some other tool
+// entirely outside this dashboard, or a reload landed between the
+// last resolve and this render) shows a plain status line instead of
+// an empty Main.
+func gitBreachRenderConflict(path string, sections []git.ConflictSection) string {
+	if len(sections) == 0 {
+		return tview.Escape(fmt.Sprintf("%s: no conflict markers found — already resolved (press \"r\" to reload if Files still lists it).", path))
+	}
+
+	var b strings.Builder
+	b.WriteString(tview.Escape(fmt.Sprintf(
+		"%s — %d unresolved conflict(s). \"o\" keeps %s (ours), \"t\" keeps %s (theirs) for the top section.\n\n",
+		path, len(sections), sections[0].OursLabel, sections[0].TheirsLabel,
+	)))
+
+	for i, sec := range sections {
+		marker := "  "
+		if i == 0 {
+			marker = "> "
+		}
+		b.WriteString(tview.Escape(fmt.Sprintf("%s[%d/%d] <<<<<<< %s\n", marker, i+1, len(sections), sec.OursLabel)))
+		for _, line := range sec.Ours {
+			b.WriteString(gitBreachWrapConflictLine(line, gitBreachDiffAddedBackground))
+			b.WriteString("\n")
+		}
+		b.WriteString(tview.Escape("=======\n"))
+		for _, line := range sec.Theirs {
+			b.WriteString(gitBreachWrapConflictLine(line, gitBreachDiffRemovedBackground))
+			b.WriteString("\n")
+		}
+		b.WriteString(tview.Escape(fmt.Sprintf(">>>>>>> %s\n\n", sec.TheirsLabel)))
+	}
+	return b.String()
+}
+
+// gitBreachWrapConflictLine mirrors gitBreachWrapDiffLine's own
+// background-tint tag shape, minus the separate marker glyph: a
+// conflict section's own lines have no per-line "+"/"-" of their own,
+// the whole line is the content.
+func gitBreachWrapConflictLine(content string, background tcell.Color) string {
+	return fmt.Sprintf("[:#%06x:]%s[-:-:-]", uint32(background.Hex())&0xffffff, tview.Escape(content))
 }
