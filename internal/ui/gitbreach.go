@@ -81,6 +81,10 @@ type gitBreachState struct {
 	BranchesTab gitBreachBranchesTab
 	Tags        []git.Tag
 	TagsErr     error
+	// Remotes is read-only for now — see renderGitBreachRemotes' own
+	// doc comment on why (Fetch/Push/Pull are later Phase D patches).
+	Remotes    []git.Remote
+	RemotesErr error
 	// FilesFilter/BranchesFilter/TagsFilter/StashFilter are each
 	// box's own "/" filter — a plain, case-insensitive substring (see
 	// gitBreachFilterMatches), deliberately not the panel's own
@@ -248,6 +252,10 @@ func (r *Root) reloadGitBreach() {
 	tags, tagsErr := git.Tags(ctx, r.gitBreach.Root)
 	r.gitBreach.Tags = tags
 	r.gitBreach.TagsErr = tagsErr
+
+	remotes, remotesErr := git.Remotes(ctx, r.gitBreach.Root)
+	r.gitBreach.Remotes = remotes
+	r.gitBreach.RemotesErr = remotesErr
 
 	commits, commitsErr := git.Log(ctx, r.gitBreach.Root, r.gitBreach.CommitsLimit)
 	r.gitBreach.Commits = commits
@@ -643,6 +651,17 @@ func (r *Root) gitBreachTagAt(row int) (git.Tag, bool) {
 		return git.Tag{}, false
 	}
 	return r.gitBreach.TagsShown[row], true
+}
+
+// gitBreachRemoteAt indexes r.gitBreach.Remotes directly by row — no
+// filter on this sub-tab (see renderGitBreachRemotes' own doc
+// comment), so there's no *Shown slice the way Branches/Tags each
+// have one.
+func (r *Root) gitBreachRemoteAt(row int) (git.Remote, bool) {
+	if row < 0 || row >= len(r.gitBreach.Remotes) {
+		return git.Remote{}, false
+	}
+	return r.gitBreach.Remotes[row], true
 }
 
 // toggleGitBreachBranchesTab/reverseToggleGitBreachBranchesTab cycle
