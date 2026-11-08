@@ -594,15 +594,19 @@ var helpText = strings.TrimLeft(`
 
   Each setting shows where its value comes from — "default",
   "system-wide" (set in /etc/breakthrough/config), or "changed by you".
-  "Reset category" and "Reset all" remove your own overrides rather than
-  writing defaults over them, so a value falls back to the system-wide
-  setting where there is one.
+  "Reset <category>" (its own label always names whichever category is
+  currently selected, e.g. "Reset Behavior") and "Reset all" remove
+  your own overrides rather than writing defaults over them, so a
+  value falls back to the system-wide setting where there is one.
 
   "Edit config file" opens your config in your editor, creating it first
   with every setting listed and commented out if you don't have one yet.
-  "New color scheme" copies the current scheme and opens that for
-  editing; either way the change is picked up when the editor closes.
-  "Remove orphaned labels" scans every color-labeled path in the
+  These three buttons are the only ones shown on most categories — a
+  handful of further buttons only make sense for one specific category
+  and appear only while it's selected: "New color scheme" (Appearance)
+  copies the current scheme and opens that for editing, picked up when
+  the editor closes. "Remove orphaned labels" (Label) scans every
+  color-labeled path in the
   background (cancelable from the status bar while it runs) and, once
   done, asks before removing any whose own file or directory no longer
   exists where it was set — a path under a directory that isn't
