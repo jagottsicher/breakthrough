@@ -716,8 +716,8 @@ Search, chmod, ...).
 
 **Self-adapting defaults** — the one setting group in this whole app
 that works this way, per explicit design: whatever is chosen here
-becomes the new default shown next time, under Options → Behavior →
-Duplicate (see [Settings reference](#settings-reference)). This only
+becomes the new default shown next time, under Options → Duplicate
+(see [Settings reference](#settings-reference)). This only
 happens once **Duplicate** is actually pressed; editing a field and
 then **Cancel** never touches the sticky default at all.
 

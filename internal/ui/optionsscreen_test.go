@@ -902,42 +902,53 @@ func TestOptionsCategoryChangeSwapsTheSettingsShown(t *testing.T) {
 	}
 }
 
-// TestCopyMoveIsASubsectionOfBehaviorNotItsOwnCategory pins the user's
-// own explicit request: the eight Copy & Move settings live grouped
-// under Behavior, with a "Copy & Move" header row of their own, rather
-// than costing their own top-level category in the left-hand list.
-func TestCopyMoveIsASubsectionOfBehaviorNotItsOwnCategory(t *testing.T) {
+// TestBehaviorSplitPromotedSubsectionsAreTopLevelCategories pins the
+// 2026-11-08 reversal of the opposite, previous decision ("Copy &
+// Move" used to live grouped under "Behavior" as a subsection, per the
+// user's own explicit request at the time — see the git history of
+// this test's own earlier name): six former subsections of "Behavior"
+// (Copy & Move, Duplicate, Compress & Extract, Rsync, Sed Replace,
+// Search) are now their own top-level categories, each with no
+// section header of its own anymore (the category name already says
+// it) — only "General"/"Miscellaneous" remain inside "Behavior",
+// still with their own section header each, since there are two of
+// them sharing one category.
+func TestBehaviorSplitPromotedSubsectionsAreTopLevelCategories(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 
-	for _, cat := range optionCategories() {
-		if cat.name == "Copy & Move" {
-			t.Fatal("Copy & Move should no longer be its own top-level category")
+	promoted := []string{"Copy & Move", "Duplicate", "Compress & Extract", "Rsync", "Sed Replace", "Search"}
+	for _, name := range promoted {
+		selectOptionCategory(t, r, name) // fails the test outright if the category doesn't exist
+
+		for _, dr := range optionCategoryDisplayRows(r, mustOptionCategory(t, name)) {
+			if dr.header != "" {
+				t.Errorf("category %q still has a section header %q — should have none now that it's its own category", name, dr.header)
+			}
 		}
+	}
+
+	// copy_preserve_attributes (the first Copy & Move setting) is the
+	// very first row under its own new category — nothing above it,
+	// unlike when it used to sit right after a "Copy & Move" header
+	// row under Behavior.
+	selectOptionCategory(t, r, "Copy & Move")
+	if row, ok := optionRowByKey(r, "copy_preserve_attributes"); !ok || row != 0 {
+		t.Errorf("copy_preserve_attributes at row %d (ok=%v), want row 0", row, ok)
 	}
 
 	selectOptionCategory(t, r, "Behavior")
-
-	headerRow := -1
 	rows := optionCategoryDisplayRows(r, mustOptionCategory(t, "Behavior"))
-	for i, dr := range rows {
-		if dr.header == "Copy & Move" {
-			headerRow = i
-			break
+	var headers []string
+	for _, dr := range rows {
+		if dr.header != "" {
+			headers = append(headers, dr.header)
 		}
 	}
-	if headerRow == -1 {
-		t.Fatal("no \"Copy & Move\" subsection header found under Behavior")
+	if len(headers) != 2 || headers[0] != "General" || headers[1] != "Miscellaneous" {
+		t.Errorf("Behavior's own section headers = %+v, want exactly [\"General\" \"Miscellaneous\"]", headers)
 	}
-	if got := strings.TrimSpace(r.options.Table.GetCell(headerRow, optionsColLabel).Text); got != "Copy & Move" {
-		t.Errorf("header row label = %q, want %q", got, "Copy & Move")
-	}
-
-	copyRow, ok := optionRowByKey(r, "copy_preserve_attributes")
-	if !ok {
-		t.Fatal("copy_preserve_attributes not found under Behavior")
-	}
-	if copyRow != headerRow+1 {
-		t.Errorf("copy_preserve_attributes at row %d, want it directly after the header at row %d", copyRow, headerRow+1)
+	if _, ok := optionRowByKey(r, "copy_preserve_attributes"); ok {
+		t.Error("copy_preserve_attributes still found under Behavior — should have moved to its own category")
 	}
 }
 
@@ -1089,23 +1100,23 @@ func TestOptionAtRowReturnsFalseForHeaderRow(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	selectOptionCategory(t, r, "Behavior")
 
-	copyRow, ok := optionRowByKey(r, "copy_preserve_attributes")
+	chordRow, ok := optionRowByKey(r, "chord_timeout_ms")
 	if !ok {
-		t.Fatal("copy_preserve_attributes not found under Behavior")
+		t.Fatal("chord_timeout_ms not found under Behavior")
 	}
-	headerRow := copyRow - 1
+	headerRow := chordRow - 1
 
 	if _, ok := r.optionAtRow(headerRow); ok {
 		t.Error("optionAtRow on the header row should return false, not the option right after it")
 	}
-	if _, ok := r.optionAtRow(copyRow); !ok {
-		t.Error("optionAtRow on the row right after the header should still find copy_preserve_attributes")
+	if _, ok := r.optionAtRow(chordRow); !ok {
+		t.Error("optionAtRow on the row right after the header should still find chord_timeout_ms")
 	}
 }
 
 // TestOptionsArrowKeysSkipTheSubsectionHeader drives the real
 // tview.Table InputHandler down through Behavior's own settings and
-// pins that the cursor never lands on the "Copy & Move" header row —
+// pins that the cursor never lands on the "Miscellaneous" header row —
 // relying on tview's own documented behavior (verified directly against
 // its source, not assumed) that arrow-key movement skips any cell
 // marked NotSelectable, which renderOptions sets on every cell of a
@@ -1117,14 +1128,14 @@ func TestOptionsArrowKeysSkipTheSubsectionHeader(t *testing.T) {
 
 	headerRow, ok := func() (int, bool) {
 		for i, dr := range optionCategoryDisplayRows(r, mustOptionCategory(t, "Behavior")) {
-			if dr.header == "Copy & Move" {
+			if dr.header == "Miscellaneous" {
 				return i, true
 			}
 		}
 		return 0, false
 	}()
 	if !ok {
-		t.Fatal("no \"Copy & Move\" header found under Behavior")
+		t.Fatal("no \"Miscellaneous\" header found under Behavior")
 	}
 
 	r.options.Table.Select(0, 0)
@@ -1191,11 +1202,11 @@ func TestOptionAtRowReturnsFalseForBlankRow(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 	selectOptionCategory(t, r, "Behavior")
 
-	copyRow, ok := optionRowByKey(r, "copy_preserve_attributes")
+	chordRow, ok := optionRowByKey(r, "chord_timeout_ms")
 	if !ok {
-		t.Fatal("copy_preserve_attributes not found under Behavior")
+		t.Fatal("chord_timeout_ms not found under Behavior")
 	}
-	blankRow := copyRow - 2 // header sits right before copyRow; the blank spacer, one further back
+	blankRow := chordRow - 2 // header sits right before chordRow; the blank spacer, one further back
 
 	rows := optionCategoryDisplayRows(r, mustOptionCategory(t, "Behavior"))
 	if !rows[blankRow].blank {

@@ -760,13 +760,40 @@ func optionCategories() []optionCategory {
 					func(r *Root) bool { return r.settings.FilterPersistent },
 					func(r *Root, b bool) { r.setFilterPersistent(b) },
 				)),
-				// "Copy & Move" subsection — per the user's own explicit
-				// request, these eight settings belong grouped under
-				// Behavior rather than costing their own top-level
-				// category (see optionSpec.section's own doc comment);
-				// the same applies to the planned Duplicate settings
-				// later.
-				withSection("Copy & Move", boolOption("copy_preserve_attributes", "Copy preserves attributes",
+				// "Miscellaneous" subsection — per the user's own explicit
+				// request, for settings that don't belong to a larger
+				// cluster of their own.
+				withSection("Miscellaneous", intOption("chord_timeout_ms", "Chord timeout (ms)",
+					"How long, in milliseconds, a chord's second key (gg, oo, po, zr, ...) "+
+						"stays live for once the first key is pressed.\n\n"+
+						"4000 (four seconds) by default — long enough to actually read the "+
+						"button bar's own legend for the chord's members first, short enough "+
+						"that an abandoned chord doesn't sit waiting indefinitely for a "+
+						"keystroke that might arrive minutes later and mean something "+
+						"completely different by then.\n\n"+
+						"Capped at 10000 (ten seconds) — a value entered above that is clamped "+
+						"down to it instead of being rejected.",
+					func(r *Root) int { return r.settings.ChordTimeoutMS },
+					func(r *Root, n int) {
+						if n > chordTimeoutMaxMS {
+							n = chordTimeoutMaxMS
+						}
+						r.settings.ChordTimeoutMS = n
+						r.persistSetting("chord_timeout_ms", strconv.Itoa(n))
+					},
+				)),
+			},
+		},
+		{
+			name: "Copy & Move",
+			options: []optionSpec{
+				// Promoted to its own top-level category (2026-11-08) — these
+				// eight settings used to live as a "Copy & Move" subsection
+				// under "Behavior"; eight subsections sharing one scrolling
+				// category made it too large to read at a glance (see
+				// feature_ideas.txt's own Options-cleanup section), so each
+				// cohesive group of settings became its own category instead.
+				boolOption("copy_preserve_attributes", "Copy preserves attributes",
 					"Whether a Copy job carries the source's own permissions, ownership and "+
 						"modification time over to the destination.\n\n"+
 						"On (the default) matches what you almost always want. Off leaves the "+
@@ -779,11 +806,11 @@ func optionCategories() []optionCategory {
 						r.settings.CopyPreserveAttributes = b
 						r.persistSetting("copy_preserve_attributes", strconv.FormatBool(b))
 					},
-				)),
+				),
 				// Grouped Copy-then-Move (all four Copy settings, then
 				// all four Move ones) rather than alternating pairs —
 				// per the user's own explicit request.
-				withSection("Copy & Move", boolOption("copy_follow_symlinks", "Copy follows symlinks",
+				boolOption("copy_follow_symlinks", "Copy follows symlinks",
 					"The default a Copy paste (\"v\") uses when the selection includes a "+
 						"symlink: dereference it, writing a real copy of whatever it points to, "+
 						"instead of a new symlink pointing at the same place.\n\n"+
@@ -799,8 +826,8 @@ func optionCategories() []optionCategory {
 						r.settings.CopyFollowSymlinks = b
 						r.persistSetting("copy_follow_symlinks", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Copy & Move", boolOption("copy_auto_merge_directories", "Copy auto-merges directories",
+				),
+				boolOption("copy_auto_merge_directories", "Copy auto-merges directories",
 					"Whether a Copy paste that runs into a directory already existing at the "+
 						"destination combines the two automatically, without asking.\n\n"+
 						"Only ever applies when both sides are directories — a conflict between two "+
@@ -813,8 +840,8 @@ func optionCategories() []optionCategory {
 						r.settings.CopyAutoMergeDirectories = b
 						r.persistSetting("copy_auto_merge_directories", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Copy & Move", boolOption("copy_stable_symlinks", "Copy keeps symlinks stable",
+				),
+				boolOption("copy_stable_symlinks", "Copy keeps symlinks stable",
 					"Whether a symlink whose target lives inside the tree being copied gets "+
 						"that target rewritten to point at the corresponding new location, instead "+
 						"of keeping the original target verbatim.\n\n"+
@@ -830,8 +857,8 @@ func optionCategories() []optionCategory {
 						r.settings.CopyStableSymlinks = b
 						r.persistSetting("copy_stable_symlinks", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Copy & Move", boolOption("move_preserve_attributes", "Move preserves attributes",
+				),
+				boolOption("move_preserve_attributes", "Move preserves attributes",
 					"Move's own counterpart to \"Copy preserves attributes\".\n\n"+
 						"Has no effect on a same-filesystem move: that's a single atomic rename, "+
 						"the same inode throughout, so its attributes never change regardless of "+
@@ -843,8 +870,8 @@ func optionCategories() []optionCategory {
 						r.settings.MovePreserveAttributes = b
 						r.persistSetting("move_preserve_attributes", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Copy & Move", boolOption("move_follow_symlinks", "Move follows symlinks",
+				),
+				boolOption("move_follow_symlinks", "Move follows symlinks",
 					"Move's own counterpart to \"Copy follows symlinks\" — the default a Cut "+
 						"paste (\"v\" after \"x\") uses, with \"V\" flipping it once for that one "+
 						"paste the same way.",
@@ -854,8 +881,8 @@ func optionCategories() []optionCategory {
 						r.settings.MoveFollowSymlinks = b
 						r.persistSetting("move_follow_symlinks", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Copy & Move", boolOption("move_auto_merge_directories", "Move auto-merges directories",
+				),
+				boolOption("move_auto_merge_directories", "Move auto-merges directories",
 					"Move's own counterpart to \"Copy auto-merges directories\", for a Cut paste.",
 					false,
 					func(r *Root) bool { return r.settings.MoveAutoMergeDirectories },
@@ -863,8 +890,8 @@ func optionCategories() []optionCategory {
 						r.settings.MoveAutoMergeDirectories = b
 						r.persistSetting("move_auto_merge_directories", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Copy & Move", boolOption("move_stable_symlinks", "Move keeps symlinks stable",
+				),
+				boolOption("move_stable_symlinks", "Move keeps symlinks stable",
 					"Move's own counterpart to \"Copy keeps symlinks stable\". Has no effect on a "+
 						"same-filesystem move (the fast path never touches an individual symlink at "+
 						"all) or on a move with \"Follow symlinks\" on (nothing survives as a link "+
@@ -876,20 +903,16 @@ func optionCategories() []optionCategory {
 						r.settings.MoveStableSymlinks = b
 						r.persistSetting("move_stable_symlinks", strconv.FormatBool(b))
 					},
-				)),
-				// "Duplicate" subsection — per the user's own explicit
-				// request. Unlike every other setting in this app, eight
-				// of these nine are self-adapting: applyDuplicateSelection
-				// (duplicate.go) writes back through these exact same
-				// apply functions whenever the Duplicate dialog itself is
-				// actually confirmed, not just here — so whatever was
-				// chosen there becomes the new default shown here next
-				// time, "so passt sich das den Vorlieben an" being the
-				// user's own explicit words for it. The ninth,
-				// "duplicate_count_max", is deliberately not — it's a
-				// safety bound the dialog itself never offers a field
-				// for, only ever set here.
-				withSection("Duplicate", stringOption("duplicate_separator", "Separator",
+				),
+			},
+		},
+		{
+			name: "Duplicate",
+			options: []optionSpec{
+				// Promoted to its own top-level category (2026-11-08) — see
+				// the "Copy & Move" category's own doc comment above for why.
+				// Unlike every other setting in this app, eight
+				stringOption("duplicate_separator", "Separator",
 					"Sits between the original name — its extension included, untouched — and "+
 						"Duplicate's own suffix — free-form: \"_\", \"-\", \".\" are the obvious "+
 						"choices, but nothing here requires any particular one.\n\n"+
@@ -904,8 +927,8 @@ func optionCategories() []optionCategory {
 						r.settings.DuplicateSeparator = v
 						r.persistSetting("duplicate_separator", v)
 					},
-				)),
-				withSection("Duplicate", optionSpec{
+				),
+				optionSpec{
 					key:   "duplicate_strategy",
 					label: "Naming strategy",
 					help: "How Duplicate names a copy — always appended after the original " +
@@ -932,8 +955,8 @@ func optionCategories() []optionCategory {
 							{value: "datetime", label: "Date/time"},
 						}
 					},
-				}),
-				withSection("Duplicate", stringOption("duplicate_suffix_text", "Suffix text",
+				},
+				stringOption("duplicate_suffix_text", "Suffix text",
 					"The literal text \"Fixed suffix text\" (see the strategy above) appends — "+
 						"only relevant while that strategy is selected.\n\n"+
 						"\"copy\" by default: \"report.txt\" duplicates to \"report.txt_copy\".",
@@ -942,8 +965,8 @@ func optionCategories() []optionCategory {
 						r.settings.DuplicateSuffixText = v
 						r.persistSetting("duplicate_suffix_text", v)
 					},
-				)),
-				withSection("Duplicate", intOption("duplicate_number_padding", "Number padding (digits)",
+				),
+				intOption("duplicate_number_padding", "Number padding (digits)",
 					"How many digits the \"Numbered\" strategy (see above) pads its own number "+
 						"to with leading zeros — only relevant while that strategy is selected.\n\n"+
 						"0 (the default) disables padding entirely: \"report.txt_1\", "+
@@ -956,8 +979,8 @@ func optionCategories() []optionCategory {
 						r.settings.DuplicateNumberPadding = n
 						r.persistSetting("duplicate_number_padding", strconv.Itoa(n))
 					},
-				)),
-				withSection("Duplicate", stringOption("duplicate_datetime_format", "Date/time format",
+				),
+				stringOption("duplicate_datetime_format", "Date/time format",
 					"The format string the \"Date/time\" strategy (see above) renders its own "+
 						"timestamp with — only relevant while that strategy is selected, and "+
 						"ignored entirely once \"Use Unix timestamp\" below is on.\n\n"+
@@ -970,8 +993,8 @@ func optionCategories() []optionCategory {
 						r.settings.DuplicateDateTimeFormat = v
 						r.persistSetting("duplicate_datetime_format", v)
 					},
-				)),
-				withSection("Duplicate", boolOption("duplicate_datetime_strftime", "Strftime-style format",
+				),
+				boolOption("duplicate_datetime_strftime", "Strftime-style format",
 					"How \"Date/time format\" above is interpreted — in the Multiply dialog "+
 						"itself, its own \"Date/time format type\" dropdown picks this (and "+
 						"\"Use Unix timestamp\" below) directly instead of a pair of separate "+
@@ -992,8 +1015,8 @@ func optionCategories() []optionCategory {
 						r.settings.DuplicateDateTimeStrftime = b
 						r.persistSetting("duplicate_datetime_strftime", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Duplicate", boolOption("duplicate_datetime_use_unix", "Use Unix timestamp",
+				),
+				boolOption("duplicate_datetime_use_unix", "Use Unix timestamp",
 					"Bypasses \"Date/time format\" above entirely in favor of a raw Unix "+
 						"timestamp (seconds since 1970-01-01 UTC) — for anyone who'd rather not "+
 						"deal with a format string at all. Off by default.",
@@ -1003,8 +1026,8 @@ func optionCategories() []optionCategory {
 						r.settings.DuplicateDateTimeUseUnix = b
 						r.persistSetting("duplicate_datetime_use_unix", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Duplicate", intOption("duplicate_count", "Number of duplicates",
+				),
+				intOption("duplicate_count", "Number of duplicates",
 					"How many duplicates one Duplicate invocation creates at once — each named "+
 						"in sequence by the strategy above (three \"Numbered\" duplicates of "+
 						"\"report.txt\" become \"report.txt_1\", \"report.txt_2\", "+
@@ -1016,8 +1039,8 @@ func optionCategories() []optionCategory {
 						r.settings.DuplicateCount = n
 						r.persistSetting("duplicate_count", strconv.Itoa(n))
 					},
-				)),
-				withSection("Duplicate", intOption("duplicate_count_max", "Maximum number of duplicates",
+				),
+				intOption("duplicate_count_max", "Maximum number of duplicates",
 					"The upper bound \"Number of duplicates\" above can be set to — purely a "+
 						"safety net against an accidental \"ten thousand copies\", not a hard "+
 						"limit: raising this is itself just another config value.\n\n"+
@@ -1027,38 +1050,21 @@ func optionCategories() []optionCategory {
 						r.settings.DuplicateCountMax = n
 						r.persistSetting("duplicate_count_max", strconv.Itoa(n))
 					},
-				)),
-				// "Miscellaneous" subsection — per the user's own explicit
-				// request, for settings that don't belong to a larger
-				// cluster of their own.
-				withSection("Miscellaneous", intOption("chord_timeout_ms", "Chord timeout (ms)",
-					"How long, in milliseconds, a chord's second key (gg, oo, po, zr, ...) "+
-						"stays live for once the first key is pressed.\n\n"+
-						"4000 (four seconds) by default — long enough to actually read the "+
-						"button bar's own legend for the chord's members first, short enough "+
-						"that an abandoned chord doesn't sit waiting indefinitely for a "+
-						"keystroke that might arrive minutes later and mean something "+
-						"completely different by then.\n\n"+
-						"Capped at 10000 (ten seconds) — a value entered above that is clamped "+
-						"down to it instead of being rejected.",
-					func(r *Root) int { return r.settings.ChordTimeoutMS },
-					func(r *Root, n int) {
-						if n > chordTimeoutMaxMS {
-							n = chordTimeoutMaxMS
-						}
-						r.settings.ChordTimeoutMS = n
-						r.persistSetting("chord_timeout_ms", strconv.Itoa(n))
-					},
-				)),
-				// "Compress & Extract" subsection — self-adapting, per
-				// the user's own explicit request that this follow the
-				// same "whatever gets chosen becomes the new sticky
-				// default" shape Duplicate's own settings above already
+				),
+			},
+		},
+		{
+			name: "Compress & Extract",
+			options: []optionSpec{
+				// Promoted to its own top-level category (2026-11-08) — see
+				// the "Copy & Move" category's own doc comment above for why.
+				// Self-adapting, the same "whatever gets chosen becomes the
+				// new sticky default" shape Duplicate's own settings already
 				// have: confirming Compress with a given Format writes
 				// it back here (see openCompress/runCompress in
 				// compress.go), so the dialog opens on whichever one was
 				// actually used last instead of always "zip".
-				withSection("Compress & Extract", optionSpec{
+				optionSpec{
 					key:   "compress_format",
 					label: "Default archive format",
 					help: "Which format Compress's own \"Format\" dropdown starts on.\n\n" +
@@ -1080,14 +1086,20 @@ func optionCategories() []optionCategory {
 						}
 						return out
 					},
-				}),
-				// "Rsync" subsection — self-adapting, the same shape as
-				// "Compress & Extract" above: running Rsync (Run or Run
-				// in background) writes its own five flags back here
-				// (see runRsync/runRsyncBackground in rsync.go), so the
-				// dialog opens on whichever combination was actually
-				// used last.
-				withSection("Rsync", boolOption("rsync_copy_contents", "Copy the folder's contents in",
+				},
+			},
+		},
+		{
+			name: "Rsync",
+			options: []optionSpec{
+				// Promoted to its own top-level category (2026-11-08) — see
+				// the "Copy & Move" category's own doc comment above for why.
+				// Self-adapting, the same shape as "Compress & Extract" above:
+				// running Rsync (Run or Run in background) writes its own five
+				// flags back here (see runRsync/runRsyncBackground in
+				// rsync.go), so the dialog opens on whichever combination was
+				// actually used last.
+				boolOption("rsync_copy_contents", "Copy the folder's contents in",
 					"Rsync's own last-used \"Copy the folder's contents in (not the folder "+
 						"itself)\" flag — see internal/rsync's own CopyContents doc comment for "+
 						"what it actually changes. Off by default.",
@@ -1097,8 +1109,8 @@ func optionCategories() []optionCategory {
 						r.settings.RsyncCopyContents = b
 						r.persistSetting("rsync_copy_contents", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Rsync", boolOption("rsync_archive", "Archive mode (-a)",
+				),
+				boolOption("rsync_archive", "Archive mode (-a)",
 					"Rsync's own last-used \"Archive mode\" flag — preserves permissions, "+
 						"times, and symlinks. On by default, rsync's own conventional "+
 						"\"just copy it properly\" starting point.",
@@ -1108,8 +1120,8 @@ func optionCategories() []optionCategory {
 						r.settings.RsyncArchive = b
 						r.persistSetting("rsync_archive", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Rsync", boolOption("rsync_compress", "Compress data in transit (-z)",
+				),
+				boolOption("rsync_compress", "Compress data in transit (-z)",
 					"Rsync's own last-used compression flag — mainly useful over a slow "+
 						"link. Off by default.",
 					false,
@@ -1118,8 +1130,8 @@ func optionCategories() []optionCategory {
 						r.settings.RsyncCompress = b
 						r.persistSetting("rsync_compress", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Rsync", boolOption("rsync_delete", "Delete extraneous files (--delete)",
+				),
+				boolOption("rsync_delete", "Delete extraneous files (--delete)",
 					"Rsync's own last-used \"also remove from Destination whatever no "+
 						"longer exists in Source\" flag. Off by default — this can permanently "+
 						"remove files at the destination, so it's never silently pre-enabled "+
@@ -1130,8 +1142,8 @@ func optionCategories() []optionCategory {
 						r.settings.RsyncDelete = b
 						r.persistSetting("rsync_delete", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Rsync", boolOption("rsync_dry_run", "Dry run (-n)",
+				),
+				boolOption("rsync_dry_run", "Dry run (-n)",
 					"Rsync's own last-used \"report what would happen, change nothing\" "+
 						"flag. Off by default.",
 					false,
@@ -1140,11 +1152,18 @@ func optionCategories() []optionCategory {
 						r.settings.RsyncDryRun = b
 						r.persistSetting("rsync_dry_run", strconv.FormatBool(b))
 					},
-				)),
-				// "Sed Replace" subsection — self-adapting, the same
-				// shape as above: running Preview writes its own five
-				// flags back here (see runSedPreview in sedreplace.go).
-				withSection("Sed Replace", boolOption("sed_regex", "Regex",
+				),
+			},
+		},
+		{
+			name: "Sed Replace",
+			options: []optionSpec{
+				// Promoted to its own top-level category (2026-11-08) — see
+				// the "Copy & Move" category's own doc comment above for why.
+				// Self-adapting, the same shape as above: running Preview
+				// writes its own five flags back here (see runSedPreview in
+				// sedreplace.go).
+				boolOption("sed_regex", "Regex",
 					"Sed Replace's own last-used \"Find is a pattern, not literal text\" "+
 						"flag. Off by default.",
 					false,
@@ -1153,8 +1172,8 @@ func optionCategories() []optionCategory {
 						r.settings.SedRegex = b
 						r.persistSetting("sed_regex", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Sed Replace", boolOption("sed_extended_regex", "Extended regex (-E)",
+				),
+				boolOption("sed_extended_regex", "Extended regex (-E)",
 					"Sed Replace's own last-used extended-regex flag. Off by default.",
 					false,
 					func(r *Root) bool { return r.settings.SedExtendedRegex },
@@ -1162,8 +1181,8 @@ func optionCategories() []optionCategory {
 						r.settings.SedExtendedRegex = b
 						r.persistSetting("sed_extended_regex", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Sed Replace", boolOption("sed_case_insensitive", "Case-insensitive",
+				),
+				boolOption("sed_case_insensitive", "Case-insensitive",
 					"Sed Replace's own last-used case-insensitive flag. Off by default.",
 					false,
 					func(r *Root) bool { return r.settings.SedCaseInsensitive },
@@ -1171,8 +1190,8 @@ func optionCategories() []optionCategory {
 						r.settings.SedCaseInsensitive = b
 						r.persistSetting("sed_case_insensitive", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Sed Replace", boolOption("sed_global", "Replace all matches per line",
+				),
+				boolOption("sed_global", "Replace all matches per line",
 					"Sed Replace's own last-used \"replace every match, not just the "+
 						"first\" flag. On by default, today's existing behavior.",
 					false,
@@ -1181,8 +1200,8 @@ func optionCategories() []optionCategory {
 						r.settings.SedGlobal = b
 						r.persistSetting("sed_global", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Sed Replace", boolOption("sed_backup", "Keep a .bak backup",
+				),
+				boolOption("sed_backup", "Keep a .bak backup",
 					"Sed Replace's own last-used \"keep a .bak backup before overwriting\" "+
 						"flag. Off by default.",
 					false,
@@ -1191,14 +1210,20 @@ func optionCategories() []optionCategory {
 						r.settings.SedBackup = b
 						r.persistSetting("sed_backup", strconv.FormatBool(b))
 					},
-				)),
-				// "Search" subsection — self-adapting, the same shape as
-				// above: running a real search writes these four back
-				// here (see runSearch in search.go) — the same four that
-				// already stayed put for the rest of a session, never
-				// resetting between searches (see openSearch's own doc
-				// comment), now surviving a restart too.
-				withSection("Search", optionSpec{
+				),
+			},
+		},
+		{
+			name: "Search",
+			options: []optionSpec{
+				// Promoted to its own top-level category (2026-11-08) — see
+				// the "Copy & Move" category's own doc comment above for why.
+				// Self-adapting, the same shape as above: running a real
+				// search writes these four back here (see runSearch in
+				// search.go) — the same four that already stayed put for the
+				// rest of a session, never resetting between searches (see
+				// openSearch's own doc comment), now surviving a restart too.
+				optionSpec{
 					key:   "search_engine",
 					label: "Default engine",
 					help: "Which Engine the Search dialog starts on: \"find\" or \"locate\" " +
@@ -1217,8 +1242,8 @@ func optionCategories() []optionCategory {
 							{value: "locate", label: "locate"},
 						}
 					},
-				}),
-				withSection("Search", boolOption("search_shell_patterns", "Using shell patterns",
+				},
+				boolOption("search_shell_patterns", "Using shell patterns",
 					"Search's own last-used Filename match mode: on for a shell-glob "+
 						"pattern, off for a regex. On by default, matching MC's own real "+
 						"default for this same checkbox.",
@@ -1228,8 +1253,8 @@ func optionCategories() []optionCategory {
 						r.settings.SearchShellPatterns = b
 						r.persistSetting("search_shell_patterns", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Search", boolOption("search_case_sensitive", "Case sensitive",
+				),
+				boolOption("search_case_sensitive", "Case sensitive",
 					"Search's own last-used \"Case sensitive\" flag. Off by default.",
 					false,
 					func(r *Root) bool { return r.settings.SearchCaseSensitive },
@@ -1237,8 +1262,8 @@ func optionCategories() []optionCategory {
 						r.settings.SearchCaseSensitive = b
 						r.persistSetting("search_case_sensitive", strconv.FormatBool(b))
 					},
-				)),
-				withSection("Search", boolOption("search_skip_hidden", "Skip hidden",
+				),
+				boolOption("search_skip_hidden", "Skip hidden",
 					"Search's own last-used \"Skip hidden\" flag. Off by default.",
 					false,
 					func(r *Root) bool { return r.settings.SearchSkipHidden },
@@ -1246,7 +1271,7 @@ func optionCategories() []optionCategory {
 						r.settings.SearchSkipHidden = b
 						r.persistSetting("search_skip_hidden", strconv.FormatBool(b))
 					},
-				)),
+				),
 			},
 		},
 		{
