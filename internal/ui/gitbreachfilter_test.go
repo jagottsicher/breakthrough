@@ -97,7 +97,7 @@ func TestOpenGitBreachBranchesOrTagsFilterAppliesToWhicheverSubTabShows(t *testi
 		t.Fatalf("BranchesShown after filtering \"feature\" = %+v, want just feature-x", r.gitBreach.BranchesShown)
 	}
 
-	r.toggleGitBreachBranchesTab() // Tags — its own, still-empty filter
+	r.toggleGitBreachBranchesTab() // Branches -> Tags — its own, still-empty filter
 	if got := len(r.gitBreach.TagsShown); got != 2 {
 		t.Fatalf("TagsShown = %d, want 2 (v1, v2) — Branches' own filter shouldn't leak into Tags", got)
 	}
@@ -110,7 +110,7 @@ func TestOpenGitBreachBranchesOrTagsFilterAppliesToWhicheverSubTabShows(t *testi
 		t.Fatalf("TagsShown after filtering \"v1\" = %+v, want just v1", r.gitBreach.TagsShown)
 	}
 
-	r.toggleGitBreachBranchesTab() // back to Branches
+	r.reverseToggleGitBreachBranchesTab() // Tags -> Branches
 	if got := len(r.gitBreach.BranchesShown); got != 1 || r.gitBreach.BranchesShown[0].Name != "feature-x" {
 		t.Errorf("BranchesShown after switching back = %+v, want its own \"feature\" filter still applied", r.gitBreach.BranchesShown)
 	}
