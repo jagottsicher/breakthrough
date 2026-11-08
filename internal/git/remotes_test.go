@@ -2,6 +2,8 @@ package git
 
 import (
 	"context"
+	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -78,5 +80,57 @@ func TestRemotesReportsASeparatePushURLOverride(t *testing.T) {
 	}
 	if remotes[0].PushURL != "ssh://push.example.com/repo.git" {
 		t.Errorf("PushURL = %q, want the pushurl override", remotes[0].PushURL)
+	}
+}
+
+// TestFetchRemoteFetchesNewCommitsFromARealRemote uses a local bare
+// repository as the remote — a real push/fetch round trip, not a
+// mocked one, the same "test the real git subprocess" approach every
+// other test in this package already takes, just against a bare repo
+// instead of the network.
+func TestFetchRemoteFetchesNewCommitsFromARealRemote(t *testing.T) {
+	requireGit(t)
+	bareDir := t.TempDir()
+	runGit(t, bareDir, "init", "-q", "--bare", "-b", "main")
+
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	runGit(t, dir, "remote", "add", "origin", bareDir)
+	runGit(t, dir, "push", "-q", "origin", "main")
+
+	// A second clone of the same bare repo, pushes a commit dir's own
+	// remote-tracking ref doesn't know about yet.
+	otherDir := t.TempDir()
+	runGit(t, otherDir, "clone", "-q", bareDir, otherDir)
+	runGit(t, otherDir, "config", "user.name", "Test")
+	runGit(t, otherDir, "config", "user.email", "test@example.com")
+	writeFile(t, otherDir, "b.txt", "from the other clone")
+	runGit(t, otherDir, "add", "b.txt")
+	runGit(t, otherDir, "commit", "-q", "-m", "second")
+	runGit(t, otherDir, "push", "-q", "origin", "main")
+
+	if err := FetchRemote(context.Background(), dir, "origin"); err != nil {
+		t.Fatalf("FetchRemote: %v", err)
+	}
+
+	logCmd := exec.Command("git", "-C", dir, "log", "-1", "--format=%s", "origin/main")
+	logCmd.Env = gitTestEnv()
+	out, err := logCmd.Output()
+	if err != nil {
+		t.Fatalf("log origin/main: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "second" {
+		t.Errorf("origin/main's own latest subject = %q, want %q (the fetch should have updated it)", got, "second")
+	}
+}
+
+func TestFetchRemoteOnAnUnknownRemoteFails(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+
+	if err := FetchRemote(context.Background(), dir, "no-such-remote"); err == nil {
+		t.Error("FetchRemote(no-such-remote): err = nil, want an error")
 	}
 }
