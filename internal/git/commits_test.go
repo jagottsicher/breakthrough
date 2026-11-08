@@ -3,6 +3,8 @@ package git
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -228,5 +230,84 @@ func TestCommitCountOnARepositoryWithNoCommitsYet(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("CommitCount on an empty repository = %d, want 0", count)
+	}
+}
+
+func TestCherryPickAppliesACleanCommitOntoCurrentHead(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	runGit(t, dir, "checkout", "-q", "-b", "side")
+	writeFile(t, dir, "b.txt", "side")
+	runGit(t, dir, "add", "b.txt")
+	runGit(t, dir, "commit", "-q", "-m", "side change")
+	sideCmd := exec.Command("git", "-C", dir, "rev-parse", "side")
+	sideCmd.Env = gitTestEnv()
+	out, err := sideCmd.Output()
+	if err != nil {
+		t.Fatalf("rev-parse side: %v", err)
+	}
+	sideHash := strings.TrimSpace(string(out))
+	runGit(t, dir, "checkout", "-q", "main")
+
+	if err := CherryPick(context.Background(), dir, sideHash); err != nil {
+		t.Fatalf("CherryPick: %v", err)
+	}
+	if InProgressOperation(dir) != OperationNone {
+		t.Error("InProgressOperation = true after a clean cherry-pick, want OperationNone")
+	}
+	content, err := os.ReadFile(dir + "/b.txt")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(content) != "side" {
+		t.Errorf("b.txt = %q, want the cherry-picked content", content)
+	}
+}
+
+// TestCherryPickOnARealConflictReportsNoErrorButLeavesOneInProgress
+// mirrors Merge's own discriminating test exactly.
+func TestCherryPickOnARealConflictReportsNoErrorButLeavesOneInProgress(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base\n")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	runGit(t, dir, "checkout", "-q", "-b", "side")
+	writeFile(t, dir, "a.txt", "side change\n")
+	runGit(t, dir, "commit", "-q", "-am", "side change")
+	sideCmd := exec.Command("git", "-C", dir, "rev-parse", "side")
+	sideCmd.Env = gitTestEnv()
+	out, err := sideCmd.Output()
+	if err != nil {
+		t.Fatalf("rev-parse side: %v", err)
+	}
+	sideHash := strings.TrimSpace(string(out))
+	runGit(t, dir, "checkout", "-q", "main")
+	writeFile(t, dir, "a.txt", "main change\n")
+	runGit(t, dir, "commit", "-q", "-am", "main change")
+
+	if err := CherryPick(context.Background(), dir, sideHash); err != nil {
+		t.Fatalf("CherryPick on a conflicting pick: err = %v, want nil (conflicted, not failed)", err)
+	}
+	if InProgressOperation(dir) != OperationCherryPick {
+		t.Error("InProgressOperation = false after a conflicting cherry-pick, want OperationCherryPick")
+	}
+}
+
+func TestCherryPickOnAnUnknownHashFails(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+
+	if err := CherryPick(context.Background(), dir, "0000000000000000000000000000000000000000"); err == nil {
+		t.Error("CherryPick(unknown hash): err = nil, want an error")
+	}
+	if InProgressOperation(dir) != OperationNone {
+		t.Error("InProgressOperation = true after a pick that never started, want OperationNone")
 	}
 }
