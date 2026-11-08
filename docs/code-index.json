@@ -1097,6 +1097,16 @@
       "sha256": "62afec31c0bfe4e7ea706215e89e7559b85484d2bdb0bfaf8c011aaef1e40043"
     },
     {
+      "path": "internal/git/conflict.go",
+      "size": 7366,
+      "sha256": "329d2952d9b32f37b401955d040ac3e0a1a9028f69f23a4f5de8a8292f06d371"
+    },
+    {
+      "path": "internal/git/conflict_test.go",
+      "size": 7895,
+      "sha256": "d199323ac80b983c14258ea79bc13045a901e6ac322be88562c021274b8e14a3"
+    },
+    {
       "path": "internal/git/diff.go",
       "size": 3220,
       "sha256": "b080ecc92ffeaccad8ffa93cd2dd568f826d031b6194659d5347a5fd354df085"
@@ -1128,8 +1138,8 @@
     },
     {
       "path": "internal/git/ops.go",
-      "size": 5690,
-      "sha256": "0bad5a256873cda6e200144f598ae63805abda47199ed789019586f21660e1cb"
+      "size": 8559,
+      "sha256": "8922e3ea754b20c1e2867a47221a79862f285875a735b416b21a0a818ca97fc3"
     },
     {
       "path": "internal/git/stash.go",
@@ -3769,6 +3779,8 @@
         "internal/git/branches_test.go",
         "internal/git/commits.go",
         "internal/git/commits_test.go",
+        "internal/git/conflict.go",
+        "internal/git/conflict_test.go",
         "internal/git/diff.go",
         "internal/git/diff_test.go",
         "internal/git/doc.go",
@@ -15603,6 +15615,253 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "Operation",
+      "kind": "type",
+      "line": 17
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "OperationNone",
+      "kind": "const",
+      "line": 20
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "OperationMerge",
+      "kind": "const",
+      "line": 21
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "OperationRebase",
+      "kind": "const",
+      "line": 22
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "OperationCherryPick",
+      "kind": "const",
+      "line": 23
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "OperationRevert",
+      "kind": "const",
+      "line": 24
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "String",
+      "kind": "method",
+      "receiver": "Operation",
+      "line": 29
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "InProgressOperation",
+      "kind": "function",
+      "line": 55
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "fileExists",
+      "kind": "function",
+      "line": 71
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "dirExists",
+      "kind": "function",
+      "line": 76
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "ConflictSide",
+      "kind": "type",
+      "line": 82
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "SideOurs",
+      "kind": "const",
+      "line": 85
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "SideTheirs",
+      "kind": "const",
+      "line": 86
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "ConflictSection",
+      "kind": "type",
+      "line": 100
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "ParseConflicts",
+      "kind": "function",
+      "line": 121
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "isConflictMarker",
+      "kind": "function",
+      "line": 159
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "conflictMarkerLabel",
+      "kind": "function",
+      "line": 167
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "ResolveConflict",
+      "kind": "function",
+      "line": 180
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "ConflictIndexError",
+      "kind": "type",
+      "line": 204
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict.go",
+      "name": "Error",
+      "kind": "method",
+      "receiver": "*ConflictIndexError",
+      "line": 208
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestInProgressOperationIsNoneOnACleanRepository",
+      "kind": "function",
+      "line": 10
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "conflictedMergeRepo",
+      "kind": "function",
+      "line": 26
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestInProgressOperationDetectsAMerge",
+      "kind": "function",
+      "line": 49
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestInProgressOperationDetectsACherryPick",
+      "kind": "function",
+      "line": 58
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestParseConflictsFindsOneSectionWithItsLabels",
+      "kind": "function",
+      "line": 91
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestParseConflictsFindsTwoIndependentSections",
+      "kind": "function",
+      "line": 113
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestParseConflictsIgnoresAnUnterminatedMarker",
+      "kind": "function",
+      "line": 134
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestParseConflictsDoesNotMatchAShorterRunOfAngleBrackets",
+      "kind": "function",
+      "line": 142
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestResolveConflictPicksOneSideAndLeavesTheOtherSectionAlone",
+      "kind": "function",
+      "line": 150
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestResolveConflictTheirsSide",
+      "kind": "function",
+      "line": 176
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestResolveConflictRejectsAnOutOfRangeIndex",
+      "kind": "function",
+      "line": 189
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestContinueOperationAfterResolvingAMergeConflict",
+      "kind": "function",
+      "line": 198
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestAbortOperationOnAMergeConflict",
+      "kind": "function",
+      "line": 215
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestSkipOperationRefusesOnAMerge",
+      "kind": "function",
+      "line": 227
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/conflict_test.go",
+      "name": "TestContinueOperationWithNoneInProgressFails",
+      "kind": "function",
+      "line": 239
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/diff.go",
       "name": "DiffPage",
       "kind": "function",
@@ -16038,16 +16297,51 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/ops.go",
+      "name": "ContinueOperation",
+      "kind": "function",
+      "line": 121
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/ops.go",
+      "name": "AbortOperation",
+      "kind": "function",
+      "line": 132
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/ops.go",
+      "name": "SkipOperation",
+      "kind": "function",
+      "line": 144
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/ops.go",
+      "name": "operationArgs",
+      "kind": "function",
+      "line": 158
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/ops.go",
+      "name": "runOperation",
+      "kind": "function",
+      "line": 173
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/ops.go",
       "name": "Diff",
       "kind": "function",
-      "line": 117
+      "line": 196
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/ops.go",
       "name": "UntrackedContent",
       "kind": "function",
-      "line": 147
+      "line": 226
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
@@ -41778,14 +42072,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
@@ -66759,5 +67053,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "0c35735e9a534a195326874da95f073d5476840ce02fc66e94e8271ee14b174b"
+  "merkle_root": "3a96f2d6b7c6aa43732f345d55f4da05923f2eb1d0bafb5ccb012f41e1dfa7de"
 }
