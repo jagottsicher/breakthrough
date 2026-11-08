@@ -651,6 +651,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 	case r.gitBreach.StashTable.HasFocus():
 		entries = append(entries,
 			hintKey("a", "apply stash", func(r *Root) { r.openGitBreachStashApply() }),
+			hintKey("p", "pop stash", func(r *Root) { r.openGitBreachStashPop() }),
 			hintKey("d", "drop stash", func(r *Root) { r.openGitBreachStashDrop() }),
 			hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 			hintKey("/", gitBreachFilterHintLabel(r.gitBreach.StashFilter), func(r *Root) { r.openGitBreachStashFilter() }),
@@ -1281,6 +1282,9 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 			return nil
 		case 'a':
 			r.openGitBreachStashApply()
+			return nil
+		case 'p':
+			r.openGitBreachStashPop()
 			return nil
 		case 'd':
 			r.openGitBreachStashDrop()

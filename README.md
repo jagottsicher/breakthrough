@@ -1291,18 +1291,21 @@ Lightning Network ⚡️ using the sponsor button above.
 - Git breach (`jg`): a multi-pane dashboard for the git repository
   containing the active panel's own current directory, shelling out to
   the system's own `git` rather than reimplementing it. Status
-  (branch, ahead/behind, a one-line summary), Files (staged/unstaged/
-  untracked, conflicts first, syntax-colored diffs — Space stages/
-  unstages the row under the cursor, "b" shows that file's own blame
-  in Main instead, colored by author), Branches (every local branch,
-  checkout on Enter, delete with "d" — Left/Right switch this box to
-  a Tags sub-tab, "a" to create a new tag at HEAD, "d" to delete
-  one), Commits (newest first, colored
+  (branch, ahead/behind, a one-line summary, plus which
+  merge/rebase/cherry-pick/revert is in progress, if any), Files
+  (staged/unstaged/untracked, conflicts first, syntax-colored diffs —
+  Space stages/unstages the row under the cursor, "b" shows that
+  file's own blame in Main instead, colored by author), Branches
+  (every local branch, checkout on Enter, "m" merges it into whatever
+  is currently checked out, delete with "d" — Left/Right switch this
+  box to a Tags sub-tab, "a" to create a new tag at HEAD, "d" to
+  delete one), Commits (newest first, colored
   by author, a lane/branch graph for merges, loads 200 at a time, "d"
   to diff the selected commit against a picked branch/tag/other
   commit, "B" to start a bisect with it as "good" ("G"/"X" mark a
   step good/bad, "E" ends it) and
-  Stash (apply with "a", drop with "d") are all live. The Main pane on
+  Stash (apply with "a", pop — apply and drop in one step — with "p",
+  drop alone with "d") are all live. The Main pane on
   the right shows whichever side box currently has focus — Files' own
   diff, an untracked file's raw content, or a Commits/Stash row's full
   diff — and can take real keyboard focus itself (Right/Enter/Space to
@@ -1310,7 +1313,14 @@ Lightning Network ⚡️ using the sponsor button above.
   step back out), remembering each file/commit/stash entry's own
   scroll position for the whole session. "s" (while Files' own
   unstaged diff is showing) stages whichever hunk is at the top of
-  the visible area. "c" commits whatever is
+  the visible area. A Files row still unresolved from a conflicting
+  merge/rebase/cherry-pick/pop shows every conflicted section in Main
+  instead, "o"/"t" keeping that section's own "ours"/"theirs" side and
+  re-staging the file once every section is resolved; "C"/"A"/"K"
+  (available regardless of which box has focus) continue, abort, or
+  skip the operation itself once every conflict is handled (or
+  outright, for abort) — "K" has no effect during a plain merge, which
+  git itself has no skip step for. "c" commits whatever is
   currently staged. "/" filters Files, Branches, Tags, or Stash by a
   plain substring (press it again to clear) — Commits has no filter,
   since its lane/branch graph needs the whole, unfiltered list.

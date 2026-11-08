@@ -1386,6 +1386,57 @@ func (r *Root) applyGitBreachStash(ref string) {
 	r.showError(r.panel.load(r.panel.path))
 }
 
+// openGitBreachStashPop is "p" on the Stash table — apply-then-drop in
+// one step, now safe to offer alongside Apply/Drop since Phase B's
+// conflict surface exists (see git.StashPop's own doc comment on
+// exactly what this was withheld for before). Mirrors
+// openGitBreachStashApply's own guard shape: a confirm first only on a
+// dirty tree, immediate otherwise — Pop is no more destructive than
+// Apply in the clean-tree case (nothing is lost: the stashed content
+// ends up in the working tree either way, whether or not the entry
+// itself survives), so it gets the same restraint rather than Drop's
+// own always-confirm.
+func (r *Root) openGitBreachStashPop() {
+	row, _ := r.gitBreach.StashTable.GetSelection()
+	s, ok := r.gitBreachStashAt(row)
+	if !ok {
+		return
+	}
+
+	st := r.gitBreach.Status
+	if len(st.Staged) > 0 || len(st.Unstaged) > 0 || len(st.Conflicts) > 0 {
+		r.openConfirm(
+			fmt.Sprintf("Pop stash %q with uncommitted changes in the working tree?", s.Message),
+			"Yes, pop",
+			func() { r.popGitBreachStash(s.Ref) },
+		)
+		return
+	}
+	r.popGitBreachStash(s.Ref)
+}
+
+// popGitBreachStash runs the actual pop and reloads — same reasoning
+// as applyGitBreachStash's own doc comment, plus mergeGitBreachBranch's
+// own "a conflicting outcome is not a real failure" distinction:
+// git.StashPop already turns a conflicting pop into a nil error, so
+// reloadGitBreach here always runs on success, landing a conflict
+// directly in Phase B's own conflict surface rather than at an error
+// overlay. Uses showTransientErrorOverOverlay for the one case that is
+// a real failure, same as mergeGitBreachBranch/
+// resolveGitBreachConflictSection — unlike applyGitBreachStash's own
+// plain showError, left alone as out of this change's own scope (see
+// the Phase A tags-tab fix's own doc comment on this exact bug class).
+func (r *Root) popGitBreachStash(ref string) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.StashPop(ctx, r.gitBreach.Root, ref); err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+	r.showError(r.panel.load(r.panel.path))
+}
+
 // openGitBreachStashDrop is "d" on the Stash table — always confirms
 // first, unlike Apply: dropping a stash is itself the irreversible
 // action (the stashed changes are simply gone), not something that's
