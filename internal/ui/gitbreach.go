@@ -20,6 +20,19 @@ import (
 
 const gitBreachPage = "gitBreach"
 
+// gitBreachBranchesTab is which of the Branches box's own sub-tabs is
+// currently showing — see gitBreachState.BranchesTab's own doc
+// comment. iota order is also tab order: Left/Right cycle backward/
+// forward through it, wrapping at either end (see
+// cycleGitBreachBranchesTab).
+type gitBreachBranchesTab int
+
+const (
+	gitBreachBranchesTabBranches gitBreachBranchesTab = iota
+	gitBreachBranchesTabTags
+	gitBreachBranchesTabRemotes
+)
+
 // gitBreachState holds the Git Breach dashboard's own widgets (per
 // pane: Status/Files/Branches/Commits/Stash/Diff), the last read
 // result for each pane, and the Diff pane's own split-view state (see
@@ -58,16 +71,16 @@ type gitBreachState struct {
 	Branches          []git.Branch
 	BranchesErr       error
 	BranchesReady     bool
-	// BranchesShowTags switches the Branches box between its two
-	// sub-tabs (Branches/Tags, see renderGitBreachBranchesHeader) —
-	// one box, one table, two row kinds, the same "no new box" shape
-	// feature_ideas.txt's own Box-Gruppierung plan calls for (Tags is
-	// meant to join Branches/Remotes as tabs within this one box, not
-	// become a fifth box of its own). Reset to false on every fresh
-	// "jg" open (see openGitBreach), same as CommitsLimit.
-	BranchesShowTags bool
-	Tags             []git.Tag
-	TagsErr          error
+	// BranchesTab switches the Branches box between its own sub-tabs —
+	// Branches/Tags/Remotes, see renderGitBreachBranchesHeader — one
+	// box, one table, several row kinds, the same "no new box" shape
+	// feature_ideas.txt's own Box-Gruppierung plan calls for rather
+	// than Remotes becoming a fifth box of its own. Reset to
+	// gitBreachBranchesTabBranches on every fresh "jg" open (see
+	// openGitBreach), same as CommitsLimit.
+	BranchesTab gitBreachBranchesTab
+	Tags        []git.Tag
+	TagsErr     error
 	// FilesFilter/BranchesFilter/TagsFilter/StashFilter are each
 	// box's own "/" filter — a plain, case-insensitive substring (see
 	// gitBreachFilterMatches), deliberately not the panel's own
@@ -179,7 +192,7 @@ func (r *Root) openGitBreach() {
 	// deliberately leaves an already-expanded limit alone so a user who
 	// scrolled to 600 commits and reloads doesn't lose that expansion.
 	r.gitBreach.CommitsLimit = git.CommitLogLimit
-	r.gitBreach.BranchesShowTags = false
+	r.gitBreach.BranchesTab = gitBreachBranchesTabBranches
 	r.reloadGitBreach()
 	r.showOverlayWithRestore(gitBreachPage, r.gitBreach.Layout, r.restoreGitBreachFocus)
 }
@@ -508,7 +521,7 @@ func (r *Root) checkoutGitBreachBranch(branch string) {
 // whatever commit it points at, and feature_ideas.txt's own Phase C
 // item scopes this to branches specifically.
 func (r *Root) openGitBreachMerge() {
-	if r.gitBreach.BranchesShowTags {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabBranches {
 		return
 	}
 	row, _ := r.gitBreach.BranchesTable.GetSelection()
@@ -632,13 +645,24 @@ func (r *Root) gitBreachTagAt(row int) (git.Tag, bool) {
 	return r.gitBreach.TagsShown[row], true
 }
 
-// toggleGitBreachBranchesTab switches the Branches box between its
-// Branches/Tags sub-tabs (Left/Right while the box has focus — see
-// captureGitBreachBranchesTableKey) and re-renders in place, landing
+// toggleGitBreachBranchesTab/reverseToggleGitBreachBranchesTab cycle
+// the Branches box forward/backward through its own three sub-tabs —
+// Branches → Tags → Remotes → Branches again, wrapping either
+// direction (Right/Left while the box has focus — see
+// captureGitBreachBranchesTableKey) — and re-render in place, landing
 // on the first row of whichever table just became visible rather than
-// keeping a selection index that belonged to the other one.
+// keeping a selection index that belonged to a different one.
 func (r *Root) toggleGitBreachBranchesTab() {
-	r.gitBreach.BranchesShowTags = !r.gitBreach.BranchesShowTags
+	r.cycleGitBreachBranchesTab(1)
+}
+
+func (r *Root) reverseToggleGitBreachBranchesTab() {
+	r.cycleGitBreachBranchesTab(-1)
+}
+
+func (r *Root) cycleGitBreachBranchesTab(delta int) {
+	const tabCount = 3
+	r.gitBreach.BranchesTab = gitBreachBranchesTab((int(r.gitBreach.BranchesTab) + delta + tabCount) % tabCount)
 	r.renderGitBreachBranches()
 	r.renderGitBreachBranchesHeader()
 	// Focus itself never changes here (still the Branches table before
