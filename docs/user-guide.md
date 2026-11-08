@@ -26,6 +26,7 @@ material, always matching the version you are actually running.
 - [Toolbox](#toolbox)
 - [Tool windows](#tool-windows)
 - [Mounts](#mounts)
+- [Services](#services)
 - [Firewall](#firewall)
 - [Git Breach](#git-breach)
 - [Sessions](#sessions)
@@ -107,7 +108,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zi` Nerd Font icons (needs a terminal font that actually has them — off by default) · `zl` label (opens a quick picker to set/clear one of 9 colors on the focused row, or every checked row at once — the one member here that mutates state rather than just toggling a display) · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, del org · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Action Log](#action-log-screen-jl) screen · `jL` [Log Holepunch](#log-holepunch-screen-jl) screen (reads other log files in the current directory) |
+| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, del org · `jm` [Mounts](#mounts) screen (what's mounted right now) · `ju` [Services](#services) screen (systemd service units, read-only) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Action Log](#action-log-screen-jl) screen · `jL` [Log Holepunch](#log-holepunch-screen-jl) screen (reads other log files in the current directory) |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -1274,11 +1275,35 @@ it. The reload glyph (⭯) in the title bar's own top-right corner is a
 mouse-clickable equivalent to `r`. Read-only for now — no mount/unmount
 actions yet.
 
+## Services
+
+`j` then `u`. A fifth full-screen catalog, alongside Options, the
+Toolbox, and Mounts: a read-only, live table of every systemd service
+unit on this host — Linux only, since systemd doesn't exist on
+macOS/BSD.
+
+Built entirely from the real `systemctl list-units --all --type=service
+--output=json` command (never reimplemented). Five columns: Name,
+Active, Sub, Load, Description. Grouped into a bold "<group> (N)"
+header row per state — Failed first, then Active, then Inactive, plus
+an "Other" group (empty on every real system this was built against,
+but never silently dropped) for any `active` value this screen hasn't
+specifically named — so a failed service never scrolls off below a
+long Active list on a busy host; a failed unit's own row is always
+shown in red regardless of which group it's in.
+
+`Up`/`Down` move between units, `r` re-reads the live unit list (a
+crash, restart, or manual stop while this screen is open won't
+otherwise be noticed on its own), `Escape` closes it. The reload glyph
+(⭯) in the title bar's own top-right corner is a mouse-clickable
+equivalent to `r`. Read-only for now — starting, stopping, enabling, or
+disabling a unit isn't wired to a key yet.
+
 ## Firewall
 
-`j` then `f`. A fourth full-screen catalog, alongside Options, the
-Toolbox, and Mounts: a read-only, live view of this host's own actual
-firewall rules.
+`j` then `f`. A sixth full-screen catalog, alongside Options, the
+Toolbox, Mounts, and Services: a read-only, live view of this host's
+own actual firewall rules.
 
 Exactly one backend is read — UFW if it's active, otherwise nftables if
 it has any rules, otherwise iptables, otherwise none — never more than

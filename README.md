@@ -85,7 +85,9 @@ covering every setting breakthrough recognizes, a Toolbox screen of
 built-in networking and hardware tools with its own Network Tools
 (`jn`) and Hardware Tools (`jh`) screens, a Mounts
 screen (`jm`) showing what's currently mounted and whether it survives a
-reboot, a Firewall screen (`jf`) showing this host's own actual
+reboot, a Services screen (`ju`, Linux only) listing every systemd
+service unit, grouped by state with failed ones called out, read-only
+for now, a Firewall screen (`jf`) showing this host's own actual
 firewall rules (UFW, nftables, or iptables — whichever one really
 governs traffic), including which rules shadow each other, plus an
 Add-rule form (`a`, UFW/iptables only) that builds the exact command
@@ -938,6 +940,16 @@ Lightning Network ⚡️ using the sponsor button above.
   some point since), and flags bind mounts, so it doubles as a quick
   answer to "what will still be here after I reboot this box?" See
   [docs/user-guide.md](docs/user-guide.md#mounts) for the full picture.
+- Services (`j` then `u`, Linux only): a read-only, live table of every
+  systemd service unit, built from the real `systemctl` command,
+  grouped Failed first, then Active, then Inactive, each a bold
+  "<group> (N)" header row — a failed unit's own row always shown in
+  red regardless of which group's count would otherwise bury it.
+  Starting, stopping, enabling, or disabling a unit isn't wired to a
+  key yet; this first version only answers "is service X running, and
+  what failed?" See
+  [docs/user-guide.md](docs/user-guide.md#services) for the full
+  picture.
 - Compress (`j` then `c`, or the context menu's "Compress…") and
   Extract (`j` then `e`/`E`, or the context menu's "Extract"/"Extract,
   delete original"): real archive creation and unpacking, through a

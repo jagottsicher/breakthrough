@@ -343,6 +343,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// The Mounts screen (see mounts.go/applyMountsTheme).
 	r.applyMountsTheme(theme)
 
+	// The Services screen (see services.go/applyServicesTheme).
+	r.applyServicesTheme(theme)
+
 	// The Firewall screen and its own three secondary dialogs (see
 	// firewall.go/applyFirewallTheme).
 	r.applyFirewallTheme(theme)

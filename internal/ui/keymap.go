@@ -597,6 +597,13 @@ func chordFamilies() []chordFamily {
 			// before "jm".
 			{'C', "Compare Faultline", func(r *Root) { r.openCompare() }},
 			{'m', "Mounts", func(r *Root) { r.openMounts() }},
+			// "ju" opens the Services screen (services.go) — a read-only
+			// overview of this host's own systemd service units
+			// (internal/systemd), the same "own destination under this
+			// prefix" shape jm/jf/jl/js/jk already establish. "u" for
+			// "units", systemd's own vocabulary for what this screen
+			// lists.
+			{'u', "Services", func(r *Root) { r.openServices() }},
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
 			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
