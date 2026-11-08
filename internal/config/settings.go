@@ -428,6 +428,20 @@ type Settings struct {
 	// recoverable by hand or by pointing this back at it).
 	LogAuditDiskCachePath string
 
+	// LogAuditJournalLines is the window Log Holepunch's own
+	// "systemd-journal" row reads at once (journalctl -n) — see
+	// logview.ReadJournal's own doc comment for why this is a fixed
+	// window rather than a live tail: "-f" streaming is deliberately
+	// out of scope, follow mode (LogAuditFollowIntervalMS below)
+	// re-runs this same bounded read instead.
+	LogAuditJournalLines int
+
+	// LogAuditFollowIntervalMS is how often, in milliseconds, Log
+	// Holepunch's own follow mode ("f") re-reads — both a file family
+	// (readLogAuditGroup) and the systemd journal (ReadJournal) use the
+	// exact same ticker, so this one setting governs both.
+	LogAuditFollowIntervalMS int
+
 	// CloudMountBaseDir overrides internal/rclone's own computed default
 	// (session.MountsDir: XDG_DATA_HOME or ~/.local/share/breakthrough,
 	// plus "mounts/<user>" — the same base trash already uses, see
@@ -843,6 +857,9 @@ func DefaultSettings() Settings {
 		LogAuditDiskCacheEnabled: true,
 		LogAuditDiskCacheSize:    20 << 30, // 20GB — 10x the RAM cache's own default
 
+		LogAuditJournalLines:     2000,
+		LogAuditFollowIntervalMS: 2000, // 2 seconds
+
 		CloudMountBaseDir: "",
 
 		CompressFormat: "zip",
@@ -1046,6 +1063,10 @@ func (s *Settings) apply(key, value string) error {
 		s.LogAuditDiskCacheSize = n
 	case "log_audit_disk_cache_path":
 		s.LogAuditDiskCachePath = value
+	case "log_audit_journal_lines":
+		return parseInt(&s.LogAuditJournalLines)
+	case "log_audit_follow_interval_ms":
+		return parseInt(&s.LogAuditFollowIntervalMS)
 	case "cloud_mount_base_dir":
 		s.CloudMountBaseDir = value
 	case "compress_format":

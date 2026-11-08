@@ -1019,12 +1019,13 @@ var helpText = strings.TrimLeft(`
   On Linux, with "journalctl" on $PATH, a "systemd-journal" row is
   offered above the file list — the journal's own binary store is not
   a file this directory scan can ever find. Opening it reads the last
-  2000 entries via "journalctl -o json"; the rest of the view (filter,
-  timeline, follow, Statistics) works exactly as it does for a file,
-  but "r"/follow re-run that same bounded read rather than tailing it,
-  and there's no unit/boot selection yet. Never offered on a remote-
-  connected panel — no command-execution channel reaches "journalctl"
-  on the other end, only ever this machine's own journal.
+  2000 entries by default via "journalctl -o json" (Options → Log
+  Holepunch → "Journal window (lines)" to change it); the rest of the
+  view (filter, timeline, follow, Statistics) works exactly as it does
+  for a file, but "r"/follow re-run that same bounded read rather than
+  tailing it, and there's no unit/boot selection yet. Never offered on
+  a remote-connected panel — no command-execution channel reaches
+  "journalctl" on the other end, only ever this machine's own journal.
 
     Enter    Open the Log Holepunch view for the family (or the
              systemd-journal row) under the cursor
@@ -1172,9 +1173,10 @@ var helpText = strings.TrimLeft(`
     r               Re-read the same files
     f               Toggle follow (the same idea as "tail -f", merged
                      live across every selected file at once): re-reads
-                     the same files every two seconds and keeps
-                     rendering, the cursor following along if it was
-                     already on the last row
+                     the same files every two seconds by default
+                     (Options → Log Holepunch → "Follow interval
+                     (ms)") and keeps rendering, the cursor following
+                     along if it was already on the last row
     s               Statistics: counts by level and by source (top 10),
                      over whatever currently matches the three filters
     Esc             Back to file selection

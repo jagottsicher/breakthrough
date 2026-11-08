@@ -27,15 +27,6 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/logview"
 )
 
-// logAuditJournalWindowLines is the fixed window ReadJournal reads —
-// shown in the selection row's own label (renderLogAuditSelection,
-// logauditscreen.go) so a short result never reads as "nothing
-// happened", the same reasoning Git Breach's own active-filter header
-// line follows. A user-adjustable window, unit ("-u") and boot ("-b")
-// selection are deliberately out of scope for this first version (see
-// feature_ideas.txt).
-const logAuditJournalWindowLines = 2000
-
 // logAuditJournalRowOffset is how many extra rows renderLogAuditSelection
 // puts above log.Groups' own rows — 1 while the systemd-journal row is
 // offered, 0 otherwise. logAuditGroupAt (logaudit.go) and
@@ -91,7 +82,7 @@ func (r *Root) openLogAuditJournalViewer() {
 // so recomputeLogAuditCombined's merge is really just a pass-through
 // here.
 func (r *Root) refreshLogAuditJournal() {
-	entries, err := logview.ReadJournal(context.Background(), logview.JournalOptions{Lines: logAuditJournalWindowLines})
+	entries, err := logview.ReadJournal(context.Background(), logview.JournalOptions{Lines: r.settings.LogAuditJournalLines})
 	r.log.CurrentEntries = nil
 	r.log.CurrentFiles = 0
 	r.log.CurrentSkipped = 0

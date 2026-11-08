@@ -762,7 +762,7 @@ func (r *Root) renderLogAuditSelection() {
 	if r.log.JournalAvailable {
 		journalRow := 1
 		click := r.clickLogAuditSelectionCell(journalRow)
-		label := fmt.Sprintf("systemd-journal (last %d)", logAuditJournalWindowLines)
+		label := fmt.Sprintf("systemd-journal (last %d)", r.settings.LogAuditJournalLines)
 		r.log.Table.SetCell(journalRow, logAuditSelName,
 			tview.NewTableCell(label).SetTextColor(r.theme.Text).SetSelectable(true).SetClickedFunc(click))
 		r.log.Table.SetCell(journalRow, logAuditSelInfo,
