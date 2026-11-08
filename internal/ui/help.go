@@ -807,8 +807,10 @@ var helpText = strings.TrimLeft(`
   lightweight tag at HEAD, "d" deletes the one under the cursor after
   confirming, and Enter does nothing — a tag has no checkout
   equivalent; pushing a tag isn't part of this yet. Remotes lists
-  every configured remote by name and URL, read-only for
-  now — no Fetch/Push/Pull wired up yet),
+  every configured remote by name and URL; "f" fetches the one
+  under the cursor in the background, no confirm — it only ever
+  updates this repository's own remote-tracking refs, never the
+  remote itself. Push/Pull aren't wired up yet),
   Commits (the most recent commits, newest first, each one colored by
   its own author — loads 200 at a time, reaching the last loaded row
   fetches 200 more automatically, with a "loaded/total" hint in the
@@ -979,6 +981,9 @@ var helpText = strings.TrimLeft(`
              itself. A conflicting merge isn't an error: it lands you
              in the conflict view below with the merge already
              in progress, ready for "o"/"t" and then "C"
+    f        (Remotes sub-tab) Fetch the remote under the cursor in
+             the background — no confirm, it only ever updates this
+             repository's own remote-tracking refs
     a        (Tags sub-tab) Create a new, lightweight tag at HEAD,
              after typing a name in a prompt
     d        (Tags sub-tab) Delete the tag under the cursor, after

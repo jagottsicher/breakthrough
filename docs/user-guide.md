@@ -1437,8 +1437,10 @@ for at all.
 `Left`/`Right` on the Branches box cycle it through its own three
 sub-tabs — Branches (above), Tags, and Remotes, one shared table
 either way. Remotes lists every configured remote by name and URL
-(`git config --get-regexp`, not the human-facing `git remote -v`),
-read-only for now — no Fetch/Push/Pull wired up yet.
+(`git config --get-regexp`, not the human-facing `git remote -v`).
+`f` fetches the remote under the cursor in the background (no
+confirm — it only ever updates this repository's own remote-tracking
+refs, never the remote itself); Push/Pull aren't wired up yet.
 
 On the Tags sub-tab: `a` prompts for a name and creates a new,
 lightweight tag at `HEAD`; `d` deletes the one under the cursor,
@@ -1464,6 +1466,7 @@ of this yet.
 | `E` | (Commits, while bisecting) End the bisect |
 | `P` | (Commits) Open the ref picker and cherry-pick whichever branch, tag, or loaded commit gets picked onto whatever is currently checked out, confirming first only on a dirty tree |
 | `d` | (Branches sub-tab) Delete the branch under the cursor, after confirming — refuses on an unmerged branch the same way `git` itself does |
+| `f` | (Remotes sub-tab) Fetch the remote under the cursor in the background — no confirm |
 | `a` | (Tags sub-tab) Create a new tag at `HEAD`, after typing a name |
 | `d` | (Tags sub-tab) Delete the tag under the cursor, after confirming |
 | `a` | (Stash) Apply the entry under the cursor (never pops it) |
