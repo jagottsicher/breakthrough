@@ -814,7 +814,12 @@ var helpText = strings.TrimLeft(`
   confirms first, showing the exact "git push <remote> <branch>"
   about to run (the exact command, not just a yes/no question,
   since a push is the one real network write this dashboard makes).
-  Pull isn't wired up yet),
+  "P" pulls — a real fetch plus a real merge in one step, always
+  via the merge strategy regardless of this repository's own
+  pull.rebase setting, so a conflict always lands in the same
+  conflict view a conflicting merge already does ("o"/"t" to
+  resolve, then "C"/"A"/"K"). Confirms first only on a dirty tree,
+  same restraint merge's own "m" already has),
   Commits (the most recent commits, newest first, each one colored by
   its own author — loads 200 at a time, reaching the last loaded row
   fetches 200 more automatically, with a "loaded/total" hint in the
@@ -992,6 +997,10 @@ var helpText = strings.TrimLeft(`
              under the cursor — always confirms first, showing the
              exact command about to run. Does nothing on a detached
              HEAD (no branch name to push)
+    P        (Remotes sub-tab) Pull from the remote under the
+             cursor — fetch plus merge in one step, confirming first
+             only on a dirty tree. A conflicting pull lands in the
+             same conflict view a conflicting merge already does
     a        (Tags sub-tab) Create a new, lightweight tag at HEAD,
              after typing a name in a prompt
     d        (Tags sub-tab) Delete the tag under the cursor, after
