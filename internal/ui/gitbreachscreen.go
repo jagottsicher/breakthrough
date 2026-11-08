@@ -628,8 +628,11 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.TagsFilter), func(r *Root) { r.openGitBreachBranchesOrTagsFilter() }),
 			)
 		case gitBreachBranchesTabRemotes:
-			// Push/Pull land in later patches.
-			entries = append(entries, hintKey("f", "fetch", func(r *Root) { r.openGitBreachFetchRemote() }))
+			// Pull lands in a later patch.
+			entries = append(entries,
+				hintKey("f", "fetch", func(r *Root) { r.openGitBreachFetchRemote() }),
+				hintKey("p", "push...", func(r *Root) { r.openGitBreachPushRemote() }),
+			)
 		default:
 			entries = append(entries,
 				hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }),
@@ -1126,6 +1129,9 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			return nil
 		case 'f':
 			r.openGitBreachFetchRemote()
+			return nil
+		case 'p':
+			r.openGitBreachPushRemote()
 			return nil
 		case 'g':
 			// "gC" reaches the AI Consigliere — see

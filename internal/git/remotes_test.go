@@ -134,3 +134,70 @@ func TestFetchRemoteOnAnUnknownRemoteFails(t *testing.T) {
 		t.Error("FetchRemote(no-such-remote): err = nil, want an error")
 	}
 }
+
+// TestPushRemotePushesTheCurrentBranchToARealRemote uses a local bare
+// repository as the remote, the same shape
+// TestFetchRemoteFetchesNewCommitsFromARealRemote already establishes.
+func TestPushRemotePushesTheCurrentBranchToARealRemote(t *testing.T) {
+	requireGit(t)
+	bareDir := t.TempDir()
+	runGit(t, bareDir, "init", "-q", "--bare", "-b", "main")
+
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	runGit(t, dir, "remote", "add", "origin", bareDir)
+
+	if err := PushRemote(context.Background(), dir, "origin", "main"); err != nil {
+		t.Fatalf("PushRemote: %v", err)
+	}
+
+	logCmd := exec.Command("git", "-C", bareDir, "log", "-1", "--format=%s", "main")
+	logCmd.Env = gitTestEnv()
+	out, err := logCmd.Output()
+	if err != nil {
+		t.Fatalf("log main in the bare repo: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "base" {
+		t.Errorf("bare repo's own main subject = %q, want %q (the push should have created it)", got, "base")
+	}
+}
+
+// TestPushRemoteRejectsANonFastForward pins the one real failure mode
+// a push actually has (see PushRemote's own doc comment on why this,
+// unlike CherryPick/Merge, is always a reportable error): the remote
+// has a commit this branch doesn't.
+func TestPushRemoteRejectsANonFastForward(t *testing.T) {
+	requireGit(t)
+	bareDir := t.TempDir()
+	runGit(t, bareDir, "init", "-q", "--bare", "-b", "main")
+
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	runGit(t, dir, "remote", "add", "origin", bareDir)
+	if err := PushRemote(context.Background(), dir, "origin", "main"); err != nil {
+		t.Fatalf("setup PushRemote: %v", err)
+	}
+
+	// A second clone pushes its own commit to the same bare repo first
+	// — dir's own "main" no longer fast-forwards onto it.
+	otherDir := t.TempDir()
+	runGit(t, otherDir, "clone", "-q", bareDir, otherDir)
+	runGit(t, otherDir, "config", "user.name", "Test")
+	runGit(t, otherDir, "config", "user.email", "test@example.com")
+	writeFile(t, otherDir, "b.txt", "from the other clone")
+	runGit(t, otherDir, "add", "b.txt")
+	runGit(t, otherDir, "commit", "-q", "-m", "second")
+	runGit(t, otherDir, "push", "-q", "origin", "main")
+
+	writeFile(t, dir, "c.txt", "conflicting")
+	runGit(t, dir, "add", "c.txt")
+	runGit(t, dir, "commit", "-q", "-m", "diverged")
+
+	if err := PushRemote(context.Background(), dir, "origin", "main"); err == nil {
+		t.Error("PushRemote on a non-fast-forward: err = nil, want a real error")
+	}
+}
