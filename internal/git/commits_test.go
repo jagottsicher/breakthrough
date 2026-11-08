@@ -311,3 +311,44 @@ func TestCherryPickOnAnUnknownHashFails(t *testing.T) {
 		t.Error("InProgressOperation = true after a pick that never started, want OperationNone")
 	}
 }
+
+// TestCherryPickOnAnAlreadyAppliedRefFailsNotSwallowed is a real,
+// live-caught bug: picking a ref whose change is already applied
+// (git itself calls this "empty", not a conflict) still leaves
+// CHERRY_PICK_HEAD set with zero actual conflicted paths — the same
+// InProgressOperation-only check Merge gets away with would have
+// swallowed this as "conflicted, not failed", stranding the caller
+// with a cherry-pick in progress and no visible error at all. See
+// CherryPick's own doc comment on why this needs the same before/
+// after Status.Conflicts comparison StashPop already uses.
+func TestCherryPickOnAnAlreadyAppliedRefFailsNotSwallowed(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+
+	commits, err := Log(context.Background(), dir, CommitLogLimit)
+	if err != nil {
+		t.Fatalf("Log: %v", err)
+	}
+	if len(commits) != 1 {
+		t.Fatalf("Log = %+v, want exactly 1", commits)
+	}
+
+	if err := CherryPick(context.Background(), dir, commits[0].Hash); err == nil {
+		t.Error("CherryPick(already-applied ref): err = nil, want a real error (empty pick, not a conflict)")
+	}
+	if len(dirConflicts(t, dir)) != 0 {
+		t.Error("an empty pick left real conflicts behind — setup assumption broken")
+	}
+}
+
+func dirConflicts(t *testing.T, dir string) []string {
+	t.Helper()
+	st, err := Fetch(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	return st.Conflicts
+}
