@@ -338,6 +338,54 @@ func TestApplyPatchCachedStagesExactlyOneHunk(t *testing.T) {
 	}
 }
 
+// TestBisectStartMarkAndResetRoundTrip is the discriminating test for
+// the whole package: a real five-commit history, known-good at the
+// bottom, known-bad at the top — BisectStart/BisectMark must surface
+// git's own real stdout text, BisectInProgress must track the real
+// on-disk state throughout, and BisectReset must leave no trace.
+func TestBisectStartMarkAndResetRoundTrip(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	for i := 1; i <= 5; i++ {
+		writeFile(t, dir, "f.txt", fmt.Sprintf("commit %d\n", i))
+		runGit(t, dir, "add", "f.txt")
+		runGit(t, dir, "commit", "-q", "-m", fmt.Sprintf("c%d", i))
+	}
+
+	if BisectInProgress(dir) {
+		t.Fatal("setup: BisectInProgress = true before any bisect started")
+	}
+
+	out, err := BisectStart(context.Background(), dir, "HEAD", "HEAD~4")
+	if err != nil {
+		t.Fatalf("BisectStart: %v", err)
+	}
+	if !strings.Contains(out, "Bisecting:") {
+		t.Errorf("BisectStart output = %q, want it to contain git's own \"Bisecting:\" status", out)
+	}
+	if !BisectInProgress(dir) {
+		t.Error("BisectInProgress = false right after BisectStart, want true")
+	}
+
+	out, err = BisectMark(context.Background(), dir, "bad")
+	if err != nil {
+		t.Fatalf("BisectMark(bad): %v", err)
+	}
+	if !strings.Contains(out, "Bisecting:") {
+		t.Errorf("BisectMark(bad) output = %q, want git's own \"Bisecting:\" status (more revisions left)", out)
+	}
+	if !BisectInProgress(dir) {
+		t.Error("BisectInProgress = false mid-bisect, want true")
+	}
+
+	if _, err := BisectReset(context.Background(), dir); err != nil {
+		t.Fatalf("BisectReset: %v", err)
+	}
+	if BisectInProgress(dir) {
+		t.Error("BisectInProgress = true after BisectReset, want false")
+	}
+}
+
 func TestCommitCreatesARealCommit(t *testing.T) {
 	requireGit(t)
 	dir := initRepo(t)

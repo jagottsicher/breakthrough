@@ -631,6 +631,15 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 			hintKey("Enter/Space/→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 			hintKey("d", "diff against ref...", func(r *Root) { r.openGitBreachDiffAgainstRef() }),
 		)
+		if r.gitBreachBisectAvailable() {
+			entries = append(entries, hintKey("B", "bisect start...", func(r *Root) { r.openGitBreachBisectStart() }))
+		} else {
+			entries = append(entries,
+				hintKey("G", "mark good", func(r *Root) { r.openGitBreachBisectMark("good") }),
+				hintKey("X", "mark bad", func(r *Root) { r.openGitBreachBisectMark("bad") }),
+				hintKey("E", "end bisect", func(r *Root) { r.openGitBreachBisectEnd() }),
+			)
+		}
 	case r.gitBreach.StashTable.HasFocus():
 		entries = append(entries,
 			hintKey("a", "apply stash", func(r *Root) { r.openGitBreachStashApply() }),
@@ -1072,9 +1081,13 @@ func (r *Root) gitBreachFocusBranchesOnClick(action tview.MouseAction, event *tc
 // with which row is selected here, so it works regardless of focus,
 // unlike Space/Enter which only ever act on a Files/Branches row),
 // "d" diffs the row under the cursor against a picked ref (see
-// openGitBreachDiffAgainstRef), Escape closes — no Enter action
-// beyond jumping into Main, since this first Ausbaustufe only ever
-// shows a commit's own diff there (via Commits' own
+// openGitBreachDiffAgainstRef), "B" starts a bisect with the row
+// under the cursor as "good" (only while none is already running —
+// see gitBreachBisectAvailable), "G"/"X" mark the current bisect
+// step good/bad and "E" ends it (all three only while one actually
+// is running — see git.BisectInProgress), Escape closes — no Enter
+// action beyond jumping into Main, since this first Ausbaustufe only
+// ever shows a commit's own diff there (via Commits' own
 // SetSelectionChangedFunc/FocusFunc), with no other action a commit
 // row itself triggers (checkout/revert/cherry-pick/reset are
 // explicitly later Ausbaustufen — see feature_ideas.txt's own list).
@@ -1108,6 +1121,18 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 			return nil
 		case 'd':
 			r.openGitBreachDiffAgainstRef()
+			return nil
+		case 'B':
+			r.openGitBreachBisectStart()
+			return nil
+		case 'G':
+			r.openGitBreachBisectMark("good")
+			return nil
+		case 'X':
+			r.openGitBreachBisectMark("bad")
+			return nil
+		case 'E':
+			r.openGitBreachBisectEnd()
 			return nil
 		case 'g':
 			// "gC" reaches the AI Consigliere — see

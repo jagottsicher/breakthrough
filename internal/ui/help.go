@@ -785,7 +785,8 @@ var helpText = strings.TrimLeft(`
   fetches 200 more automatically, with a "loaded/total" hint in the
   box's own header while there's still more to reach; "d" diffs the
   selected commit against a picked branch, tag, or other loaded
-  commit — see the key list below), and Stash (every
+  commit; "B" starts a bisect with the selected commit as "good" —
+  see the key list below), and Stash (every
   stashed change, newest first). The Main box on the right shows the
   diff of whichever box currently has keyboard focus: Files' own
   staged/unstaged diff (also syntax-colored, background tinted green/
@@ -853,6 +854,16 @@ var helpText = strings.TrimLeft(`
   separate cursor inside the diff: scroll the hunk you want to the
   top, then press "s". Line-level staging isn't part of this yet —
   a whole hunk at a time, see the key list below.
+
+  "B" on a Commits row starts a "git bisect" with that commit as
+  "good" — "bad" is picked from the same ref picker "d" opens (any
+  local branch, tag, or other loaded commit). Once running, "G"/"X"
+  mark the current step good/bad and "E" ends it; git's own real
+  output (the next revision to test, or "<sha> is the first bad
+  commit") shows in Main. Every step can check out a different
+  commit, so both this dashboard and the active panel underneath it
+  reload each time. "skip" isn't wired to a key yet, nor is
+  "git bisect run", log/replay, or visualizing the remaining range.
 
     Tab/     Switch keyboard focus forwards/backwards between Files,
     Shift-   Branches, Commits and Stash (or, from inside Main's own
@@ -939,6 +950,14 @@ var helpText = strings.TrimLeft(`
              Does nothing on a commit/stash diff, a Staged row, or
              anywhere a cursor-moved reload has just replaced what
              was showing
+    B        (Commits only) Start a bisect with the commit under the
+             cursor as "good" — "bad" comes from the same ref picker
+             "d" opens. Only reachable while no bisect is already
+             running
+    G/X      (Commits only, while bisecting) Mark the current step
+             good/bad
+    E        (Commits only, while bisecting) End the bisect —
+             "git bisect reset"
     c        Commit whatever is currently staged, after typing a
              message (does nothing with nothing staged) — works no
              matter which box currently has focus, since committing
