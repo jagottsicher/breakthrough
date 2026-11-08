@@ -1557,11 +1557,7 @@ func (r *Root) renderGitBreachBranches() {
 		r.renderGitBreachTags()
 		return
 	case gitBreachBranchesTabRemotes:
-		// Fetch/Push/Pull land in a later patch — for now this tab is
-		// a plain, always-empty placeholder, the same shape Stash's
-		// own "No stashed changes." already establishes for "nothing
-		// to show yet" (not "broken").
-		showTablePlaceholder(r.gitBreach.BranchesTable, "Remotes aren't wired up yet.", r.theme.MutedTextColor)
+		r.renderGitBreachRemotes()
 		return
 	}
 
@@ -1675,6 +1671,36 @@ func (r *Root) renderGitBreachTags() {
 	r.gitBreach.BranchesTable.SetSelectable(true, false)
 	cur, _ := r.gitBreach.BranchesTable.GetSelection()
 	if _, ok := r.gitBreachTagAt(cur); !ok {
+		r.gitBreach.BranchesTable.Select(0, 0)
+	}
+}
+
+// renderGitBreachRemotes fills the same BranchesTable with
+// gitBreach.Remotes instead, while the Remotes sub-tab is showing —
+// read-only for now (see gitBreachRemoteAt's own doc comment on why:
+// Fetch/Push/Pull are later patches within this same Phase D), so
+// unlike Tags there's no filter and no "current" marker to draw,
+// just name and URL. No detached-HEAD row-0 offset either, same
+// reasoning renderGitBreachTags' own doc comment already gives.
+func (r *Root) renderGitBreachRemotes() {
+	if r.gitBreach.RemotesErr != nil {
+		showTablePlaceholder(r.gitBreach.BranchesTable, r.gitBreach.RemotesErr.Error(), r.theme.EntryError)
+		return
+	}
+	if len(r.gitBreach.Remotes) == 0 {
+		showTablePlaceholder(r.gitBreach.BranchesTable, "No remotes configured.", r.theme.MutedTextColor)
+		return
+	}
+
+	for row, rm := range r.gitBreach.Remotes {
+		text := fmt.Sprintf("  %s  %s", rm.Name, rm.FetchURL)
+		r.gitBreach.BranchesTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(r.theme.Text))
+	}
+
+	// Same reasoning as renderGitBreachTags' own identical tail.
+	r.gitBreach.BranchesTable.SetSelectable(true, false)
+	cur, _ := r.gitBreach.BranchesTable.GetSelection()
+	if _, ok := r.gitBreachRemoteAt(cur); !ok {
 		r.gitBreach.BranchesTable.Select(0, 0)
 	}
 }
