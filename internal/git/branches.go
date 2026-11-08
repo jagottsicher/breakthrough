@@ -93,3 +93,27 @@ func Checkout(ctx context.Context, root, branch string) error {
 func DeleteBranch(ctx context.Context, root, branch string) error {
 	return run(ctx, root, "branch", "-d", branch)
 }
+
+// Merge runs `git merge --no-edit branch` into whatever HEAD currently
+// points at. --no-edit deliberately skips the merge-commit-message
+// editor step entirely for a clean, non-fast-forward merge, the same
+// "nothing here can ever open one" reasoning Commit's own
+// GIT_EDITOR=true gives — except there's no equivalent "just succeed
+// with the default message" flag for an editor already running, so
+// avoiding the editor step altogether is simpler and more direct than
+// Commit's own workaround.
+//
+// A conflicting merge is deliberately not reported as err: git itself
+// exits non-zero for that case exactly the same way it does for every
+// other failure (an unknown ref, a dirty tree it refuses to touch at
+// all), so the one way a caller can tell them apart is checking
+// InProgressOperation(root) immediately afterward — == OperationMerge
+// means conflicts are waiting to be resolved (see conflict.go), not
+// that the merge itself failed to start.
+func Merge(ctx context.Context, root, branch string) error {
+	err := run(ctx, root, "merge", "--no-edit", branch)
+	if err != nil && InProgressOperation(root) == OperationMerge {
+		return nil
+	}
+	return err
+}

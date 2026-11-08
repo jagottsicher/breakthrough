@@ -629,6 +629,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		} else {
 			entries = append(entries,
 				hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }),
+				hintKey("m", "merge into current", func(r *Root) { r.openGitBreachMerge() }),
 				hintKey("d", "delete branch", func(r *Root) { r.openGitBreachDeleteBranch() }),
 				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.BranchesFilter), func(r *Root) { r.openGitBreachBranchesOrTagsFilter() }),
 			)
@@ -1108,6 +1109,9 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			} else {
 				r.openGitBreachDeleteBranch()
 			}
+			return nil
+		case 'm':
+			r.openGitBreachMerge()
 			return nil
 		case 'g':
 			// "gC" reaches the AI Consigliere — see
