@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -194,6 +195,58 @@ func ResolveConflict(content string, sections []ConflictSection, index int, side
 	out = append(out, resolved...)
 	out = append(out, lines[sec.End+1:]...)
 	return strings.Join(out, "\n"), nil
+}
+
+// ReadConflictedFile reads path's own raw, still-conflicted content
+// straight off disk — same shape as UntrackedContent (no git object to
+// diff against: an unmerged path's index entries are the pre-conflict
+// stage-1/2/3 blobs, not something `git diff` can usefully show), kept
+// as its own name since the two reads happen for unrelated reasons
+// despite sharing one implementation.
+func ReadConflictedFile(root, path string) (string, error) {
+	return UntrackedContent(root, path)
+}
+
+// ResolveConflictSection resolves exactly one section of path's own
+// conflict (index into ParseConflicts' result over the file's current,
+// on-disk content — always re-read and re-parsed here rather than
+// trusting a caller-held copy, since resolving one section shifts every
+// later section's own line numbers, making a stale index/offset
+// actively dangerous to reuse) by picking side, writes the result back
+// to disk, and — only once every section in the file is gone — stages
+// it via Stage, the one git operation that actually clears the path
+// out of Status.Conflicts. remaining is the file's own still-unresolved
+// sections after this call (empty once resolved and staged).
+func ResolveConflictSection(ctx context.Context, root, path string, index int, side ConflictSide) (remaining []ConflictSection, err error) {
+	content, err := ReadConflictedFile(root, path)
+	if err != nil {
+		return nil, err
+	}
+	sections := ParseConflicts(content)
+	resolved, err := ResolveConflict(content, sections, index, side)
+	if err != nil {
+		return nil, err
+	}
+	// Preserve whatever mode the file already has (e.g. an executable
+	// script with a conflict in it) rather than hard-coding one — falls
+	// back to a plain, non-executable 0o644 only if the stat itself
+	// somehow fails, which ReadConflictedFile succeeding just above
+	// already makes unlikely.
+	mode := os.FileMode(0o644)
+	if info, statErr := os.Stat(filepath.Join(root, path)); statErr == nil {
+		mode = info.Mode()
+	}
+	if err := os.WriteFile(filepath.Join(root, path), []byte(resolved), mode); err != nil {
+		return nil, err
+	}
+
+	remaining = ParseConflicts(resolved)
+	if len(remaining) == 0 {
+		if err := Stage(ctx, root, []string{path}); err != nil {
+			return nil, err
+		}
+	}
+	return remaining, nil
 }
 
 // ConflictIndexError reports an out-of-range section index passed to
