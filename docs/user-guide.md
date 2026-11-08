@@ -1437,8 +1437,18 @@ for at all.
 `Left`/`Right` on the Branches box cycle it through its own three
 sub-tabs — Branches (above), Tags, and Remotes, one shared table
 either way. Remotes lists every configured remote by name and URL
-(`git config --get-regexp`, not the human-facing `git remote -v`),
-read-only for now — no Fetch/Push/Pull wired up yet.
+(`git config --get-regexp`, not the human-facing `git remote -v`).
+`f` fetches the remote under the cursor in the background (no
+confirm — it only ever updates this repository's own remote-tracking
+refs, never the remote itself). `p` pushes the current branch to it
+— always confirms first, showing the exact command (`git push
+<remote> <branch>`) about to run; does nothing on a detached HEAD.
+`P` pulls from it — a real fetch plus a real merge in one step,
+always via the merge strategy regardless of this repository's own
+`pull.rebase` setting, so a conflicting pull lands in the same
+conflict view a conflicting merge already does (`o`/`t` then
+`C`/`A`/`K`). Confirms first only on a dirty tree, the same restraint
+`m` (merge) already has.
 
 On the Tags sub-tab: `a` prompts for a name and creates a new,
 lightweight tag at `HEAD`; `d` deletes the one under the cursor,
@@ -1464,6 +1474,9 @@ of this yet.
 | `E` | (Commits, while bisecting) End the bisect |
 | `P` | (Commits) Open the ref picker and cherry-pick whichever branch, tag, or loaded commit gets picked onto whatever is currently checked out, confirming first only on a dirty tree |
 | `d` | (Branches sub-tab) Delete the branch under the cursor, after confirming — refuses on an unmerged branch the same way `git` itself does |
+| `f` | (Remotes sub-tab) Fetch the remote under the cursor in the background — no confirm |
+| `p` | (Remotes sub-tab) Push the current branch to the remote under the cursor, confirming first with the exact command — does nothing on a detached HEAD |
+| `P` | (Remotes sub-tab) Pull from the remote under the cursor — fetch plus merge, confirming first only on a dirty tree; a conflict lands in the same conflict view a conflicting merge does |
 | `a` | (Tags sub-tab) Create a new tag at `HEAD`, after typing a name |
 | `d` | (Tags sub-tab) Delete the tag under the cursor, after confirming |
 | `a` | (Stash) Apply the entry under the cursor (never pops it) |

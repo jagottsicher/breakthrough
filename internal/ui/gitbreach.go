@@ -150,6 +150,14 @@ type gitBreachState struct {
 // action, not a once-a-second clock tick competing with other segments.
 const gitBreachFetchTimeout = 3 * time.Second
 
+// gitBreachNetworkTimeout bounds a real network call (Fetch, and later
+// Push/Pull) — much more generous than gitBreachFetchTimeout's own 3s,
+// which only ever waits on fast, local git operations. A slow, distant
+// remote over a mediocre connection can legitimately take tens of
+// seconds; this is a ceiling against an actually hung connection, not
+// a tolerance for ordinary latency.
+const gitBreachNetworkTimeout = 60 * time.Second
+
 // openGitBreach is "jg" — resolves whichever repository contains the
 // active panel's own current directory (its own parents included,
 // exactly what git itself would find — see git.Root) and opens the
@@ -662,6 +670,189 @@ func (r *Root) gitBreachRemoteAt(row int) (git.Remote, bool) {
 		return git.Remote{}, false
 	}
 	return r.gitBreach.Remotes[row], true
+}
+
+// openGitBreachFetchRemote is "f" on a Remotes row — no confirm
+// (unlike Push, a future patch: fetch only ever updates this
+// repository's own remote-tracking refs, never the remote itself, so
+// there's nothing here to weigh the way an irreversible action would
+// need).
+func (r *Root) openGitBreachFetchRemote() {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabRemotes {
+		return
+	}
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	rm, ok := r.gitBreachRemoteAt(row)
+	if !ok {
+		return
+	}
+	r.startGitBreachFetchRemote(rm.Name)
+}
+
+// startGitBreachFetchRemote dispatches the real network call off the
+// UI goroutine — see internal/ui's own async-ui conventions
+// (startGitBreachDiff and friends): root/name are captured here, never
+// re-read from r.gitBreach inside the goroutine itself, so a later
+// "jg" on a different repository while this is still in flight can
+// never apply its result to the wrong one (see applyGitBreachFetchRemote's
+// own staleness guard). The Remotes table itself shows "Fetching
+// %q…" for the duration — a real network call can take long enough
+// that Merge/StashPop's own "the state just changes, no explicit
+// feedback" convention would otherwise read as unresponsive.
+func (r *Root) startGitBreachFetchRemote(name string) {
+	root := r.gitBreach.Root
+	showTablePlaceholder(r.gitBreach.BranchesTable, fmt.Sprintf("Fetching %q…", name), r.theme.MutedTextColor)
+
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachNetworkTimeout)
+	r.safeGo("Git breach fetch", cancel, func() {
+		err := git.FetchRemote(ctx, root, name)
+		cancel()
+		r.app.QueueUpdateDraw(func() {
+			r.applyGitBreachFetchRemote(root, name, err)
+		})
+	})
+}
+
+// applyGitBreachFetchRemote is startGitBreachFetchRemote's own testable
+// apply half (see the async-ui skill's own "split into fetchX/applyX"
+// point: QueueUpdateDraw blocks forever without a running
+// Application.Run, which no test in this package has). Discards
+// silently if gitBreach.Root has since changed — a later "jg" on a
+// different repository, or this fetch simply outliving the dashboard
+// being closed and reopened elsewhere — the same staleness guard
+// every other async feature in this package already applies to
+// whatever identifies "is this still the thing we asked for".
+func (r *Root) applyGitBreachFetchRemote(root, name string, err error) {
+	if r.gitBreach.Root != root {
+		return
+	}
+	if err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: fetch %q: %w", name, err))
+	}
+	r.reloadGitBreach()
+}
+
+// openGitBreachPushRemote is "p" on a Remotes row — always confirms
+// first, showing the exact command about to run (feature_ideas.txt's
+// own explicit requirement for this action: "ein Remote-Push ist ein
+// Netzwerk-Schreibzugriff mit anderem Blast-Radius... eigener
+// Bestätigungsdialog, exakter Befehl vorab sichtbar"). Refuses outright
+// on a detached HEAD — there's no branch name to push at all in that
+// state, the same "nothing sane to act on" reasoning Checkout/Merge's
+// own guards already apply elsewhere in this box.
+func (r *Root) openGitBreachPushRemote() {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabRemotes {
+		return
+	}
+	if r.gitBreach.Status.Detached || r.gitBreach.Status.Branch == "" {
+		return
+	}
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	rm, ok := r.gitBreachRemoteAt(row)
+	if !ok {
+		return
+	}
+	branch := r.gitBreach.Status.Branch
+	r.openConfirm(
+		fmt.Sprintf("Run %q?", fmt.Sprintf("git push %s %s", rm.Name, branch)),
+		"Yes, push",
+		func() { r.startGitBreachPushRemote(rm.Name, branch) },
+	)
+}
+
+// startGitBreachPushRemote/applyGitBreachPushRemote mirror
+// startGitBreachFetchRemote/applyGitBreachFetchRemote exactly — same
+// async dispatch shape, same staleness guard, same "Verb-ing %q…"
+// placeholder. The one real difference is git.PushRemote's own: a
+// rejected push is always a real, reportable error here, never
+// reinterpreted as something else (see its own doc comment).
+func (r *Root) startGitBreachPushRemote(remote, branch string) {
+	root := r.gitBreach.Root
+	showTablePlaceholder(r.gitBreach.BranchesTable, fmt.Sprintf("Pushing %q…", remote), r.theme.MutedTextColor)
+
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachNetworkTimeout)
+	r.safeGo("Git breach push", cancel, func() {
+		err := git.PushRemote(ctx, root, remote, branch)
+		cancel()
+		r.app.QueueUpdateDraw(func() {
+			r.applyGitBreachPushRemote(root, remote, err)
+		})
+	})
+}
+
+func (r *Root) applyGitBreachPushRemote(root, name string, err error) {
+	if r.gitBreach.Root != root {
+		return
+	}
+	if err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: push %q: %w", name, err))
+	}
+	r.reloadGitBreach()
+}
+
+// openGitBreachPullRemote is "P" on a Remotes row — mirrors
+// openGitBreachMerge's own guard shape, not Push's always-confirm:
+// a conflicting pull lands in the same conflict surface a conflicting
+// Merge already does (see git.PullRemote's own doc comment), so the
+// risk this confirm exists to flag is the dirty-tree case, same as
+// Merge, not "this writes to the remote" the way Push's own always-
+// confirm is about. Refuses on a detached HEAD, same reasoning as
+// Push.
+func (r *Root) openGitBreachPullRemote() {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabRemotes {
+		return
+	}
+	if r.gitBreach.Status.Detached || r.gitBreach.Status.Branch == "" {
+		return
+	}
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	rm, ok := r.gitBreachRemoteAt(row)
+	if !ok {
+		return
+	}
+	branch := r.gitBreach.Status.Branch
+
+	st := r.gitBreach.Status
+	if len(st.Staged) > 0 || len(st.Unstaged) > 0 || len(st.Conflicts) > 0 {
+		r.openConfirm(
+			fmt.Sprintf("Pull %q with uncommitted changes in the working tree?", rm.Name),
+			"Yes, pull",
+			func() { r.startGitBreachPullRemote(rm.Name, branch) },
+		)
+		return
+	}
+	r.startGitBreachPullRemote(rm.Name, branch)
+}
+
+// startGitBreachPullRemote/applyGitBreachPullRemote mirror Fetch/Push's
+// own async dispatch shape exactly. applyGitBreachPullRemote always
+// reloads on success too, the same as a conflicting result — a
+// conflicting pull needs it to pick up the new Conflicts rows and
+// Operation state, landing the user in Phase B's own conflict surface
+// rather than at an error overlay, exactly like mergeGitBreachBranch's
+// own identical reasoning.
+func (r *Root) startGitBreachPullRemote(remote, branch string) {
+	root := r.gitBreach.Root
+	showTablePlaceholder(r.gitBreach.BranchesTable, fmt.Sprintf("Pulling %q…", remote), r.theme.MutedTextColor)
+
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachNetworkTimeout)
+	r.safeGo("Git breach pull", cancel, func() {
+		err := git.PullRemote(ctx, root, remote, branch)
+		cancel()
+		r.app.QueueUpdateDraw(func() {
+			r.applyGitBreachPullRemote(root, remote, err)
+		})
+	})
+}
+
+func (r *Root) applyGitBreachPullRemote(root, name string, err error) {
+	if r.gitBreach.Root != root {
+		return
+	}
+	if err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: pull %q: %w", name, err))
+	}
+	r.reloadGitBreach()
 }
 
 // toggleGitBreachBranchesTab/reverseToggleGitBreachBranchesTab cycle

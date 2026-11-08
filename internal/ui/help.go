@@ -807,8 +807,19 @@ var helpText = strings.TrimLeft(`
   lightweight tag at HEAD, "d" deletes the one under the cursor after
   confirming, and Enter does nothing — a tag has no checkout
   equivalent; pushing a tag isn't part of this yet. Remotes lists
-  every configured remote by name and URL, read-only for
-  now — no Fetch/Push/Pull wired up yet),
+  every configured remote by name and URL; "f" fetches the one
+  under the cursor in the background, no confirm — it only ever
+  updates this repository's own remote-tracking refs, never the
+  remote itself. "p" pushes the current branch to it — always
+  confirms first, showing the exact "git push <remote> <branch>"
+  about to run (the exact command, not just a yes/no question,
+  since a push is the one real network write this dashboard makes).
+  "P" pulls — a real fetch plus a real merge in one step, always
+  via the merge strategy regardless of this repository's own
+  pull.rebase setting, so a conflict always lands in the same
+  conflict view a conflicting merge already does ("o"/"t" to
+  resolve, then "C"/"A"/"K"). Confirms first only on a dirty tree,
+  same restraint merge's own "m" already has),
   Commits (the most recent commits, newest first, each one colored by
   its own author — loads 200 at a time, reaching the last loaded row
   fetches 200 more automatically, with a "loaded/total" hint in the
@@ -979,6 +990,17 @@ var helpText = strings.TrimLeft(`
              itself. A conflicting merge isn't an error: it lands you
              in the conflict view below with the merge already
              in progress, ready for "o"/"t" and then "C"
+    f        (Remotes sub-tab) Fetch the remote under the cursor in
+             the background — no confirm, it only ever updates this
+             repository's own remote-tracking refs
+    p        (Remotes sub-tab) Push the current branch to the remote
+             under the cursor — always confirms first, showing the
+             exact command about to run. Does nothing on a detached
+             HEAD (no branch name to push)
+    P        (Remotes sub-tab) Pull from the remote under the
+             cursor — fetch plus merge in one step, confirming first
+             only on a dirty tree. A conflicting pull lands in the
+             same conflict view a conflicting merge already does
     a        (Tags sub-tab) Create a new, lightweight tag at HEAD,
              after typing a name in a prompt
     d        (Tags sub-tab) Delete the tag under the cursor, after
