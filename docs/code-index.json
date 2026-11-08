@@ -1088,13 +1088,13 @@
     },
     {
       "path": "internal/git/commits.go",
-      "size": 7588,
-      "sha256": "7421458b19a7bcc5a9cf455773cc5d7ee12eedd27a6e6e3cd3c794a699f1e306"
+      "size": 8552,
+      "sha256": "3157d5c6a72471e377b8115b5989c7e8445a732994768f886cb178ca8e8cab4a"
     },
     {
       "path": "internal/git/commits_test.go",
-      "size": 7704,
-      "sha256": "62afec31c0bfe4e7ea706215e89e7559b85484d2bdb0bfaf8c011aaef1e40043"
+      "size": 10554,
+      "sha256": "624edd5c2c99b124a9cdbd3a6d2a47977df3e9ddc8e35d3ecb8fbf52cd0edd25"
     },
     {
       "path": "internal/git/conflict.go",
@@ -15603,73 +15603,101 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/commits.go",
+      "name": "CherryPick",
+      "kind": "function",
+      "line": 205
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/commits_test.go",
       "name": "TestLogListsCommitsNewestFirst",
       "kind": "function",
-      "line": 10
+      "line": 12
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/commits_test.go",
       "name": "TestLogOnARepositoryWithNoCommitsYet",
       "kind": "function",
-      "line": 47
+      "line": 49
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/commits_test.go",
       "name": "TestCommitDiffShowsTheCommitsOwnChange",
       "kind": "function",
-      "line": 60
+      "line": 62
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/commits_test.go",
       "name": "TestDiffRefsComparesTwoArbitraryRefsDirectly",
       "kind": "function",
-      "line": 88
+      "line": 90
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/commits_test.go",
       "name": "TestDiffRefsReversedSwapsAddedAndRemoved",
       "kind": "function",
-      "line": 111
+      "line": 113
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/commits_test.go",
       "name": "TestDiffRefsOnAnUnresolvableRefSurfacesGitsOwnError",
       "kind": "function",
-      "line": 135
+      "line": 137
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/commits_test.go",
       "name": "TestCommitDiffOnTheRootCommit",
       "kind": "function",
-      "line": 150
+      "line": 152
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/commits_test.go",
       "name": "TestLogRespectsASmallerLimit",
       "kind": "function",
-      "line": 178
+      "line": 180
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/commits_test.go",
       "name": "TestCommitCountMatchesTheRealCommitCount",
       "kind": "function",
-      "line": 199
+      "line": 201
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/commits_test.go",
       "name": "TestCommitCountOnARepositoryWithNoCommitsYet",
       "kind": "function",
-      "line": 221
+      "line": 223
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/commits_test.go",
+      "name": "TestCherryPickAppliesACleanCommitOntoCurrentHead",
+      "kind": "function",
+      "line": 236
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/commits_test.go",
+      "name": "TestCherryPickOnARealConflictReportsNoErrorButLeavesOneInProgress",
+      "kind": "function",
+      "line": 272
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/commits_test.go",
+      "name": "TestCherryPickOnAnUnknownHashFails",
+      "kind": "function",
+      "line": 300
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
@@ -42455,14 +42483,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
@@ -67436,5 +67464,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "a6aa8305cc56d949e8ffcb4d9f1d4e0c77bac2181308bb5730902bc8871c5ec3"
+  "merkle_root": "d632be9c359e85ea6e5e087c7dc1f774eac30c684c1de3ab2313cae22be21cf9"
 }

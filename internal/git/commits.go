@@ -188,3 +188,24 @@ func DiffRefs(ctx context.Context, root, a, b string) (string, error) {
 	}
 	return stdout.String(), nil
 }
+
+// CherryPick runs `git cherry-pick hash` onto whatever HEAD currently
+// points at — the single-commit, onto-HEAD case feature_ideas.txt's
+// own Phase C item asks for first ("Commit(s) markieren, in einen
+// anderen Branch einfügen" is noted as a later remainder: picking onto
+// a branch other than the current one needs its own checkout step
+// first, and multi-select doesn't exist on any table in this dashboard
+// yet).
+//
+// A conflicting pick is deliberately not reported as err, the same
+// disambiguation Merge already has: InProgressOperation(root) ==
+// OperationCherryPick immediately afterward means conflicts are
+// waiting to be resolved, not that the pick failed to start at all
+// (an unknown hash, a dirty tree it refuses to touch).
+func CherryPick(ctx context.Context, root, hash string) error {
+	err := run(ctx, root, "cherry-pick", hash)
+	if err != nil && InProgressOperation(root) == OperationCherryPick {
+		return nil
+	}
+	return err
+}
