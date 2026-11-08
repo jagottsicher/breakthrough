@@ -964,6 +964,11 @@ var helpText = strings.TrimLeft(`
              doesn't depend on which row is selected anywhere
     r        Re-read the repository's current status/branches/commits/
              stash — works no matter which box currently has focus
+    /        (Files/Branches/Tags/Stash) Filter that box by a plain,
+             case-insensitive substring — press "/" again while one
+             is active to clear it instead. Not this app's own
+             glob/regex filter menu elsewhere; Commits has no filter,
+             since its lane/branch graph needs the whole list
     Esc      Close — except from inside Main's own diff, where it only
              steps back out to whichever box is still selected
              underneath (the same as Left/Enter/Space above) instead of

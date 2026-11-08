@@ -65,9 +65,35 @@ type gitBreachState struct {
 	// meant to join Branches/Remotes as tabs within this one box, not
 	// become a fifth box of its own). Reset to false on every fresh
 	// "jg" open (see openGitBreach), same as CommitsLimit.
-	BranchesShowTags    bool
-	Tags                []git.Tag
-	TagsErr             error
+	BranchesShowTags bool
+	Tags             []git.Tag
+	TagsErr          error
+	// FilesFilter/BranchesFilter/TagsFilter/StashFilter are each
+	// box's own "/" filter — a plain, case-insensitive substring (see
+	// gitBreachFilterMatches), deliberately not the panel's own
+	// glob/regex filter contract, per Jens's own explicit "keep it
+	// simple" (2026-11-08). Commits deliberately has none: its own
+	// lane/branch graph (git.CommitLanes) is computed over the whole,
+	// unfiltered list — filtering rows out of an already-drawn graph
+	// would either break lane continuity or need the graph itself
+	// recomputed around gaps, real complexity for a "keep it simple"
+	// feature; noted in feature_ideas.txt as a separate, later step.
+	// BranchesShown/TagsShown/StashShown are each box's own filtered
+	// view, rebuilt by its own render function — gitBreachBranchAt/
+	// gitBreachTagAt/gitBreachStashAt read these, not the raw
+	// Branches/Tags/Stash slices, so a table row always resolves to
+	// the same entry the filter actually shows at that position.
+	// Files needs no equivalent: gitBreachRowAt already goes through
+	// RowIndex, which renderGitBreachFiles only ever populates for
+	// rows it actually drew — a filtered-out row simply never gets an
+	// entry, no second slice needed.
+	FilesFilter         string
+	BranchesFilter      string
+	TagsFilter          string
+	StashFilter         string
+	BranchesShown       []git.Branch
+	TagsShown           []git.Tag
+	StashShown          []git.Stash
 	Commits             []git.LogEntry
 	CommitsErr          error
 	CommitsReady        bool
@@ -477,10 +503,10 @@ func (r *Root) gitBreachBranchAt(row int) (git.Branch, bool) {
 	if r.gitBreach.Status.Detached {
 		row--
 	}
-	if row < 0 || row >= len(r.gitBreach.Branches) {
+	if row < 0 || row >= len(r.gitBreach.BranchesShown) {
 		return git.Branch{}, false
 	}
-	return r.gitBreach.Branches[row], true
+	return r.gitBreach.BranchesShown[row], true
 }
 
 // gitBreachTagAt returns gitBreach.Tags[row] — no detached-HEAD row-0
@@ -488,10 +514,10 @@ func (r *Root) gitBreachBranchAt(row int) (git.Branch, bool) {
 // a tag is never "current" the way a branch is, so renderGitBreachTags
 // never inserts a non-selectable row ahead of the real ones.
 func (r *Root) gitBreachTagAt(row int) (git.Tag, bool) {
-	if row < 0 || row >= len(r.gitBreach.Tags) {
+	if row < 0 || row >= len(r.gitBreach.TagsShown) {
 		return git.Tag{}, false
 	}
-	return r.gitBreach.Tags[row], true
+	return r.gitBreach.TagsShown[row], true
 }
 
 // toggleGitBreachBranchesTab switches the Branches box between its
@@ -1090,10 +1116,10 @@ func (r *Root) startGitBreachRefDiff(c git.LogEntry, ref string) {
 // gitBreachCommitAt exactly (no non-selectable header rows in the
 // Stash table either).
 func (r *Root) gitBreachStashAt(row int) (git.Stash, bool) {
-	if row < 0 || row >= len(r.gitBreach.Stash) {
+	if row < 0 || row >= len(r.gitBreach.StashShown) {
 		return git.Stash{}, false
 	}
-	return r.gitBreach.Stash[row], true
+	return r.gitBreach.StashShown[row], true
 }
 
 // startGitBreachStashDiff mirrors startGitBreachCommitDiff exactly, for

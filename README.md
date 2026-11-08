@@ -1291,7 +1291,10 @@ Lightning Network ⚡️ using the sponsor button above.
   scroll position for the whole session. "s" (while Files' own
   unstaged diff is showing) stages whichever hunk is at the top of
   the visible area. "c" commits whatever is
-  currently staged. Local working trees only — there is no
+  currently staged. "/" filters Files, Branches, Tags, or Stash by a
+  plain substring (press it again to clear) — Commits has no filter,
+  since its lane/branch graph needs the whole, unfiltered list.
+  Local working trees only — there is no
   command-execution channel to run git against a remote session.
 - AI Consigliere (`gC`): a non-modal chat sidebar reachable from the
   file panel and every full-screen catalog screen — Log Holepunch, Git
