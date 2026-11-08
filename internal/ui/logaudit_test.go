@@ -31,6 +31,12 @@ func newTestRootForLogAudit(t *testing.T, dir string) *Root {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	// Deterministic regardless of whether journalctl happens to be
+	// installed on the machine running this test — see
+	// logAuditState.JournalAvailableFn's own doc comment
+	// (logauditscreen.go). The systemd-journal feature's own tests
+	// override this back to true.
+	r.log.JournalAvailableFn = func() bool { return false }
 	r.openLogAudit()
 	return r
 }
