@@ -639,6 +639,11 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 				hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.FilesFilter), func(r *Root) { r.openGitBreachFilesFilter() }),
 			)
+		case gitBreachFilesTabSubmodules:
+			entries = append(entries,
+				hintKey("←/→", "switch tab", func(r *Root) { r.cycleGitBreachFilesTab(1) }),
+				hintKey("u", "update", func(r *Root) { r.openGitBreachSubmoduleUpdate() }),
+			)
 		default:
 			entries = append(entries, hintKey("←/→", "switch tab", func(r *Root) { r.cycleGitBreachFilesTab(1) }))
 		}
@@ -1088,6 +1093,9 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 			return nil
 		case 'r':
 			r.reloadGitBreach()
+			return nil
+		case 'u':
+			r.openGitBreachSubmoduleUpdate()
 			return nil
 		case '/':
 			r.openGitBreachFilesFilter()

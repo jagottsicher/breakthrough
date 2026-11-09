@@ -788,6 +788,64 @@ func (r *Root) gitBreachSubmoduleAt(row int) (git.Submodule, bool) {
 	return r.gitBreach.Submodules[row], true
 }
 
+// openGitBreachSubmoduleUpdate is "u" on a Submodules row — runs `git
+// submodule update --init` on the row under the cursor only, not
+// every submodule at once (matches "f"/"p"/"P" on a single Remotes
+// row, "m"/"w" on a single Branches row — this box's own established
+// pattern of acting on the cursor, never the whole list). No confirm:
+// additive, same reasoning openGitBreachFetchRemote's own doc comment
+// gives — it can only ever bring a submodule's own checkout in line
+// with what the superproject already has it pinned to, never lose
+// anything already committed there.
+func (r *Root) openGitBreachSubmoduleUpdate() {
+	if r.gitBreach.FilesTab != gitBreachFilesTabSubmodules {
+		return
+	}
+	row, _ := r.gitBreach.FilesTable.GetSelection()
+	sm, ok := r.gitBreachSubmoduleAt(row)
+	if !ok {
+		return
+	}
+	r.startGitBreachSubmoduleUpdate(sm.Path)
+}
+
+// startGitBreachSubmoduleUpdate/applyGitBreachSubmoduleUpdate mirror
+// startGitBreachFetchRemote/applyGitBreachFetchRemote exactly — a
+// submodule update clones/fetches from that submodule's own remote,
+// the same unbounded-network-wait shape fetch itself has, so it gets
+// gitBreachNetworkTimeout (60s), not gitBreachFetchTimeout (3s, for
+// the purely local git calls elsewhere in this box). Reloads and
+// reloads the active panel on success — unlike a remote fetch, this
+// one writes real files inside the panel's own directory tree (the
+// submodule's own working copy), the same "a dashboard action just
+// changed what's on disk under the panel" reasoning
+// checkoutGitBreachBranch's own doc comment gives.
+func (r *Root) startGitBreachSubmoduleUpdate(path string) {
+	root := r.gitBreach.Root
+	showTablePlaceholder(r.gitBreach.FilesTable, fmt.Sprintf("Updating %q…", path), r.theme.MutedTextColor)
+
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachNetworkTimeout)
+	r.safeGo("Git breach submodule update", cancel, func() {
+		err := git.UpdateSubmodule(ctx, root, path)
+		cancel()
+		r.app.QueueUpdateDraw(func() {
+			r.applyGitBreachSubmoduleUpdate(root, path, err)
+		})
+	})
+}
+
+func (r *Root) applyGitBreachSubmoduleUpdate(root, path string, err error) {
+	if r.gitBreach.Root != root {
+		return
+	}
+	if err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: update %q: %w", path, err))
+		return
+	}
+	r.reloadGitBreach()
+	r.showError(r.panel.load(r.panel.path))
+}
+
 // openGitBreachFetchRemote is "f" on a Remotes row — no confirm
 // (unlike Push, a future patch: fetch only ever updates this
 // repository's own remote-tracking refs, never the remote itself, so

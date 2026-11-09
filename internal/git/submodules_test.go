@@ -84,3 +84,30 @@ func TestSubmodulesReportsAnUninitializedOne(t *testing.T) {
 		t.Errorf("Path = %q, want %q", submodules[0].Path, "sub")
 	}
 }
+
+func TestUpdateSubmoduleInitializesAnUninitializedOne(t *testing.T) {
+	root, _ := initRepoWithSubmodule(t)
+	runGit(t, root, "config", "protocol.file.allow", "always")
+	runGit(t, root, "submodule", "deinit", "-q", "-f", "--all")
+
+	if err := UpdateSubmodule(context.Background(), root, "sub"); err != nil {
+		t.Fatalf("UpdateSubmodule: %v", err)
+	}
+
+	submodules, err := Submodules(context.Background(), root)
+	if err != nil {
+		t.Fatalf("Submodules: %v", err)
+	}
+	if len(submodules) != 1 || submodules[0].State != SubmoduleUpToDate {
+		t.Errorf("submodules = %+v, want 1 entry with State=SubmoduleUpToDate after update", submodules)
+	}
+}
+
+func TestUpdateSubmoduleOnAnUnknownPathFails(t *testing.T) {
+	root, _ := initRepoWithSubmodule(t)
+	runGit(t, root, "config", "protocol.file.allow", "always")
+
+	if err := UpdateSubmodule(context.Background(), root, "no-such-submodule"); err == nil {
+		t.Fatal("UpdateSubmodule on an unknown path, want an error")
+	}
+}

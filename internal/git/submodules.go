@@ -82,3 +82,28 @@ func Submodules(ctx context.Context, root string) ([]Submodule, error) {
 	}
 	return submodules, nil
 }
+
+// UpdateSubmodule runs `git submodule update --init` on a single
+// submodule path — clones it first if it's still uninitialized,
+// otherwise fetches and checks out whatever commit the superproject
+// has it pinned to. Not --recursive: a submodule that itself has
+// submodules is a later, separate concern, not implicit in this one.
+// Uses cmdEnvironWithoutPrompts (remotes.go) for the same reason
+// FetchRemote/PushRemote/PullRemote already do — a submodule on an
+// SSH remote must never block on an interactive credential prompt.
+func UpdateSubmodule(ctx context.Context, root, path string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "submodule", "update", "--init", "--", path)
+	cmd.Env = cmdEnvironWithoutPrompts()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("git submodule update: %s", msg)
+		}
+		return fmt.Errorf("git submodule update: %w", err)
+	}
+	return nil
+}
