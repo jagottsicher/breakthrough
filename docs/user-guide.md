@@ -1454,7 +1454,9 @@ on no branch), and lock status; `w` on a Branches row creates a new
 one (see below). Submodules lists each one's own path, status (`git
 submodule status`'s own four states: up to date, modified,
 uninitialized, or conflicted), and the describe or hash it's pinned
-to — updating one isn't part of this yet.
+to — `u` updates the one under the cursor (`git submodule update
+--init`, not recursive; clones it first if it's still
+uninitialized).
 
 `Left`/`Right` on the Branches box cycle it through its own three
 sub-tabs — Branches (above), Tags, and Remotes, one shared table
@@ -1491,6 +1493,7 @@ of this yet.
 | `Enter` | (Branches sub-tab) Check out the branch under the cursor, confirming first if the working tree isn't clean |
 | `m` | (Branches sub-tab) Merge the branch under the cursor into whatever is checked out, confirming first if the working tree isn't clean — does nothing on the current branch |
 | `w` | (Branches sub-tab) Create a new linked worktree on the branch under the cursor at a sibling path, switching the active panel into it — does nothing on the current branch |
+| `u` | (Files, Submodules sub-tab) Update the submodule under the cursor (`git submodule update --init`) |
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
 | `d` | (Commits) Diff the commit under the cursor against a picked ref — any local branch, tag, or other loaded commit |
 | `s` | (Main, Files' own unstaged diff only) Stage the hunk at the top of the visible area |

@@ -1302,8 +1302,9 @@ Lightning Network ⚡️ using the sponsor button above.
   Submodules have no diff to show. Worktrees lists every worktree
   (path, branch or "(detached)", lock status). Submodules lists each
   one's own path and status (up to date, modified, uninitialized, or
-  conflicted) against the describe or hash it's pinned to —
-  updating one isn't part of this yet), Branches
+  conflicted) against the describe or hash it's pinned to — "u"
+  updates the one under the cursor (`git submodule update --init`,
+  not recursive)), Branches
   (every local branch, checkout on Enter, "m" merges it into whatever
   is currently checked out, "w" creates a new linked worktree on it
   (at a sibling path next to the repository root, switching the
