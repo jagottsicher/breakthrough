@@ -1440,8 +1440,11 @@ table either way; clicking a label directly jumps straight to that
 one. `Right` keeps its own existing meaning — jump into Main's own
 diff — specifically on Changes; Worktrees/Submodules have no diff to
 jump into, so `Right` means the same as `Left` there instead (cycle
-forward). Both are currently placeholders — no worktree creation or
-submodule status/update wired up yet.
+forward). Worktrees lists every worktree this repository has (`git
+worktree list --porcelain`) — path, branch (or "(detached)" for one
+on no branch), and lock status. Submodules is currently a placeholder
+— no status/update wired up yet, and worktree creation isn't part of
+this yet either.
 
 `Left`/`Right` on the Branches box cycle it through its own three
 sub-tabs — Branches (above), Tags, and Remotes, one shared table

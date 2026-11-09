@@ -1299,8 +1299,9 @@ Lightning Network ⚡️ using the sponsor button above.
   by author; Left/Right cycle this box through Changes/Worktrees/
   Submodules and back, or click a label directly — Right keeps its
   own "view diff" meaning on Changes specifically, since Worktrees/
-  Submodules have no diff to show; both are currently placeholders),
-  Branches
+  Submodules have no diff to show. Worktrees lists every worktree
+  (path, branch or "(detached)", lock status) — Submodules is
+  currently a placeholder), Branches
   (every local branch, checkout on Enter, "m" merges it into whatever
   is currently checked out, delete with "d" — Left/Right cycle this
   box through its own Tags and Remotes sub-tabs and back (or click a
