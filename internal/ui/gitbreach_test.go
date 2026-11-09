@@ -1624,14 +1624,19 @@ func TestGitBreachHintShowsSpaceOnlyWhileFilesHasFocus(t *testing.T) {
 // which is a different key string entirely from Branches' own bare
 // "Enter" as far as gitBreachHintHasKey's exact-match comparison is
 // concerned.
-func TestGitBreachHintShowsEnterOnlyWhileBranchesOrCommitsHasFocus(t *testing.T) {
+func TestGitBreachHintShowsEnterOnlyWhileFilesChangesBranchesOrCommitsHasFocus(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	if gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") {
-		t.Error("hint entries mention Enter before Branches has focus")
+	// A fresh "jg" starts on Files' own Changes sub-tab (see
+	// openGitBreach), which now shows bare "Enter" too — jump into
+	// Main's own diff for the row under the cursor, the same way
+	// Right used to before that meaning moved here (see
+	// captureGitBreachFilesTableKey's own doc comment).
+	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") {
+		t.Error("hint entries don't mention Enter on Files' own Changes sub-tab")
 	}
 
 	r.toggleGitBreachFocus() // -> Branches
@@ -1990,7 +1995,13 @@ func TestOpenGitBreachStashApplyDoesNothingWithNoStash(t *testing.T) {
 // Branches out (see its own dedicated test below), since Branches
 // never owns Main's content in the first place (gitBreachMainOwnerKind
 // has no Branches value at all).
-func TestActivateGitBreachMainFromFilesCommitsStashGivesMainFocus(t *testing.T) {
+// TestActivateGitBreachMainFromCommitsStashGivesMainFocus covers
+// Commits/Stash — Right still means "view diff" there, unchanged.
+// Files is deliberately not part of this shared loop: Right there now
+// means "cycle tabs" uniformly, and Enter is Files' own way into Main
+// instead (Changes sub-tab only) — see
+// TestCaptureGitBreachFilesTableKeyEnterActivatesMainOnChangesOnly.
+func TestActivateGitBreachMainFromCommitsStashGivesMainFocus(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
@@ -2004,7 +2015,6 @@ func TestActivateGitBreachMainFromFilesCommitsStashGivesMainFocus(t *testing.T) 
 		focus   func(r *Root) tview.Primitive
 		capture func(r *Root) func(*tcell.EventKey) *tcell.EventKey
 	}{
-		{"Files", func(r *Root) tview.Primitive { return r.gitBreach.FilesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachFilesTableKey }},
 		{"Commits", func(r *Root) tview.Primitive { return r.gitBreach.CommitsTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachCommitsTableKey }},
 		{"Stash", func(r *Root) tview.Primitive { return r.gitBreach.StashTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachStashTableKey }},
 	} {

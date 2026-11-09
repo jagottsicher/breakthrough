@@ -54,31 +54,52 @@ func TestCycleGitBreachFilesTabWrapsThroughAllThree(t *testing.T) {
 	}
 }
 
-// TestCaptureGitBreachFilesTableKeyRightMeansDiffOnlyOnChanges pins
-// the one real behavior change this patch makes: Right still means
-// "view diff" on Changes (unchanged), but means "next tab" on
-// Worktrees/Submodules instead — see captureGitBreachFilesTableKey's
-// own doc comment on why the two meanings never apply to the same
-// sub-tab at once.
-func TestCaptureGitBreachFilesTableKeyRightMeansDiffOnlyOnChanges(t *testing.T) {
+// TestCaptureGitBreachFilesTableKeyRightAlwaysCyclesTabs pins Right's
+// own uniform meaning on every sub-tab: cycle forward, same as Left
+// cycles backward, on Changes included. Enter, not Right, is this
+// box's own way into Main on Changes (see the test right below) —
+// Right used to double as "view diff" on Changes specifically, which
+// broke the left/right symmetry every other cycle in this dashboard
+// already has (see captureGitBreachFilesTableKey's own doc comment).
+func TestCaptureGitBreachFilesTableKeyRightAlwaysCyclesTabs(t *testing.T) {
 	r := gitBreachFilesTabFixture(t)
 
 	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
 
-	if r.gitBreach.MainOwner != gitBreachMainOwnerFiles {
-		t.Error("Right on Changes did not activate Main — existing diff behavior broke")
+	if r.gitBreachMainHasFocus() {
+		t.Error("Right on Changes activated Main, want it to cycle tabs instead")
 	}
-	if r.gitBreach.FilesTab != gitBreachFilesTabChanges {
-		t.Error("Right on Changes changed FilesTab, want it to stay on Changes")
+	if r.gitBreach.FilesTab != gitBreachFilesTabWorktrees {
+		t.Errorf("FilesTab = %v after Right on Changes, want it to have cycled to Worktrees", r.gitBreach.FilesTab)
 	}
-
-	r.deactivateGitBreachMain()
-	r.cycleGitBreachFilesTab(1) // -> Worktrees
 
 	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
 
 	if r.gitBreach.FilesTab != gitBreachFilesTabSubmodules {
 		t.Errorf("FilesTab = %v after Right on Worktrees, want it to have cycled to Submodules", r.gitBreach.FilesTab)
+	}
+}
+
+// TestCaptureGitBreachFilesTableKeyEnterActivatesMainOnChangesOnly
+// pins Changes' own way into Main now that Right no longer doubles
+// as it — a no-op on Worktrees/Submodules, which have no diff of
+// their own to show at all.
+func TestCaptureGitBreachFilesTableKeyEnterActivatesMainOnChangesOnly(t *testing.T) {
+	r := gitBreachFilesTabFixture(t)
+
+	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+
+	if !r.gitBreachMainHasFocus() {
+		t.Error("Enter on Changes did not activate Main")
+	}
+
+	r.deactivateGitBreachMain()
+	r.cycleGitBreachFilesTab(1) // -> Worktrees
+
+	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+
+	if r.gitBreachMainHasFocus() {
+		t.Error("Enter on Worktrees activated Main, want a no-op (no diff to show)")
 	}
 }
 

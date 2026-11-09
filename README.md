@@ -1297,8 +1297,8 @@ Lightning Network ⚡️ using the sponsor button above.
   first, syntax-colored diffs — Space stages/unstages the row under
   the cursor, "b" shows that file's own blame in Main instead, colored
   by author; Left/Right cycle this box through Changes/Worktrees/
-  Submodules and back, or click a label directly — Right keeps its
-  own "view diff" meaning on Changes specifically, since Worktrees/
+  Submodules and back, or click a label directly — Enter jumps into
+  Main's own diff on Changes specifically, since Worktrees/
   Submodules have no diff to show. Worktrees lists every worktree
   (path, branch or "(detached)", lock status). Submodules lists each
   one's own path and status (up to date, modified, uninitialized, or
