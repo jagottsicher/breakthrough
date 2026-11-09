@@ -107,8 +107,16 @@ func TestOpenGitBreachCreateWorktreeAddsALinkedOneAndSwitchesThePanel(t *testing
 	if _, err := os.Stat(wantPath); err != nil {
 		t.Errorf("worktree directory %q missing: %v", wantPath, err)
 	}
-	if r.panel.path != wantPath {
-		t.Errorf("panel.path = %q, want %q (switched into the new worktree)", r.panel.path, wantPath)
+	// panel.load resolves symlinks in the path it's given — on macOS
+	// t.TempDir() lives under /var/folders, itself a symlink to
+	// /private/var/folders, so panel.path ends up resolved even
+	// though wantPath, built from dir's own unresolved form, isn't.
+	resolvedWantPath, err := filepath.EvalSymlinks(wantPath)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", wantPath, err)
+	}
+	if r.panel.path != resolvedWantPath {
+		t.Errorf("panel.path = %q, want %q (switched into the new worktree)", r.panel.path, resolvedWantPath)
 	}
 }
 
