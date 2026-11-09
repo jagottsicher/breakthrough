@@ -15,6 +15,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/git"
+	"github.com/jagottsicher/breakthrough/internal/github"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
@@ -103,6 +104,15 @@ type gitBreachState struct {
 	WorktreesErr  error
 	Submodules    []git.Submodule
 	SubmodulesErr error
+	// PullRequests is keyed on branch name, filled in asynchronously
+	// (see startGitBreachPullRequests) rather than from reloadGitBreach
+	// itself — a `gh pr list` call is a real network round trip, and
+	// reloadGitBreach is this dashboard's own synchronous path, run on
+	// every "jg" open and every "r". Nil (not an error) on a machine
+	// without `gh` on $PATH at all — github.Available() gates the
+	// fetch itself, so this stays nil silently rather than ever
+	// reaching an error overlay for a merely-missing optional tool.
+	PullRequests map[string]github.PullRequest
 	// BranchesTabSpans locates each sub-tab label's own clickable
 	// column range in BranchesHeader's current text — recorded as
 	// renderGitBreachBranchesHeader builds that text, the same
@@ -313,6 +323,69 @@ func (r *Root) reloadGitBreach() {
 	r.gitBreach.StashErr = stashErr
 
 	r.renderGitBreach()
+	r.startGitBreachPullRequests()
+}
+
+// gitBreachPullRequestsAvailable/gitBreachFetchPullRequests are
+// package-level var hooks onto internal/github's own Available/
+// PullRequests — the same swappable-var-for-testing shape
+// loadFirewallServices/listConsigliereModelsFunc/mailDefaultMboxPath
+// already establish elsewhere in this package (see bottombar_test.go's
+// own TestMain). Without this seam, reloadGitBreach runs on every
+// single one of this package's hundreds of openGitBreach calls in
+// tests, and a real `gh` on $PATH (true of this project's own dev
+// machines, and of GitHub Actions' own ubuntu-latest/macos runners)
+// would dispatch a real background `gh pr list` subprocess + goroutine
+// per test — the exact "real dispatch racing t.TempDir cleanup"
+// failure class #764's own fetch tests already hit twice this session,
+// just for a different network call. TestMain overrides both to a
+// fixed "not available" default; tests that specifically exercise this
+// feature override gitBreachFetchPullRequests further with captured
+// data (see gitbreachpullrequests_test.go).
+var gitBreachPullRequestsAvailable = github.Available
+var gitBreachFetchPullRequests = github.PullRequests
+
+// startGitBreachPullRequests fetches every branch's own pull request
+// (see internal/github's own doc comment on why one call, not one per
+// branch) off the UI goroutine — unlike every field just above, this
+// one real network round trip never blocks reloadGitBreach's own
+// otherwise-synchronous path; it paints the Branches box's own icons
+// in once it lands, same safeGo/QueueUpdateDraw/staleness-guard shape
+// startGitBreachFetchRemote already establishes. A missing `gh` means
+// no call at all, not a probe-then-fail — gitBreachPullRequestsAvailable
+// is a plain $PATH lookup, cheap enough to run on the UI goroutine
+// itself.
+func (r *Root) startGitBreachPullRequests() {
+	if !gitBreachPullRequestsAvailable() {
+		r.gitBreach.PullRequests = nil
+		return
+	}
+	root := r.gitBreach.Root
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachNetworkTimeout)
+	r.safeGo("Git breach pull requests", cancel, func() {
+		prs, err := gitBreachFetchPullRequests(ctx, root)
+		cancel()
+		r.app.QueueUpdateDraw(func() {
+			r.applyGitBreachPullRequests(root, prs, err)
+		})
+	})
+}
+
+// applyGitBreachPullRequests is startGitBreachPullRequests' own
+// testable apply half. A failed `gh pr list` (not authenticated, rate
+// limited, no network) is silently discarded, same as a missing `gh`
+// altogether — this is a cosmetic icon, not information the dashboard
+// itself depends on, so there is no error overlay for either case, by
+// design (see gitBreachState.PullRequests' own doc comment).
+func (r *Root) applyGitBreachPullRequests(root string, prs map[string]github.PullRequest, err error) {
+	if r.gitBreach.Root != root {
+		return
+	}
+	if err != nil {
+		return
+	}
+	r.gitBreach.PullRequests = prs
+	r.renderGitBreachBranches()
 }
 
 func (r *Root) closeGitBreach() {
@@ -679,6 +752,64 @@ func (r *Root) openGitBreachCreateWorktree() {
 	}
 	r.reloadGitBreach()
 	r.showError(r.panel.load(path))
+}
+
+// openGitBreachPullRequest is "o" on a Branches row — opens that
+// branch's own pull request in the system browser (`gh pr view
+// --web`, see internal/github's own doc comment on why gh itself
+// resolves the URL rather than this package building one). Silently
+// does nothing on a branch with no known PR at all, same "nothing
+// sane to act on" guard openGitBreachMerge/openGitBreachCreateWorktree
+// already apply to the current branch — PullRequests is only ever
+// populated for branches `gh pr list` actually returned one for.
+func (r *Root) openGitBreachPullRequest() {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabBranches {
+		return
+	}
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	branch, ok := r.gitBreachBranchAt(row)
+	if !ok {
+		return
+	}
+	if _, ok := r.gitBreach.PullRequests[branch.Name]; !ok {
+		return
+	}
+	r.startGitBreachOpenPullRequest(branch.Name)
+}
+
+// startGitBreachOpenPullRequest/applyGitBreachOpenPullRequest mirror
+// startGitBreachFetchRemote/applyGitBreachFetchRemote's own shape —
+// resolving a branch to its own PR URL is a real network round trip
+// (gh pr view needs to ask GitHub, not just read local git state), so
+// it never runs on the UI goroutine either.
+// gitBreachOpenPullRequestFunc is startGitBreachOpenPullRequest's own
+// swappable hook onto internal/github.OpenPullRequest — same reasoning
+// as gitBreachPullRequestsAvailable/gitBreachFetchPullRequests above;
+// no test currently triggers a real dispatch through it (every test
+// here only reaches the no-op guards or applyGitBreachOpenPullRequest
+// directly), but the seam exists so one that does later never becomes
+// a real `gh pr view --web` subprocess launch from `go test`.
+var gitBreachOpenPullRequestFunc = github.OpenPullRequest
+
+func (r *Root) startGitBreachOpenPullRequest(branch string) {
+	root := r.gitBreach.Root
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachNetworkTimeout)
+	r.safeGo("Git breach open pull request", cancel, func() {
+		err := gitBreachOpenPullRequestFunc(ctx, root, branch)
+		cancel()
+		r.app.QueueUpdateDraw(func() {
+			r.applyGitBreachOpenPullRequest(root, branch, err)
+		})
+	})
+}
+
+func (r *Root) applyGitBreachOpenPullRequest(root, branch string, err error) {
+	if r.gitBreach.Root != root {
+		return
+	}
+	if err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: open PR for %q: %w", branch, err))
+	}
 }
 
 // openGitBreachDeleteBranch is "d" on the Branches table — always
