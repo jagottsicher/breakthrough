@@ -1308,7 +1308,11 @@ Lightning Network ⚡️ using the sponsor button above.
   (every local branch, checkout on Enter, "m" merges it into whatever
   is currently checked out, "w" creates a new linked worktree on it
   (at a sibling path next to the repository root, switching the
-  active panel straight into it) and delete with "d" — Left/Right cycle this
+  active panel straight into it), delete with "d". Only if `gh` is
+  already installed: a colored circle next to any branch with its own
+  pull request — green open, hollow yellow draft, purple merged, red
+  closed — "o" opens it in the browser (`gh pr view --web`); no `gh`
+  on $PATH means simply no icon at all, never an error. Left/Right cycle this
   box through its own Tags and Remotes sub-tabs and back (or click a
   label directly), "a" to
   create a new tag at HEAD, "d" to delete one; Remotes lists every

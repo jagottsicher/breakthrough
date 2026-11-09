@@ -811,7 +811,12 @@ var helpText = strings.TrimLeft(`
   "m" merges the one under the cursor into whatever is currently
   checked out (does nothing on the current branch itself), "w"
   creates a new linked worktree on it at a sibling path next to the
-  repository root and switches the active panel straight into it —
+  repository root and switches the active panel straight into it.
+  Only if "gh" is already installed: a colored circle next to any
+  branch with its own pull request — green open, hollow yellow
+  draft, purple merged, red closed — "o" opens it in the browser
+  ("gh pr view --web"); no "gh" on $PATH means simply no icon at
+  all, never an error.
   Left/Right cycle this box through its own Tags and Remotes sub-tabs
   and back (one shared table either way, or click a label directly —
   mouse and keyboard reach the same three tabs); "a" on Tags creates a new,
