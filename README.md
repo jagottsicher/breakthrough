@@ -1300,8 +1300,10 @@ Lightning Network ⚡️ using the sponsor button above.
   Submodules and back, or click a label directly — Right keeps its
   own "view diff" meaning on Changes specifically, since Worktrees/
   Submodules have no diff to show. Worktrees lists every worktree
-  (path, branch or "(detached)", lock status) — Submodules is
-  currently a placeholder), Branches
+  (path, branch or "(detached)", lock status). Submodules lists each
+  one's own path and status (up to date, modified, uninitialized, or
+  conflicted) against the describe or hash it's pinned to —
+  updating one isn't part of this yet), Branches
   (every local branch, checkout on Enter, "m" merges it into whatever
   is currently checked out, "w" creates a new linked worktree on it
   (at a sibling path next to the repository root, switching the

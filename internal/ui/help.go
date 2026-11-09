@@ -803,8 +803,10 @@ var helpText = strings.TrimLeft(`
   Submodules and back, or click a label directly; Right keeps its own
   "jump into Main" meaning on Changes specifically, since Worktrees/
   Submodules have no diff to show. Worktrees lists every worktree —
-  path, branch or "(detached)", lock status — Submodules is currently
-  a placeholder), Branches (every local branch, the current one marked —
+  path, branch or "(detached)", lock status. Submodules lists each
+  one's own path, status (up to date, modified, uninitialized, or
+  conflicted), and the describe/hash it's pinned to — updating one
+  isn't part of this yet), Branches (every local branch, the current one marked —
   "m" merges the one under the cursor into whatever is currently
   checked out (does nothing on the current branch itself), "w"
   creates a new linked worktree on it at a sibling path next to the
