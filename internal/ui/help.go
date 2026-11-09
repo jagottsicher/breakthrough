@@ -803,7 +803,8 @@ var helpText = strings.TrimLeft(`
   "m" merges the one under the cursor into whatever is currently
   checked out (does nothing on the current branch itself) —
   Left/Right cycle this box through its own Tags and Remotes sub-tabs
-  and back (one shared table either way); "a" on Tags creates a new,
+  and back (one shared table either way, or click a label directly —
+  mouse and keyboard reach the same three tabs); "a" on Tags creates a new,
   lightweight tag at HEAD, "d" deletes the one under the cursor after
   confirming, and Enter does nothing — a tag has no checkout
   equivalent; pushing a tag isn't part of this yet. Remotes lists

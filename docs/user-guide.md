@@ -1436,7 +1436,8 @@ for at all.
 
 `Left`/`Right` on the Branches box cycle it through its own three
 sub-tabs — Branches (above), Tags, and Remotes, one shared table
-either way. Remotes lists every configured remote by name and URL
+either way; clicking a label directly jumps straight to that one.
+Remotes lists every configured remote by name and URL
 (`git config --get-regexp`, not the human-facing `git remote -v`).
 `f` fetches the remote under the cursor in the background (no
 confirm — it only ever updates this repository's own remote-tracking
