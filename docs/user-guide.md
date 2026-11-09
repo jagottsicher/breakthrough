@@ -1451,8 +1451,10 @@ jump into, so `Right` means the same as `Left` there instead (cycle
 forward). Worktrees lists every worktree this repository has (`git
 worktree list --porcelain`) — path, branch (or "(detached)" for one
 on no branch), and lock status; `w` on a Branches row creates a new
-one (see below). Submodules is currently a placeholder — no
-status/update wired up yet.
+one (see below). Submodules lists each one's own path, status (`git
+submodule status`'s own four states: up to date, modified,
+uninitialized, or conflicted), and the describe or hash it's pinned
+to — updating one isn't part of this yet.
 
 `Left`/`Right` on the Branches box cycle it through its own three
 sub-tabs — Branches (above), Tags, and Remotes, one shared table
