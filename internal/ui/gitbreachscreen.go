@@ -1539,7 +1539,7 @@ func (r *Root) renderGitBreachFiles() {
 		r.gitBreach.DiffView.SetText("")
 		return
 	case gitBreachFilesTabSubmodules:
-		showTablePlaceholder(r.gitBreach.FilesTable, "Submodules aren't wired up yet.", r.theme.MutedTextColor)
+		r.renderGitBreachSubmodules()
 		r.cancelGitBreachDiff()
 		r.gitBreach.DiffView.SetText("")
 		return
@@ -1890,6 +1890,47 @@ func (r *Root) renderGitBreachWorktrees() {
 	r.gitBreach.FilesTable.SetSelectable(true, false)
 	cur, _ := r.gitBreach.FilesTable.GetSelection()
 	if _, ok := r.gitBreachWorktreeAt(cur); !ok {
+		r.gitBreach.FilesTable.Select(0, 0)
+	}
+}
+
+// renderGitBreachSubmodules mirrors renderGitBreachWorktrees' own
+// shape, one table row per submodule, labeling each one's own state
+// the same four words `git submodule status`'s own leading character
+// means (see git.SubmoduleState's own doc comment).
+func (r *Root) renderGitBreachSubmodules() {
+	if r.gitBreach.SubmodulesErr != nil {
+		showTablePlaceholder(r.gitBreach.FilesTable, r.gitBreach.SubmodulesErr.Error(), r.theme.EntryError)
+		return
+	}
+	if len(r.gitBreach.Submodules) == 0 {
+		showTablePlaceholder(r.gitBreach.FilesTable, "No submodules.", r.theme.MutedTextColor)
+		return
+	}
+
+	for row, sm := range r.gitBreach.Submodules {
+		var state string
+		switch sm.State {
+		case git.SubmoduleModified:
+			state = "modified"
+		case git.SubmoduleUninitialized:
+			state = "uninitialized"
+		case git.SubmoduleConflict:
+			state = "conflict"
+		default:
+			state = "up to date"
+		}
+		describe := sm.Describe
+		if describe == "" {
+			describe = sm.Hash
+		}
+		text := fmt.Sprintf("  %s  %s (%s)", sm.Path, state, describe)
+		r.gitBreach.FilesTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(r.theme.Text))
+	}
+
+	r.gitBreach.FilesTable.SetSelectable(true, false)
+	cur, _ := r.gitBreach.FilesTable.GetSelection()
+	if _, ok := r.gitBreachSubmoduleAt(cur); !ok {
 		r.gitBreach.FilesTable.Select(0, 0)
 	}
 }
