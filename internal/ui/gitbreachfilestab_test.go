@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jagottsicher/breakthrough/internal/git"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -90,12 +92,24 @@ func TestCaptureGitBreachFilesTableKeyLeftCyclesTabsOnChangesToo(t *testing.T) {
 	}
 }
 
-func TestRenderGitBreachFilesOnWorktreesShowsAPlaceholder(t *testing.T) {
+func TestRenderGitBreachFilesOnWorktreesListsThem(t *testing.T) {
 	r := gitBreachFilesTabFixture(t)
+	r.gitBreach.Worktrees = []git.Worktree{{Path: "/repo", Branch: "main"}}
 
 	r.setGitBreachFilesTab(gitBreachFilesTabWorktrees)
 
-	if got, want := r.gitBreach.FilesTable.GetCell(1, 0).Text, "Worktrees aren't wired up yet."; got != want {
+	if got, want := r.gitBreach.FilesTable.GetCell(0, 0).Text, "  /repo  main"; got != want {
+		t.Errorf("row text = %q, want %q", got, want)
+	}
+}
+
+func TestRenderGitBreachFilesOnWorktreesWithNoneShowsAPlaceholder(t *testing.T) {
+	r := gitBreachFilesTabFixture(t)
+	r.gitBreach.Worktrees = nil
+
+	r.setGitBreachFilesTab(gitBreachFilesTabWorktrees)
+
+	if got, want := r.gitBreach.FilesTable.GetCell(1, 0).Text, "No worktrees."; got != want {
 		t.Errorf("placeholder text = %q, want %q", got, want)
 	}
 }

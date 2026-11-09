@@ -94,11 +94,13 @@ type gitBreachState struct {
 	// than Remotes becoming a fifth box of its own. Reset to
 	// gitBreachBranchesTabBranches on every fresh "jg" open (see
 	// openGitBreach), same as CommitsLimit.
-	BranchesTab gitBreachBranchesTab
-	Tags        []git.Tag
-	TagsErr     error
-	Remotes     []git.Remote
-	RemotesErr  error
+	BranchesTab  gitBreachBranchesTab
+	Tags         []git.Tag
+	TagsErr      error
+	Remotes      []git.Remote
+	RemotesErr   error
+	Worktrees    []git.Worktree
+	WorktreesErr error
 	// BranchesTabSpans locates each sub-tab label's own clickable
 	// column range in BranchesHeader's current text — recorded as
 	// renderGitBreachBranchesHeader builds that text, the same
@@ -287,6 +289,10 @@ func (r *Root) reloadGitBreach() {
 	remotes, remotesErr := git.Remotes(ctx, r.gitBreach.Root)
 	r.gitBreach.Remotes = remotes
 	r.gitBreach.RemotesErr = remotesErr
+
+	worktrees, worktreesErr := git.Worktrees(ctx, r.gitBreach.Root)
+	r.gitBreach.Worktrees = worktrees
+	r.gitBreach.WorktreesErr = worktreesErr
 
 	commits, commitsErr := git.Log(ctx, r.gitBreach.Root, r.gitBreach.CommitsLimit)
 	r.gitBreach.Commits = commits
@@ -717,6 +723,16 @@ func (r *Root) gitBreachRemoteAt(row int) (git.Remote, bool) {
 		return git.Remote{}, false
 	}
 	return r.gitBreach.Remotes[row], true
+}
+
+// gitBreachWorktreeAt indexes r.gitBreach.Worktrees directly by row —
+// no filter on this sub-tab, same reasoning as gitBreachRemoteAt's
+// own doc comment above.
+func (r *Root) gitBreachWorktreeAt(row int) (git.Worktree, bool) {
+	if row < 0 || row >= len(r.gitBreach.Worktrees) {
+		return git.Worktree{}, false
+	}
+	return r.gitBreach.Worktrees[row], true
 }
 
 // openGitBreachFetchRemote is "f" on a Remotes row — no confirm
