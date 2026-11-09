@@ -2428,8 +2428,8 @@
     },
     {
       "path": "internal/ui/gitbreachworktrees_test.go",
-      "size": 4325,
-      "sha256": "ab75187ac8491c98518c3ff32d108bbded67012fa473a95116f73317d06b6430"
+      "size": 4728,
+      "sha256": "82f63ed9578a9e56a33007920f1073f86a9f2dafea8b5df7cfa638d29718e6e7"
     },
     {
       "path": "internal/ui/gitstatus.go",
@@ -43136,7 +43136,7 @@
       "file": "internal/ui/gitbreachworktrees_test.go",
       "name": "TestOpenGitBreachCreateWorktreeIsANoOpOnTheCurrentBranch",
       "kind": "function",
-      "line": 115
+      "line": 123
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -68292,5 +68292,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "833035af452da4157ea5306f230d88947a5fbf5e9e0aed84c454566cc9e510fb"
+  "merkle_root": "806ef44cf8bafbc55f7c59423883fb9e0a77d56518656cdce70056b655064f49"
 }
