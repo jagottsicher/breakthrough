@@ -802,8 +802,9 @@ var helpText = strings.TrimLeft(`
   change — Left/Right cycle this box through Changes/Worktrees/
   Submodules and back, or click a label directly; Right keeps its own
   "jump into Main" meaning on Changes specifically, since Worktrees/
-  Submodules have no diff to show — both are currently placeholders,
-  no content of their own wired up yet), Branches (every local branch, the current one marked —
+  Submodules have no diff to show. Worktrees lists every worktree —
+  path, branch or "(detached)", lock status — Submodules is currently
+  a placeholder), Branches (every local branch, the current one marked —
   "m" merges the one under the cursor into whatever is currently
   checked out (does nothing on the current branch itself) —
   Left/Right cycle this box through its own Tags and Remotes sub-tabs

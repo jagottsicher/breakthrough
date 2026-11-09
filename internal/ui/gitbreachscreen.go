@@ -1530,11 +1530,7 @@ func (r *Root) renderGitBreachFiles() {
 
 	switch r.gitBreach.FilesTab {
 	case gitBreachFilesTabWorktrees:
-		// Worktree create-and-switch is its own later patch — for now
-		// this tab is a plain, always-empty placeholder, the same
-		// shape Remotes' own first patch had before Fetch/Push/Pull
-		// filled it in.
-		showTablePlaceholder(r.gitBreach.FilesTable, "Worktrees aren't wired up yet.", r.theme.MutedTextColor)
+		r.renderGitBreachWorktrees()
 		r.cancelGitBreachDiff()
 		r.gitBreach.DiffView.SetText("")
 		return
@@ -1858,6 +1854,39 @@ func (r *Root) renderGitBreachRemotes() {
 	cur, _ := r.gitBreach.BranchesTable.GetSelection()
 	if _, ok := r.gitBreachRemoteAt(cur); !ok {
 		r.gitBreach.BranchesTable.Select(0, 0)
+	}
+}
+
+// renderGitBreachWorktrees mirrors renderGitBreachRemotes' own shape,
+// one table row per worktree, on FilesTable rather than BranchesTable
+// since Worktrees lives under the Files box's own sub-tabs.
+func (r *Root) renderGitBreachWorktrees() {
+	if r.gitBreach.WorktreesErr != nil {
+		showTablePlaceholder(r.gitBreach.FilesTable, r.gitBreach.WorktreesErr.Error(), r.theme.EntryError)
+		return
+	}
+	if len(r.gitBreach.Worktrees) == 0 {
+		showTablePlaceholder(r.gitBreach.FilesTable, "No worktrees.", r.theme.MutedTextColor)
+		return
+	}
+
+	for row, wt := range r.gitBreach.Worktrees {
+		ref := wt.Branch
+		if wt.Detached {
+			ref = "(detached)"
+		}
+		lock := ""
+		if wt.Locked {
+			lock = "  [locked]"
+		}
+		text := fmt.Sprintf("  %s  %s%s", wt.Path, ref, lock)
+		r.gitBreach.FilesTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(r.theme.Text))
+	}
+
+	r.gitBreach.FilesTable.SetSelectable(true, false)
+	cur, _ := r.gitBreach.FilesTable.GetSelection()
+	if _, ok := r.gitBreachWorktreeAt(cur); !ok {
+		r.gitBreach.FilesTable.Select(0, 0)
 	}
 }
 
