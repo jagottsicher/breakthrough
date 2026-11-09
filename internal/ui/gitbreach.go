@@ -33,6 +33,16 @@ const (
 	gitBreachBranchesTabRemotes
 )
 
+// gitBreachBranchesTabSpan is one sub-tab label's own clickable region
+// in BranchesHeader's rendered text — [start, end) is its half-open
+// column range, relative to the header's own inner rect, the same
+// shape tabStripSpan already establishes for the panel's own tab
+// strip.
+type gitBreachBranchesTabSpan struct {
+	start, end int
+	tab        gitBreachBranchesTab
+}
+
 // gitBreachState holds the Git Breach dashboard's own widgets (per
 // pane: Status/Files/Branches/Commits/Stash/Diff), the last read
 // result for each pane, and the Diff pane's own split-view state (see
@@ -81,10 +91,16 @@ type gitBreachState struct {
 	BranchesTab gitBreachBranchesTab
 	Tags        []git.Tag
 	TagsErr     error
-	// Remotes is read-only for now — see renderGitBreachRemotes' own
-	// doc comment on why (Fetch/Push/Pull are later Phase D patches).
-	Remotes    []git.Remote
-	RemotesErr error
+	Remotes     []git.Remote
+	RemotesErr  error
+	// BranchesTabSpans locates each sub-tab label's own clickable
+	// column range in BranchesHeader's current text — recorded as
+	// renderGitBreachBranchesHeader builds that text, the same
+	// "record spans while building, don't re-measure the string
+	// afterwards" shape tabStripSpan already establishes (see its own
+	// doc comment on why: this avoids ever having to re-derive column
+	// positions from rendered text whose own format could change).
+	BranchesTabSpans []gitBreachBranchesTabSpan
 	// FilesFilter/BranchesFilter/TagsFilter/StashFilter are each
 	// box's own "/" filter — a plain, case-insensitive substring (see
 	// gitBreachFilterMatches), deliberately not the panel's own
@@ -872,7 +888,16 @@ func (r *Root) reverseToggleGitBreachBranchesTab() {
 
 func (r *Root) cycleGitBreachBranchesTab(delta int) {
 	const tabCount = 3
-	r.gitBreach.BranchesTab = gitBreachBranchesTab((int(r.gitBreach.BranchesTab) + delta + tabCount) % tabCount)
+	r.setGitBreachBranchesTab(gitBreachBranchesTab((int(r.gitBreach.BranchesTab) + delta + tabCount) % tabCount))
+}
+
+// setGitBreachBranchesTab switches the Branches box directly to tab
+// and re-renders — shared by cycleGitBreachBranchesTab (Left/Right)
+// and gitBreachFocusBranchesOnClick (clicking a sub-tab label
+// directly), so both land on identical state afterward rather than
+// each re-deriving the same render/refresh sequence.
+func (r *Root) setGitBreachBranchesTab(tab gitBreachBranchesTab) {
+	r.gitBreach.BranchesTab = tab
 	r.renderGitBreachBranches()
 	r.renderGitBreachBranchesHeader()
 	// Focus itself never changes here (still the Branches table before

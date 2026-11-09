@@ -1157,12 +1157,28 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 // same as gitBreachFocusFilesOnClick already does for Files' own
 // header (see its own doc comment for why a header needs this at all:
 // it's its own separate TextView from the table it labels).
+// gitBreachFocusBranchesOnClick focuses the Branches table on any
+// click within its own header — and, if the click actually landed on
+// one of the "Branches"/"Tags"/"Remotes" labels themselves (see
+// BranchesTabSpans, recorded by renderGitBreachBranchesHeader as it
+// builds that text), switches straight to that sub-tab too, giving
+// Left/Right's own keyboard-only cycling a mouse equivalent.
 func (r *Root) gitBreachFocusBranchesOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action == tview.MouseLeftDown && r.gitBreach.BranchesHeader.InRect(event.Position()) {
-		r.app.SetFocus(r.gitBreach.BranchesTable)
-		return tview.MouseConsumed, nil
+	if action != tview.MouseLeftDown || !r.gitBreach.BranchesHeader.InRect(event.Position()) {
+		return action, event
 	}
-	return action, event
+	x, _ := event.Position()
+	rectX, _, _, _ := r.gitBreach.BranchesHeader.GetInnerRect()
+	col := x - rectX
+	for _, span := range r.gitBreach.BranchesTabSpans {
+		if col < span.start || col >= span.end {
+			continue
+		}
+		r.setGitBreachBranchesTab(span.tab)
+		break
+	}
+	r.app.SetFocus(r.gitBreach.BranchesTable)
+	return tview.MouseConsumed, nil
 }
 
 // captureGitBreachCommitsTableKey: Tab switches to the next box, "r"
@@ -1543,20 +1559,52 @@ func (r *Root) renderGitBreachFiles() {
 // Hint): a bold/colored active label would need it turned on for this
 // header specifically, for one glyph's worth of difference.
 func (r *Root) renderGitBreachBranchesHeader() {
-	title := " ● Branches   Tags   Remotes "
+	labels := [...]struct {
+		name string
+		tab  gitBreachBranchesTab
+	}{
+		{"Branches", gitBreachBranchesTabBranches},
+		{"Tags", gitBreachBranchesTabTags},
+		{"Remotes", gitBreachBranchesTabRemotes},
+	}
+
+	var b strings.Builder
+	var spans []gitBreachBranchesTabSpan
+	col := 0
+	write := func(s string) {
+		b.WriteString(s)
+		col += len([]rune(s))
+	}
+
+	write(" ")
+	for i, lbl := range labels {
+		if i > 0 {
+			write("   ")
+		}
+		start := col
+		if lbl.tab == r.gitBreach.BranchesTab {
+			write("● ")
+		} else {
+			write("  ")
+		}
+		write(lbl.name)
+		spans = append(spans, gitBreachBranchesTabSpan{start: start, end: col, tab: lbl.tab})
+	}
+	write(" ")
+
 	filter := r.gitBreach.BranchesFilter
 	switch r.gitBreach.BranchesTab {
 	case gitBreachBranchesTabTags:
-		title = "   Branches  ● Tags   Remotes "
 		filter = r.gitBreach.TagsFilter
 	case gitBreachBranchesTabRemotes:
-		title = "   Branches   Tags  ● Remotes "
 		filter = ""
 	}
 	if filter != "" {
-		title += fmt.Sprintf(" /%s ", filter)
+		write(fmt.Sprintf(" /%s ", filter))
 	}
-	r.gitBreach.BranchesHeader.SetText(title)
+
+	r.gitBreach.BranchesTabSpans = spans
+	r.gitBreach.BranchesHeader.SetText(b.String())
 }
 
 func (r *Root) renderGitBreachBranches() {
