@@ -628,15 +628,10 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		switch r.gitBreach.FilesTab {
 		case gitBreachFilesTabChanges:
 			entries = append(entries,
-				// Left-only here, not "←/→": Right already means
-				// "view diff" on this one sub-tab — see
-				// captureGitBreachFilesTableKey's own doc comment on
-				// why the two meanings never apply to the same
-				// sub-tab at once.
-				hintKey("←", "switch tab", func(r *Root) { r.cycleGitBreachFilesTab(-1) }),
+				hintKey("←/→", "switch tab", func(r *Root) { r.cycleGitBreachFilesTab(1) }),
 				hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }),
 				hintKey("b", "blame", func(r *Root) { r.startGitBreachBlame() }),
-				hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+				hintKey("Enter", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.FilesFilter), func(r *Root) { r.openGitBreachFilesFilter() }),
 			)
 		case gitBreachFilesTabSubmodules:
@@ -1046,18 +1041,19 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 		return nil
 	}
 	if event.Key() == tcell.KeyRight {
-		// On the Changes sub-tab, Right keeps its own long-standing
-		// meaning untouched: jump into Main's own diff for the row
-		// under the cursor. Worktrees/Submodules have no diff of
-		// their own to jump into at all, so Right there instead
-		// cycles forward the same way Left always does — the one
-		// place in this box Right means something other than
-		// "activate Main", deliberately, since the two meanings never
-		// apply to the same sub-tab at once.
+		// Left/Right always cycle this box's own three sub-tabs,
+		// uniformly — Right used to jump into Main's own diff on
+		// Changes specifically, but that broke the symmetry users
+		// actually reach for (Left always works, Right didn't) and
+		// was reverted: see KeyEnter below for Changes' own way into
+		// Main now, the same "Enter is the row-under-cursor action"
+		// shape Branches'/Commits'/Stash' own tables already use.
+		r.cycleGitBreachFilesTab(1)
+		return nil
+	}
+	if event.Key() == tcell.KeyEnter {
 		if r.gitBreach.FilesTab == gitBreachFilesTabChanges {
 			r.activateGitBreachMain()
-		} else {
-			r.cycleGitBreachFilesTab(1)
 		}
 		return nil
 	}

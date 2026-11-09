@@ -1445,10 +1445,10 @@ for at all.
 `Left`/`Right` on the Files box cycle it through its own three
 sub-tabs — Changes (above), Worktrees, and Submodules, one shared
 table either way; clicking a label directly jumps straight to that
-one. `Right` keeps its own existing meaning — jump into Main's own
-diff — specifically on Changes; Worktrees/Submodules have no diff to
-jump into, so `Right` means the same as `Left` there instead (cycle
-forward). Worktrees lists every worktree this repository has (`git
+one. `Enter` jumps into Main's own diff for the row under the cursor
+— on Changes specifically; a no-op on Worktrees/Submodules, which
+have no diff to show. Worktrees lists every worktree this repository
+has (`git
 worktree list --porcelain`) — path, branch (or "(detached)" for one
 on no branch), and lock status; `w` on a Branches row creates a new
 one (see below). Submodules lists each one's own path, status (`git
@@ -1486,9 +1486,9 @@ of this yet.
 | `Tab` / `Shift+Tab` | Switch focus between Files, Branches, Commits and Stash |
 | `Space` | (Files) Stage/unstage the row under the cursor |
 | `b` | (Files) Show the selected file's own blame in Main |
-| `Right` | (Files, Changes sub-tab/Commits/Stash) Jump into Main's own diff |
-| `Left` | (Files, Changes sub-tab) Cycle this box backward through Changes/Worktrees/Submodules |
-| `Left`/`Right` | (Files, Worktrees/Submodules sub-tabs) Cycle this box backward/forward through its own three sub-tabs |
+| `Right` | (Commits/Stash) Jump into Main's own diff |
+| `Left`/`Right` | (Files) Cycle this box backward/forward through its own Changes/Worktrees/Submodules sub-tabs |
+| `Enter` | (Files, Changes sub-tab) Jump into Main's own diff for the row under the cursor — a no-op on Worktrees/Submodules |
 | `Left` / `Right` | (Branches) Cycle backward/forward through the Branches, Tags, and Remotes sub-tabs |
 | `Enter` | (Branches sub-tab) Check out the branch under the cursor, confirming first if the working tree isn't clean |
 | `m` | (Branches sub-tab) Merge the branch under the cursor into whatever is checked out, confirming first if the working tree isn't clean — does nothing on the current branch |
