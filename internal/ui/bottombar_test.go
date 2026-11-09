@@ -19,6 +19,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/consigliere"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/github"
 )
 
 // TestMain isolates every test in this package from whatever the real
@@ -103,6 +104,18 @@ func TestMain(m *testing.M) {
 	notifyPersistPath = func() string { return "" }
 	labelsPersistPath = func() string { return "" }
 	operationsPersistPath = func() string { return "" }
+	// gitBreachPullRequestsAvailable/gitBreachFetchPullRequests: see
+	// their own doc comment in gitbreach.go — a real `gh` on $PATH
+	// (true of this project's own dev machines and of CI runners)
+	// would otherwise dispatch a real `gh pr list` subprocess from
+	// every single openGitBreach call in this package's test suite.
+	gitBreachPullRequestsAvailable = func() bool { return false }
+	gitBreachFetchPullRequests = func(ctx context.Context, root string) (map[string]github.PullRequest, error) {
+		return nil, errors.New("gitBreachFetchPullRequests: no fake installed for this test")
+	}
+	gitBreachOpenPullRequestFunc = func(ctx context.Context, root, branch string) error {
+		return errors.New("gitBreachOpenPullRequestFunc: no fake installed for this test")
+	}
 	// Same reasoning, for the AI Consigliere's own encrypted API-key
 	// store: without this, a test run on a machine that already has a
 	// real ~/.config/breakthrough/apikeys.json (any developer who has

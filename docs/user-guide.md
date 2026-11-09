@@ -1365,7 +1365,7 @@ list.
 |---|---|
 | Status | Branch, ahead/behind, a one-line summary, plus a fourth line naming whichever merge/rebase/cherry-pick/revert is actually in progress, if any |
 | Files | Its own Changes sub-tab: staged/unstaged/untracked changes (Conflicts first, if any), real syntax coloring on every change — `Left`/`Right` cycle this box through Changes/Worktrees/Submodules and back (see below) |
-| Branches | Every local branch, the current one marked — `m` merges it into whatever is checked out, `Left`/`Right` cycle this box through its Tags and Remotes sub-tabs and back (see below) |
+| Branches | Every local branch, the current one marked — `m` merges it into whatever is checked out, a colored circle next to any branch with its own GitHub PR if `gh` is installed, `Left`/`Right` cycle this box through its Tags and Remotes sub-tabs and back (see below) |
 | Commits | The most recent commits, newest first, each colored by its own author, with a lane/branch graph; loads 200 at a time, fetching 200 more automatically once you reach the last loaded row — `d` diffs the selected commit against a picked branch, tag, or other loaded commit; `B` starts a bisect with the selected commit as "good" |
 | Stash | Every stashed change, newest first |
 
@@ -1426,6 +1426,18 @@ taken), then switches the active panel straight into it. No confirm:
 unlike deleting a branch, this never touches anything already on
 disk. Does nothing on the branch already checked out in the main
 worktree itself — git itself would just refuse it.
+
+Only if `gh` (the GitHub CLI) is already installed, each branch with
+its own pull request shows a colored circle next to its name — a
+filled green circle for an open PR, a hollow yellow circle for a
+draft, filled purple for merged, filled red for closed. `o`
+(Branches) opens it in the browser (`gh pr view --web`) — a no-op on
+a branch with no known PR. Fetched once per "jg" open/reload in one
+single `gh pr list` call, not one per branch; no `gh` on `$PATH`
+means simply no icon at all anywhere, never an error — this is a
+purely cosmetic, opt-in feature, matching the "external tool used
+optionally, never a hard dependency" pattern rsync/zstd already
+follow elsewhere in breakthrough.
 
 An unresolved Files row — from a conflicting merge, rebase,
 cherry-pick, revert, or `p` (stash pop, below) — shows every
@@ -1494,6 +1506,7 @@ of this yet.
 | `m` | (Branches sub-tab) Merge the branch under the cursor into whatever is checked out, confirming first if the working tree isn't clean — does nothing on the current branch |
 | `w` | (Branches sub-tab) Create a new linked worktree on the branch under the cursor at a sibling path, switching the active panel into it — does nothing on the current branch |
 | `u` | (Files, Submodules sub-tab) Update the submodule under the cursor (`git submodule update --init`) |
+| `o` | (Branches sub-tab) Open the branch under the cursor's own pull request in the browser — only if `gh` is installed |
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
 | `d` | (Commits) Diff the commit under the cursor against a picked ref — any local branch, tag, or other loaded commit |
 | `s` | (Main, Files' own unstaged diff only) Stage the hunk at the top of the visible area |
