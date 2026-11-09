@@ -1293,9 +1293,14 @@ Lightning Network ⚡️ using the sponsor button above.
   the system's own `git` rather than reimplementing it. Status
   (branch, ahead/behind, a one-line summary, plus which
   merge/rebase/cherry-pick/revert is in progress, if any), Files
-  (staged/unstaged/untracked, conflicts first, syntax-colored diffs —
-  Space stages/unstages the row under the cursor, "b" shows that
-  file's own blame in Main instead, colored by author), Branches
+  (its own Changes sub-tab: staged/unstaged/untracked, conflicts
+  first, syntax-colored diffs — Space stages/unstages the row under
+  the cursor, "b" shows that file's own blame in Main instead, colored
+  by author; Left/Right cycle this box through Changes/Worktrees/
+  Submodules and back, or click a label directly — Right keeps its
+  own "view diff" meaning on Changes specifically, since Worktrees/
+  Submodules have no diff to show; both are currently placeholders),
+  Branches
   (every local branch, checkout on Enter, "m" merges it into whatever
   is currently checked out, delete with "d" — Left/Right cycle this
   box through its own Tags and Remotes sub-tabs and back (or click a

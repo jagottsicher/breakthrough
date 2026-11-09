@@ -78,9 +78,15 @@ type gitBreachState struct {
 	RowIndex          map[int]int
 	FetchErr          error
 	FilesReady        bool
-	Branches          []git.Branch
-	BranchesErr       error
-	BranchesReady     bool
+	// FilesTab switches the Files box between its own sub-tabs —
+	// see gitBreachFilesTab's own doc comment. Reset to
+	// gitBreachFilesTabChanges on every fresh "jg" open, same as
+	// BranchesTab.
+	FilesTab      gitBreachFilesTab
+	FilesTabSpans []gitBreachFilesTabSpan
+	Branches      []git.Branch
+	BranchesErr   error
+	BranchesReady bool
 	// BranchesTab switches the Branches box between its own sub-tabs —
 	// Branches/Tags/Remotes, see renderGitBreachBranchesHeader — one
 	// box, one table, several row kinds, the same "no new box" shape
@@ -221,6 +227,7 @@ func (r *Root) openGitBreach() {
 	// scrolled to 600 commits and reloads doesn't lose that expansion.
 	r.gitBreach.CommitsLimit = git.CommitLogLimit
 	r.gitBreach.BranchesTab = gitBreachBranchesTabBranches
+	r.gitBreach.FilesTab = gitBreachFilesTabChanges
 	r.reloadGitBreach()
 	r.showOverlayWithRestore(gitBreachPage, r.gitBreach.Layout, r.restoreGitBreachFocus)
 }
@@ -305,6 +312,30 @@ func (r *Root) closeGitBreach() {
 // belongs to — the grouping the mockup's own "Staged (n)"/"Unstaged
 // (n)" headers render, and what decides whether Space stages or
 // unstages the row under the cursor (see toggleGitBreachStage).
+// gitBreachFilesTab is which of the Files box's own sub-tabs is
+// currently showing — the same "one box, several row kinds" shape
+// gitBreachBranchesTab already establishes for Branches, applied here
+// instead for Changes/Worktrees/Submodules (feature_ideas.txt's own
+// later Ausbaustufen for this box). Changes is the box's own original,
+// and still only, real content — Worktrees/Submodules start as plain
+// placeholders (see renderGitBreachFiles' own doc comment) until their
+// own later patches fill them in, the same "refactor first, content
+// after" order Remotes' own BranchesTab work already followed.
+type gitBreachFilesTab int
+
+const (
+	gitBreachFilesTabChanges gitBreachFilesTab = iota
+	gitBreachFilesTabWorktrees
+	gitBreachFilesTabSubmodules
+)
+
+// gitBreachFilesTabSpan mirrors gitBreachBranchesTabSpan exactly, for
+// the Files box's own header instead of Branches'.
+type gitBreachFilesTabSpan struct {
+	start, end int
+	tab        gitBreachFilesTab
+}
+
 type gitBreachRowKind int
 
 const (
@@ -905,6 +936,20 @@ func (r *Root) setGitBreachBranchesTab(tab gitBreachBranchesTab) {
 	// FocusFunc) never fires on its own — has to be called directly,
 	// or the hint bar would keep advertising Enter/checkout and "d
 	// delete branch" after switching to Tags, a real, live-caught bug.
+	r.refreshGitBreachHint()
+}
+
+// cycleGitBreachFilesTab/setGitBreachFilesTab mirror
+// cycleGitBreachBranchesTab/setGitBreachBranchesTab exactly, for the
+// Files box's own three sub-tabs instead of Branches'.
+func (r *Root) cycleGitBreachFilesTab(delta int) {
+	const tabCount = 3
+	r.setGitBreachFilesTab(gitBreachFilesTab((int(r.gitBreach.FilesTab) + delta + tabCount) % tabCount))
+}
+
+func (r *Root) setGitBreachFilesTab(tab gitBreachFilesTab) {
+	r.gitBreach.FilesTab = tab
+	r.renderGitBreachFiles()
 	r.refreshGitBreachHint()
 }
 

@@ -379,12 +379,25 @@ func gitBreachBlockFocusSteal(action tview.MouseAction, event *tcell.EventMouse)
 // click on the table's own rows, or — the real, user-reported bug this
 // fixed — the scrollbar column added alongside the table) got swallowed
 // here first and never reached whatever was actually clicked.
+// gitBreachFocusFilesOnClick mirrors gitBreachFocusBranchesOnClick
+// exactly — see its own doc comment — for Files' own three sub-tab
+// labels instead of Branches'.
 func (r *Root) gitBreachFocusFilesOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action == tview.MouseLeftDown && r.gitBreach.FilesHeader.InRect(event.Position()) {
-		r.app.SetFocus(r.gitBreach.FilesTable)
-		return tview.MouseConsumed, nil
+	if action != tview.MouseLeftDown || !r.gitBreach.FilesHeader.InRect(event.Position()) {
+		return action, event
 	}
-	return action, event
+	x, _ := event.Position()
+	rectX, _, _, _ := r.gitBreach.FilesHeader.GetInnerRect()
+	col := x - rectX
+	for _, span := range r.gitBreach.FilesTabSpans {
+		if col < span.start || col >= span.end {
+			continue
+		}
+		r.setGitBreachFilesTab(span.tab)
+		break
+	}
+	r.app.SetFocus(r.gitBreach.FilesTable)
+	return tview.MouseConsumed, nil
 }
 
 // newGitBreachBox is every TextView-bodied box's own shared
@@ -612,12 +625,23 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 	}
 	switch {
 	case r.gitBreach.FilesTable.HasFocus():
-		entries = append(entries,
-			hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }),
-			hintKey("b", "blame", func(r *Root) { r.startGitBreachBlame() }),
-			hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
-			hintKey("/", gitBreachFilterHintLabel(r.gitBreach.FilesFilter), func(r *Root) { r.openGitBreachFilesFilter() }),
-		)
+		switch r.gitBreach.FilesTab {
+		case gitBreachFilesTabChanges:
+			entries = append(entries,
+				// Left-only here, not "←/→": Right already means
+				// "view diff" on this one sub-tab — see
+				// captureGitBreachFilesTableKey's own doc comment on
+				// why the two meanings never apply to the same
+				// sub-tab at once.
+				hintKey("←", "switch tab", func(r *Root) { r.cycleGitBreachFilesTab(-1) }),
+				hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }),
+				hintKey("b", "blame", func(r *Root) { r.startGitBreachBlame() }),
+				hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.FilesFilter), func(r *Root) { r.openGitBreachFilesFilter() }),
+			)
+		default:
+			entries = append(entries, hintKey("←/→", "switch tab", func(r *Root) { r.cycleGitBreachFilesTab(1) }))
+		}
 	case r.gitBreach.BranchesTable.HasFocus():
 		entries = append(entries, hintKey("←/→", "switch tab", func(r *Root) { r.toggleGitBreachBranchesTab() }))
 		switch r.gitBreach.BranchesTab {
@@ -1011,8 +1035,24 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 		r.reverseToggleGitBreachFocus()
 		return nil
 	}
+	if event.Key() == tcell.KeyLeft {
+		r.cycleGitBreachFilesTab(-1)
+		return nil
+	}
 	if event.Key() == tcell.KeyRight {
-		r.activateGitBreachMain()
+		// On the Changes sub-tab, Right keeps its own long-standing
+		// meaning untouched: jump into Main's own diff for the row
+		// under the cursor. Worktrees/Submodules have no diff of
+		// their own to jump into at all, so Right there instead
+		// cycles forward the same way Left always does — the one
+		// place in this box Right means something other than
+		// "activate Main", deliberately, since the two meanings never
+		// apply to the same sub-tab at once.
+		if r.gitBreach.FilesTab == gitBreachFilesTabChanges {
+			r.activateGitBreachMain()
+		} else {
+			r.cycleGitBreachFilesTab(1)
+		}
 		return nil
 	}
 	if event.Key() == tcell.KeyRune {
@@ -1425,12 +1465,52 @@ func (r *Root) renderGitBreachStatus() {
 // as "most of the working tree vanished" rather than "filtered",
 // exactly the kind of silent staleness this project's own
 // conventions elsewhere already guard against.
+// renderGitBreachFilesHeader shows the Files box's own three sub-tab
+// labels (Changes/Worktrees/Submodules), recording each one's own
+// clickable column span as it builds the text — the identical shape
+// renderGitBreachBranchesHeader already establishes for Branches, see
+// its own doc comment on why spans are tracked while building rather
+// than re-measured from the rendered string afterward.
 func (r *Root) renderGitBreachFilesHeader() {
-	title := " Files "
-	if r.gitBreach.FilesFilter != "" {
-		title = fmt.Sprintf(" Files  /%s ", r.gitBreach.FilesFilter)
+	labels := [...]struct {
+		name string
+		tab  gitBreachFilesTab
+	}{
+		{"Changes", gitBreachFilesTabChanges},
+		{"Worktrees", gitBreachFilesTabWorktrees},
+		{"Submodules", gitBreachFilesTabSubmodules},
 	}
-	r.gitBreach.FilesHeader.SetText(title)
+
+	var b strings.Builder
+	var spans []gitBreachFilesTabSpan
+	col := 0
+	write := func(s string) {
+		b.WriteString(s)
+		col += len([]rune(s))
+	}
+
+	write(" ")
+	for i, lbl := range labels {
+		if i > 0 {
+			write("   ")
+		}
+		start := col
+		if lbl.tab == r.gitBreach.FilesTab {
+			write("● ")
+		} else {
+			write("  ")
+		}
+		write(lbl.name)
+		spans = append(spans, gitBreachFilesTabSpan{start: start, end: col, tab: lbl.tab})
+	}
+	write(" ")
+
+	if r.gitBreach.FilesTab == gitBreachFilesTabChanges && r.gitBreach.FilesFilter != "" {
+		write(fmt.Sprintf(" /%s ", r.gitBreach.FilesFilter))
+	}
+
+	r.gitBreach.FilesTabSpans = spans
+	r.gitBreach.FilesHeader.SetText(b.String())
 }
 
 // renderGitBreachFiles rebuilds the Files table: one bold, non-
@@ -1447,6 +1527,23 @@ func (r *Root) renderGitBreachFiles() {
 	r.gitBreach.FilesTable.Clear()
 	r.gitBreach.RowIndex = map[int]int{}
 	r.renderGitBreachFilesHeader()
+
+	switch r.gitBreach.FilesTab {
+	case gitBreachFilesTabWorktrees:
+		// Worktree create-and-switch is its own later patch — for now
+		// this tab is a plain, always-empty placeholder, the same
+		// shape Remotes' own first patch had before Fetch/Push/Pull
+		// filled it in.
+		showTablePlaceholder(r.gitBreach.FilesTable, "Worktrees aren't wired up yet.", r.theme.MutedTextColor)
+		r.cancelGitBreachDiff()
+		r.gitBreach.DiffView.SetText("")
+		return
+	case gitBreachFilesTabSubmodules:
+		showTablePlaceholder(r.gitBreach.FilesTable, "Submodules aren't wired up yet.", r.theme.MutedTextColor)
+		r.cancelGitBreachDiff()
+		r.gitBreach.DiffView.SetText("")
+		return
+	}
 
 	type section struct {
 		label string

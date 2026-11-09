@@ -1364,7 +1364,7 @@ list.
 | Box | Shows |
 |---|---|
 | Status | Branch, ahead/behind, a one-line summary, plus a fourth line naming whichever merge/rebase/cherry-pick/revert is actually in progress, if any |
-| Files | Staged/unstaged/untracked changes (Conflicts first, if any), real syntax coloring on every change |
+| Files | Its own Changes sub-tab: staged/unstaged/untracked changes (Conflicts first, if any), real syntax coloring on every change — `Left`/`Right` cycle this box through Changes/Worktrees/Submodules and back (see below) |
 | Branches | Every local branch, the current one marked — `m` merges it into whatever is checked out, `Left`/`Right` cycle this box through its Tags and Remotes sub-tabs and back (see below) |
 | Commits | The most recent commits, newest first, each colored by its own author, with a lane/branch graph; loads 200 at a time, fetching 200 more automatically once you reach the last loaded row — `d` diffs the selected commit against a picked branch, tag, or other loaded commit; `B` starts a bisect with the selected commit as "good" |
 | Stash | Every stashed change, newest first |
@@ -1434,6 +1434,15 @@ always confirms first (discards any resolution made so far), and `K`
 does nothing during a plain merge, which git itself has no skip step
 for at all.
 
+`Left`/`Right` on the Files box cycle it through its own three
+sub-tabs — Changes (above), Worktrees, and Submodules, one shared
+table either way; clicking a label directly jumps straight to that
+one. `Right` keeps its own existing meaning — jump into Main's own
+diff — specifically on Changes; Worktrees/Submodules have no diff to
+jump into, so `Right` means the same as `Left` there instead (cycle
+forward). Both are currently placeholders — no worktree creation or
+submodule status/update wired up yet.
+
 `Left`/`Right` on the Branches box cycle it through its own three
 sub-tabs — Branches (above), Tags, and Remotes, one shared table
 either way; clicking a label directly jumps straight to that one.
@@ -1462,7 +1471,9 @@ of this yet.
 | `Tab` / `Shift+Tab` | Switch focus between Files, Branches, Commits and Stash |
 | `Space` | (Files) Stage/unstage the row under the cursor |
 | `b` | (Files) Show the selected file's own blame in Main |
-| `Right` | (Files/Commits/Stash) Jump into Main's own diff |
+| `Right` | (Files, Changes sub-tab/Commits/Stash) Jump into Main's own diff |
+| `Left` | (Files, Changes sub-tab) Cycle this box backward through Changes/Worktrees/Submodules |
+| `Left`/`Right` | (Files, Worktrees/Submodules sub-tabs) Cycle this box backward/forward through its own three sub-tabs |
 | `Left` / `Right` | (Branches) Cycle backward/forward through the Branches, Tags, and Remotes sub-tabs |
 | `Enter` | (Branches sub-tab) Check out the branch under the cursor, confirming first if the working tree isn't clean |
 | `m` | (Branches sub-tab) Merge the branch under the cursor into whatever is checked out, confirming first if the working tree isn't clean — does nothing on the current branch |
