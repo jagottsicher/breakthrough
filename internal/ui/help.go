@@ -797,13 +797,24 @@ var helpText = strings.TrimLeft(`
   on it. Several boxes at once rather than one full-screen list: Status
   (branch, ahead/behind, a one-line summary, plus a fourth line
   whenever a merge/rebase/cherry-pick/revert is actually in progress),
-  Files (staged/unstaged/
+  Files (its own Changes sub-tab: staged/unstaged/
   untracked, Conflicts first if any, real syntax coloring on every
-  change), Branches (every local branch, the current one marked —
+  change — Left/Right cycle this box through Changes/Worktrees/
+  Submodules and back, or click a label directly; Right keeps its own
+  "jump into Main" meaning on Changes specifically, since Worktrees/
+  Submodules have no diff to show. Worktrees lists every worktree —
+  path, branch or "(detached)", lock status. Submodules lists each
+  one's own path, status (up to date, modified, uninitialized, or
+  conflicted), and the describe/hash it's pinned to — "u" updates the
+  one under the cursor ("git submodule update --init", not
+  recursive)), Branches (every local branch, the current one marked —
   "m" merges the one under the cursor into whatever is currently
-  checked out (does nothing on the current branch itself) —
+  checked out (does nothing on the current branch itself), "w"
+  creates a new linked worktree on it at a sibling path next to the
+  repository root and switches the active panel straight into it —
   Left/Right cycle this box through its own Tags and Remotes sub-tabs
-  and back (one shared table either way); "a" on Tags creates a new,
+  and back (one shared table either way, or click a label directly —
+  mouse and keyboard reach the same three tabs); "a" on Tags creates a new,
   lightweight tag at HEAD, "d" deletes the one under the cursor after
   confirming, and Enter does nothing — a tag has no checkout
   equivalent; pushing a tag isn't part of this yet. Remotes lists
@@ -951,10 +962,18 @@ var helpText = strings.TrimLeft(`
              without resolving it first) or an untracked file (never
              added to the index, so no history yet) — both show a
              short message instead of attempting it
-    Right    (Files/Commits/Stash) Jump into Main's own diff, giving it
-             real keyboard focus — only shown in the hint bar while one
-             of these three has focus, since Branches has no diff of
-             its own to jump into
+    Right    (Files, Changes sub-tab only/Commits/Stash) Jump into
+             Main's own diff, giving it real keyboard focus — only
+             shown in the hint bar while one of these three has
+             focus, since Branches has no diff of its own to jump into
+    Left     (Files only) Cycle this box backward through its own
+             Changes/Worktrees/Submodules sub-tabs — shown instead of
+             Right on this one box, since Right already means "jump
+             into Main" while Changes is showing
+    Left/    (Files, Worktrees/Submodules sub-tabs only) Cycle this
+    Right    box backward/forward through its own three sub-tabs —
+             Right has no diff to jump into on either of these two,
+             so it means the same as Left here instead
     Left/    (Branches only) Cycle this box backward/forward through
     Right    its own Branches/Tags/Remotes sub-tabs — one shared table
              either way, so nothing else about the focus ring changes

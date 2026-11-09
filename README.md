@@ -1293,12 +1293,24 @@ Lightning Network ⚡️ using the sponsor button above.
   the system's own `git` rather than reimplementing it. Status
   (branch, ahead/behind, a one-line summary, plus which
   merge/rebase/cherry-pick/revert is in progress, if any), Files
-  (staged/unstaged/untracked, conflicts first, syntax-colored diffs —
-  Space stages/unstages the row under the cursor, "b" shows that
-  file's own blame in Main instead, colored by author), Branches
+  (its own Changes sub-tab: staged/unstaged/untracked, conflicts
+  first, syntax-colored diffs — Space stages/unstages the row under
+  the cursor, "b" shows that file's own blame in Main instead, colored
+  by author; Left/Right cycle this box through Changes/Worktrees/
+  Submodules and back, or click a label directly — Right keeps its
+  own "view diff" meaning on Changes specifically, since Worktrees/
+  Submodules have no diff to show. Worktrees lists every worktree
+  (path, branch or "(detached)", lock status). Submodules lists each
+  one's own path and status (up to date, modified, uninitialized, or
+  conflicted) against the describe or hash it's pinned to — "u"
+  updates the one under the cursor (`git submodule update --init`,
+  not recursive)), Branches
   (every local branch, checkout on Enter, "m" merges it into whatever
-  is currently checked out, delete with "d" — Left/Right cycle this
-  box through its own Tags and Remotes sub-tabs and back, "a" to
+  is currently checked out, "w" creates a new linked worktree on it
+  (at a sibling path next to the repository root, switching the
+  active panel straight into it) and delete with "d" — Left/Right cycle this
+  box through its own Tags and Remotes sub-tabs and back (or click a
+  label directly), "a" to
   create a new tag at HEAD, "d" to delete one; Remotes lists every
   configured remote by name and URL, "f" fetches one in the
   background (no confirm — never touches the remote itself, only

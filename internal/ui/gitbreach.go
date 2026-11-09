@@ -33,6 +33,16 @@ const (
 	gitBreachBranchesTabRemotes
 )
 
+// gitBreachBranchesTabSpan is one sub-tab label's own clickable region
+// in BranchesHeader's rendered text — [start, end) is its half-open
+// column range, relative to the header's own inner rect, the same
+// shape tabStripSpan already establishes for the panel's own tab
+// strip.
+type gitBreachBranchesTabSpan struct {
+	start, end int
+	tab        gitBreachBranchesTab
+}
+
 // gitBreachState holds the Git Breach dashboard's own widgets (per
 // pane: Status/Files/Branches/Commits/Stash/Diff), the last read
 // result for each pane, and the Diff pane's own split-view state (see
@@ -68,9 +78,15 @@ type gitBreachState struct {
 	RowIndex          map[int]int
 	FetchErr          error
 	FilesReady        bool
-	Branches          []git.Branch
-	BranchesErr       error
-	BranchesReady     bool
+	// FilesTab switches the Files box between its own sub-tabs —
+	// see gitBreachFilesTab's own doc comment. Reset to
+	// gitBreachFilesTabChanges on every fresh "jg" open, same as
+	// BranchesTab.
+	FilesTab      gitBreachFilesTab
+	FilesTabSpans []gitBreachFilesTabSpan
+	Branches      []git.Branch
+	BranchesErr   error
+	BranchesReady bool
 	// BranchesTab switches the Branches box between its own sub-tabs —
 	// Branches/Tags/Remotes, see renderGitBreachBranchesHeader — one
 	// box, one table, several row kinds, the same "no new box" shape
@@ -78,13 +94,23 @@ type gitBreachState struct {
 	// than Remotes becoming a fifth box of its own. Reset to
 	// gitBreachBranchesTabBranches on every fresh "jg" open (see
 	// openGitBreach), same as CommitsLimit.
-	BranchesTab gitBreachBranchesTab
-	Tags        []git.Tag
-	TagsErr     error
-	// Remotes is read-only for now — see renderGitBreachRemotes' own
-	// doc comment on why (Fetch/Push/Pull are later Phase D patches).
-	Remotes    []git.Remote
-	RemotesErr error
+	BranchesTab   gitBreachBranchesTab
+	Tags          []git.Tag
+	TagsErr       error
+	Remotes       []git.Remote
+	RemotesErr    error
+	Worktrees     []git.Worktree
+	WorktreesErr  error
+	Submodules    []git.Submodule
+	SubmodulesErr error
+	// BranchesTabSpans locates each sub-tab label's own clickable
+	// column range in BranchesHeader's current text — recorded as
+	// renderGitBreachBranchesHeader builds that text, the same
+	// "record spans while building, don't re-measure the string
+	// afterwards" shape tabStripSpan already establishes (see its own
+	// doc comment on why: this avoids ever having to re-derive column
+	// positions from rendered text whose own format could change).
+	BranchesTabSpans []gitBreachBranchesTabSpan
 	// FilesFilter/BranchesFilter/TagsFilter/StashFilter are each
 	// box's own "/" filter — a plain, case-insensitive substring (see
 	// gitBreachFilterMatches), deliberately not the panel's own
@@ -205,6 +231,7 @@ func (r *Root) openGitBreach() {
 	// scrolled to 600 commits and reloads doesn't lose that expansion.
 	r.gitBreach.CommitsLimit = git.CommitLogLimit
 	r.gitBreach.BranchesTab = gitBreachBranchesTabBranches
+	r.gitBreach.FilesTab = gitBreachFilesTabChanges
 	r.reloadGitBreach()
 	r.showOverlayWithRestore(gitBreachPage, r.gitBreach.Layout, r.restoreGitBreachFocus)
 }
@@ -265,6 +292,14 @@ func (r *Root) reloadGitBreach() {
 	r.gitBreach.Remotes = remotes
 	r.gitBreach.RemotesErr = remotesErr
 
+	worktrees, worktreesErr := git.Worktrees(ctx, r.gitBreach.Root)
+	r.gitBreach.Worktrees = worktrees
+	r.gitBreach.WorktreesErr = worktreesErr
+
+	submodules, submodulesErr := git.Submodules(ctx, r.gitBreach.Root)
+	r.gitBreach.Submodules = submodules
+	r.gitBreach.SubmodulesErr = submodulesErr
+
 	commits, commitsErr := git.Log(ctx, r.gitBreach.Root, r.gitBreach.CommitsLimit)
 	r.gitBreach.Commits = commits
 	r.gitBreach.CommitsErr = commitsErr
@@ -289,6 +324,30 @@ func (r *Root) closeGitBreach() {
 // belongs to — the grouping the mockup's own "Staged (n)"/"Unstaged
 // (n)" headers render, and what decides whether Space stages or
 // unstages the row under the cursor (see toggleGitBreachStage).
+// gitBreachFilesTab is which of the Files box's own sub-tabs is
+// currently showing — the same "one box, several row kinds" shape
+// gitBreachBranchesTab already establishes for Branches, applied here
+// instead for Changes/Worktrees/Submodules (feature_ideas.txt's own
+// later Ausbaustufen for this box). Changes is the box's own original,
+// and still only, real content — Worktrees/Submodules start as plain
+// placeholders (see renderGitBreachFiles' own doc comment) until their
+// own later patches fill them in, the same "refactor first, content
+// after" order Remotes' own BranchesTab work already followed.
+type gitBreachFilesTab int
+
+const (
+	gitBreachFilesTabChanges gitBreachFilesTab = iota
+	gitBreachFilesTabWorktrees
+	gitBreachFilesTabSubmodules
+)
+
+// gitBreachFilesTabSpan mirrors gitBreachBranchesTabSpan exactly, for
+// the Files box's own header instead of Branches'.
+type gitBreachFilesTabSpan struct {
+	start, end int
+	tab        gitBreachFilesTab
+}
+
 type gitBreachRowKind int
 
 const (
@@ -585,6 +644,43 @@ func (r *Root) mergeGitBreachBranch(branch string) {
 	r.showError(r.panel.load(r.panel.path))
 }
 
+// openGitBreachCreateWorktree is "w" on a Branches row — creates a new
+// linked worktree on it at a sibling path (see git.WorktreePath's own
+// doc comment for the naming/collision rule) and switches the active
+// panel straight into it, the same "the dashboard's own action just
+// changed what the active panel should be showing" reasoning
+// checkoutGitBreachBranch's own doc comment gives. No confirm: unlike
+// deleting a branch or discarding a resolution, creating a worktree
+// has nothing to lose — it only ever adds a new directory, never
+// touches anything already on disk. Does nothing on the branch
+// currently checked out in the main worktree itself, the same
+// restraint openGitBreachMerge already has for that row, since git
+// itself would just refuse it anyway ("already checked out").
+func (r *Root) openGitBreachCreateWorktree() {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabBranches {
+		return
+	}
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	branch, ok := r.gitBreachBranchAt(row)
+	if !ok || branch.Current {
+		return
+	}
+
+	path, err := git.WorktreePath(r.gitBreach.Root, branch.Name)
+	if err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.AddWorktree(ctx, r.gitBreach.Root, path, branch.Name); err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+	r.showError(r.panel.load(path))
+}
+
 // openGitBreachDeleteBranch is "d" on the Branches table — always
 // confirms first, unlike checkout's own "only ask if there's actually
 // something to lose": deleting a branch is itself the irreversible
@@ -670,6 +766,84 @@ func (r *Root) gitBreachRemoteAt(row int) (git.Remote, bool) {
 		return git.Remote{}, false
 	}
 	return r.gitBreach.Remotes[row], true
+}
+
+// gitBreachWorktreeAt indexes r.gitBreach.Worktrees directly by row —
+// no filter on this sub-tab, same reasoning as gitBreachRemoteAt's
+// own doc comment above.
+func (r *Root) gitBreachWorktreeAt(row int) (git.Worktree, bool) {
+	if row < 0 || row >= len(r.gitBreach.Worktrees) {
+		return git.Worktree{}, false
+	}
+	return r.gitBreach.Worktrees[row], true
+}
+
+// gitBreachSubmoduleAt indexes r.gitBreach.Submodules directly by
+// row — no filter on this sub-tab, same reasoning as
+// gitBreachRemoteAt's own doc comment above.
+func (r *Root) gitBreachSubmoduleAt(row int) (git.Submodule, bool) {
+	if row < 0 || row >= len(r.gitBreach.Submodules) {
+		return git.Submodule{}, false
+	}
+	return r.gitBreach.Submodules[row], true
+}
+
+// openGitBreachSubmoduleUpdate is "u" on a Submodules row — runs `git
+// submodule update --init` on the row under the cursor only, not
+// every submodule at once (matches "f"/"p"/"P" on a single Remotes
+// row, "m"/"w" on a single Branches row — this box's own established
+// pattern of acting on the cursor, never the whole list). No confirm:
+// additive, same reasoning openGitBreachFetchRemote's own doc comment
+// gives — it can only ever bring a submodule's own checkout in line
+// with what the superproject already has it pinned to, never lose
+// anything already committed there.
+func (r *Root) openGitBreachSubmoduleUpdate() {
+	if r.gitBreach.FilesTab != gitBreachFilesTabSubmodules {
+		return
+	}
+	row, _ := r.gitBreach.FilesTable.GetSelection()
+	sm, ok := r.gitBreachSubmoduleAt(row)
+	if !ok {
+		return
+	}
+	r.startGitBreachSubmoduleUpdate(sm.Path)
+}
+
+// startGitBreachSubmoduleUpdate/applyGitBreachSubmoduleUpdate mirror
+// startGitBreachFetchRemote/applyGitBreachFetchRemote exactly — a
+// submodule update clones/fetches from that submodule's own remote,
+// the same unbounded-network-wait shape fetch itself has, so it gets
+// gitBreachNetworkTimeout (60s), not gitBreachFetchTimeout (3s, for
+// the purely local git calls elsewhere in this box). Reloads and
+// reloads the active panel on success — unlike a remote fetch, this
+// one writes real files inside the panel's own directory tree (the
+// submodule's own working copy), the same "a dashboard action just
+// changed what's on disk under the panel" reasoning
+// checkoutGitBreachBranch's own doc comment gives.
+func (r *Root) startGitBreachSubmoduleUpdate(path string) {
+	root := r.gitBreach.Root
+	showTablePlaceholder(r.gitBreach.FilesTable, fmt.Sprintf("Updating %q…", path), r.theme.MutedTextColor)
+
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachNetworkTimeout)
+	r.safeGo("Git breach submodule update", cancel, func() {
+		err := git.UpdateSubmodule(ctx, root, path)
+		cancel()
+		r.app.QueueUpdateDraw(func() {
+			r.applyGitBreachSubmoduleUpdate(root, path, err)
+		})
+	})
+}
+
+func (r *Root) applyGitBreachSubmoduleUpdate(root, path string, err error) {
+	if r.gitBreach.Root != root {
+		return
+	}
+	if err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: update %q: %w", path, err))
+		return
+	}
+	r.reloadGitBreach()
+	r.showError(r.panel.load(r.panel.path))
 }
 
 // openGitBreachFetchRemote is "f" on a Remotes row — no confirm
@@ -872,7 +1046,16 @@ func (r *Root) reverseToggleGitBreachBranchesTab() {
 
 func (r *Root) cycleGitBreachBranchesTab(delta int) {
 	const tabCount = 3
-	r.gitBreach.BranchesTab = gitBreachBranchesTab((int(r.gitBreach.BranchesTab) + delta + tabCount) % tabCount)
+	r.setGitBreachBranchesTab(gitBreachBranchesTab((int(r.gitBreach.BranchesTab) + delta + tabCount) % tabCount))
+}
+
+// setGitBreachBranchesTab switches the Branches box directly to tab
+// and re-renders — shared by cycleGitBreachBranchesTab (Left/Right)
+// and gitBreachFocusBranchesOnClick (clicking a sub-tab label
+// directly), so both land on identical state afterward rather than
+// each re-deriving the same render/refresh sequence.
+func (r *Root) setGitBreachBranchesTab(tab gitBreachBranchesTab) {
+	r.gitBreach.BranchesTab = tab
 	r.renderGitBreachBranches()
 	r.renderGitBreachBranchesHeader()
 	// Focus itself never changes here (still the Branches table before
@@ -880,6 +1063,20 @@ func (r *Root) cycleGitBreachBranchesTab(delta int) {
 	// FocusFunc) never fires on its own — has to be called directly,
 	// or the hint bar would keep advertising Enter/checkout and "d
 	// delete branch" after switching to Tags, a real, live-caught bug.
+	r.refreshGitBreachHint()
+}
+
+// cycleGitBreachFilesTab/setGitBreachFilesTab mirror
+// cycleGitBreachBranchesTab/setGitBreachBranchesTab exactly, for the
+// Files box's own three sub-tabs instead of Branches'.
+func (r *Root) cycleGitBreachFilesTab(delta int) {
+	const tabCount = 3
+	r.setGitBreachFilesTab(gitBreachFilesTab((int(r.gitBreach.FilesTab) + delta + tabCount) % tabCount))
+}
+
+func (r *Root) setGitBreachFilesTab(tab gitBreachFilesTab) {
+	r.gitBreach.FilesTab = tab
+	r.renderGitBreachFiles()
 	r.refreshGitBreachHint()
 }
 
