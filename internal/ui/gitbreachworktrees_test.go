@@ -16,7 +16,11 @@ func TestToggleToWorktreesShowsALinkedWorktree(t *testing.T) {
 	runGitBreach(t, dir, "add", "a.txt")
 	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
 	runGitBreach(t, dir, "branch", "feature-x")
-	other := t.TempDir() + "/linked"
+	tmp, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
+	other := tmp + "/linked"
 	runGitBreach(t, dir, "worktree", "add", "-q", other, "feature-x")
 
 	r := newTestRootForGitBreachDir(t, dir)
@@ -52,7 +56,11 @@ func TestRenderGitBreachWorktreesOnADetachedOneShowsItWithoutABranch(t *testing.
 	}
 	runGitBreach(t, dir, "add", "a.txt")
 	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
-	other := t.TempDir() + "/detached"
+	tmp, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
+	other := tmp + "/detached"
 	runGitBreach(t, dir, "worktree", "add", "-q", "--detach", other)
 
 	r := newTestRootForGitBreachDir(t, dir)

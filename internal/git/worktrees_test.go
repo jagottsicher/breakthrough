@@ -2,8 +2,22 @@ package git
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 )
+
+// realTempDir resolves symlinks in t.TempDir() — on macOS it's under
+// /var/folders, itself a symlink to /private/var/folders, and `git
+// worktree list` reports the resolved form, so a raw t.TempDir()
+// comparison fails there despite being the same directory.
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
+	return dir
+}
 
 func TestWorktreesListsJustTheMainOneByDefault(t *testing.T) {
 	requireGit(t)
@@ -31,7 +45,7 @@ func TestWorktreesListsALinkedWorktreeOnABranch(t *testing.T) {
 	runGit(t, dir, "add", "a.txt")
 	runGit(t, dir, "commit", "-q", "-m", "base")
 	runGit(t, dir, "branch", "feature-x")
-	otherDir := t.TempDir() + "/linked"
+	otherDir := realTempDir(t) + "/linked"
 	runGit(t, dir, "worktree", "add", "-q", otherDir, "feature-x")
 
 	worktrees, err := Worktrees(context.Background(), dir)
@@ -65,7 +79,7 @@ func TestWorktreesReportsADetachedOne(t *testing.T) {
 	writeFile(t, dir, "a.txt", "base")
 	runGit(t, dir, "add", "a.txt")
 	runGit(t, dir, "commit", "-q", "-m", "base")
-	otherDir := t.TempDir() + "/detached"
+	otherDir := realTempDir(t) + "/detached"
 	runGit(t, dir, "worktree", "add", "-q", "--detach", otherDir)
 
 	worktrees, err := Worktrees(context.Background(), dir)
@@ -94,7 +108,7 @@ func TestWorktreesReportsALockedOne(t *testing.T) {
 	runGit(t, dir, "add", "a.txt")
 	runGit(t, dir, "commit", "-q", "-m", "base")
 	runGit(t, dir, "branch", "feature-x")
-	otherDir := t.TempDir() + "/locked"
+	otherDir := realTempDir(t) + "/locked"
 	runGit(t, dir, "worktree", "add", "-q", otherDir, "feature-x")
 	runGit(t, dir, "worktree", "lock", "--reason", "testing", otherDir)
 
