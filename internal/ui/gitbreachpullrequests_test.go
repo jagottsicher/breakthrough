@@ -70,7 +70,7 @@ func TestApplyGitBreachPullRequestsOnFailureLeavesPullRequestsUntouched(t *testi
 	r.openGitBreach()
 	r.gitBreach.PullRequests = map[string]github.PullRequest{"main": {Number: 1}}
 
-	r.applyGitBreachPullRequests(dir, nil, fmt.Errorf("gh: not authenticated"))
+	r.applyGitBreachPullRequests(r.gitBreach.Root, nil, fmt.Errorf("gh: not authenticated"))
 
 	if r.activePage == errorPage {
 		t.Error("activePage = errorPage after a failed gh call, want it silently discarded (cosmetic icon only)")
@@ -88,7 +88,7 @@ func TestApplyGitBreachPullRequestsOnSuccessUpdatesAndRenders(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	r.applyGitBreachPullRequests(dir, map[string]github.PullRequest{"feature-x": {Number: 7, State: github.StateMerged}}, nil)
+	r.applyGitBreachPullRequests(r.gitBreach.Root, map[string]github.PullRequest{"feature-x": {Number: 7, State: github.StateMerged}}, nil)
 
 	row, ok := gitBreachBranchRow(r, "feature-x")
 	if !ok {
@@ -134,7 +134,7 @@ func TestApplyGitBreachOpenPullRequestOnFailureShowsAnError(t *testing.T) {
 	r := newTestRootForGitBreachDir(t, dir)
 	r.openGitBreach()
 
-	r.applyGitBreachOpenPullRequest(dir, "main", fmt.Errorf("gh: no pull requests found"))
+	r.applyGitBreachOpenPullRequest(r.gitBreach.Root, "main", fmt.Errorf("gh: no pull requests found"))
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want %q after a failed open", r.activePage, errorPage)
