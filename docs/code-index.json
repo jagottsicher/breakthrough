@@ -1183,8 +1183,8 @@
     },
     {
       "path": "internal/git/worktrees_test.go",
-      "size": 3211,
-      "sha256": "6be8e1c307a167bcfc3e4592ca7d3c66e6f0f67963f8347a07447cabdb515930"
+      "size": 3674,
+      "sha256": "100296a8c0108db34bb0def7868079542c433f90bbd58385edfbe9a961472c5f"
     },
     {
       "path": "internal/gitstatus/doc.go",
@@ -2428,8 +2428,8 @@
     },
     {
       "path": "internal/ui/gitbreachworktrees_test.go",
-      "size": 2259,
-      "sha256": "417120fa0a377622c2ed1b5cc0e929b4e98d690b3a5a8dba2c2212093dc0c105"
+      "size": 2451,
+      "sha256": "c44966a745833c099c7edae79c9de3c1e433087349f51f25c162ad00bae8fe24"
     },
     {
       "path": "internal/ui/gitstatus.go",
@@ -16882,30 +16882,37 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/worktrees_test.go",
+      "name": "realTempDir",
+      "kind": "function",
+      "line": 13
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/worktrees_test.go",
       "name": "TestWorktreesListsJustTheMainOneByDefault",
       "kind": "function",
-      "line": 8
+      "line": 22
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/worktrees_test.go",
       "name": "TestWorktreesListsALinkedWorktreeOnABranch",
       "kind": "function",
-      "line": 27
+      "line": 41
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/worktrees_test.go",
       "name": "TestWorktreesReportsADetachedOne",
       "kind": "function",
-      "line": 62
+      "line": 76
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/worktrees_test.go",
       "name": "TestWorktreesReportsALockedOne",
       "kind": "function",
-      "line": 90
+      "line": 104
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
@@ -37419,14 +37426,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
@@ -43058,7 +43065,7 @@
       "file": "internal/ui/gitbreachworktrees_test.go",
       "name": "TestRenderGitBreachWorktreesOnADetachedOneShowsItWithoutABranch",
       "kind": "function",
-      "line": 47
+      "line": 51
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43233,14 +43240,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
@@ -58513,14 +58520,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 27
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 27
     },
@@ -68214,5 +68221,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "a838f83f3e57f95b6c884ff53e49f7bcb691df6b0ba8b09874da8f7b9082da9c"
+  "merkle_root": "74b9adfb5cacb8311a785d9dc942c96f651966063823e98bc5b6a446ef99f859"
 }
