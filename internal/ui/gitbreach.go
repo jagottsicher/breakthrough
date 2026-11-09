@@ -638,6 +638,43 @@ func (r *Root) mergeGitBreachBranch(branch string) {
 	r.showError(r.panel.load(r.panel.path))
 }
 
+// openGitBreachCreateWorktree is "w" on a Branches row — creates a new
+// linked worktree on it at a sibling path (see git.WorktreePath's own
+// doc comment for the naming/collision rule) and switches the active
+// panel straight into it, the same "the dashboard's own action just
+// changed what the active panel should be showing" reasoning
+// checkoutGitBreachBranch's own doc comment gives. No confirm: unlike
+// deleting a branch or discarding a resolution, creating a worktree
+// has nothing to lose — it only ever adds a new directory, never
+// touches anything already on disk. Does nothing on the branch
+// currently checked out in the main worktree itself, the same
+// restraint openGitBreachMerge already has for that row, since git
+// itself would just refuse it anyway ("already checked out").
+func (r *Root) openGitBreachCreateWorktree() {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabBranches {
+		return
+	}
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	branch, ok := r.gitBreachBranchAt(row)
+	if !ok || branch.Current {
+		return
+	}
+
+	path, err := git.WorktreePath(r.gitBreach.Root, branch.Name)
+	if err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.AddWorktree(ctx, r.gitBreach.Root, path, branch.Name); err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+	r.showError(r.panel.load(path))
+}
+
 // openGitBreachDeleteBranch is "d" on the Branches table — always
 // confirms first, unlike checkout's own "only ask if there's actually
 // something to lose": deleting a branch is itself the irreversible

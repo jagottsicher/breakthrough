@@ -661,6 +661,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 			entries = append(entries,
 				hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }),
 				hintKey("m", "merge into current", func(r *Root) { r.openGitBreachMerge() }),
+				hintKey("w", "new worktree...", func(r *Root) { r.openGitBreachCreateWorktree() }),
 				hintKey("d", "delete branch", func(r *Root) { r.openGitBreachDeleteBranch() }),
 				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.BranchesFilter), func(r *Root) { r.openGitBreachBranchesOrTagsFilter() }),
 			)
@@ -1166,6 +1167,9 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			return nil
 		case 'm':
 			r.openGitBreachMerge()
+			return nil
+		case 'w':
+			r.openGitBreachCreateWorktree()
 			return nil
 		case 'f':
 			r.openGitBreachFetchRemote()
