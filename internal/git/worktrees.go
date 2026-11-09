@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -63,7 +65,7 @@ func Worktrees(ctx context.Context, root string) ([]Worktree, error) {
 		}
 		cur = Worktree{}
 	}
-	for _, line := range strings.Split(stdout.String(), "\n") {
+	for line := range strings.SplitSeq(stdout.String(), "\n") {
 		if line == "" {
 			flush()
 			continue
@@ -86,4 +88,46 @@ func Worktrees(ctx context.Context, root string) ([]Worktree, error) {
 	}
 	flush()
 	return worktrees, nil
+}
+
+// WorktreePath proposes a sibling directory for a new worktree on
+// branch — "<repo>-<branch>" next to root itself, slashes in branch
+// flattened to "-" since a branch like "feature/x" would otherwise
+// nest a directory no one asked for. If that path already exists, a
+// numeric suffix is appended ("-2", "-3", ...) until a free one is
+// found — git itself refuses to add a worktree at an existing
+// non-empty path, so this check happens before ever shelling out.
+func WorktreePath(root, branch string) (string, error) {
+	root = filepath.Clean(root)
+	parent := filepath.Dir(root)
+	base := filepath.Base(root) + "-" + strings.ReplaceAll(branch, "/", "-")
+	candidate := filepath.Join(parent, base)
+	for i := 2; ; i++ {
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate, nil
+		} else if err != nil {
+			return "", err
+		}
+		candidate = filepath.Join(parent, fmt.Sprintf("%s-%d", base, i))
+	}
+}
+
+// AddWorktree runs `git worktree add <path> <branch>`, checking out
+// branch into a brand-new linked worktree at path — path's own parent
+// must already exist, but path itself must not (git's own
+// requirement, not one this function adds).
+func AddWorktree(ctx context.Context, root, path, branch string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "worktree", "add", path, branch)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("git worktree add: %s", msg)
+		}
+		return fmt.Errorf("git worktree add: %w", err)
+	}
+	return nil
 }

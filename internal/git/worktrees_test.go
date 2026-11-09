@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -128,5 +129,91 @@ func TestWorktreesReportsALockedOne(t *testing.T) {
 	}
 	if !locked.Locked || locked.LockReason != "testing" {
 		t.Errorf("locked = %+v, want Locked=true, LockReason=testing", locked)
+	}
+}
+
+func TestWorktreePathProposesASiblingNamedAfterTheBranch(t *testing.T) {
+	dir := "/repo/breakthrough"
+	path, err := WorktreePath(dir, "feature-x")
+	if err != nil {
+		t.Fatalf("WorktreePath: %v", err)
+	}
+	if want := "/repo/breakthrough-feature-x"; path != want {
+		t.Errorf("WorktreePath(%q, %q) = %q, want %q", dir, "feature-x", path, want)
+	}
+}
+
+func TestWorktreePathFlattensSlashesInTheBranchName(t *testing.T) {
+	dir := "/repo/breakthrough"
+	path, err := WorktreePath(dir, "feature/x")
+	if err != nil {
+		t.Fatalf("WorktreePath: %v", err)
+	}
+	if want := "/repo/breakthrough-feature-x"; path != want {
+		t.Errorf("WorktreePath(%q, %q) = %q, want %q", dir, "feature/x", path, want)
+	}
+}
+
+func TestWorktreePathAppendsASuffixWhenTheCandidateAlreadyExists(t *testing.T) {
+	parent := realTempDir(t)
+	root := filepath.Join(parent, "breakthrough")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	taken := filepath.Join(parent, "breakthrough-feature-x")
+	if err := os.MkdirAll(taken, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	path, err := WorktreePath(root, "feature-x")
+	if err != nil {
+		t.Fatalf("WorktreePath: %v", err)
+	}
+	if want := filepath.Join(parent, "breakthrough-feature-x-2"); path != want {
+		t.Errorf("WorktreePath = %q, want %q", path, want)
+	}
+}
+
+func TestAddWorktreeChecksOutTheBranchAtPath(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	runGit(t, dir, "branch", "feature-x")
+	path := realTempDir(t) + "/linked"
+
+	if err := AddWorktree(context.Background(), dir, path, "feature-x"); err != nil {
+		t.Fatalf("AddWorktree: %v", err)
+	}
+
+	worktrees, err := Worktrees(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Worktrees: %v", err)
+	}
+	var linked *Worktree
+	for i := range worktrees {
+		if worktrees[i].Path == path {
+			linked = &worktrees[i]
+		}
+	}
+	if linked == nil {
+		t.Fatalf("no worktree found at %q among %+v", path, worktrees)
+	}
+	if linked.Branch != "feature-x" {
+		t.Errorf("linked.Branch = %q, want %q", linked.Branch, "feature-x")
+	}
+}
+
+func TestAddWorktreeOnAnAlreadyCheckedOutBranchFails(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	path := realTempDir(t) + "/linked"
+
+	if err := AddWorktree(context.Background(), dir, path, "main"); err == nil {
+		t.Fatal("AddWorktree on the already-checked-out branch, want an error")
 	}
 }

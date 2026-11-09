@@ -77,3 +77,63 @@ func TestRenderGitBreachWorktreesOnADetachedOneShowsItWithoutABranch(t *testing.
 		t.Errorf("detached row text = %q, want it to contain %q", text, "(detached)")
 	}
 }
+
+func TestOpenGitBreachCreateWorktreeAddsALinkedOneAndSwitchesThePanel(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	runGitBreach(t, dir, "branch", "feature-x")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreach.BranchesTable)
+
+	row, ok := gitBreachBranchRow(r, "feature-x")
+	if !ok {
+		t.Fatal("feature-x not found in the Branches table")
+	}
+	r.gitBreach.BranchesTable.Select(row, 0)
+
+	r.openGitBreachCreateWorktree()
+
+	if r.activePage == errorPage {
+		t.Fatalf("activePage = errorPage after creating a worktree, want it to have succeeded")
+	}
+	wantPath := filepath.Join(filepath.Dir(dir), filepath.Base(dir)+"-feature-x")
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Errorf("worktree directory %q missing: %v", wantPath, err)
+	}
+	if r.panel.path != wantPath {
+		t.Errorf("panel.path = %q, want %q (switched into the new worktree)", r.panel.path, wantPath)
+	}
+}
+
+func TestOpenGitBreachCreateWorktreeIsANoOpOnTheCurrentBranch(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreach.BranchesTable)
+
+	row, ok := gitBreachBranchRow(r, "main")
+	if !ok {
+		t.Fatal("main not found in the Branches table")
+	}
+	r.gitBreach.BranchesTable.Select(row, 0)
+
+	r.openGitBreachCreateWorktree()
+
+	if r.activePage == errorPage {
+		t.Errorf("activePage = errorPage, want a silent no-op on the already-checked-out branch")
+	}
+}
