@@ -1303,7 +1303,9 @@ Lightning Network ⚡️ using the sponsor button above.
   (path, branch or "(detached)", lock status) — Submodules is
   currently a placeholder), Branches
   (every local branch, checkout on Enter, "m" merges it into whatever
-  is currently checked out, delete with "d" — Left/Right cycle this
+  is currently checked out, "w" creates a new linked worktree on it
+  (at a sibling path next to the repository root, switching the
+  active panel straight into it) and delete with "d" — Left/Right cycle this
   box through its own Tags and Remotes sub-tabs and back (or click a
   label directly), "a" to
   create a new tag at HEAD, "d" to delete one; Remotes lists every

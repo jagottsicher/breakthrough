@@ -806,7 +806,9 @@ var helpText = strings.TrimLeft(`
   path, branch or "(detached)", lock status — Submodules is currently
   a placeholder), Branches (every local branch, the current one marked —
   "m" merges the one under the cursor into whatever is currently
-  checked out (does nothing on the current branch itself) —
+  checked out (does nothing on the current branch itself), "w"
+  creates a new linked worktree on it at a sibling path next to the
+  repository root and switches the active panel straight into it —
   Left/Right cycle this box through its own Tags and Remotes sub-tabs
   and back (one shared table either way, or click a label directly —
   mouse and keyboard reach the same three tabs); "a" on Tags creates a new,

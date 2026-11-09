@@ -1419,6 +1419,14 @@ nothing on the current branch itself. A conflicting merge isn't an
 error: it lands you in the conflict view below, merge already in
 progress.
 
+`w` (Branches) creates a new linked worktree on the branch under the
+cursor — at a sibling path next to the repository root
+(`<repo>-<branch>`, a numeric suffix added if that path's already
+taken), then switches the active panel straight into it. No confirm:
+unlike deleting a branch, this never touches anything already on
+disk. Does nothing on the branch already checked out in the main
+worktree itself — git itself would just refuse it.
+
 An unresolved Files row — from a conflicting merge, rebase,
 cherry-pick, revert, or `p` (stash pop, below) — shows every
 `<<<<<<<`/`=======`/`>>>>>>>` section in Main instead of an ordinary
@@ -1442,9 +1450,9 @@ diff — specifically on Changes; Worktrees/Submodules have no diff to
 jump into, so `Right` means the same as `Left` there instead (cycle
 forward). Worktrees lists every worktree this repository has (`git
 worktree list --porcelain`) — path, branch (or "(detached)" for one
-on no branch), and lock status. Submodules is currently a placeholder
-— no status/update wired up yet, and worktree creation isn't part of
-this yet either.
+on no branch), and lock status; `w` on a Branches row creates a new
+one (see below). Submodules is currently a placeholder — no
+status/update wired up yet.
 
 `Left`/`Right` on the Branches box cycle it through its own three
 sub-tabs — Branches (above), Tags, and Remotes, one shared table
@@ -1480,6 +1488,7 @@ of this yet.
 | `Left` / `Right` | (Branches) Cycle backward/forward through the Branches, Tags, and Remotes sub-tabs |
 | `Enter` | (Branches sub-tab) Check out the branch under the cursor, confirming first if the working tree isn't clean |
 | `m` | (Branches sub-tab) Merge the branch under the cursor into whatever is checked out, confirming first if the working tree isn't clean — does nothing on the current branch |
+| `w` | (Branches sub-tab) Create a new linked worktree on the branch under the cursor at a sibling path, switching the active panel into it — does nothing on the current branch |
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
 | `d` | (Commits) Diff the commit under the cursor against a picked ref — any local branch, tag, or other loaded commit |
 | `s` | (Main, Files' own unstaged diff only) Stage the hunk at the top of the visible area |
