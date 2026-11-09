@@ -9,6 +9,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/git"
+	"github.com/jagottsicher/breakthrough/internal/github"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
@@ -662,6 +663,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 				hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }),
 				hintKey("m", "merge into current", func(r *Root) { r.openGitBreachMerge() }),
 				hintKey("w", "new worktree...", func(r *Root) { r.openGitBreachCreateWorktree() }),
+				hintKey("o", "open PR", func(r *Root) { r.openGitBreachPullRequest() }),
 				hintKey("d", "delete branch", func(r *Root) { r.openGitBreachDeleteBranch() }),
 				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.BranchesFilter), func(r *Root) { r.openGitBreachBranchesOrTagsFilter() }),
 			)
@@ -1174,6 +1176,9 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			return nil
 		case 'w':
 			r.openGitBreachCreateWorktree()
+			return nil
+		case 'o':
+			r.openGitBreachPullRequest()
 			return nil
 		case 'f':
 			r.openGitBreachFetchRemote()
@@ -1708,6 +1713,27 @@ func (r *Root) renderGitBreachBranchesHeader() {
 	r.gitBreach.BranchesHeader.SetText(b.String())
 }
 
+// gitBreachPullRequestIcon renders one branch row's own PR status —
+// "●" for Open/Merged/Closed, "○" (hollow) for Draft specifically
+// (feature_ideas.txt's own item 20, decided this exact way: a filled
+// vs. hollow circle for draft, not a fourth color, since draft is a
+// different kind of "not ready" than closed/merged are). Wrapped in
+// its own inline color tag (wrapColor) rather than the cell's own
+// SetTextColor — this icon's color is independent of whether the row
+// is also the current branch (EntryExecutable green).
+func gitBreachPullRequestIcon(r *Root, state github.State) string {
+	switch state {
+	case github.StateDraft:
+		return wrapColor(r.theme.WarningText, "○")
+	case github.StateMerged:
+		return wrapColor(tcell.ColorMediumPurple, "●")
+	case github.StateClosed:
+		return wrapColor(r.theme.EntryError, "●")
+	default: // github.StateOpen
+		return wrapColor(r.theme.EntryExecutable, "●")
+	}
+}
+
 func (r *Root) renderGitBreachBranches() {
 	r.gitBreach.BranchesTable.Clear()
 	r.renderGitBreachBranchesHeader()
@@ -1748,6 +1774,15 @@ func (r *Root) renderGitBreachBranches() {
 	// plain text color — the current branch reads as the single
 	// obvious answer to "which one am I on" at a glance rather than
 	// needing a separate marker column.
+	//
+	// gitBreachPullRequestIcon is the one glyph rather than wired
+	// into the loop below directly, since it needs r.theme (resolving
+	// Open/Closed against the active color scheme) but Merged
+	// deliberately doesn't — GitHub's own purple "Merged" badge has
+	// no equivalent anywhere in this app's themed palette, so it's a
+	// fixed color here, the same "a few specific badges use a fixed
+	// palette instead of the theme" precedent gitBreachAuthorColors/
+	// gitBreachLaneColor already set for author/lane coloring.
 	r.gitBreach.BranchesShown = nil
 	for _, b := range r.gitBreach.Branches {
 		if !gitBreachFilterMatches(r.gitBreach.BranchesFilter, b.Name) {
@@ -1757,6 +1792,9 @@ func (r *Root) renderGitBreachBranches() {
 		text, color := "  "+b.Name, r.theme.Text
 		if b.Current {
 			text, color = "* "+b.Name, r.theme.EntryExecutable
+		}
+		if pr, ok := r.gitBreach.PullRequests[b.Name]; ok {
+			text += " " + gitBreachPullRequestIcon(r, pr.State)
 		}
 		r.gitBreach.BranchesTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(color))
 		row++
