@@ -852,8 +852,10 @@ var helpText = strings.TrimLeft(`
   instead (see the key list below). Tab/Shift-Tab switches keyboard
   focus forwards/backwards
   between Files, Branches, Commits and Stash, the dashboard's own four
-  real, navigable boxes so far — no action on a Commits row yet
-  (checkout/revert/cherry-pick/reset are later Ausbaustufen). A Stash
+  real, navigable boxes. Still no checkout/revert/reset on a Commits
+  row directly, but "d" diffs it against a picked branch/tag/other
+  commit, "P" cherry-picks a chosen branch/tag/commit onto whatever is
+  currently checked out, and "B" starts a bisect with it as "good". A Stash
   row can be applied, popped (apply and drop in one step), or dropped
   alone — see the key list below. Commits also draws a lane/branch graph to the left of each
   row — a merge commit forks its extra parents into their own, newly
