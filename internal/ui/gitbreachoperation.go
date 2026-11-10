@@ -27,11 +27,28 @@ func (r *Root) openGitBreachOperationContinue() {
 	if r.gitBreach.Operation == git.OperationNone {
 		return
 	}
+	// A conflicting `git flow feature finish` is a plain `git merge`
+	// underneath (see git.GitFlowFeatureFinish's own doc comment) —
+	// git.ContinueOperation below finishes that merge exactly the same
+	// way it would for any other one, but git flow's own cleanup step
+	// (deleting the now-fully-merged feature branch) never ran, since
+	// it never got the chance to. Captured before ContinueOperation
+	// runs: completing the merge consumes .git/MERGE_MSG, the only
+	// record of which finish this conflict belonged to.
+	pendingFeature := r.gitBreach.PendingGitFlowFinish
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
 	if err := git.ContinueOperation(ctx, r.gitBreach.Root, r.gitBreach.Operation); err != nil {
 		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
 		return
+	}
+	if pendingFeature != "" {
+		// Best-effort: the merge itself already landed on develop
+		// either way, so a refusal here (an unrelated worktree still
+		// has this branch checked out, say) only ever leaves a stale
+		// branch name behind — never a real failure worth its own
+		// error overlay over what Continue already accomplished.
+		_ = git.DeleteBranch(ctx, r.gitBreach.Root, r.gitBreach.GitFlowFeaturePrefix+pendingFeature)
 	}
 	r.reloadGitBreach()
 }

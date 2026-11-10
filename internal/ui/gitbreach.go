@@ -113,6 +113,20 @@ type gitBreachState struct {
 	// fetch itself, so this stays nil silently rather than ever
 	// reaching an error overlay for a merely-missing optional tool.
 	PullRequests map[string]github.PullRequest
+	// GitFlowAvailable/GitFlowFeaturePrefix are refreshed on every
+	// reloadGitBreach, both local/cheap enough (one $PATH lookup, two
+	// `git config --get` calls — see git.GitFlowAvailable's own doc
+	// comment) to run synchronously there unlike PullRequests above.
+	// GitFlowFeaturePrefix is only meaningful while GitFlowAvailable
+	// is true.
+	GitFlowAvailable     bool
+	GitFlowFeaturePrefix string
+	// PendingGitFlowFinish is the feature name a conflicting "git flow
+	// feature finish" left mid-merge, read straight out of
+	// .git/MERGE_MSG on every reload — see
+	// git.PendingGitFlowFinish's own doc comment on why this is never
+	// tracked as separate UI state.
+	PendingGitFlowFinish string
 	// BranchesTabSpans locates each sub-tab label's own clickable
 	// column range in BranchesHeader's current text — recorded as
 	// renderGitBreachBranchesHeader builds that text, the same
@@ -309,6 +323,19 @@ func (r *Root) reloadGitBreach() {
 	submodules, submodulesErr := git.Submodules(ctx, r.gitBreach.Root)
 	r.gitBreach.Submodules = submodules
 	r.gitBreach.SubmodulesErr = submodulesErr
+
+	r.gitBreach.GitFlowAvailable = git.GitFlowAvailable(ctx, r.gitBreach.Root)
+	r.gitBreach.GitFlowFeaturePrefix = ""
+	if r.gitBreach.GitFlowAvailable {
+		_, featurePrefix, _ := git.GitFlowConfig(ctx, r.gitBreach.Root)
+		r.gitBreach.GitFlowFeaturePrefix = featurePrefix
+	}
+	r.gitBreach.PendingGitFlowFinish = ""
+	if r.gitBreach.GitFlowAvailable && r.gitBreach.Operation == git.OperationMerge {
+		if name, ok := git.PendingGitFlowFinish(r.gitBreach.Root); ok {
+			r.gitBreach.PendingGitFlowFinish = name
+		}
+	}
 
 	commits, commitsErr := git.Log(ctx, r.gitBreach.Root, r.gitBreach.CommitsLimit)
 	r.gitBreach.Commits = commits
@@ -810,6 +837,81 @@ func (r *Root) applyGitBreachOpenPullRequest(root, branch string, err error) {
 	if err != nil {
 		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: open PR for %q: %w", branch, err))
 	}
+}
+
+// openGitBreachGitFlowFeatureStart is "n" on the Branches sub-tab —
+// prompts for a feature name, then runs `git flow feature start
+// <name>` (creates and checks out a new feature/<name> branch off
+// develop). Invisible-not-erroring is this key's own job (the hint
+// bar simply never advertises it): the guard here is a defensive
+// backstop for a stale keypress queued before GitFlowAvailable
+// actually flipped false, the same shape every other "only on this
+// sub-tab" guard already has.
+func (r *Root) openGitBreachGitFlowFeatureStart() {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabBranches || !r.gitBreach.GitFlowAvailable {
+		return
+	}
+	r.prompt.SetLabel("New git-flow feature name ")
+	r.prompt.SetText("")
+	r.promptSubmit = func(name string) {
+		if name == "" {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+		defer cancel()
+		if err := git.GitFlowFeatureStart(ctx, r.gitBreach.Root, name); err != nil {
+			r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+			return
+		}
+		r.reloadGitBreach()
+		r.showError(r.panel.load(r.panel.path))
+	}
+
+	const width, height = 56, 1
+	_, _, screenWidth, screenHeight := r.GetRect()
+	x, y, w, h := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
+	r.prompt.SetRect(x, y, w, h)
+	r.pushOverlay(promptPage, r.prompt, nil)
+}
+
+// openGitBreachGitFlowFeatureFinish is "F" on a Branches row whose
+// own name starts with the configured feature prefix — confirms
+// first, showing the exact command about to run (the same "a
+// potentially destructive, hard-to-preview action always shows the
+// literal command" precedent Push's own confirm already set), since
+// finish both merges and deletes the branch in one step, unlike a
+// plain checkout. A no-op on any other row (the current branch,
+// develop/main themselves, a non-feature branch) — there's nothing
+// for git flow to finish there.
+func (r *Root) openGitBreachGitFlowFeatureFinish() {
+	if r.gitBreach.BranchesTab != gitBreachBranchesTabBranches || !r.gitBreach.GitFlowAvailable {
+		return
+	}
+	row, _ := r.gitBreach.BranchesTable.GetSelection()
+	branch, ok := r.gitBreachBranchAt(row)
+	if !ok {
+		return
+	}
+	name, ok := strings.CutPrefix(branch.Name, r.gitBreach.GitFlowFeaturePrefix)
+	if !ok || name == "" {
+		return
+	}
+	r.openConfirm(
+		fmt.Sprintf("Run %q?", fmt.Sprintf("git flow feature finish %s", name)),
+		"Yes, finish",
+		func() { r.runGitBreachGitFlowFeatureFinish(name) },
+	)
+}
+
+func (r *Root) runGitBreachGitFlowFeatureFinish(name string) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.GitFlowFeatureFinish(ctx, r.gitBreach.Root, name); err != nil {
+		r.showTransientErrorOverOverlay(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+	r.showError(r.panel.load(r.panel.path))
 }
 
 // openGitBreachDeleteBranch is "d" on the Branches table — always

@@ -665,6 +665,14 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 				hintKey("w", "new worktree...", func(r *Root) { r.openGitBreachCreateWorktree() }),
 				hintKey("o", "open PR", func(r *Root) { r.openGitBreachPullRequest() }),
 				hintKey("d", "delete branch", func(r *Root) { r.openGitBreachDeleteBranch() }),
+			)
+			if r.gitBreach.GitFlowAvailable {
+				entries = append(entries,
+					hintKey("n", "new feature...", func(r *Root) { r.openGitBreachGitFlowFeatureStart() }),
+					hintKey("F", "finish feature...", func(r *Root) { r.openGitBreachGitFlowFeatureFinish() }),
+				)
+			}
+			entries = append(entries,
 				hintKey("/", gitBreachFilterHintLabel(r.gitBreach.BranchesFilter), func(r *Root) { r.openGitBreachBranchesOrTagsFilter() }),
 			)
 		}
@@ -1179,6 +1187,12 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			return nil
 		case 'o':
 			r.openGitBreachPullRequest()
+			return nil
+		case 'n':
+			r.openGitBreachGitFlowFeatureStart()
+			return nil
+		case 'F':
+			r.openGitBreachGitFlowFeatureFinish()
 			return nil
 		case 'f':
 			r.openGitBreachFetchRemote()
