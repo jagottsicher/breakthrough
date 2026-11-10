@@ -816,7 +816,13 @@ var helpText = strings.TrimLeft(`
   branch with its own pull request — green open, hollow yellow
   draft, purple merged, red closed — "o" opens it in the browser
   ("gh pr view --web"); no "gh" on $PATH means simply no icon at
-  all, never an error.
+  all, never an error. Only if the repository is already "git flow
+  init"-ed and "git-flow" is on $PATH: "n" starts a new feature
+  ("git flow feature start"), "F" on a feature branch finishes it
+  ("git flow feature finish" — merges into develop and deletes it,
+  always confirming first with the exact command); a conflicting
+  finish lands in the same conflict view, and continuing it deletes
+  the now-fully-merged feature branch too.
   Left/Right cycle this box through its own Tags and Remotes sub-tabs
   and back (one shared table either way, or click a label directly —
   mouse and keyboard reach the same three tabs); "a" on Tags creates a new,
