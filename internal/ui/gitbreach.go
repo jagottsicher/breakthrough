@@ -324,15 +324,18 @@ func (r *Root) reloadGitBreach() {
 	r.gitBreach.Submodules = submodules
 	r.gitBreach.SubmodulesErr = submodulesErr
 
-	r.gitBreach.GitFlowAvailable = git.GitFlowAvailable(ctx, r.gitBreach.Root)
-	r.gitBreach.GitFlowFeaturePrefix = ""
-	if r.gitBreach.GitFlowAvailable {
-		_, featurePrefix, _ := git.GitFlowConfig(ctx, r.gitBreach.Root)
-		r.gitBreach.GitFlowFeaturePrefix = featurePrefix
-	}
+	// One GitFlowAvailable call answers all three questions below —
+	// whether to show the keys at all, which prefix a branch name has
+	// to carry to be finishable, and (together with develop) which
+	// feature a conflicted MERGE_MSG belongs to. Deliberately not three
+	// separate lookups: this runs on every single reload, and the two
+	// `git config --get` processes it costs are the whole budget.
+	develop, featurePrefix, gitFlowOK := git.GitFlowAvailable(ctx, r.gitBreach.Root)
+	r.gitBreach.GitFlowAvailable = gitFlowOK
+	r.gitBreach.GitFlowFeaturePrefix = featurePrefix
 	r.gitBreach.PendingGitFlowFinish = ""
-	if r.gitBreach.GitFlowAvailable && r.gitBreach.Operation == git.OperationMerge {
-		if name, ok := git.PendingGitFlowFinish(r.gitBreach.Root); ok {
+	if gitFlowOK && r.gitBreach.Operation == git.OperationMerge {
+		if name, ok := git.PendingGitFlowFinish(r.gitBreach.Root, develop, featurePrefix); ok {
 			r.gitBreach.PendingGitFlowFinish = name
 		}
 	}

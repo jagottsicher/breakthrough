@@ -2,7 +2,9 @@ package git
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 )
 
@@ -36,28 +38,20 @@ func TestGitFlowAvailableOnAnUninitializedRepoIsFalse(t *testing.T) {
 	runGit(t, dir, "add", "a.txt")
 	runGit(t, dir, "commit", "-q", "-m", "base")
 
-	if GitFlowAvailable(context.Background(), dir) {
+	if _, _, ok := GitFlowAvailable(context.Background(), dir); ok {
 		t.Error("GitFlowAvailable = true on a repo never `git flow init`-ed")
 	}
 }
 
-func TestGitFlowAvailableOnAnInitializedRepoIsTrue(t *testing.T) {
+func TestGitFlowAvailableReadsTheRealPrefixAndDevelopBranch(t *testing.T) {
 	dir := initGitFlowRepo(t)
 
-	if !GitFlowAvailable(context.Background(), dir) {
-		t.Error("GitFlowAvailable = false on a `git flow init`-ed repo")
-	}
-}
-
-func TestGitFlowConfigReadsTheRealPrefixAndDevelopBranch(t *testing.T) {
-	dir := initGitFlowRepo(t)
-
-	develop, prefix, ok := GitFlowConfig(context.Background(), dir)
+	develop, prefix, ok := GitFlowAvailable(context.Background(), dir)
 	if !ok {
-		t.Fatal("GitFlowConfig: ok = false on an initialized repo")
+		t.Fatal("GitFlowAvailable: ok = false on an initialized repo")
 	}
 	if develop != "develop" || prefix != "feature/" {
-		t.Errorf("GitFlowConfig = (%q, %q), want (develop, feature/)", develop, prefix)
+		t.Errorf("GitFlowAvailable = (%q, %q), want (develop, feature/)", develop, prefix)
 	}
 }
 
@@ -131,26 +125,38 @@ func TestGitFlowFeatureFinishOnARealConflictLeavesAMergeInProgress(t *testing.T)
 	if InProgressOperation(dir) != OperationMerge {
 		t.Error("InProgressOperation != OperationMerge after a conflicting finish")
 	}
-	name, ok := PendingGitFlowFinish(dir)
+	name, ok := PendingGitFlowFinish(dir, "develop", "feature/")
 	if !ok || name != "side" {
 		t.Errorf("PendingGitFlowFinish = (%q, %v), want (\"side\", true)", name, ok)
 	}
 }
 
-func TestPendingGitFlowFinishIsFalseWithNoMergeInProgress(t *testing.T) {
-	dir := initGitFlowRepo(t)
+// The PendingGitFlowFinish tests below deliberately need plain git
+// only, never git-flow itself: the function reads .git/MERGE_MSG and
+// matches a regexp, nothing more, so every case it can actually get
+// wrong is reachable by writing that file directly. That also means
+// they keep running on a machine with no "git-flow" installed, where
+// the GitFlow* tests above can only skip.
 
-	if _, ok := PendingGitFlowFinish(dir); ok {
+func TestPendingGitFlowFinishIsFalseWithNoMergeInProgress(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+
+	if _, ok := PendingGitFlowFinish(dir, "develop", "feature/"); ok {
 		t.Error("PendingGitFlowFinish = true with no merge in progress at all")
 	}
 }
 
 func TestPendingGitFlowFinishIsFalseForAnOrdinaryMergeConflict(t *testing.T) {
-	dir := initGitFlowRepo(t)
-	runGit(t, dir, "checkout", "-q", "-b", "plain-side", "develop")
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "base")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "base")
+	runGit(t, dir, "checkout", "-q", "-b", "plain-side")
 	writeFile(t, dir, "a.txt", "plain side change")
 	runGit(t, dir, "commit", "-q", "-am", "plain side change")
-	runGit(t, dir, "checkout", "-q", "develop")
+	runGit(t, dir, "checkout", "-q", "-")
 	writeFile(t, dir, "a.txt", "plain develop change")
 	runGit(t, dir, "commit", "-q", "-am", "plain develop change")
 
@@ -160,7 +166,43 @@ func TestPendingGitFlowFinishIsFalseForAnOrdinaryMergeConflict(t *testing.T) {
 	if InProgressOperation(dir) != OperationMerge {
 		t.Fatal("setup: expected a real merge conflict in progress")
 	}
-	if _, ok := PendingGitFlowFinish(dir); ok {
+	if _, ok := PendingGitFlowFinish(dir, "develop", "feature/"); ok {
 		t.Error("PendingGitFlowFinish = true for an ordinary, non-git-flow merge conflict")
+	}
+}
+
+// TestPendingGitFlowFinishHonoursANonDefaultPrefixAndDevelop covers
+// the half of gitFlowMergeMsgPattern a `git flow init -d` repo can
+// never reach: both names are configurable, and a repo that answered
+// `git flow init` with anything other than the defaults must still be
+// matched — while the default spelling must not match there.
+func TestPendingGitFlowFinishHonoursANonDefaultPrefixAndDevelop(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeMergeMsg(t, dir, "Merge branch 'feat-/thing' into trunk\n")
+
+	name, ok := PendingGitFlowFinish(dir, "trunk", "feat-/")
+	if !ok || name != "thing" {
+		t.Errorf("PendingGitFlowFinish = (%q, %v), want (\"thing\", true)", name, ok)
+	}
+	if _, ok := PendingGitFlowFinish(dir, "develop", "feature/"); ok {
+		t.Error("PendingGitFlowFinish matched the default names against a non-default MERGE_MSG")
+	}
+}
+
+func TestPendingGitFlowFinishIsFalseWithoutAConfiguredPrefix(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeMergeMsg(t, dir, "Merge branch 'feature/thing' into develop\n")
+
+	if _, ok := PendingGitFlowFinish(dir, "", ""); ok {
+		t.Error("PendingGitFlowFinish = true with no git-flow config to match against")
+	}
+}
+
+func writeMergeMsg(t *testing.T, dir, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, ".git", "MERGE_MSG"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

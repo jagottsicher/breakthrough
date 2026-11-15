@@ -9,39 +9,30 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 )
 
-// gitFlowConfigTimeout bounds PendingGitFlowFinish's own two `git
-// config --get` calls — always local, no network, so this is purely
-// a "never hang forever" ceiling, not a real expected duration.
-const gitFlowConfigTimeout = 3 * time.Second
-
-// GitFlowAvailable reports whether `git flow` can actually run here —
-// two independent conditions, both required (feature_ideas.txt's own
+// GitFlowAvailable reports whether `git flow` can actually run here
+// and, when it can, this repository's own `git flow init` choices —
+// develop is gitflow.branch.develop, featurePrefix is
+// gitflow.prefix.feature (e.g. "feature/"). Values plus an "is it
+// really there" bool, the same shape Root's own (root, inRepo, err)
+// already has, so the one caller that needs both gets both from a
+// single pair of `git config --get` runs rather than repeating them.
+//
+// ok requires two independent conditions (feature_ideas.txt's own
 // item 21: "nur falls git flow/git-flow-next tatsächlich installiert
 // ist, sonst nicht sichtbar", the same opt-in pattern GitHub's own PR
 // status already follows): the "git-flow" binary itself on $PATH, and
 // this specific repository already having run `git flow init` — an
-// uninitialized repo has none of the "gitflow.*" config keys below at
-// all, and every `git flow feature ...` there fails with a confusing
-// error rather than a clean "not set up for this". Callers must treat
-// a false result as "feature invisible", never an error row, same as
-// a missing `gh`.
-func GitFlowAvailable(ctx context.Context, root string) bool {
+// uninitialized repo has none of the "gitflow.*" config keys at all,
+// and every `git flow feature ...` there fails with a confusing error
+// rather than a clean "not set up for this". Callers must treat a
+// false ok as "feature invisible", never an error row, same as a
+// missing `gh`.
+func GitFlowAvailable(ctx context.Context, root string) (develop, featurePrefix string, ok bool) {
 	if _, err := exec.LookPath("git-flow"); err != nil {
-		return false
+		return "", "", false
 	}
-	_, _, ok := GitFlowConfig(ctx, root)
-	return ok
-}
-
-// GitFlowConfig reads this repository's own `git flow init` choices —
-// develop is gitflow.branch.develop, featurePrefix is
-// gitflow.prefix.feature (e.g. "feature/"). ok is false if either key
-// is missing, meaning this repository was never `git flow init`-ed at
-// all.
-func GitFlowConfig(ctx context.Context, root string) (develop, featurePrefix string, ok bool) {
 	develop, err1 := configValue(ctx, root, "gitflow.branch.develop")
 	featurePrefix, err2 := configValue(ctx, root, "gitflow.prefix.feature")
 	if err1 != nil || err2 != nil || develop == "" || featurePrefix == "" {
@@ -91,9 +82,13 @@ func GitFlowFeatureFinish(ctx context.Context, root, name string) error {
 	}
 	// A real conflict, not a genuine failure — see
 	// resolvePendingGitFlowFinish's own doc comment for how this gets
-	// completed once the conflict is actually resolved.
-	if _, ok := PendingGitFlowFinish(root); ok {
-		return nil
+	// completed once the conflict is actually resolved. The config
+	// re-read here is on the error path only, never on the dashboard's
+	// own reload path, so it costs nothing anyone waits on.
+	if develop, featurePrefix, configOK := GitFlowAvailable(ctx, root); configOK {
+		if _, pending := PendingGitFlowFinish(root, develop, featurePrefix); pending {
+			return nil
+		}
 	}
 	if msg := strings.TrimSpace(stderr.String()); msg != "" {
 		return fmt.Errorf("git flow feature finish: %s", msg)
@@ -137,14 +132,16 @@ func gitFlowMergeMsgPattern(featurePrefix, develop string) *regexp.Regexp {
 // MERGE_MSG stops existing (not a merge in progress at all) or its
 // content doesn't match a git-flow feature finish's own exact
 // wording — an ordinary merge of some other branch never confuses the
-// two. The config lookup it needs (develop/featurePrefix) is cheap
-// enough — two `git config --get` calls — to redo on every call
-// rather than threading it through from somewhere else.
-func PendingGitFlowFinish(root string) (name string, ok bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitFlowConfigTimeout)
-	defer cancel()
-	develop, featurePrefix, configOK := GitFlowConfig(ctx, root)
-	if !configOK {
+// two.
+//
+// develop/featurePrefix come from the caller's own GitFlowAvailable
+// result rather than being re-read here: every caller already holds
+// them, and reading them again would put two more `git config --get`
+// processes on the dashboard's own reload path for an answer that
+// cannot have changed since. That leaves this a pure file read plus a
+// regexp — no subprocess, so no context to take either.
+func PendingGitFlowFinish(root, develop, featurePrefix string) (name string, ok bool) {
+	if develop == "" || featurePrefix == "" {
 		return "", false
 	}
 	data, err := os.ReadFile(filepath.Join(root, ".git", "MERGE_MSG"))
