@@ -638,6 +638,44 @@ func TestOpenGitBreachCreateTagThenOpenGitBreachDeleteTagRoundTrip(t *testing.T)
 	}
 }
 
+// TestGitBreachPromptOnAnEmptyAnswerDoesNothing pins the contract
+// openGitBreachPrompt's callers (commit message, tag name, git-flow
+// feature name, box filter) all rely on instead of re-checking it:
+// Enter on an empty field closes the prompt and runs nothing at
+// all — not the action, and not an error overlay about the empty
+// input either. Enforced one level down in finishPrompt, which is
+// exactly why it is worth pinning from up here: nothing in this file
+// would otherwise notice that rule changing out from under it.
+func TestGitBreachPromptOnAnEmptyAnswerDoesNothing(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.gitBreach.BranchesTab = gitBreachBranchesTabTags
+	r.renderGitBreachBranches()
+
+	ran := false
+	r.openGitBreachPrompt("Anything ", 56, func(string) { ran = true })
+	if r.activePage != promptPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, promptPage)
+	}
+	r.prompt.SetText("")
+	r.finishPrompt(tcell.KeyEnter)
+
+	if ran {
+		t.Error("onSubmit ran for an empty answer")
+	}
+	if r.activePage == errorPage {
+		t.Error("activePage = errorPage, want an empty answer to be a silent no-op")
+	}
+}
+
 // TestOpenGitBreachDiffAgainstRefListsBranchesTagsAndOtherCommits pins
 // openGitBreachDiffAgainstRef's own picker contents: every local
 // branch, every tag, and every loaded commit except the one under

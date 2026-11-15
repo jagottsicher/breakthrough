@@ -585,35 +585,50 @@ func (r *Root) gitBreachRowAt(row int) (gitBreachRow, bool) {
 	return r.gitBreach.Rows[idx], true
 }
 
-// openGitBreachCommitPrompt is "c" — a commit-message input pushed on
-// top of the dashboard (pushOverlay, not showOverlay/openPrompt: the
-// generic openPrompt closes every open overlay first via
-// showOverlay's own closeAllOverlays, which would dismiss the
-// dashboard itself rather than layer on top of it, the same "layer by
-// layer" shape the Log Audit viewer's own detail modal already uses).
-// Does nothing if nothing is actually staged — committing an empty
-// index would just surface git's own "nothing to commit" error for no
-// reason the user didn't already know about from the Files box itself.
+// openGitBreachPrompt is the dashboard's own one-line text input:
+// a label, a fixed width, and what to do with a non-empty answer.
+//
+// Built on pushOverlay, not showOverlay/openPrompt. The generic
+// openPrompt closes every open overlay first via showOverlay's own
+// closeAllOverlays, which would dismiss Git Breach itself (also an
+// overlay) rather than layer on top of it — a real, live-caught bug
+// (Enter after typing a tag name closed the whole dashboard instead
+// of creating the tag), and the same "layer by layer" shape the Log
+// Audit viewer's own detail modal already uses.
+//
+// width stays an explicit argument rather than being derived from the
+// label the way layoutPrompt does it: what these prompts need room
+// for is the answer, not the question, and how much differs per
+// caller — a commit message wants more of it than a branch name.
+//
+// onSubmit never sees an empty answer: finishPrompt treats Enter on
+// an empty field as Cancel for every prompt in the app, so a caller
+// checking for "" itself only ever adds an unreachable branch. Three
+// of the callers below used to carry exactly that check.
+func (r *Root) openGitBreachPrompt(label string, width int, onSubmit func(text string)) {
+	r.prompt.SetLabel(label)
+	r.prompt.SetText("")
+	r.promptSubmit = onSubmit
+
+	const height = 1
+	_, _, screenWidth, screenHeight := r.GetRect()
+	x, y, w, h := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
+	r.prompt.SetRect(x, y, w, h)
+	r.pushOverlay(promptPage, r.prompt, nil)
+}
+
+// openGitBreachCommitPrompt is "c" — a commit-message input on top of
+// the dashboard (see openGitBreachPrompt on why it is built the way it
+// is). Does nothing if nothing is actually staged — committing an
+// empty index would just surface git's own "nothing to commit" error
+// for no reason the user didn't already know about from the Files box
+// itself.
 func (r *Root) openGitBreachCommitPrompt() {
 	if len(r.gitBreach.Status.Staged) == 0 {
 		r.showError(fmt.Errorf("git breach: nothing staged to commit"))
 		return
 	}
-
-	r.prompt.SetLabel("Commit message ")
-	r.prompt.SetText("")
-	r.promptSubmit = func(text string) {
-		if text == "" {
-			return
-		}
-		r.commitGitBreach(text)
-	}
-
-	const width, height = 60, 1
-	_, _, screenWidth, screenHeight := r.GetRect()
-	x, y, w, h := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
-	r.prompt.SetRect(x, y, w, h)
-	r.pushOverlay(promptPage, r.prompt, nil)
+	r.openGitBreachPrompt("Commit message ", 60, r.commitGitBreach)
 }
 
 // commitGitBreach runs the actual commit and reloads — errors (most
@@ -854,12 +869,7 @@ func (r *Root) openGitBreachGitFlowFeatureStart() {
 	if r.gitBreach.BranchesTab != gitBreachBranchesTabBranches || !r.gitBreach.GitFlowAvailable {
 		return
 	}
-	r.prompt.SetLabel("New git-flow feature name ")
-	r.prompt.SetText("")
-	r.promptSubmit = func(name string) {
-		if name == "" {
-			return
-		}
+	r.openGitBreachPrompt("New git-flow feature name ", 56, func(name string) {
 		ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 		defer cancel()
 		if err := git.GitFlowFeatureStart(ctx, r.gitBreach.Root, name); err != nil {
@@ -868,13 +878,7 @@ func (r *Root) openGitBreachGitFlowFeatureStart() {
 		}
 		r.reloadGitBreach()
 		r.showError(r.panel.load(r.panel.path))
-	}
-
-	const width, height = 56, 1
-	_, _, screenWidth, screenHeight := r.GetRect()
-	x, y, w, h := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
-	r.prompt.SetRect(x, y, w, h)
-	r.pushOverlay(promptPage, r.prompt, nil)
+	})
 }
 
 // openGitBreachGitFlowFeatureFinish is "F" on a Branches row whose
@@ -900,7 +904,7 @@ func (r *Root) openGitBreachGitFlowFeatureFinish() {
 		return
 	}
 	r.openConfirm(
-		fmt.Sprintf("Run %q?", fmt.Sprintf("git flow feature finish %s", name)),
+		fmt.Sprintf("Run %q?", "git flow feature finish "+name),
 		"Yes, finish",
 		func() { r.runGitBreachGitFlowFeatureFinish(name) },
 	)
@@ -1320,22 +1324,10 @@ func (r *Root) setGitBreachFilesTab(tab gitBreachFilesTab) {
 // lightweight tag at HEAD — see git.CreateTag's own doc comment on
 // why never annotated. Only reachable while the Tags sub-tab is
 // showing (see captureGitBreachBranchesTableKey); nothing here needs
-// a row under the cursor, unlike checkout/delete.
-//
-// Built directly on r.pushOverlay rather than the shared openPrompt
-// helper — same reasoning openGitBreachCommitPrompt's own identical
-// shape already has: openPrompt's own showOverlay calls
-// closeAllOverlays first, which would close Git Breach itself (also
-// an overlay) before ever showing the prompt on top of it, a real,
-// live-caught bug (Enter after typing a name closed the whole
-// dashboard instead of creating the tag).
+// a row under the cursor, unlike checkout/delete. See
+// openGitBreachPrompt on why the input itself is built the way it is.
 func (r *Root) openGitBreachCreateTag() {
-	r.prompt.SetLabel("New tag name ")
-	r.prompt.SetText("")
-	r.promptSubmit = func(name string) {
-		if name == "" {
-			return
-		}
+	r.openGitBreachPrompt("New tag name ", 56, func(name string) {
 		ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 		defer cancel()
 		if err := git.CreateTag(ctx, r.gitBreach.Root, name, "HEAD"); err != nil {
@@ -1349,13 +1341,7 @@ func (r *Root) openGitBreachCreateTag() {
 			return
 		}
 		r.reloadGitBreach()
-	}
-
-	const width, height = 56, 1
-	_, _, screenWidth, screenHeight := r.GetRect()
-	x, y, w, h := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
-	r.prompt.SetRect(x, y, w, h)
-	r.pushOverlay(promptPage, r.prompt, nil)
+	})
 }
 
 // openGitBreachDeleteTag confirms, then deletes the tag under the
