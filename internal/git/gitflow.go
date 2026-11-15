@@ -80,9 +80,10 @@ func GitFlowFeatureFinish(ctx context.Context, root, name string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	// A real conflict, not a genuine failure — see
-	// resolvePendingGitFlowFinish's own doc comment for how this gets
-	// completed once the conflict is actually resolved. The config
+	// A real conflict, not a genuine failure — the dashboard's own
+	// openGitBreachOperationContinue is what completes it once the
+	// conflict is actually resolved, including git flow's own
+	// branch-deletion step, which never got to run here. The config
 	// re-read here is on the error path only, never on the dashboard's
 	// own reload path, so it costs nothing anyone waits on.
 	if develop, featurePrefix, configOK := GitFlowAvailable(ctx, root); configOK {

@@ -1128,8 +1128,8 @@
     },
     {
       "path": "internal/git/gitflow.go",
-      "size": 6539,
-      "sha256": "c5b1df988977919863390bc103da27a9e446be10d15a702125c661771c2bfd64"
+      "size": 6613,
+      "sha256": "3c2b28ef47f7090365f1b45f7816309def0d90d58af9c7f76ec429f7bed3e656"
     },
     {
       "path": "internal/git/gitflow_test.go",
@@ -16376,21 +16376,21 @@
       "file": "internal/git/gitflow.go",
       "name": "runGitFlow",
       "kind": "function",
-      "line": 99
+      "line": 100
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/gitflow.go",
       "name": "gitFlowMergeMsgPattern",
       "kind": "function",
-      "line": 120
+      "line": 121
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/gitflow.go",
       "name": "PendingGitFlowFinish",
       "kind": "function",
-      "line": 143
+      "line": 144
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
@@ -69037,5 +69037,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "c38efa127be7541ba66d7c0cba8bd6cb783725a276a8f0168d3cd93e5ac6f92e"
+  "merkle_root": "604480cdf9503ba22cfc8b7ce2914afc6dfd5c4e1078cc0cf700b408c1b8489a"
 }
