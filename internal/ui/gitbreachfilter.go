@@ -35,11 +35,6 @@ func gitBreachFilterHintLabel(filter string) string {
 // if none is active yet. render re-renders that one box afterward;
 // refreshGitBreachHint always runs too, since none of this moves
 // keyboard focus, the usual trigger for a hint-bar refresh.
-//
-// Built directly on r.pushOverlay rather than the shared openPrompt
-// helper — same reasoning openGitBreachCreateTag's own doc comment
-// already gives: openPrompt's own showOverlay would close Git Breach
-// itself first.
 func (r *Root) openGitBreachFilter(label string, get func() string, set func(string), render func()) {
 	if get() != "" {
 		set("")
@@ -48,19 +43,11 @@ func (r *Root) openGitBreachFilter(label string, get func() string, set func(str
 		return
 	}
 
-	r.prompt.SetLabel(label + " ")
-	r.prompt.SetText("")
-	r.promptSubmit = func(text string) {
+	r.openGitBreachPrompt(label+" ", 56, func(text string) {
 		set(text)
 		render()
 		r.refreshGitBreachHint()
-	}
-
-	const width, height = 56, 1
-	_, _, screenWidth, screenHeight := r.GetRect()
-	x, y, w, h := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
-	r.prompt.SetRect(x, y, w, h)
-	r.pushOverlay(promptPage, r.prompt, nil)
+	})
 }
 
 // openGitBreachFilesFilter filters Files by path.

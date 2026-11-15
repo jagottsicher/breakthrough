@@ -1312,7 +1312,15 @@ Lightning Network ⚡️ using the sponsor button above.
   already installed: a colored circle next to any branch with its own
   pull request — green open, hollow yellow draft, purple merged, red
   closed — "o" opens it in the browser (`gh pr view --web`); no `gh`
-  on $PATH means simply no icon at all, never an error. Left/Right cycle this
+  on $PATH means simply no icon at all, never an error. Only if the
+  repository is already `git flow init`-ed and `git-flow` is on
+  $PATH: "n" starts a new feature (`git flow feature start`), "F" on
+  a feature branch finishes it (`git flow feature finish` — merges
+  into develop and deletes it in one step, always confirming first
+  with the exact command); a conflicting finish lands in the same
+  conflict view every other merge does, and continuing it deletes
+  the now-fully-merged feature branch the same way a clean finish
+  already would. Left/Right cycle this
   box through its own Tags and Remotes sub-tabs and back (or click a
   label directly), "a" to
   create a new tag at HEAD, "d" to delete one; Remotes lists every

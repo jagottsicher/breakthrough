@@ -1439,6 +1439,20 @@ purely cosmetic, opt-in feature, matching the "external tool used
 optionally, never a hard dependency" pattern rsync/zstd already
 follow elsewhere in breakthrough.
 
+Only if this repository is already `git flow init`-ed and `git-flow`
+is on `$PATH` (same opt-in pattern as the PR icon above, except both
+conditions have to hold — an uninitialized repository has none of
+`git flow`'s own config keys set at all): `n` (Branches) prompts for a
+name and starts a new feature (`git flow feature start`), creating
+and checking out `feature/<name>` off develop. `F` (Branches) on a
+feature branch finishes it (`git flow feature finish`) — always
+confirms first, showing the exact command — merging it into develop
+and deleting it in one step; a no-op on any branch without the
+configured feature prefix. A conflicting finish lands in the same
+conflict view every other merge does; continuing it deletes the
+now-fully-merged feature branch too, the one cleanup step `git flow`
+itself doesn't get to run when a finish conflicts.
+
 An unresolved Files row — from a conflicting merge, rebase,
 cherry-pick, revert, or `p` (stash pop, below) — shows every
 `<<<<<<<`/`=======`/`>>>>>>>` section in Main instead of an ordinary
@@ -1507,6 +1521,8 @@ of this yet.
 | `w` | (Branches sub-tab) Create a new linked worktree on the branch under the cursor at a sibling path, switching the active panel into it — does nothing on the current branch |
 | `u` | (Files, Submodules sub-tab) Update the submodule under the cursor (`git submodule update --init`) |
 | `o` | (Branches sub-tab) Open the branch under the cursor's own pull request in the browser — only if `gh` is installed |
+| `n` | (Branches sub-tab) Start a new git-flow feature (`git flow feature start`) — only if the repository is `git flow init`-ed and `git-flow` is installed |
+| `F` | (Branches sub-tab) Finish the feature branch under the cursor (`git flow feature finish`), confirming first — same gating as `n` |
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
 | `d` | (Commits) Diff the commit under the cursor against a picked ref — any local branch, tag, or other loaded commit |
 | `s` | (Main, Files' own unstaged diff only) Stage the hunk at the top of the visible area |
