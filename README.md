@@ -105,7 +105,8 @@ another trip over the network, even in a future run,
 a Git breach dashboard (`jg`) for staging, committing, and diffing the
 local git repository containing the active panel's own current
 directory — its own diff pane toggles between a unified pager and a
-side-by-side view (`v`) — an AI Consigliere chat sidebar (`gC`,
+side-by-side view (`v`), and between scrolling long lines sideways and
+wrapping them onto further rows (`w`) — an AI Consigliere chat sidebar (`gC`,
 reachable from anywhere in the app) talking to a real Anthropic/
 OpenAI/DeepSeek/Gemini provider, an Ollama server anywhere reachable
 on the network (not only this same machine — falls back to Ollama's
@@ -870,7 +871,9 @@ Lightning Network ⚡️ using the sponsor button above.
   default sync mode uses, an on-demand SHA-256 hash for a certain
   answer, and a real line-by-line diff — a side-by-side view, each pane
   independently scrollable (Up/Down/Page Up/Page Down, Tab to switch
-  panes) or linked to scroll together via the view's own toggle button
+  panes) or linked to scroll together via the view's own toggle button,
+  with long lines either scrolled sideways or wrapped onto further rows
+  (`w`, or the title bar's own button) with both sides staying aligned
   — for text. Two directories get
   a full screen listing every difference and every one-sided path — a
   one-sided directory is one row, never descended into, so an old
