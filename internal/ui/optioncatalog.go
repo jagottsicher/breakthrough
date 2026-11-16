@@ -1515,6 +1515,39 @@ func optionCategories() []optionCategory {
 			},
 		},
 		{
+			name: "Diff views",
+			options: []optionSpec{
+				boolOption("git_breach_diff_wrap", "Wrap long lines in Git Breach",
+					"Whether a diff line too long for the Main box is broken onto further "+
+						"rows instead of running off the right edge, reachable only by "+
+						"scrolling sideways.\n\n"+
+						"Covers both of Git Breach's own diff views at once — the unified "+
+						"pager and the side-by-side one \"v\" switches to — since those are "+
+						"two presentations of the same content.\n\n"+
+						"Off by default: one row per diff line is how a diff is normally read "+
+						"and counted, and the horizontal scrollbar is still there either way. "+
+						"\"w\" inside the diff, or the \"w\" button in the hint bar, is the "+
+						"quicker way to switch it and switch back.",
+					false,
+					func(r *Root) bool { return r.settings.GitBreachDiffWrap },
+					func(r *Root, b bool) { r.setGitBreachDiffWrap(b) },
+				),
+				boolOption("compare_diff_wrap", "Wrap long lines in Compare Faultline",
+					"The same for Compare Faultline's own two side-by-side panes: a line "+
+						"too long for its pane is broken onto further rows rather than needing "+
+						"a sideways scroll.\n\n"+
+						"Both panes always agree — a wrapped line and its counterpart stay on "+
+						"the same row as each other, so the two sides never drift apart, "+
+						"whether their scrolling is currently linked or not.\n\n"+
+						"Off by default. \"w\", the \"w\" button in the hint bar, or the "+
+						"wrap glyph in the title bar all switch it.",
+					false,
+					func(r *Root) bool { return r.settings.CompareDiffWrap },
+					func(r *Root, b bool) { r.setCompareDiffWrap(b) },
+				),
+			},
+		},
+		{
 			name: "Log Holepunch",
 			options: []optionSpec{
 				stringOption("log_audit_cache_size", "Rotated-file cache size",
@@ -2298,6 +2331,10 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.MoveStableSymlinks), true
 	case "remote_archive_confirm_size":
 		return config.FormatByteSize(s.RemoteArchiveConfirmSize), true
+	case "git_breach_diff_wrap":
+		return strconv.FormatBool(s.GitBreachDiffWrap), true
+	case "compare_diff_wrap":
+		return strconv.FormatBool(s.CompareDiffWrap), true
 	case "log_audit_cache_size":
 		return config.FormatByteSize(s.LogAuditCacheSize), true
 	case "log_audit_disk_cache_enabled":

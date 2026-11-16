@@ -229,6 +229,17 @@ func (r *Root) newGitBreachScreen() {
 	// an identical reason.
 	r.gitBreach.DiffView.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
 		r.renderGitBreachDiffHeader(width, height)
+		// Soft wrap re-renders here for the same reason Compare's own
+		// panes do (see newCompareDiffScreen): this is the only place
+		// the pager's current width is reliably known — root.go's own
+		// handleBeforeDraw runs before the layout has handed it a new
+		// rect. Guarded on the width actually having changed, so an
+		// ordinary redraw doesn't re-wrap the whole diff. The pager has
+		// no border padding, so the rect can go back unchanged.
+		r.gitBreach.DiffPaneWidth = width
+		if r.gitBreachDiffContentWidth() != r.gitBreach.DiffWrapWidth {
+			r.rerenderGitBreachDiffUnified()
+		}
 		return x, y, width, height
 	})
 	// Main is reachable via Right/Enter/Space (see
@@ -722,11 +733,13 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 				},
 				hintKey("Enter/Space", "back", func(r *Root) { r.deactivateGitBreachMain() }),
 				hintKey("v", "unified view", func(r *Root) { r.toggleGitBreachDiffSplit() }),
+				r.gitBreachWrapHintEntry(),
 			)
 		} else {
 			entries = append(entries,
 				hintKey("←/Enter/Space", "back", func(r *Root) { r.deactivateGitBreachMain() }),
 				hintKey("v", "side by side", func(r *Root) { r.toggleGitBreachDiffSplit() }),
+				r.gitBreachWrapHintEntry(),
 			)
 		}
 		if r.gitBreachMainShowsAStageableHunk() {
@@ -758,6 +771,22 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		entries = append(entries, hintKey("Esc", "close", func(r *Root) { r.closeGitBreach() }))
 	}
 	return entries
+}
+
+// gitBreachWrapHintEntry is the hint bar's own soft-wrap toggle,
+// advertised only while Main has focus — "w" does nothing anywhere
+// else on this dashboard, and showing a key the keyboard wouldn't act
+// on is exactly what gitBreachHintEntries' own doc comment argues
+// against. Shown in both of Main's views, since one state covers both
+// (see toggleGitBreachDiffWrap). The label says what pressing it would
+// do and, in brackets, what's true right now — the same two-part
+// wording Compare's own equivalent settled on.
+func (r *Root) gitBreachWrapHintEntry() listHintEntry {
+	label := "wrap long lines (currently off)"
+	if r.settings.GitBreachDiffWrap {
+		label = "stop wrapping (currently on)"
+	}
+	return hintKey("w", label, func(r *Root) { r.toggleGitBreachDiffWrap() })
 }
 
 // refreshGitBreachHint rebuilds the hint bar's own text/spans from
@@ -994,6 +1023,9 @@ func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case 'v':
 			r.toggleGitBreachDiffSplit()
+			return nil
+		case 'w':
+			r.toggleGitBreachDiffWrap()
 			return nil
 		case 's':
 			r.openGitBreachStageHunk()

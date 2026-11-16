@@ -103,14 +103,21 @@ func (r *Root) gitBreachMainShowsAStageableHunk() bool {
 // stage them *into* — those are already-committed history, not the
 // working tree), and gitBreachColorizeDiff guarantees one rendered
 // line per raw line (pinned by its own tests), so Main's scroll
-// offset maps directly onto a raw-line index with no separate
-// tracking of "which line is the cursor on" needed.
+// offset maps onto a raw-line index with no separate tracking of
+// "which line is the cursor on" needed.
+//
+// Soft wrap (see gitBreachRenderDiffUnified) is the one thing that
+// breaks that directness, by turning one rendered line into several
+// rows — gitBreach.DiffRowToRaw is the map back, and reading the
+// offset through sourceLineAtRow means this stages the same hunk
+// either way rather than the wrong one with wrapping on.
 func (r *Root) openGitBreachStageHunk() {
 	if !r.gitBreachMainShowsAStageableHunk() {
 		return
 	}
 
-	topLine, _ := r.gitBreach.DiffView.GetScrollOffset()
+	topRow, _ := r.gitBreach.DiffView.GetScrollOffset()
+	topLine := sourceLineAtRow(r.gitBreach.DiffRowToRaw, topRow)
 	lines := strings.Split(r.gitBreach.DiffRawText, "\n")
 	hunkIndex, ok := gitBreachHunkAt(lines, topLine)
 	if !ok {

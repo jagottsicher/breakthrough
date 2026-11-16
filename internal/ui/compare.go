@@ -90,6 +90,30 @@ type compareState struct {
 	DiffPairs           []compare.LinePair
 	DiffLinked          bool
 	DiffLeftFocused     bool
+
+	// DiffPairStartRows is each DiffPairs entry's own first rendered row,
+	// in document order — the index diffPairAtRow/diffRowForPair read to
+	// carry the reading position across a re-render that changes how
+	// many rows a pair occupies (soft wrap switched, or the pane
+	// resized). Without wrap it is simply 0, 1, 2, …; it is still built
+	// then, so nothing has to care which mode produced it.
+	DiffPairStartRows []int
+
+	// DiffWrapWidth is the content width renderCompareDiff last wrapped
+	// at (0 when it rendered unwrapped — see compareDiffContentWidth).
+	// Kept so the panes' own draw hook can tell a mere redraw from a
+	// real resize and only re-render for the latter; re-rendering on
+	// every draw would mean re-lexing the whole pair list on every
+	// keypress and mouse move.
+	DiffWrapWidth int
+
+	// DiffPaneWidth is one pane's own inner width as of the last draw —
+	// both are always equal (one Flex, both items proportion 1), so one
+	// number covers both. Written by DiffLeft's own draw func rather
+	// than read from GetInnerRect on demand, because the one caller
+	// that matters runs *inside* that draw func, where Box still holds
+	// the previous frame's cached inner rect. 0 before the first draw.
+	DiffPaneWidth int
 }
 
 // comparePathTruncateWidth is how wide a path is allowed to get in
