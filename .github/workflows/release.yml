@@ -7,6 +7,27 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # Re-run the apt/rpm publishing alone, for a tag that is already
+  # released. The tag push above is a one-shot trigger: when
+  # publish-pkg-repo fails on its own (v0.105.0 — the runner image
+  # moved to rpm 6 and broke package signing) the GitHub release,
+  # binaries and Homebrew tap are all already out, so the recovery
+  # must not touch them, which rules out re-pushing the tag just to
+  # get this one job to run again. test/goreleaser are skipped here
+  # for exactly that reason; see each job's own `if`.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing v*.*.* tag whose apt/rpm packages to (re)publish"
+        required: true
+        type: string
+
+# The tag being released, whichever trigger started this run. For a
+# tag push that is the tag itself; for the manual re-run above,
+# github.ref_name would be the branch it was dispatched from, which is
+# never what the package steps want.
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 # contents: write is what lets GoReleaser create the GitHub Release and
 # upload its assets — see goreleaser.com/ci/actions, the current
@@ -25,6 +46,10 @@ jobs:
   # releases without the exact tagged commit passing go vet/lint/test
   # right here, regardless of what already ran (or didn't) on develop.
   test:
+    # Skipped on a manual re-run: that path republishes packages for an
+    # already-released tag, and this job exists to gate the release
+    # itself, which by then has long since happened.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     # Only ever reads this repo's own checkout — narrower than the
     # workflow-level `contents: write` the goreleaser job below
@@ -50,6 +75,11 @@ jobs:
 
   goreleaser:
     needs: test
+    # Skipped on a manual re-run, and this is the whole reason that
+    # trigger exists: `release --clean` against a tag that already has
+    # a published release would recreate it, replacing assets people
+    # may already have downloaded.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -115,6 +145,16 @@ jobs:
   # on the GitHub release.
   publish-pkg-repo:
     needs: goreleaser
+    # always(), because on a manual re-run goreleaser is skipped and a
+    # plain `needs` would skip this job along with it. The explicit
+    # result check keeps the tag-push path strict: a goreleaser that
+    # failed has not uploaded the .deb/.rpm assets this job downloads,
+    # so there would be nothing to publish.
+    if: |
+      always() && (
+        github.event_name == 'workflow_dispatch' ||
+        needs.goreleaser.result == 'success'
+      )
     runs-on: ubuntu-latest
     # Only ever reads from this repo (gh release download) — every
     # write this job does goes to the separate jagottsicher/breakthrough-pkg
@@ -124,6 +164,19 @@ jobs:
     permissions:
       contents: read
     steps:
+      # A typo in the manually-entered tag would otherwise surface
+      # several steps later as a confusing "release not found" from gh,
+      # after the signing key has already been imported.
+      - name: Check the tag exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          case "$RELEASE_TAG" in
+            v*.*.*) ;;
+            *) echo "::error::RELEASE_TAG '$RELEASE_TAG' is not a v*.*.* tag"; exit 1 ;;
+          esac
+          gh release view "$RELEASE_TAG" --repo jagottsicher/breakthrough >/dev/null
+
       - name: Install repo tooling
         run: sudo apt-get update && sudo apt-get install -y reprepro createrepo-c rpm gnupg
 
@@ -141,11 +194,29 @@ jobs:
           echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
           echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
           gpgconf --kill gpg-agent
+          # Deliberately no %__gpg_sign_cmd override: rpm 6 (which
+          # ubuntu-latest started shipping when it migrated to Ubuntu
+          # 26.04, rpm 6.0.1 vs 4.x before) made the low-level signing
+          # macros parametric, so an override written for rpm 4 does
+          # not merely need updating, it stops being honoured as such
+          # — upstream's own 6.0.0 release notes say to drop these
+          # overrides rather than port them. The override that used to
+          # live here also carried the historical "%{__gpg} gpg ..."
+          # idiom, where the second literal "gpg" was argv[0]; under
+          # rpm 6 that word arrives as a filename instead, so gpg
+          # ignored every option after it and failed with "no command
+          # supplied" (v0.105.0's own publish-pkg-repo run).
+          #
+          # %_gpg_sign_cmd_extra_args is the supported way to add the
+          # unattended-signing flags to rpm's own default command, and
+          # it predates this change (rpm 4.18), so this works on both
+          # the old and the new runner image rather than trading one
+          # version lock-in for another.
           printf '%s\n' \
             '%_signature gpg' \
             '%_gpg_name breakthrough package signing' \
-            '%__gpg /usr/bin/gpg' \
-            '%__gpg_sign_cmd %{__gpg} gpg --batch --no-armor --digest-algo sha256 --pinentry-mode loopback --passphrase "" -u "%{_gpg_name}" --detach-sign -o %{__signature_filename} %{__plaintext_filename}' \
+            '%_gpg_digest_algo sha256' \
+            '%_gpg_sign_cmd_extra_args --batch --pinentry-mode loopback' \
             > ~/.rpmmacros
 
       - name: Download release assets
@@ -153,7 +224,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p assets
-          gh release download "${{ github.ref_name }}" \
+          gh release download "$RELEASE_TAG" \
             --repo jagottsicher/breakthrough \
             --pattern '*.deb' --pattern '*.rpm' \
             --dir assets
@@ -261,5 +332,5 @@ jobs:
           cd pkg-repo
           git -c user.name="jagottsicher" -c user.email="jagottsicher@gmx.net" add -A
           git -c user.name="jagottsicher" -c user.email="jagottsicher@gmx.net" \
-            commit -m "Add ${{ github.ref_name }}" || echo "nothing to commit"
+            commit -m "Add $RELEASE_TAG" || echo "nothing to commit"
           git push origin HEAD:main
