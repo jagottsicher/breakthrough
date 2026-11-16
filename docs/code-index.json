@@ -2073,8 +2073,8 @@
     },
     {
       "path": "internal/ui/comparediff_wrap_test.go",
-      "size": 7158,
-      "sha256": "8d0570337e48c27ce0754fcb2472a15439304acec6aab74c0cc812ce0abce6cf"
+      "size": 7992,
+      "sha256": "f19665e60dd7a1e5a3697fa3da27b6ebbe6377eea3ace86744632f2c228456fd"
     },
     {
       "path": "internal/ui/comparetree.go",
@@ -31947,9 +31947,16 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff_wrap_test.go",
+      "name": "TestSetDiffWrapWithoutEverOpeningTheScreens",
+      "kind": "function",
+      "line": 143
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/comparediff_wrap_test.go",
       "name": "TestCompareDiffWrapIsReachableByKeyAndByButton",
       "kind": "function",
-      "line": 141
+      "line": 166
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -69459,5 +69466,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "349e61de8a3427e476ad7c9fa7eb0c214ffe9ca50134ac0d9de703dcba321185"
+  "merkle_root": "27dfb3c1bca0b1882f1240bc82bf254ea188fbb216e6272312ef6a379cff7d36"
 }

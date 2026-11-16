@@ -135,6 +135,31 @@ func TestToggleCompareDiffWrapKeepsTheReadingPosition(t *testing.T) {
 	}
 }
 
+// TestSetDiffWrapWithoutEverOpeningTheScreens pins the Options
+// screen's own path into both toggles: it can reach them with neither
+// diff screen ever having been shown, so every widget and slice they
+// touch has to tolerate being empty rather than panicking on a
+// never-populated view.
+func TestSetDiffWrapWithoutEverOpeningTheScreens(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	r, _ := newCompareRoot(t)
+
+	r.setCompareDiffWrap(true)
+	if !r.settings.CompareDiffWrap {
+		t.Error("compare_diff_wrap did not take")
+	}
+	r.setGitBreachDiffWrap(true)
+	if !r.settings.GitBreachDiffWrap {
+		t.Error("git_breach_diff_wrap did not take")
+	}
+
+	r.setCompareDiffWrap(false)
+	r.setGitBreachDiffWrap(false)
+	if r.settings.CompareDiffWrap || r.settings.GitBreachDiffWrap {
+		t.Error("turning both back off did not take")
+	}
+}
+
 // TestCompareDiffWrapIsReachableByKeyAndByButton pins both halves of
 // the user-facing requirement: "w" does it, and so does clicking the
 // title bar's own glyph — and the hint bar says which key that is.
