@@ -30,8 +30,8 @@ func drawTextViewRow(t *testing.T, text string, width int) string {
 
 	var row strings.Builder
 	for x := 0; x < width; x++ {
-		ch, _, _, _ := screen.GetContent(x, 0)
-		row.WriteRune(ch)
+		cell, _, _ := screen.Get(x, 0)
+		row.WriteString(cell)
 	}
 	return strings.TrimRight(row.String(), " ")
 }

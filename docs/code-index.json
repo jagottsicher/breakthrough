@@ -2238,8 +2238,8 @@
     },
     {
       "path": "internal/ui/diffwrap_test.go",
-      "size": 11960,
-      "sha256": "277133a7b392dc05d1e5ca81116279c582c1c1fe6bec3521616a1f1bb4ffcca5"
+      "size": 11956,
+      "sha256": "27721a841899983de970a2797e5a3c77256bf3da37ebbbbc73a6860f38c701bb"
     },
     {
       "path": "internal/ui/dirpicker.go",
@@ -69466,5 +69466,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "27dfb3c1bca0b1882f1240bc82bf254ea188fbb216e6272312ef6a379cff7d36"
+  "merkle_root": "3e64c75a8429be89603e435f21464e9dbcb19fe85f2f83f3212411640b60596a"
 }
