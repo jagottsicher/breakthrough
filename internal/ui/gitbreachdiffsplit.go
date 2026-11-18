@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -58,6 +59,17 @@ func (r *Root) newGitBreachDiffSplit() {
 	r.gitBreach.DiffSplitLeft.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
 		_, _, headerWidth, _ := r.gitBreach.DiffHeader.GetRect()
 		r.renderGitBreachDiffHeader(headerWidth, height)
+		// Soft wrap re-renders here, for the same reason the unified
+		// pager's own draw func does (see newGitBreachScreen): nowhere
+		// else is this pane's current width reliably known. width here
+		// is one pane's own — which is exactly what's wanted this time,
+		// unlike the header above, since both panes are always the same
+		// width and that is what their content has to fit. Neither pane
+		// has border padding, so the rect goes back unchanged.
+		r.gitBreach.DiffSplitPaneWidth = width
+		if r.gitBreachDiffSplitContentWidth() != r.gitBreach.DiffSplitWrapWidth {
+			r.rerenderGitBreachDiffSplit()
+		}
 		return x, y, width, height
 	})
 	r.gitBreach.DiffSplitLeft.SetFocusFunc(func() {
@@ -269,6 +281,89 @@ func (r *Root) toggleGitBreachDiffSplit() {
 	r.refreshGitBreachHint()
 }
 
+// toggleGitBreachDiffWrap flips soft wrap for Main's diff — "w" from
+// either of its two views, and the hint bar's own "w" button.
+//
+// One state for both views on purpose: the unified pager and the
+// side-by-side one are two presentations of the same content, and
+// having "w" mean something different depending on which side of "v"
+// you're on would be a trap, not a feature. The same reasoning
+// newGitBreachDiffSplit's own doc comment already gives for scrolling
+// being unconditionally linked here.
+func (r *Root) toggleGitBreachDiffWrap() {
+	r.setGitBreachDiffWrap(!r.settings.GitBreachDiffWrap)
+}
+
+// setGitBreachDiffWrap is the Options screen's own entry point to the
+// same state, and what toggleGitBreachDiffWrap defers to — re-render,
+// then write the new value straight back to the config file, the same
+// toggle-and-persist shape setFileIcons already establishes for the
+// "zi" chord rather than leaving Options as the only way to make a
+// display preference stick.
+func (r *Root) setGitBreachDiffWrap(wrap bool) {
+	r.settings.GitBreachDiffWrap = wrap
+	r.rerenderGitBreachDiffUnified()
+	if r.gitBreach.DiffSplit {
+		r.rerenderGitBreachDiffSplit()
+	}
+	r.refreshGitBreachHint()
+	r.persistSetting("git_breach_diff_wrap", strconv.FormatBool(wrap))
+}
+
+// rerenderGitBreachDiffUnified re-renders the unified pager at the
+// current width while keeping the reading position: the diff line at
+// the top of the view stays at the top, even though soft wrap being
+// switched (or Main being resized) changes which row that line is now
+// on. See sourceLineAtRow/rowForSourceLine for the mapping.
+//
+// The column offset is reset whenever the new render actually wraps:
+// nothing overflows any more, so the horizontal scrollbar has hidden
+// itself (horizontalScrollbar.Draw's own maxOffset() <= 0 rule) and a
+// leftover sideways offset would strand the view in blank space with
+// no visible control to get back out of it.
+//
+// Touches the pager alone, never the hint bar: its other caller is the
+// pager's own draw func, where writing to a widget drawn earlier in the
+// same frame would only ever show up one frame late. setGitBreachDiffWrap
+// refreshes the hint itself instead, outside any draw.
+func (r *Root) rerenderGitBreachDiffUnified() {
+	if r.gitBreach.DiffView == nil {
+		return
+	}
+	row, col := r.gitBreach.DiffView.GetScrollOffset()
+	line := sourceLineAtRow(r.gitBreach.DiffRowToRaw, row)
+
+	r.gitBreachRenderDiffUnified()
+
+	if r.gitBreach.DiffWrapWidth > 0 {
+		col = 0
+	}
+	r.gitBreach.DiffView.ScrollTo(rowForSourceLine(r.gitBreach.DiffRowToRaw, line), col)
+}
+
+// rerenderGitBreachDiffSplit is the side-by-side view's own
+// counterpart, keeping position by the emitted unit (file header, gap
+// marker or line pair) the top row belongs to rather than by a line
+// number — see gitBreachRenderDiffSplit's own DiffSplitStartRows. Both
+// panes always land on the same row, which is the invariant this view
+// exists on.
+func (r *Root) rerenderGitBreachDiffSplit() {
+	if r.gitBreach.DiffSplitLeft == nil {
+		return
+	}
+	row, col := r.gitBreach.DiffSplitLeft.GetScrollOffset()
+	unit := diffPairAtRow(r.gitBreach.DiffSplitStartRows, row)
+
+	r.gitBreachRenderDiffSplit()
+
+	if r.gitBreach.DiffSplitWrapWidth > 0 {
+		col = 0
+	}
+	row = diffRowForPair(r.gitBreach.DiffSplitStartRows, unit)
+	r.gitBreach.DiffSplitLeft.ScrollTo(row, col)
+	r.gitBreach.DiffSplitRight.ScrollTo(row, col)
+}
+
 // gitBreachRenderDiffSplit parses gitBreach.DiffRawText (see
 // compare.ParseUnifiedDiff) into gitBreach.DiffFiles and renders it into
 // both panes — one row per LinePair, always the same row on both
@@ -285,28 +380,48 @@ func (r *Root) toggleGitBreachDiffSplit() {
 // Reuses writeCompareDiffLine (comparediff.go) for each content line —
 // the same per-language syntax highlighting plus added/removed
 // background tint, not a second, parallel rendering scheme.
+// With soft wrap on (see gitBreachDiffSplitContentWidth), one pair can
+// occupy several rows, and not necessarily the same number on both
+// sides — writeDiffPairRows pads the shorter side, so the invariant
+// above survives untouched. DiffSplitStartRows records where every
+// emitted unit (file header, gap marker, line pair) begins, which is
+// what lets the reading position survive a re-render at a different
+// width; it is built the same way whether wrapping happens or not.
 func (r *Root) gitBreachRenderDiffSplit() {
 	r.gitBreach.DiffFiles = compare.ParseUnifiedDiff(r.gitBreach.DiffRawText)
 	if len(r.gitBreach.DiffFiles) == 0 {
 		msg := fmt.Sprintf("[%s]nothing to show side by side here.[-]", colorTag(r.theme.MutedTextColor))
+		r.gitBreach.DiffSplitStartRows = nil
+		r.gitBreach.DiffSplitWrapWidth = r.gitBreachDiffSplitContentWidth()
 		r.gitBreach.DiffSplitLeft.SetText(msg)
 		r.gitBreach.DiffSplitRight.SetText(msg)
 		return
 	}
 
 	palette := paletteFor(r.theme.PopupBackground)
+	contentWidth := r.gitBreachDiffSplitContentWidth()
+	r.gitBreach.DiffSplitWrapWidth = contentWidth
+
 	var left, right strings.Builder
+	var starts []int
+	row := 0
 	for i, f := range r.gitBreach.DiffFiles {
 		if i > 0 {
+			starts = append(starts, row)
+			row++
 			left.WriteString("\n")
 			right.WriteString("\n")
 		}
 		header := fmt.Sprintf("[%s::b]%s[-:-:-]\n", colorTag(r.theme.MutedTextColor), tview.Escape(f.Path))
+		starts = append(starts, row)
+		row++
 		left.WriteString(header)
 		right.WriteString(header)
 		for _, p := range f.Pairs {
 			if p.Kind == compare.PairGap {
 				gap := fmt.Sprintf("%s[%s]⋮[-]\n", strings.Repeat(" ", compareDiffGutterWidth+1), colorTag(r.theme.MutedTextColor))
+				starts = append(starts, row)
+				row++
 				left.WriteString(gap)
 				right.WriteString(gap)
 				continue
@@ -322,12 +437,38 @@ func (r *Root) gitBreachRenderDiffSplit() {
 			case compare.PairOnlyRight:
 				rightBg, haveRightBg = gitBreachDiffAddedBackground, true
 			}
-			writeCompareDiffLine(&left, p.LeftNo, p.Left, f.Path, palette, leftBg, haveLeftBg)
-			writeCompareDiffLine(&right, p.RightNo, p.Right, f.Path, palette, rightBg, haveRightBg)
+			starts = append(starts, row)
+			row += writeDiffPairRows(&left, &right,
+				compareDiffLineRows(p.LeftNo, p.Left, f.Path, palette, leftBg, haveLeftBg, contentWidth),
+				compareDiffLineRows(p.RightNo, p.Right, f.Path, palette, rightBg, haveRightBg, contentWidth),
+			)
 		}
 	}
+	r.gitBreach.DiffSplitStartRows = starts
 	r.gitBreach.DiffSplitLeft.SetText(left.String())
 	r.gitBreach.DiffSplitRight.SetText(right.String())
+}
+
+// gitBreachDiffSplitContentWidth is how many columns one split pane's
+// content gets after the line-number gutter, or 0 for "don't wrap" —
+// the exact counterpart of compareDiffContentWidth, including why the
+// width comes from a field the draw func writes rather than from
+// GetInnerRect (see DiffSplitPaneWidth's own comment).
+//
+// Reading the left pane alone is right here for a reason the horizontal
+// scrollbar's own adapter deliberately does not share (see
+// gitBreachDiffSplitContent.totalCols): the two panes are always the
+// same *width*, one Flex with both items at proportion 1 — it is their
+// content that can differ.
+func (r *Root) gitBreachDiffSplitContentWidth() int {
+	if !r.settings.GitBreachDiffWrap {
+		return 0
+	}
+	contentWidth := r.gitBreach.DiffSplitPaneWidth - (compareDiffGutterWidth + 1)
+	if contentWidth < diffWrapMinContentWidth {
+		return 0
+	}
+	return contentWidth
 }
 
 // gitBreachDiffSplitPageStep mirrors compareDiffPageStep exactly.
@@ -453,6 +594,9 @@ func (r *Root) captureGitBreachDiffSplitKey(event *tcell.EventKey) *tcell.EventK
 			return nil
 		case 'v':
 			r.toggleGitBreachDiffSplit()
+			return nil
+		case 'w':
+			r.toggleGitBreachDiffWrap()
 			return nil
 		}
 	}

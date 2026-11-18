@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -29,6 +30,25 @@ const (
 	compareDiffUnlinkedGlyph = '≠'
 )
 
+// compareDiffWrapOnGlyph/compareDiffWrapOffGlyph are the title bar's
+// own soft-wrap button, built the same two-states-of-one-glyph way the
+// link toggle right next to it is. '¶' (PILCROW SIGN, U+00B6) reads as
+// "this line is broken into further rows"; '…' (HORIZONTAL ELLIPSIS,
+// U+2026) as "this line keeps going off the edge" — both single-width
+// and present in any monospace font worth the name (the pilcrow is
+// Latin-1), the same bar this screen's own '='/'≠' pair already had to
+// clear.
+//
+// Unlike those two, neither of these is also a key: the link toggle
+// answers to its own glyph typed as a rune (see
+// captureCompareDiffPaneKey), soft wrap answers to "w". A glyph that
+// isn't on anyone's keyboard would be a worse key than a letter that
+// spells the action, and the hint bar advertises "w" accordingly.
+const (
+	compareDiffWrapOnGlyph  = '¶'
+	compareDiffWrapOffGlyph = '…'
+)
+
 // newCompareDiffScreen builds the side-by-side diff view: a title bar
 // (the link/unlink toggle and a close button, see
 // renderCompareDiffTitleBar) and two independently scrollable panes
@@ -49,6 +69,38 @@ func (r *Root) newCompareDiffScreen() {
 	r.compare.DiffLeft.SetInputCapture(r.captureCompareDiffPaneKey(true))
 	r.compare.DiffLeft.SetMouseCapture(r.captureCompareDiffPaneMouse(true))
 	r.compare.DiffLeft.SetFocusFunc(func() { r.compare.DiffLeftFocused = true })
+	// Soft wrap has to re-render whenever this pane's own width changes,
+	// and this is the only place that width is reliably current.
+	// root.go's own handleBeforeDraw sees the new terminal size first
+	// but runs before the layout has handed the panes their new rects
+	// (its own doc comment spells that out for Properties), and unlike
+	// Properties there'd be no later trigger to correct a stale answer.
+	//
+	// Re-rendering from inside a draw func is safe and lands in the
+	// same frame: TextView.Draw calls DrawForSubclass — which is what
+	// invokes this — before it takes its own lock and reads its text
+	// (checked against tview's own textview.go/box.go, not assumed).
+	// The DiffWrapWidth comparison is what keeps it to actual width
+	// changes: re-lexing every pair on every redraw would cost that on
+	// every keypress and mouse move.
+	//
+	// Returning the inner rect by hand is not optional here. Installing
+	// a draw func at all makes Box cache whatever it returns as the
+	// inner rect (box.go's GetInnerRect short-circuits on it), so
+	// handing back the outer rect unchanged — which is what a draw func
+	// with nothing to say usually does — would silently throw away this
+	// pane's own SetBorderPadding(0, 0, 1, 1) below.
+	r.compare.DiffLeft.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		innerWidth := width - 2
+		if innerWidth < 0 {
+			innerWidth = 0
+		}
+		r.compare.DiffPaneWidth = innerWidth
+		if r.compareDiffContentWidth() != r.compare.DiffWrapWidth {
+			r.rerenderCompareDiff()
+		}
+		return x + 1, y, innerWidth, height
+	})
 
 	r.compare.DiffRight = tview.NewTextView()
 	r.compare.DiffRight.SetDynamicColors(true)
@@ -227,8 +279,24 @@ func (r *Root) compareDiffHintEntries() []listHintEntry {
 		}, label: "scroll sideways"},
 		hintKey("Tab", "switch pane", func(r *Root) { r.cycleCompareDiffFocus() }),
 		r.compareDiffLinkHintEntry(),
+		r.compareDiffWrapHintEntry(),
 		hintKey("Esc", "close", func(r *Root) { r.closeCompareDiff() }),
 	}
+}
+
+// compareDiffWrapHintEntry is the hint bar's own soft-wrap toggle —
+// its key is the letter "w", not the title bar's own wrap glyph (see
+// compareDiffWrapOnGlyph's doc comment on why this one toggle is a
+// letter while the link toggle next to it is its glyph). The label
+// says what pressing it would do and, in brackets, what's true right
+// now, the same two-part wording compareDiffLinkHintEntry settled on
+// after the user's own report that a bare state indicator wasn't clear.
+func (r *Root) compareDiffWrapHintEntry() listHintEntry {
+	label := "wrap long lines (currently off)"
+	if r.settings.CompareDiffWrap {
+		label = "stop wrapping (currently on)"
+	}
+	return hintKey("w", label, func(r *Root) { r.toggleCompareDiffWrap() })
 }
 
 // compareDiffLinkHintEntry is the hint bar's own link/unlink toggle
@@ -400,10 +468,18 @@ func (r *Root) closeCompareDiff() {
 // too (compare.DiffPairs' own Left/Right already carry each side's
 // full reconstructed content, in order) — a separate item, not yet
 // done for this screen.
+// With soft wrap on (see compareDiffContentWidth), a pair can occupy
+// several rows instead of one, and the two sides need not need the same
+// number of them — writeDiffPairRows pads whichever side is shorter, so
+// the "same row on both sides" invariant above survives unchanged.
 func (r *Root) renderCompareDiff() {
 	palette := paletteFor(r.theme.SurfaceBackground)
+	contentWidth := r.compareDiffContentWidth()
+	r.compare.DiffWrapWidth = contentWidth
 
 	var left, right strings.Builder
+	starts := make([]int, 0, len(r.compare.DiffPairs))
+	row := 0
 	for _, p := range r.compare.DiffPairs {
 		leftBg, rightBg := tcell.ColorDefault, tcell.ColorDefault
 		haveLeftBg, haveRightBg := false, false
@@ -416,11 +492,41 @@ func (r *Root) renderCompareDiff() {
 		case compare.PairOnlyRight:
 			rightBg, haveRightBg = gitBreachDiffAddedBackground, true
 		}
-		writeCompareDiffLine(&left, p.LeftNo, p.Left, r.compare.A, palette, leftBg, haveLeftBg)
-		writeCompareDiffLine(&right, p.RightNo, p.Right, r.compare.B, palette, rightBg, haveRightBg)
+		starts = append(starts, row)
+		row += writeDiffPairRows(&left, &right,
+			compareDiffLineRows(p.LeftNo, p.Left, r.compare.A, palette, leftBg, haveLeftBg, contentWidth),
+			compareDiffLineRows(p.RightNo, p.Right, r.compare.B, palette, rightBg, haveRightBg, contentWidth),
+		)
 	}
+	r.compare.DiffPairStartRows = starts
 	r.compare.DiffLeft.SetText(left.String())
 	r.compare.DiffRight.SetText(right.String())
+}
+
+// compareDiffContentWidth is how many columns compareDiffLineRows may
+// fill per row, or 0 for "don't wrap".
+//
+// Reads the left pane's own inner rect rather than the screen width:
+// the two panes split whatever Main's own Flex gives them, minus the
+// separator column and each pane's own scrollbar, and re-deriving that
+// by hand is exactly the kind of layout arithmetic root.go's own
+// handleBeforeDraw doc comment already argues against. Both panes are
+// always the same width (one Flex, both items proportion 1), so one of
+// them is enough to ask.
+//
+// 0 comes back in three cases, all of which mean "render the way this
+// screen always did": soft wrap is off, the pane hasn't been laid out
+// yet (DiffPaneWidth is 0 until the first Draw), or the pane is too
+// narrow to wrap into usefully (see diffWrapMinContentWidth).
+func (r *Root) compareDiffContentWidth() int {
+	if !r.settings.CompareDiffWrap {
+		return 0
+	}
+	contentWidth := r.compare.DiffPaneWidth - (compareDiffGutterWidth + 1)
+	if contentWidth < diffWrapMinContentWidth {
+		return 0
+	}
+	return contentWidth
 }
 
 // compareDiffGutterWidth is how many columns the line-number gutter
@@ -432,30 +538,67 @@ func (r *Root) renderCompareDiff() {
 // in this package for a similarly rare edge case.
 const compareDiffGutterWidth = 4
 
-// writeCompareDiffLine appends one line to b: a right-aligned line
-// number (blank, not "0", when lineNo is 0 — see LinePair's own doc
-// comment on what that means), a space, then content lexed against path
-// via viewer.Highlight/renderSyntax (tview.Escape happens inside
-// renderSyntax itself — see its own doc comment — so content is never
-// escaped twice). When haveBg, the whole content (gutter excluded, the
-// same choice gitBreachColorizeDiffLine makes for its own leading
-// marker column) is wrapped in a background-only tag
-// ("[:#rrggbb:]...[-:-:-]", panel.go's own nameHighlightTags shape) so
-// the tint and the per-language foreground coloring never fight over
-// the same tag.
-func writeCompareDiffLine(b *strings.Builder, lineNo int, content, path string, palette syntaxPalette, bg tcell.Color, haveBg bool) {
+// compareDiffLineRows renders one diff line into the rows it occupies:
+// a right-aligned line number (blank, not "0", when lineNo is 0 — see
+// LinePair's own doc comment on what that means), a space, then content
+// lexed against path via viewer.Highlight/renderSyntax (tview.Escape
+// happens inside renderSyntax itself — see its own doc comment — so
+// content is never escaped twice). When haveBg, the content (gutter
+// excluded, the same choice gitBreachColorizeDiffLine makes for its own
+// leading marker column) carries a background-only tag
+// ("[:#rrggbb:]...", panel.go's own nameHighlightTags shape) so the
+// tint and the per-language foreground coloring never fight over the
+// same tag.
+//
+// contentWidth is how many columns the content gets after the gutter;
+// 0 or less means "don't wrap" and always returns exactly one row,
+// byte-for-byte what this produced before soft wrap existed. Above 0
+// the content is broken into as many rows as it needs (see wrapTagged),
+// each one no wider than contentWidth. Continuation rows get a blank
+// gutter rather than repeating the line number, so the number column
+// still reads as one number per source line.
+//
+// Tabs are expanded against the gutter width before anything else
+// happens, and only in wrap mode — see expandTabs' own doc comment for
+// why measuring them any other way puts the rows it produces off by
+// several columns each.
+//
+// The closing tag differs per row on purpose: every row but the last
+// closes with "[:-:]", which resets only the background and leaves the
+// foreground alone, so a syntax color opened before the break carries
+// into the next row (tview keeps style state across a line break — each
+// textViewLine holds its own, see textview.go's parseAhead). Only the
+// final row closes with the full "[-:-:-]", which is also exactly what
+// an unwrapped line still emits.
+func compareDiffLineRows(lineNo int, content, path string, palette syntaxPalette, bg tcell.Color, haveBg bool, contentWidth int) []string {
+	blankGutter := strings.Repeat(" ", compareDiffGutterWidth+1)
+	gutter := blankGutter
 	if lineNo > 0 {
-		fmt.Fprintf(b, "%*d ", compareDiffGutterWidth, lineNo)
-	} else {
-		b.WriteString(strings.Repeat(" ", compareDiffGutterWidth+1))
+		gutter = fmt.Sprintf("%*d ", compareDiffGutterWidth, lineNo)
 	}
-	highlighted := renderSyntax(viewer.Highlight(path, content), palette)
-	if haveBg {
-		fmt.Fprintf(b, "[:#%06x:]%s[-:-:-]", uint32(bg.Hex())&0xffffff, highlighted)
-	} else {
-		b.WriteString(highlighted)
+
+	if contentWidth > 0 {
+		content = expandTabs(content, compareDiffGutterWidth+1)
 	}
-	b.WriteString("\n")
+	segments := wrapTagged(renderSyntax(viewer.Highlight(path, content), palette), contentWidth)
+
+	rows := make([]string, len(segments))
+	for i, segment := range segments {
+		prefix := blankGutter
+		if i == 0 {
+			prefix = gutter
+		}
+		if !haveBg {
+			rows[i] = prefix + segment
+			continue
+		}
+		closing := "[:-:]"
+		if i == len(segments)-1 {
+			closing = "[-:-:-]"
+		}
+		rows[i] = fmt.Sprintf("%s[:#%06x:]%s%s", prefix, uint32(bg.Hex())&0xffffff, segment, closing)
+	}
+	return rows
 }
 
 // renderCompareDiffTitleBar sets the title bar's own text: the label,
@@ -472,14 +615,19 @@ func (r *Root) renderCompareDiffTitleBar() {
 	if r.compare.DiffLinked {
 		glyph = compareDiffLinkedGlyph
 	}
+	wrapGlyph := compareDiffWrapOffGlyph
+	if r.settings.CompareDiffWrap {
+		wrapGlyph = compareDiffWrapOnGlyph
+	}
 	label := " Diff "
 	width := r.lastScreenWidth
-	col := compareDiffCloseButtonCol(width) - 2
+	col := compareDiffWrapButtonCol(width)
 	padding := col - tview.TaggedStringWidth(label)
 	if padding < 0 {
 		padding = 0
 	}
-	r.compare.DiffTitleBar.SetText(label + strings.Repeat(" ", padding) + string(glyph) + " " + string(toolWindowCloseGlyph) + " ")
+	r.compare.DiffTitleBar.SetText(label + strings.Repeat(" ", padding) +
+		string(wrapGlyph) + " " + string(glyph) + " " + string(toolWindowCloseGlyph) + " ")
 }
 
 // compareDiffCloseButtonCol mirrors closeTitleBarButtonCol (root.go):
@@ -494,6 +642,13 @@ func compareDiffCloseButtonCol(width int) int {
 // uses for its own pair of buttons.
 func compareDiffLinkButtonCol(width int) int {
 	return compareDiffCloseButtonCol(width) - 2
+}
+
+// compareDiffWrapButtonCol is the soft-wrap glyph's own column, one
+// further left again with the same blank column between — three
+// buttons in a row, spaced exactly as the two already were.
+func compareDiffWrapButtonCol(width int) int {
+	return compareDiffLinkButtonCol(width) - 2
 }
 
 // captureCompareDiffTitleBarMouse dispatches a click on either of the
@@ -512,6 +667,9 @@ func (r *Root) captureCompareDiffTitleBarMouse() func(tview.MouseAction, *tcell.
 					return tview.MouseConsumed, nil
 				case compareDiffLinkButtonCol(width):
 					r.toggleCompareDiffLinked()
+					return tview.MouseConsumed, nil
+				case compareDiffWrapButtonCol(width):
+					r.toggleCompareDiffWrap()
 					return tview.MouseConsumed, nil
 				}
 			}
@@ -557,6 +715,69 @@ func (r *Root) toggleCompareDiffLinked() {
 	}
 	r.renderCompareDiffTitleBar()
 	r.renderCompareDiffHint()
+}
+
+// toggleCompareDiffWrap flips soft wrap for this screen — "w", the hint
+// bar's own "w" button, and the title bar's own wrap glyph all land
+// here. One state for both panes, never one per pane: a wrapped line
+// and its counterpart have to stay on the same row as each other (see
+// writeDiffPairRows), which only one shared answer can guarantee, so
+// which pane the key arrived on is deliberately not consulted.
+func (r *Root) toggleCompareDiffWrap() {
+	r.setCompareDiffWrap(!r.settings.CompareDiffWrap)
+}
+
+// setCompareDiffWrap is the Options screen's own entry point to the same
+// state, and what toggleCompareDiffWrap defers to — re-render, then
+// write the new value straight back to the config file, the same
+// toggle-and-persist shape setFileIcons already establishes for the
+// "zi" chord rather than leaving Options as the only way to make a
+// display preference stick.
+func (r *Root) setCompareDiffWrap(wrap bool) {
+	r.settings.CompareDiffWrap = wrap
+	r.rerenderCompareDiff()
+	r.renderCompareDiffTitleBar()
+	r.renderCompareDiffHint()
+	r.persistSetting("compare_diff_wrap", strconv.FormatBool(wrap))
+}
+
+// rerenderCompareDiff re-renders both panes at the current width while
+// keeping the reading position — the line pair at the top of the view
+// stays at the top of the view, even though soft wrap being switched
+// (or the panes being resized) changes which row that pair now starts
+// on. See diffPairAtRow for why the row number alone can't be reused.
+//
+// Column offset is reset to 0 whenever the new render actually wraps:
+// nothing overflows any more, so the horizontal scrollbar has hidden
+// itself (horizontalScrollbar.Draw's own maxOffset() <= 0 rule) and a
+// leftover sideways offset would strand the view in blank space with no
+// visible control to get back out of it.
+//
+// Touches the panes only, never the title bar or hint bar: the other
+// caller is DiffLeft's own draw func, which runs after both of those
+// have already been drawn this frame, so writing to them from there
+// would only ever show up one frame late. setCompareDiffWrap refreshes
+// them itself instead, outside any draw.
+//
+// Does nothing before a diff has been opened: the Options screen can
+// reach setCompareDiffWrap with this screen never having been shown.
+func (r *Root) rerenderCompareDiff() {
+	if r.compare.DiffLeft == nil || len(r.compare.DiffPairs) == 0 {
+		return
+	}
+
+	leftRow, leftCol := r.compare.DiffLeft.GetScrollOffset()
+	rightRow, rightCol := r.compare.DiffRight.GetScrollOffset()
+	leftPair := diffPairAtRow(r.compare.DiffPairStartRows, leftRow)
+	rightPair := diffPairAtRow(r.compare.DiffPairStartRows, rightRow)
+
+	r.renderCompareDiff()
+
+	if r.compare.DiffWrapWidth > 0 {
+		leftCol, rightCol = 0, 0
+	}
+	r.compare.DiffLeft.ScrollTo(diffRowForPair(r.compare.DiffPairStartRows, leftPair), leftCol)
+	r.compare.DiffRight.ScrollTo(diffRowForPair(r.compare.DiffPairStartRows, rightPair), rightCol)
 }
 
 // activeCompareDiffPane/inactiveCompareDiffPane return the focused pane
@@ -614,6 +835,15 @@ func (r *Root) captureCompareDiffPaneKey(isLeft bool) func(event *tcell.EventKey
 			// the other one first.
 			if event.Rune() == compareDiffLinkedGlyph || event.Rune() == compareDiffUnlinkedGlyph {
 				r.toggleCompareDiffLinked()
+				return nil
+			}
+			// "w" for soft wrap — a letter, not this screen's own wrap
+			// glyph the way the link toggle above answers to its own:
+			// '¶'/'…' aren't on anyone's keyboard, and "w" spells the
+			// action. Same letter in Git Breach's own two diff views,
+			// so it means one thing everywhere a diff is shown.
+			if event.Rune() == 'w' {
+				r.toggleCompareDiffWrap()
 				return nil
 			}
 		}
