@@ -376,6 +376,20 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "git_breach_diff_wrap",
+			Default:     strconv.FormatBool(d.GitBreachDiffWrap),
+			Kind:        KindBool,
+			Summary:     `Git Breach's diff breaks a line too long for the Main box onto further rows instead of only reaching it by scrolling sideways. Covers both the unified pager and the side-by-side view. "w" toggles it from either.`,
+			Implemented: true,
+		},
+		{
+			Key:         "compare_diff_wrap",
+			Default:     strconv.FormatBool(d.CompareDiffWrap),
+			Kind:        KindBool,
+			Summary:     `Compare Faultline's two diff panes break a line too long for the pane onto further rows instead of only reaching it by scrolling sideways. Both sides stay row-aligned either way. "w" toggles it.`,
+			Implemented: true,
+		},
+		{
 			Key:     "log_audit_cache_size",
 			Default: FormatByteSize(d.LogAuditCacheSize),
 			Kind:    KindString,

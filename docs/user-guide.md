@@ -1028,6 +1028,16 @@ the `=`/`≠` button in the view's own title bar (`=` means linked,
 scrolling one pane scrolls both; `≠` means independent). `Escape` or the
 title bar's own close button returns to the overlay.
 
+`w` soft-wraps: a line too long for its pane is broken onto further
+rows instead of only being reachable by scrolling sideways. The
+line-number gutter stays clear on those extra rows, and both sides
+stay aligned with each other — a wrapped line and its counterpart
+always start on the same row, whether the panes are currently linked
+or not. The same toggle sits on the `¶`/`…` button in the title bar,
+left of the `=`/`≠` one (`¶` means wrapping, `…` means the line runs
+off the edge), and in the hint bar. Off by default, remembered between
+runs (`compare_diff_wrap`), and also switchable from Options.
+
 ### Two directories
 
 A full screen listing every path that differs, plus every path that
@@ -1376,6 +1386,17 @@ file, or a Commits/Stash row's own full diff across every file it
 touched. `v` (with Main focused) toggles between a unified pager and a
 side-by-side pane pair.
 
+`w` (with Main focused) toggles soft wrap: a diff line too long for
+Main is broken onto further rows, pushed in two columns and tinted
+along with the rest of its own line, instead of only being reachable
+by scrolling sideways. One setting covers both of Main's views — the
+unified pager and the side-by-side pair are two presentations of the
+same content, so `w` doesn't change meaning across `v`. Off by
+default, remembered between runs (`git_breach_diff_wrap`), and also
+switchable from the hint bar's own `w` button or from Options. With
+wrapping on nothing overflows any more, so the horizontal scrollbar
+goes blank; `s` still stages the hunk under the view, wrapped or not.
+
 `s` (with Main focused, while Files' own unstaged diff is showing)
 stages whichever hunk is currently at the top of the visible area —
 a byte-exact patch for just that hunk, nothing else in the file.
@@ -1526,6 +1547,7 @@ of this yet.
 | `Enter` / `Space` | (Commits) Jump into Main's own diff |
 | `d` | (Commits) Diff the commit under the cursor against a picked ref — any local branch, tag, or other loaded commit |
 | `s` | (Main, Files' own unstaged diff only) Stage the hunk at the top of the visible area |
+| `w` | (Main) Soft-wrap lines too long for the box onto further rows instead of scrolling sideways — covers both the unified and the side-by-side view |
 | `o` / `t` | (Main, a Conflicts row's own view) Resolve the topmost still-unresolved section by keeping "ours" / "theirs" |
 | `B` | (Commits) Start a bisect with the selected commit as "good", picking "bad" from the ref picker |
 | `G` / `X` | (Commits, while bisecting) Mark the current step good / bad |
@@ -3226,6 +3248,8 @@ Every key breakthrough recognizes, with its default:
 | `duplicate_count_max` | `100` | Upper bound `duplicate_count` can be set to |
 | `language` | `en` | Reserved for future translations — parsed, no effect yet |
 | `remote_archive_confirm_size` | `10MB` | Opening a remote zip/tar at or above this size asks first — a size with a unit, e.g. `500KB` or `1GB` |
+| `git_breach_diff_wrap` | `false` | Git Breach's diff breaks a line too long for the Main box onto further rows instead of scrolling sideways — covers the unified and the side-by-side view alike; `w` toggles it from either |
+| `compare_diff_wrap` | `false` | Compare Faultline's two diff panes break a line too long for the pane onto further rows instead of scrolling sideways — both sides stay row-aligned either way; `w` toggles it |
 | `log_audit_cache_size` | `2GB` | Log Holepunch's own session-only cache of already-read rotated log files, by estimated size not file count — `0` turns caching off |
 | `log_audit_disk_cache_enabled` | `true` | Log Holepunch's own persistent, on-disk cache for remote log families — survives past this process exiting, unlike `log_audit_cache_size`'s RAM-only cache |
 | `log_audit_disk_cache_size` | `20GB` | Maximum total size of the disk cache above, across every cached connection combined, by estimated size not file count |

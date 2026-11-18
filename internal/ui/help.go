@@ -910,6 +910,17 @@ var helpText = strings.TrimLeft(`
   one after another; a gap between two hunks of the same file shows as
   a muted "⋮" row on both sides rather than disappearing silently.
 
+  "w" while Main has focus wraps a line too long for the box onto
+  further rows, pushed in two columns and tinted along with the rest
+  of its own line, instead of leaving it reachable only by scrolling
+  sideways. One setting for both of Main's views — the unified pager
+  and the side-by-side pair show the same content, so "w" doesn't
+  change meaning across "v". Off by default and remembered between
+  runs ("git_breach_diff_wrap" under Options); the hint bar's own "w"
+  button does the same. With wrapping on nothing overflows any more,
+  so the horizontal scrollbar goes blank — and "s" still stages the
+  hunk under the view, wrapped or not.
+
   "s" while Main has focus stages whichever hunk sits at the top of
   the visible area — a byte-exact patch for just that hunk, built
   from the already-fetched diff text. Only meaningful for Files' own
@@ -1588,6 +1599,15 @@ var helpText = strings.TrimLeft(`
   switches which pane Up/Down/Page Up/Page Down scrolls; the title
   bar's own "=" / "≠" button links the two panes to scroll together or
   lets them scroll independently.
+
+  "w" — or the "¶" / "…" button left of that one, or the hint bar's
+  own "w" — wraps a line too long for its pane onto further rows
+  instead of leaving it reachable only sideways ("¶" means wrapping,
+  "…" means the line runs off the edge). The line-number gutter stays
+  clear on those extra rows, and the two sides stay aligned with each
+  other: a wrapped line and its counterpart always start on the same
+  row, linked scrolling or not. Off by default and remembered between
+  runs ("compare_diff_wrap" under Options).
 
   Two directories opens a full screen: every path that differs, plus
   every path that exists on only one side — a directory that's

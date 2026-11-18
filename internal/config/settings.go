@@ -383,6 +383,29 @@ type Settings struct {
 
 	RemoteArchiveConfirmSize int64
 
+	// GitBreachDiffWrap and CompareDiffWrap are the two diff screens'
+	// own soft-wrap state: whether a line too long for its pane is
+	// broken onto further rows instead of only being reachable by
+	// scrolling sideways. Both false by default — horizontal scrolling
+	// is what these views have always done, and a wrapped diff trades
+	// the guarantee that one row is one line (which is how a diff is
+	// normally read, and counted) for not having to scroll.
+	//
+	// Two separate settings rather than one shared one, because the two
+	// screens are genuinely separate contexts: Git Breach shows one
+	// file's own before/after, Compare Faultline two unrelated files.
+	// GitBreachDiffWrap covers both of Git Breach's own diff views at
+	// once (the unified pager and the side-by-side one "v" toggles) —
+	// those are two presentations of the same content, and having "w"
+	// mean something different on either side of "v" would be a trap.
+	//
+	// Written straight back to the config file whenever "w" or either
+	// screen's own button toggles one, the same as the "zi" chord
+	// already does for FileIcons rather than leaving the Options screen
+	// as the only way to make a display preference stick.
+	GitBreachDiffWrap bool
+	CompareDiffWrap   bool
+
 	// LogAuditCacheSize caps Log Holepunch's own session-only cache of
 	// already-parsed rotated log files (logview.RotatedCache) — an
 	// estimated-byte LRU budget, not a file count, since one rotated
@@ -852,6 +875,9 @@ func DefaultSettings() Settings {
 
 		RemoteArchiveConfirmSize: 10 << 20, // 10MB
 
+		GitBreachDiffWrap: false,
+		CompareDiffWrap:   false,
+
 		LogAuditCacheSize: 2 << 30, // 2GB
 
 		LogAuditDiskCacheEnabled: true,
@@ -1047,6 +1073,10 @@ func (s *Settings) apply(key, value string) error {
 			return fmt.Errorf("invalid size for %q: %w", key, err)
 		}
 		s.RemoteArchiveConfirmSize = n
+	case "git_breach_diff_wrap":
+		return parseBool(&s.GitBreachDiffWrap)
+	case "compare_diff_wrap":
+		return parseBool(&s.CompareDiffWrap)
 	case "log_audit_cache_size":
 		n, err := ParseByteSize(value)
 		if err != nil {

@@ -191,6 +191,44 @@ type gitBreachState struct {
 	DiffSplitSpacer     *tview.Box
 	DiffRawText         string
 	DiffFiles           []compare.FileDiff
+
+	// The soft-wrap bookkeeping both of Main's own diff views share the
+	// state for (settings.GitBreachDiffWrap) but keep their own measured
+	// numbers for, since the unified pager is one full-width pane and
+	// the split view is two half-width ones.
+	//
+	// *WrapWidth is the content width that view was last rendered at (0
+	// when it rendered unwrapped), so its own draw func can tell a plain
+	// redraw from a real resize instead of re-rendering on every
+	// keypress. *PaneWidth is the pane's inner width as of the last
+	// draw, written by that same draw func: the caller that needs it
+	// runs inside the draw func, where Box still answers GetInnerRect
+	// with the previous frame's cached rect. *StartRows is where each
+	// emitted unit begins, for carrying the reading position across a
+	// re-render (see diffPairAtRow); DiffRowToRaw maps a rendered row of
+	// the unified view back to its own line in DiffRenderedText — which
+	// is line-for-line DiffRawText whenever Main is showing a real diff
+	// — which hunk staging needs once a line no longer occupies exactly
+	// one row (see openGitBreachStageHunk). DiffRenderedText is the
+	// unwrapped rendering Main was last handed, kept so the view can be
+	// re-wrapped at a new width without re-running whichever renderer
+	// produced it. All of them are empty/0 until the view they belong
+	// to has rendered once.
+	//
+	// Accepted limit: DiffScroll above remembers a *rendered* row per
+	// entry, so a position remembered before soft wrap was switched is
+	// read back against a different row count afterwards and lands a
+	// little off. Only reachable by toggling wrap and then returning to
+	// an entry visited before that, and no worse than what already
+	// happens when an entry's own diff changes length between visits —
+	// not worth a second, wrap-aware memory of its own.
+	DiffWrapWidth      int
+	DiffPaneWidth      int
+	DiffRowToRaw       []int
+	DiffRenderedText   string
+	DiffSplitWrapWidth int
+	DiffSplitPaneWidth int
+	DiffSplitStartRows []int
 }
 
 // gitBreachFetchTimeout bounds how long "jg" itself, and every
@@ -1472,7 +1510,8 @@ func (r *Root) gitBreachClearDiff() {
 
 func (r *Root) gitBreachSetDiffText(key, text, rawDiff string) {
 	r.gitBreach.DiffScrollKey = key
-	r.gitBreach.DiffView.SetText(text)
+	r.gitBreach.DiffRenderedText = text
+	r.gitBreachRenderDiffUnified()
 	r.gitBreach.DiffView.ScrollTo(r.gitBreach.DiffScroll[key], 0)
 	r.gitBreach.DiffRawText = rawDiff
 	if r.gitBreach.DiffSplit {
@@ -1480,6 +1519,51 @@ func (r *Root) gitBreachSetDiffText(key, text, rawDiff string) {
 		r.gitBreach.DiffSplitLeft.ScrollTo(r.gitBreach.DiffScroll[key], 0)
 		r.gitBreach.DiffSplitRight.ScrollTo(r.gitBreach.DiffScroll[key], 0)
 	}
+}
+
+// gitBreachDiffWrapIndent is how far a soft-wrapped line's own
+// continuation rows are pushed in, in the unified pager. Without it a
+// wrapped "+" line's second row starts in the marker column and reads
+// exactly like the context line below it; two columns tell them apart
+// at a glance and cost almost nothing on a narrow pane. The indent sits
+// inside the line's own background tint (see wrapRenderedText), so a
+// continuation row stays visibly part of the same changed line.
+const gitBreachDiffWrapIndent = 2
+
+// gitBreachRenderDiffUnified puts DiffRenderedText into Main's own
+// unified pager, soft-wrapped to the pager's current width if that's
+// switched on — and records the row-to-line map that wrapping makes
+// necessary (see wrapRenderedText, and openGitBreachStageHunk for the
+// one caller that genuinely needs it).
+//
+// Deliberately wraps the finished rendering rather than teaching each
+// of the renderers that feed this view (a colorized diff, a highlighted
+// untracked file, a conflict, a blame, a bisect log, a plain error) to
+// wrap for itself: they all arrive here as tagged text with one line
+// per source line, which is everything this needs — so soft wrap
+// reaches all of them at once, and gitBreachColorizeDiff in particular
+// keeps producing exactly what its own tests pin it to.
+func (r *Root) gitBreachRenderDiffUnified() {
+	if r.gitBreach.DiffView == nil {
+		return
+	}
+	width := r.gitBreachDiffContentWidth()
+	text, rowToRaw := wrapRenderedText(r.gitBreach.DiffRenderedText, width, gitBreachDiffWrapIndent)
+	r.gitBreach.DiffWrapWidth = width
+	r.gitBreach.DiffRowToRaw = rowToRaw
+	r.gitBreach.DiffView.SetText(text)
+}
+
+// gitBreachDiffContentWidth is how wide the unified pager's own rows
+// may be, or 0 for "don't wrap" — soft wrap off, or the pager not laid
+// out yet (DiffPaneWidth is 0 until its first draw). Unlike the two
+// side-by-side views there's no gutter to subtract: a unified diff line
+// carries its own +/- marker as part of its content.
+func (r *Root) gitBreachDiffContentWidth() int {
+	if !r.settings.GitBreachDiffWrap {
+		return 0
+	}
+	return r.gitBreach.DiffPaneWidth
 }
 
 func (r *Root) startGitBreachDiff(row int) {
